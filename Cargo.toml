@@ -3,7 +3,7 @@ members = [
     "compiler/lexer",
     "compiler/parser",
     "compiler/ast"
-, "compiler/resolver", "compiler/typechecker", "compiler/mir", "compiler/lowering"]
+, "compiler/resolver", "compiler/typechecker", "compiler/mir", "compiler/lowering", "compiler/vm"]
 resolver = "2"
 
 [workspace.package]

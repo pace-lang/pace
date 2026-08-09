@@ -1,0 +1,11 @@
+[package]
+name = "vm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+ast = { version = "0.1.0", path = "../ast" }
+mir = { version = "0.1.0", path = "../mir" }
