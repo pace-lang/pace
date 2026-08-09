@@ -20,3 +20,10 @@ dependencies = [
  "ast",
  "lexer",
 ]
+
+[[package]]
+name = "resolver"
+version = "0.1.0"
+dependencies = [
+ "ast",
+]
