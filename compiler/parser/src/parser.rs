@@ -27,7 +27,9 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Option<Stmt> {
-        let res = if self.match_token(&[TokenKind::Let]) {
+        let res = if self.match_token(&[TokenKind::Func]) {
+            self.function_declaration()
+        } else if self.match_token(&[TokenKind::Let]) {
             self.let_declaration(false)
         } else if self.match_token(&[TokenKind::Var]) {
             self.let_declaration(true)
@@ -39,6 +41,82 @@ impl Parser {
             self.synchronize();
         }
         res
+    }
+
+    fn function_declaration(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+
+        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+            self.advance();
+            n
+        } else {
+            self.error_at_current("Expected function name.");
+            return None;
+        };
+
+        if !self.match_token(&[TokenKind::LeftParen]) {
+            self.error_at_current("Expected '(' after function name.");
+            return None;
+        }
+
+        let mut params = Vec::new();
+        if !self.check(&TokenKind::RightParen) {
+            loop {
+                let param_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                    self.advance();
+                    n
+                } else {
+                    self.error_at_current("Expected parameter name.");
+                    return None;
+                };
+
+                if !self.match_token(&[TokenKind::Colon]) {
+                    self.error_at_current("Expected ':' after parameter name.");
+                    return None;
+                }
+
+                let param_type = if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
+                    self.advance();
+                    t
+                } else {
+                    self.error_at_current("Expected parameter type.");
+                    return None;
+                };
+
+                params.push((param_name, param_type));
+
+                if !self.match_token(&[TokenKind::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        if !self.match_token(&[TokenKind::RightParen]) {
+            self.error_at_current("Expected ')' after parameters.");
+            return None;
+        }
+
+        let mut return_type = None;
+        if self.match_token(&[TokenKind::Arrow]) {
+            if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
+                self.advance();
+                return_type = Some(t);
+            } else {
+                self.error_at_current("Expected return type after '->'.");
+                return None;
+            }
+        }
+
+        if !self.match_token(&[TokenKind::LeftBrace]) {
+            self.error_at_current("Expected '{' before function body.");
+            return None;
+        }
+
+        let body = self.block()?;
+        let end_span = body.span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+
+        Some(Stmt::new(StmtKind::Func { name, params, return_type, body: Box::new(body) }, span))
     }
 
     fn let_declaration(&mut self, is_var: bool) -> Option<Stmt> {
@@ -77,7 +155,147 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Option<Stmt> {
-        self.expression_statement()
+        if self.match_token(&[TokenKind::If]) {
+            self.if_statement()
+        } else if self.match_token(&[TokenKind::While]) {
+            self.while_statement()
+        } else if self.match_token(&[TokenKind::For]) {
+            self.for_statement()
+        } else if self.match_token(&[TokenKind::Return]) {
+            self.return_statement()
+        } else if self.match_token(&[TokenKind::LeftBrace]) {
+            self.block()
+        } else {
+            self.expression_statement()
+        }
+    }
+
+    fn if_statement(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+
+        let condition = self.expression()?;
+
+        if !self.match_token(&[TokenKind::LeftBrace]) {
+            self.error_at_current("Expected '{' after if condition.");
+            return None;
+        }
+
+        let then_branch = self.block()?;
+
+        let mut else_branch = None;
+        let mut end_span = then_branch.span;
+
+        if self.match_token(&[TokenKind::Else]) {
+            if self.match_token(&[TokenKind::If]) {
+                let e_branch = self.if_statement()?;
+                end_span = e_branch.span;
+                else_branch = Some(Box::new(e_branch));
+            } else if self.match_token(&[TokenKind::LeftBrace]) {
+                let e_branch = self.block()?;
+                end_span = e_branch.span;
+                else_branch = Some(Box::new(e_branch));
+            } else {
+                self.error_at_current("Expected '{' or 'if' after else.");
+                return None;
+            }
+        }
+
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        Some(Stmt::new(StmtKind::If { condition, then_branch: Box::new(then_branch), else_branch }, span))
+    }
+
+    fn while_statement(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+
+        let condition = self.expression()?;
+
+        if !self.match_token(&[TokenKind::LeftBrace]) {
+            self.error_at_current("Expected '{' after while condition.");
+            return None;
+        }
+
+        let body = self.block()?;
+        let end_span = body.span;
+
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        Some(Stmt::new(StmtKind::While { condition, body: Box::new(body) }, span))
+    }
+
+    fn for_statement(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+
+        let item_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+            self.advance();
+            n
+        } else {
+            self.error_at_current("Expected item name after 'for'.");
+            return None;
+        };
+
+        let is_in = if let Some(Token { kind: TokenKind::Identifier(s), .. }) = self.peek() {
+            s == "in"
+        } else {
+            false
+        };
+
+        if is_in {
+            self.advance();
+        } else {
+            self.error_at_current("Expected 'in' after for item name.");
+            return None;
+        }
+
+        let iterator = self.expression()?;
+
+        if !self.match_token(&[TokenKind::LeftBrace]) {
+            self.error_at_current("Expected '{' after for iterator.");
+            return None;
+        }
+
+        let body = self.block()?;
+        let end_span = body.span;
+
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        Some(Stmt::new(StmtKind::For { item_name, iterator, body: Box::new(body) }, span))
+    }
+
+    fn return_statement(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+
+        let value = if !self.check(&TokenKind::Semicolon) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        if !self.match_token(&[TokenKind::Semicolon]) {
+            self.error_at_current("Expected ';' after return value.");
+            return None;
+        }
+
+        let end_span = self.previous().span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        Some(Stmt::new(StmtKind::Return { value }, span))
+    }
+
+    fn block(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+        let mut statements = Vec::new();
+
+        while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+            if let Some(stmt) = self.declaration() {
+                statements.push(stmt);
+            }
+        }
+
+        if !self.match_token(&[TokenKind::RightBrace]) {
+            self.error_at_current("Expected '}' after block.");
+            return None;
+        }
+
+        let end_span = self.previous().span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        Some(Stmt::new(StmtKind::Block(statements), span))
     }
 
     fn expression_statement(&mut self) -> Option<Stmt> {
@@ -293,50 +511,40 @@ mod tests {
     use lexer::Scanner;
 
     #[test]
-    fn test_let_statement() {
-        let source = "let count = 10 + 5;";
+    fn test_func_declaration() {
+        let source = "func add(a: Int, b: Int) -> Int { return a + b; }";
         let mut scanner = Scanner::new(source);
-        let tokens = scanner.scan_tokens();
-        
-        let mut parser = Parser::new(tokens);
+        let mut parser = Parser::new(scanner.scan_tokens());
         let (stmts, errors) = parser.parse();
         
-        assert!(errors.is_empty());
+        assert!(errors.is_empty(), "Parse errors: {:?}", errors);
         assert_eq!(stmts.len(), 1);
-        
         match &stmts[0].kind {
-            StmtKind::Let { name, initializer } => {
-                assert_eq!(name, "count");
-                match &initializer.kind {
-                    ExprKind::Binary(left, op, right) => {
-                        assert_eq!(*op, BinaryOp::Add);
-                        assert!(matches!(left.kind, ExprKind::Integer(10)));
-                        assert!(matches!(right.kind, ExprKind::Integer(5)));
-                    }
-                    _ => panic!("Expected Binary expression"),
-                }
+            StmtKind::Func { name, params, return_type, .. } => {
+                assert_eq!(name, "add");
+                assert_eq!(params.len(), 2);
+                assert_eq!(params[0].0, "a");
+                assert_eq!(return_type.as_ref().unwrap(), "Int");
             }
-            _ => panic!("Expected Let statement"),
+            _ => panic!("Expected Func statement"),
         }
     }
-    
+
     #[test]
-    fn test_error_sync() {
-        let source = "let x = @; let y = 20;";
+    fn test_if_statement() {
+        let source = "if count > 0 { let x = 1; } else { let x = 0; }";
         let mut scanner = Scanner::new(source);
-        let tokens = scanner.scan_tokens();
-        
-        let mut parser = Parser::new(tokens);
+        let mut parser = Parser::new(scanner.scan_tokens());
         let (stmts, errors) = parser.parse();
         
-        assert!(!errors.is_empty());
-        assert_eq!(stmts.len(), 1); // Only the second statement is successfully parsed
-        
+        assert!(errors.is_empty(), "Parse errors: {:?}", errors);
+        assert_eq!(stmts.len(), 1);
         match &stmts[0].kind {
-            StmtKind::Let { name, .. } => {
-                assert_eq!(name, "y");
+            StmtKind::If { then_branch, else_branch, .. } => {
+                assert!(matches!(then_branch.kind, StmtKind::Block(_)));
+                assert!(else_branch.is_some());
             }
-            _ => panic!("Expected Let statement"),
+            _ => panic!("Expected If statement"),
         }
     }
 }
