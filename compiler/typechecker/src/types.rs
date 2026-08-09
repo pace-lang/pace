@@ -7,8 +7,10 @@ pub enum Type {
     String,
     Boolean,
     Void,
-    Error, // Used to prevent cascading type errors during invalid parsing/resolution
-}
+    Error,
+    Any,
+    BuiltinFunc,
+} // Used to prevent cascading type errors during invalid parsing/resolution
 
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -19,6 +21,8 @@ impl fmt::Display for Type {
             Type::Boolean => write!(f, "Boolean"),
             Type::Void => write!(f, "Void"),
             Type::Error => write!(f, "<ErrorType>"),
+            Type::Any => write!(f, "Any"),
+            Type::BuiltinFunc => write!(f, "<BuiltinFunc>"),
         }
     }
 }

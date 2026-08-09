@@ -14,8 +14,10 @@ pub struct Resolver {
 
 impl Resolver {
     pub fn new() -> Self {
+        let mut scopes = ScopeStack::new();
+        scopes.declare("print".into());
         Self {
-            scopes: ScopeStack::new(),
+            scopes,
             errors: Vec::new(),
         }
     }
@@ -102,6 +104,12 @@ impl Resolver {
             }
             ExprKind::Grouping(inner) => {
                 self.resolve_expr(inner);
+            }
+            ExprKind::Call { callee, arguments } => {
+                self.resolve_expr(callee);
+                for arg in arguments {
+                    self.resolve_expr(arg);
+                }
             }
             // Literals have no names to resolve
             ExprKind::Integer(_) | ExprKind::Float(_) | ExprKind::String(_) | ExprKind::Boolean(_) => {}

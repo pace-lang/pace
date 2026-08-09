@@ -13,6 +13,7 @@ pub enum Value {
     String(String),
     Boolean(bool),
     Place(Place),
+    Void,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -20,6 +21,7 @@ pub enum RValue {
     Use(Value),
     BinaryOp(BinaryOp, Value, Value),
     UnaryOp(UnaryOp, Value),
+    Call(String, Vec<Value>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

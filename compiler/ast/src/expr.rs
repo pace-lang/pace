@@ -37,6 +37,11 @@ pub enum ExprKind {
     Unary(UnaryOp, Box<Expr>),
     /// A grouped expression like `(a + b)`
     Grouping(Box<Expr>),
+    /// A function call like `f(a, b)`
+    Call {
+        callee: Box<Expr>,
+        arguments: Vec<Expr>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -392,7 +392,38 @@ impl Parser {
             return Some(Expr::new(ExprKind::Unary(UnaryOp::Negate, Box::new(right)), span));
         }
 
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> Option<Expr> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.match_token(&[TokenKind::LeftParen]) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+        Some(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> Option<Expr> {
+        let mut arguments = Vec::new();
+        if !self.check(&TokenKind::RightParen) {
+            loop {
+                arguments.push(self.expression()?);
+                if !self.match_token(&[TokenKind::Comma]) {
+                    break;
+                }
+            }
+        }
+        if !self.match_token(&[TokenKind::RightParen]) {
+            self.error_at_current("Expected ')' after arguments.");
+            return None;
+        }
+        let span = Span::new(callee.span.start, self.previous().span.end, callee.span.start_loc, self.previous().span.end_loc);
+        Some(Expr::new(ExprKind::Call { callee: Box::new(callee), arguments }, span))
     }
 
     fn primary(&mut self) -> Option<Expr> {

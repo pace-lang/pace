@@ -67,6 +67,7 @@ impl VirtualMachine {
                     RValue::Use(v) => self.resolve_value(v),
                     RValue::UnaryOp(op, right) => self.eval_unary(op.clone(), right),
                     RValue::BinaryOp(op, left, right) => self.eval_binary(op.clone(), left, right),
+                    RValue::Call(func_name, args) => self.eval_call(func_name, args),
                 };
                 self.store(place, val);
             }
@@ -102,6 +103,30 @@ impl VirtualMachine {
                 Value::Float(f) => Value::Float(-f),
                 _ => panic!("Cannot negate non-numeric value"),
             }
+        }
+    }
+
+    fn eval_call(&mut self, func_name: &str, args: &[Value]) -> Value {
+        if func_name == "print" {
+            let mut out = String::new();
+            for (i, arg) in args.iter().enumerate() {
+                if i > 0 {
+                    out.push(' ');
+                }
+                let resolved = self.resolve_value(arg);
+                match resolved {
+                    Value::Int(v) => out.push_str(&v.to_string()),
+                    Value::Float(v) => out.push_str(&v.to_string()),
+                    Value::String(v) => out.push_str(&v),
+                    Value::Boolean(v) => out.push_str(&v.to_string()),
+                    Value::Void => out.push_str("void"),
+                    Value::Place(_) => panic!("Unresolved place in print"),
+                }
+            }
+            println!("{}", out);
+            Value::Void
+        } else {
+            panic!("Calling non-built-in function '{}' is not yet implemented in VM", func_name);
         }
     }
 

@@ -142,6 +142,24 @@ impl MirBuilder {
             ExprKind::Boolean(b) => Value::Boolean(*b),
             ExprKind::Variable(name) => Value::Place(Place::Var(name.clone())),
             ExprKind::Grouping(inner) => self.lower_expr(inner),
+            ExprKind::Call { callee, arguments } => {
+                // For now, we assume the callee is just a Variable resolving to a string name.
+                // In a full implementation, callee could be a complex expression (function pointer).
+                let func_name = if let ExprKind::Variable(name) = &callee.kind {
+                    name.clone()
+                } else {
+                    panic!("Only direct function calls by name are currently supported.");
+                };
+
+                let mut arg_values = Vec::new();
+                for arg in arguments {
+                    arg_values.push(self.lower_expr(arg));
+                }
+
+                let temp = self.new_temp();
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call(func_name, arg_values)));
+                Value::Place(temp)
+            }
             ExprKind::Unary(op, right) => {
                 let right_val = self.lower_expr(right);
                 let temp = self.new_temp();

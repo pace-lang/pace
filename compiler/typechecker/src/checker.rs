@@ -129,7 +129,24 @@ impl TypeChecker {
                     Type::Error // Resolver should have caught this, but fallback to Error
                 }
             }
-            ExprKind::Grouping(inner) => self.check_expr(inner),
+            ExprKind::Grouping(inner) => {
+                self.check_expr(inner)
+            }
+            ExprKind::Call { callee, arguments } => {
+                let callee_type = self.check_expr(callee);
+                for arg in arguments {
+                    self.check_expr(arg);
+                }
+                
+                match callee_type {
+                    Type::BuiltinFunc => Type::Void,
+                    Type::Error => Type::Error,
+                    _ => {
+                        self.error(expr.span, "Cannot call non-function type.");
+                        Type::Error
+                    }
+                }
+            }
             ExprKind::Unary(op, right) => {
                 let right_type = self.check_expr(right);
                 if right_type == Type::Error {

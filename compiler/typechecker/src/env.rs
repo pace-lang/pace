@@ -29,8 +29,10 @@ pub struct TypeEnvironment {
 
 impl TypeEnvironment {
     pub fn new() -> Self {
+        let mut global_scope = Scope::new();
+        global_scope.insert("print".into(), Type::BuiltinFunc);
         Self {
-            scopes: vec![Scope::new()],
+            scopes: vec![global_scope],
         }
     }
 
