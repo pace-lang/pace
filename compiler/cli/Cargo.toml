@@ -1,0 +1,18 @@
+[package]
+name = "cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+ast = { version = "0.1.0", path = "../ast" }
+clap = { version = "4.6.6", features = ["derive"] }
+lexer = { version = "0.1.0", path = "../lexer" }
+lowering = { version = "0.1.0", path = "../lowering" }
+mir = { version = "0.1.0", path = "../mir" }
+parser = { version = "0.1.0", path = "../parser" }
+resolver = { version = "0.1.0", path = "../resolver" }
+typechecker = { version = "0.1.0", path = "../typechecker" }
+vm = { version = "0.1.0", path = "../vm" }

@@ -15,6 +15,14 @@ impl VirtualMachine {
         }
     }
 
+    pub fn dump_memory(&self) {
+        println!("--- VM Memory Dump ---");
+        for (k, v) in &self.memory_vars {
+            println!("{} = {:?}", k, v);
+        }
+        println!("----------------------");
+    }
+
     pub fn execute(&mut self, function: &Function) -> Option<Value> {
         let mut current_block_id = BlockId(0);
 

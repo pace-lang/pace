@@ -41,6 +41,9 @@ impl MirBuilder {
         for stmt in statements {
             self.lower_stmt(stmt);
         }
+        if self.current().terminator.is_none() {
+            self.current().terminator = Some(Terminator::Return(None));
+        }
         self.function
     }
 
