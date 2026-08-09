@@ -17,7 +17,7 @@ impl ProgramBuilder {
     pub fn build(mut self, statements: &[Stmt]) -> Program {
         let mut main_stmts = Vec::new();
         for stmt in statements {
-            if let StmtKind::Class { name, methods, fields } = &stmt.kind {
+            if let StmtKind::Class { name, type_params: _, implements: _, methods, fields } = &stmt.kind {
                 let mut field_names = Vec::new();
                 for field in fields {
                     if let StmtKind::Var { name: f_name, .. } | StmtKind::Let { name: f_name, .. } = &field.kind {
@@ -61,6 +61,9 @@ impl ProgramBuilder {
                     _ => builder.build(std::slice::from_ref(body)),
                 };
                 self.program.functions.insert(name.clone(), mir_func);
+            } else if let StmtKind::Interface { .. } = &stmt.kind {
+                // Ignore interface declarations in MIR, as they are fully erased
+                // and used strictly for compile-time type checking.
             } else {
                 main_stmts.push(stmt.clone());
             }
@@ -195,8 +198,9 @@ impl MirBuilder {
 
                 self.current_block = merge_block;
             }
-            StmtKind::Func { .. } | StmtKind::Class { .. } => {
-                // Nested functions or classes are not handled in this basic pass
+            StmtKind::Func { .. } | StmtKind::Class { .. } | StmtKind::Interface { .. } => {
+                // Nested functions/classes/interfaces are not fully supported in MIR yet,
+                // or are handled at the top level.
             }
             StmtKind::For { .. } => {
                 // Lowering 'for' loops requires desugaring into an iterator while loop.
@@ -238,7 +242,7 @@ impl MirBuilder {
             ExprKind::SelfRef => {
                 Value::Place(Place::Var("self".to_string()))
             }
-            ExprKind::Call { callee, arguments } => {
+            ExprKind::Call { callee, type_args: _, arguments } => {
                 let mut arg_values = Vec::new();
                 for arg in arguments {
                     arg_values.push(self.lower_expr(arg));

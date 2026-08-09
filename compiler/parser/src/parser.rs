@@ -1,4 +1,4 @@
-use ast::{Expr, ExprKind, Stmt, StmtKind, Span, BinaryOp, UnaryOp};
+use ast::{Expr, ExprKind, Stmt, StmtKind, Span, BinaryOp, UnaryOp, TypeExpr};
 use lexer::{Token, TokenKind};
 
 pub struct Parser {
@@ -27,7 +27,9 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Option<Stmt> {
-        let res = if self.match_token(&[TokenKind::Class]) {
+        let res = if self.match_token(&[TokenKind::Interface]) {
+            self.interface_declaration()
+        } else if self.match_token(&[TokenKind::Class]) {
             self.class_declaration()
         } else if self.match_token(&[TokenKind::Func]) {
             self.function_declaration()
@@ -45,6 +47,66 @@ impl Parser {
         res
     }
 
+    fn parse_type_params(&mut self) -> Option<Vec<String>> {
+        let mut type_params = Vec::new();
+        if self.match_token(&[TokenKind::Less]) {
+            if !self.check(&TokenKind::Greater) {
+                loop {
+                    if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
+                        self.advance();
+                        type_params.push(t);
+                    } else {
+                        self.error_at_current("Expected generic parameter name.");
+                        return None;
+                    }
+                    if !self.match_token(&[TokenKind::Comma]) {
+                        break;
+                    }
+                }
+            }
+            if !self.match_token(&[TokenKind::Greater]) {
+                self.error_at_current("Expected '>' after generic parameters.");
+                return None;
+            }
+        }
+        Some(type_params)
+    }
+
+    fn parse_type_expr(&mut self) -> Option<TypeExpr> {
+        if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
+            self.advance();
+            let base_type = t;
+            
+            if self.match_token(&[TokenKind::Less]) {
+                let mut type_args = Vec::new();
+                if !self.check(&TokenKind::Greater) {
+                    loop {
+                        if let Some(ty) = self.parse_type_expr() {
+                            type_args.push(ty);
+                        } else {
+                            return None;
+                        }
+                        if !self.match_token(&[TokenKind::Comma]) {
+                            break;
+                        }
+                    }
+                }
+                
+                if !self.match_token(&[TokenKind::Greater]) {
+                    self.error_at_current("Expected '>' after generic type arguments.");
+                    return None;
+                }
+                
+                return Some(TypeExpr::GenericInstance(base_type, type_args));
+            }
+            
+            Some(TypeExpr::Named(base_type))
+        } else {
+            self.error_at_current("Expected type name.");
+            None
+        }
+    }
+
     fn class_declaration(&mut self) -> Option<Stmt> {
         let start_span = self.previous().span;
 
@@ -55,6 +117,25 @@ impl Parser {
             self.error_at_current("Expected class name.");
             return None;
         };
+
+        let type_params = self.parse_type_params()?;
+
+        let mut implements = Vec::new();
+        if self.match_token(&[TokenKind::Implements]) {
+            loop {
+                if let Some(Token { kind: TokenKind::Identifier(i), .. }) = self.peek().cloned() {
+                    self.advance();
+                    implements.push(i);
+                } else {
+                    self.error_at_current("Expected interface name.");
+                    return None;
+                }
+                
+                if !self.match_token(&[TokenKind::Comma]) {
+                    break;
+                }
+            }
+        }
 
         if !self.match_token(&[TokenKind::LeftBrace]) {
             self.error_at_current("Expected '{' before class body.");
@@ -94,7 +175,107 @@ impl Parser {
 
         let end_span = self.previous().span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::Class { name, methods, fields }, span))
+        Some(Stmt::new(StmtKind::Class { name, type_params, implements, methods, fields }, span))
+    }
+
+    fn interface_declaration(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+
+        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+            self.advance();
+            n
+        } else {
+            self.error_at_current("Expected interface name.");
+            return None;
+        };
+
+        if !self.match_token(&[TokenKind::LeftBrace]) {
+            self.error_at_current("Expected '{' before interface body.");
+            return None;
+        }
+
+        let mut methods = Vec::new();
+
+        while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+            if self.match_token(&[TokenKind::Func]) {
+                if let Some(method) = self.interface_method_declaration() {
+                    methods.push(method);
+                }
+            } else {
+                self.error_at_current("Expected method signature inside interface.");
+                self.advance();
+            }
+        }
+
+        if !self.match_token(&[TokenKind::RightBrace]) {
+            self.error_at_current("Expected '}' after interface body.");
+            return None;
+        }
+
+        let end_span = self.previous().span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        Some(Stmt::new(StmtKind::Interface { name, methods }, span))
+    }
+
+    fn interface_method_declaration(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+
+        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+            self.advance();
+            n
+        } else {
+            self.error_at_current("Expected method name.");
+            return None;
+        };
+
+        if !self.match_token(&[TokenKind::LeftParen]) {
+            self.error_at_current("Expected '(' after method name.");
+            return None;
+        }
+
+        let mut params = Vec::new();
+        if !self.check(&TokenKind::RightParen) {
+            loop {
+                let param_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                    self.advance();
+                    n
+                } else {
+                    self.error_at_current("Expected parameter name.");
+                    return None;
+                };
+
+                if !self.match_token(&[TokenKind::Colon]) {
+                    self.error_at_current("Expected ':' after parameter name.");
+                    return None;
+                }
+
+                let param_type = self.parse_type_expr()?;
+
+                params.push((param_name, param_type));
+
+                if !self.match_token(&[TokenKind::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        if !self.match_token(&[TokenKind::RightParen]) {
+            self.error_at_current("Expected ')' after parameters.");
+            return None;
+        }
+
+        let mut return_type = None;
+        if self.match_token(&[TokenKind::Arrow]) {
+            return_type = Some(self.parse_type_expr()?);
+        }
+
+        let end_span = self.previous().span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+
+        // We use StmtKind::Func but with an empty block for the body.
+        let empty_body = Box::new(Stmt::new(StmtKind::Block(Vec::new()), span.clone()));
+
+        Some(Stmt::new(StmtKind::Func { name, type_params: Vec::new(), params, return_type, body: empty_body }, span))
     }
 
     fn init_declaration(&mut self) -> Option<Stmt> {
@@ -122,13 +303,7 @@ impl Parser {
                     return None;
                 }
 
-                let param_type = if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
-                    self.advance();
-                    t
-                } else {
-                    self.error_at_current("Expected parameter type.");
-                    return None;
-                };
+                let param_type = self.parse_type_expr()?;
 
                 params.push((param_name, param_type));
 
@@ -143,7 +318,7 @@ impl Parser {
             return None;
         }
 
-        let return_type = Some("Void".to_string());
+        let return_type = Some(TypeExpr::Named("Void".to_string()));
 
         if !self.match_token(&[TokenKind::LeftBrace]) {
             self.error_at_current("Expected '{' before init body.");
@@ -154,7 +329,7 @@ impl Parser {
         let end_span = body.span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
-        Some(Stmt::new(StmtKind::Func { name, params, return_type, body: Box::new(body) }, span))
+        Some(Stmt::new(StmtKind::Func { name, type_params: Vec::new(), params, return_type, body: Box::new(body) }, span))
     }
 
     fn function_declaration(&mut self) -> Option<Stmt> {
@@ -167,6 +342,8 @@ impl Parser {
             self.error_at_current("Expected function name.");
             return None;
         };
+
+        let type_params = self.parse_type_params()?;
 
         if !self.match_token(&[TokenKind::LeftParen]) {
             self.error_at_current("Expected '(' after function name.");
@@ -189,13 +366,7 @@ impl Parser {
                     return None;
                 }
 
-                let param_type = if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
-                    self.advance();
-                    t
-                } else {
-                    self.error_at_current("Expected parameter type.");
-                    return None;
-                };
+                let param_type = self.parse_type_expr()?;
 
                 params.push((param_name, param_type));
 
@@ -212,13 +383,7 @@ impl Parser {
 
         let mut return_type = None;
         if self.match_token(&[TokenKind::Arrow]) {
-            if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
-                self.advance();
-                return_type = Some(t);
-            } else {
-                self.error_at_current("Expected return type after '->'.");
-                return None;
-            }
+            return_type = Some(self.parse_type_expr()?);
         }
 
         if !self.match_token(&[TokenKind::LeftBrace]) {
@@ -230,7 +395,7 @@ impl Parser {
         let end_span = body.span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
-        Some(Stmt::new(StmtKind::Func { name, params, return_type, body: Box::new(body) }, span))
+        Some(Stmt::new(StmtKind::Func { name, type_params, params, return_type, body: Box::new(body) }, span))
     }
 
     fn let_declaration(&mut self, is_var: bool) -> Option<Stmt> {
@@ -245,13 +410,7 @@ impl Parser {
         };
 
         let type_annotation = if self.match_token(&[TokenKind::Colon]) {
-            if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
-                self.advance();
-                Some(t)
-            } else {
-                self.error_at_current("Expected type after ':'.");
-                return None;
-            }
+            Some(self.parse_type_expr()?)
         } else {
             None
         };
@@ -544,7 +703,31 @@ impl Parser {
 
         loop {
             if self.match_token(&[TokenKind::LeftParen]) {
-                expr = self.finish_call(expr)?;
+                expr = self.finish_call(expr, Vec::new())?;
+            } else if self.check_generic_call() {
+                self.advance(); // consume '<'
+                let mut type_args = Vec::new();
+                if !self.check(&TokenKind::Greater) {
+                    loop {
+                        if let Some(ty) = self.parse_type_expr() {
+                            type_args.push(ty);
+                        } else {
+                            return None;
+                        }
+                        if !self.match_token(&[TokenKind::Comma]) {
+                            break;
+                        }
+                    }
+                }
+                if !self.match_token(&[TokenKind::Greater]) {
+                    self.error_at_current("Expected '>' after generic type arguments.");
+                    return None;
+                }
+                if !self.match_token(&[TokenKind::LeftParen]) {
+                    self.error_at_current("Expected '(' after generic type arguments.");
+                    return None;
+                }
+                expr = self.finish_call(expr, type_args)?;
             } else if self.match_token(&[TokenKind::Dot]) {
                 let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
                     self.advance();
@@ -563,7 +746,7 @@ impl Parser {
         Some(expr)
     }
 
-    fn finish_call(&mut self, callee: Expr) -> Option<Expr> {
+    fn finish_call(&mut self, callee: Expr, type_args: Vec<TypeExpr>) -> Option<Expr> {
         let mut arguments = Vec::new();
         if !self.check(&TokenKind::RightParen) {
             loop {
@@ -578,7 +761,37 @@ impl Parser {
             return None;
         }
         let span = Span::new(callee.span.start, self.previous().span.end, callee.span.start_loc, self.previous().span.end_loc);
-        Some(Expr::new(ExprKind::Call { callee: Box::new(callee), arguments }, span))
+        Some(Expr::new(ExprKind::Call { callee: Box::new(callee), type_args, arguments }, span))
+    }
+
+    fn check_generic_call(&self) -> bool {
+        if !self.check(&TokenKind::Less) {
+            return false;
+        }
+        let mut i = self.current + 1;
+        let mut depth = 1;
+        while i < self.tokens.len() {
+            match self.tokens[i].kind {
+                TokenKind::Less => depth += 1,
+                TokenKind::Greater => {
+                    depth -= 1;
+                    if depth == 0 {
+                        // Check if the next token is '('
+                        if i + 1 < self.tokens.len() && self.tokens[i + 1].kind == TokenKind::LeftParen {
+                            return true;
+                        } else {
+                            return false;
+                        }
+                    }
+                },
+                TokenKind::LeftParen | TokenKind::LeftBrace | TokenKind::Semicolon | TokenKind::Equal => {
+                    return false; // Definitely not generic type args
+                },
+                _ => {}
+            }
+            i += 1;
+        }
+        false
     }
 
     fn primary(&mut self) -> Option<Expr> {

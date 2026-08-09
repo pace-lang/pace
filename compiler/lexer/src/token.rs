@@ -10,6 +10,7 @@ pub enum TokenKind {
     SelfKeyword,
     Class,
     Interface,
+    Implements,
     Type,
     If,
     Else,

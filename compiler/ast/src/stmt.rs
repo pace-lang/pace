@@ -2,17 +2,23 @@ use crate::span::Span;
 use crate::expr::Expr;
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum TypeExpr {
+    Named(String),
+    GenericInstance(String, Vec<TypeExpr>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum StmtKind {
     /// A let declaration: `let name = expression;`
     Let {
         name: String,
-        type_annotation: Option<String>,
+        type_annotation: Option<TypeExpr>,
         initializer: Option<Expr>,
     },
     /// A var declaration: `var name: type = expression;`
     Var {
         name: String,
-        type_annotation: Option<String>,
+        type_annotation: Option<TypeExpr>,
         initializer: Option<Expr>,
     },
     /// An expression evaluated for side effects: `10 + 20;`
@@ -36,22 +42,30 @@ pub enum StmtKind {
         iterator: Expr,
         body: Box<Stmt>,
     },
-    /// A function declaration: `func name(params) -> return_type { body }`
+    /// A function declaration: `func name<T>(params) -> return_type { body }`
     Func {
         name: String,
-        params: Vec<(String, String)>, // (name, type)
-        return_type: Option<String>,
+        type_params: Vec<String>,
+        params: Vec<(String, TypeExpr)>, // (name, type)
+        return_type: Option<TypeExpr>,
         body: Box<Stmt>,
     },
     /// A return statement: `return value;`
     Return {
         value: Option<Expr>,
     },
-    /// A class declaration: `class name { fields; methods; }`
+    /// A class declaration: `class name<T> { fields; methods; }`
     Class {
         name: String,
+        type_params: Vec<String>,
+        implements: Vec<String>,
         methods: Vec<Stmt>,
         fields: Vec<Stmt>,
+    },
+    /// An interface declaration: `interface name { methods; }`
+    Interface {
+        name: String,
+        methods: Vec<Stmt>,
     },
 }
 

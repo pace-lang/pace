@@ -11,9 +11,12 @@ pub enum Type {
     Any,
     BuiltinFunc,
     Function(Vec<Type>, Box<Type>),
-    Class(String),
+    Class(String, Vec<String>),
     Instance(String),
-} // Used to prevent cascading type errors during invalid parsing/resolution
+    Generic(String),
+    GenericInstance(String, Vec<Type>),
+    Interface(String),
+}
 
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -34,8 +37,29 @@ impl fmt::Display for Type {
                 }
                 write!(f, ") -> {}", ret)
             }
-            Type::Class(name) => write!(f, "Class({})", name),
+            Type::Class(name, type_params) => {
+                write!(f, "Class({})", name)?;
+                if !type_params.is_empty() {
+                    write!(f, "<")?;
+                    for (i, p) in type_params.iter().enumerate() {
+                        if i > 0 { write!(f, ", ")?; }
+                        write!(f, "{}", p)?;
+                    }
+                    write!(f, ">")?;
+                }
+                Ok(())
+            }
             Type::Instance(name) => write!(f, "{}", name),
+            Type::Generic(name) => write!(f, "{}", name),
+            Type::GenericInstance(name, args) => {
+                write!(f, "{}<", name)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ">")
+            }
+            Type::Interface(name) => write!(f, "Interface({})", name),
         }
     }
 }

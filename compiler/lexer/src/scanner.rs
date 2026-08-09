@@ -236,6 +236,7 @@ impl<'a> Scanner<'a> {
             "self" => TokenKind::SelfKeyword,
             "class" => TokenKind::Class,
             "interface" => TokenKind::Interface,
+            "implements" => TokenKind::Implements,
             "type" => TokenKind::Type,
             "if" => TokenKind::If,
             "else" => TokenKind::Else,

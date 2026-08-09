@@ -1,4 +1,4 @@
-use ast::{Expr, ExprKind, Stmt, StmtKind, Span, BinaryOp, UnaryOp};
+use ast::{Expr, ExprKind, Stmt, StmtKind, Span, BinaryOp, UnaryOp, TypeExpr};
 use crate::types::Type;
 use crate::env::TypeEnvironment;
 use std::collections::HashMap;
@@ -14,6 +14,8 @@ pub struct TypeChecker {
     pub errors: Vec<TypeError>,
     current_return_type: Option<Type>,
     pub classes: HashMap<String, HashMap<String, Type>>,
+    pub interfaces: HashMap<String, HashMap<String, Type>>,
+    pub class_implements: HashMap<String, Vec<String>>,
     current_class: Option<String>,
 }
 
@@ -24,6 +26,8 @@ impl TypeChecker {
             errors: Vec::new(),
             current_return_type: None,
             classes: HashMap::new(),
+            interfaces: HashMap::new(),
+            class_implements: HashMap::new(),
             current_class: None,
         }
     }
@@ -52,16 +56,21 @@ impl TypeChecker {
                     let ann_type = self.parse_type(ann, stmt.span);
                     if init_type == Type::Any {
                         init_type = ann_type;
-                    } else if init_type != ann_type && init_type != Type::Error {
+                    } else if !self.is_assignable(&init_type, &ann_type) && init_type != Type::Error {
                         self.error(stmt.span, &format!("Cannot assign type '{}' to variable of type '{}'.", init_type, ann_type));
                     }
                 }
                 
                 self.env.declare(name.clone(), init_type);
             }
-            StmtKind::Class { name, methods, fields } => {
-                self.env.declare(name.clone(), Type::Class(name.clone()));
+            StmtKind::Class { name, type_params, implements, methods, fields } => {
+                self.env.declare(name.clone(), Type::Class(name.clone(), type_params.clone()));
                 
+                self.env.push_scope();
+                for tp in type_params {
+                    self.env.declare(tp.clone(), Type::Generic(tp.clone()));
+                }
+
                 let mut class_members = HashMap::new();
                 
                 for field in fields {
@@ -92,7 +101,25 @@ impl TypeChecker {
                     }
                 }
                 
-                self.classes.insert(name.clone(), class_members);
+                self.classes.insert(name.clone(), class_members.clone());
+                self.class_implements.insert(name.clone(), implements.clone());
+                
+                // Validate implements
+                for interface_name in implements {
+                    if let Some(interface_members) = self.interfaces.get(interface_name).cloned() {
+                        for (i_method_name, i_method_ty) in interface_members {
+                            if let Some(c_method_ty) = class_members.get(&i_method_name) {
+                                if *c_method_ty != i_method_ty {
+                                    self.error(stmt.span, &format!("Class '{}' incorrectly implements method '{}' of interface '{}'. Expected '{}', found '{}'.", name, i_method_name, interface_name, i_method_ty, c_method_ty));
+                                }
+                            } else {
+                                self.error(stmt.span, &format!("Class '{}' does not implement required method '{}' of interface '{}'.", name, i_method_name, interface_name));
+                            }
+                        }
+                    } else {
+                        self.error(stmt.span, &format!("Interface '{}' not found.", interface_name));
+                    }
+                }
                 
                 let prev_class = self.current_class.clone();
                 self.current_class = Some(name.clone());
@@ -101,9 +128,36 @@ impl TypeChecker {
                     self.check_stmt(method);
                 }
                 
+                self.env.pop_scope();
                 self.current_class = prev_class;
             }
-            StmtKind::Func { name, params, return_type, body } => {
+            StmtKind::Interface { name, methods } => {
+                self.env.declare(name.clone(), Type::Interface(name.clone()));
+                
+                let mut interface_members = HashMap::new();
+                for method in methods {
+                    if let StmtKind::Func { name: m_name, params, return_type, .. } = &method.kind {
+                        let ret_ty = if let Some(rt) = return_type {
+                            self.parse_type(rt, method.span)
+                        } else {
+                            Type::Void
+                        };
+                        let mut param_types = Vec::new();
+                        for (_, pt) in params {
+                            param_types.push(self.parse_type(pt, method.span));
+                        }
+                        interface_members.insert(m_name.clone(), Type::Function(param_types, Box::new(ret_ty)));
+                    }
+                }
+                
+                self.interfaces.insert(name.clone(), interface_members);
+            }
+            StmtKind::Func { name, type_params, params, return_type, body } => {
+                self.env.push_scope();
+                for tp in type_params {
+                    self.env.declare(tp.clone(), Type::Generic(tp.clone()));
+                }
+
                 // Parse return type from AST string
                 let ret_ty = if let Some(rt) = return_type {
                     self.parse_type(rt, stmt.span)
@@ -118,7 +172,6 @@ impl TypeChecker {
 
                 self.env.declare(name.clone(), Type::Function(param_types.clone(), Box::new(ret_ty.clone())));
 
-                self.env.push_scope();
                 
                 if let Some(ref class_name) = self.current_class {
                     self.env.declare("self".to_string(), Type::Instance(class_name.clone()));
@@ -219,21 +272,44 @@ impl TypeChecker {
             }
             ExprKind::Get { object, name } => {
                 let obj_type = self.check_expr(object);
-                if let Type::Instance(class_name) = obj_type {
-                    if let Some(class_props) = self.classes.get(&class_name) {
-                        if let Some(prop_ty) = class_props.get(name) {
-                            prop_ty.clone()
-                        } else {
-                            self.error(expr.span, &format!("Property '{}' not found on class '{}'.", name, class_name));
-                            Type::Error
+                
+                let (class_name, instance_args) = match &obj_type {
+                    Type::Instance(n) => (n.clone(), Vec::new()),
+                    Type::GenericInstance(n, args) => (n.clone(), args.clone()),
+                    Type::Interface(n) => (n.clone(), Vec::new()),
+                    _ => {
+                        if obj_type != Type::Error {
+                            self.error(expr.span, &format!("Cannot get property '{}' on non-instance type '{}'.", name, obj_type));
                         }
+                        return Type::Error;
+                    }
+                };
+                
+                if let Some(class_props) = self.classes.get(&class_name) {
+                    if let Some(prop_ty) = class_props.get(name) {
+                        let mut resolved_ty = prop_ty.clone();
+                        if let Type::Generic(g) = prop_ty {
+                            if let Some(Type::Class(_, params)) = self.env.resolve(&class_name) {
+                                if let Some(idx) = params.iter().position(|p| p == g) {
+                                    if idx < instance_args.len() {
+                                        resolved_ty = instance_args[idx].clone();
+                                    }
+                                }
+                            }
+                        }
+                        resolved_ty
                     } else {
+                        self.error(expr.span, &format!("Property '{}' not found on class '{}'.", name, class_name));
                         Type::Error
                     }
-                } else if obj_type == Type::Error {
-                    Type::Error
+                } else if let Some(interface_props) = self.interfaces.get(&class_name) {
+                    if let Some(prop_ty) = interface_props.get(name) {
+                        prop_ty.clone()
+                    } else {
+                        self.error(expr.span, &format!("Property '{}' not found on interface '{}'.", name, class_name));
+                        Type::Error
+                    }
                 } else {
-                    self.error(expr.span, &format!("Cannot get property '{}' on non-instance type '{}'.", name, obj_type));
                     Type::Error
                 }
             }
@@ -241,25 +317,44 @@ impl TypeChecker {
                 let obj_type = self.check_expr(object);
                 let val_type = self.check_expr(value);
                 
-                if let Type::Instance(class_name) = obj_type {
-                    if let Some(class_props) = self.classes.get(&class_name) {
-                        if let Some(prop_ty) = class_props.get(name) {
-                            if val_type != *prop_ty && val_type != Type::Error && *prop_ty != Type::Error && *prop_ty != Type::Any {
-                                self.error(expr.span, &format!("Cannot assign type '{}' to property of type '{}'.", val_type, prop_ty));
-                            }
-                        } else {
-                            self.error(expr.span, &format!("Property '{}' not found on class '{}'.", name, class_name));
+                let (class_name, instance_args) = match &obj_type {
+                    Type::Instance(n) => (n.clone(), Vec::new()),
+                    Type::GenericInstance(n, args) => (n.clone(), args.clone()),
+                    Type::Interface(n) => (n.clone(), Vec::new()),
+                    _ => {
+                        if obj_type != Type::Error {
+                            self.error(expr.span, &format!("Cannot set property '{}' on non-instance type '{}'.", name, obj_type));
                         }
+                        return val_type;
                     }
-                } else if obj_type != Type::Error {
-                    self.error(expr.span, &format!("Cannot set property '{}' on non-instance type '{}'.", name, obj_type));
+                };
+
+                if let Some(class_props) = self.classes.get(&class_name) {
+                    if let Some(prop_ty) = class_props.get(name) {
+                        let mut resolved_ty = prop_ty.clone();
+                        if let Type::Generic(g) = prop_ty {
+                            if let Some(Type::Class(_, params)) = self.env.resolve(&class_name) {
+                                if let Some(idx) = params.iter().position(|p| p == g) {
+                                    if idx < instance_args.len() {
+                                        resolved_ty = instance_args[idx].clone();
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if val_type != resolved_ty && val_type != Type::Error && resolved_ty != Type::Error && resolved_ty != Type::Any {
+                            self.error(expr.span, &format!("Cannot assign type '{}' to property of type '{}'.", val_type, resolved_ty));
+                        }
+                    } else {
+                        self.error(expr.span, &format!("Property '{}' not found on class '{}'.", name, class_name));
+                    }
                 }
                 val_type
             }
             ExprKind::Grouping(inner) => {
                 self.check_expr(inner)
             }
-            ExprKind::Call { callee, arguments } => {
+            ExprKind::Call { callee, type_args, arguments } => {
                 let callee_type = self.check_expr(callee);
                 let mut arg_types = Vec::new();
                 for arg in arguments {
@@ -268,31 +363,81 @@ impl TypeChecker {
                 
                 match callee_type {
                     Type::BuiltinFunc => Type::Void,
-                    Type::Class(class_name) => {
+                    Type::Class(class_name, class_type_params) => {
                         let constructor_ty = self.classes.get(&class_name)
                             .and_then(|props| props.get("init").cloned());
-                        
+                            
+                        let mut resolved_type_args = Vec::new();
+
                         if let Some(Type::Function(param_types, _)) = constructor_ty {
                             if param_types.len() != arg_types.len() {
                                 self.error(expr.span, &format!("Constructor expected {} arguments, found {}.", param_types.len(), arg_types.len()));
                             } else {
+                                // Basic Local Inference & Checking
+                                if !class_type_params.is_empty() {
+                                    if type_args.is_empty() {
+                                        // Infer from arguments
+                                        let mut inferred_map = std::collections::HashMap::new();
+                                        for (expected, actual) in param_types.iter().zip(arg_types.iter()) {
+                                            if let Type::Generic(g) = expected {
+                                                if let std::collections::hash_map::Entry::Vacant(e) = inferred_map.entry(g.clone()) {
+                                                    e.insert(actual.clone());
+                                                }
+                                            }
+                                        }
+                                        
+                                        for tp in &class_type_params {
+                                            if let Some(ty) = inferred_map.get(tp) {
+                                                resolved_type_args.push(ty.clone());
+                                            } else {
+                                                self.error(expr.span, &format!("Cannot infer generic type '{}'. Please provide explicit type arguments.", tp));
+                                                resolved_type_args.push(Type::Error);
+                                            }
+                                        }
+                                    } else {
+                                        // Explicit arguments provided
+                                        if type_args.len() != class_type_params.len() {
+                                            self.error(expr.span, &format!("Expected {} generic arguments, found {}.", class_type_params.len(), type_args.len()));
+                                        }
+                                        for arg_expr in type_args {
+                                            resolved_type_args.push(self.parse_type(arg_expr, expr.span));
+                                        }
+                                    }
+                                }
+                                
+                                // TODO: Substitute generic parameters when checking constructor argument types!
                                 for (i, (expected, actual)) in param_types.iter().zip(arg_types.iter()).enumerate() {
-                                    if expected != actual && *expected != Type::Any && *actual != Type::Error {
-                                        self.error(expr.span, &format!("Argument {} expected type '{}', found '{}'.", i + 1, expected, actual));
+                                    // simple substitution for now
+                                    let mut expected_sub = expected.clone();
+                                    if let Type::Generic(g) = expected {
+                                        if let Some(idx) = class_type_params.iter().position(|p| p == g) {
+                                            if idx < resolved_type_args.len() {
+                                                expected_sub = resolved_type_args[idx].clone();
+                                            }
+                                        }
+                                    }
+                                    
+                                    if !self.is_assignable(actual, &expected_sub) && expected_sub != Type::Any && *actual != Type::Error {
+                                        self.error(expr.span, &format!("Argument {} to constructor expects '{}', found '{}'.", i + 1, expected_sub, actual));
                                     }
                                 }
                             }
                         } else if !arg_types.is_empty() {
-                            self.error(expr.span, &format!("Class '{}' has no init method, expected 0 arguments.", class_name));
+                            self.error(expr.span, &format!("Class '{}' has no 'init' method but arguments were provided.", class_name));
                         }
-                        Type::Instance(class_name)
+                        
+                        if class_type_params.is_empty() {
+                            Type::Instance(class_name)
+                        } else {
+                            Type::GenericInstance(class_name, resolved_type_args)
+                        }
                     }
                     Type::Function(param_types, ret_ty) => {
                         if param_types.len() != arg_types.len() {
                             self.error(expr.span, &format!("Expected {} arguments, found {}.", param_types.len(), arg_types.len()));
                         } else {
                             for (i, (expected, actual)) in param_types.iter().zip(arg_types.iter()).enumerate() {
-                                if expected != actual && *expected != Type::Any && *actual != Type::Error {
+                                if !self.is_assignable(actual, expected) && *expected != Type::Any && *actual != Type::Error {
                                     self.error(expr.span, &format!("Argument {} expected type '{}', found '{}'.", i + 1, expected, actual));
                                 }
                             }
@@ -363,22 +508,55 @@ impl TypeChecker {
         }
     }
 
-    fn parse_type(&mut self, name: &str, span: Span) -> Type {
-        match name {
-            "Int" => Type::Int,
-            "Float" => Type::Float,
-            "String" => Type::String,
-            "Boolean" => Type::Boolean,
-            "Void" => Type::Void,
-            _ => {
+    fn parse_type(&mut self, type_expr: &TypeExpr, span: Span) -> Type {
+        match type_expr {
+            TypeExpr::Named(name) => match name.as_str() {
+                "Int" => Type::Int,
+                "Float" => Type::Float,
+                "String" => Type::String,
+                "Boolean" => Type::Boolean,
+                "Void" => Type::Void,
+                _ => {
+                    if let Some(Type::Generic(g)) = self.env.resolve(name) {
+                        return Type::Generic(g.clone());
+                    }
+                    if self.classes.contains_key(name) {
+                        Type::Instance(name.to_string())
+                    } else if self.interfaces.contains_key(name) {
+                        Type::Interface(name.to_string())
+                    } else {
+                        self.error(span, &format!("Unknown type '{}'.", name));
+                        Type::Error
+                    }
+                }
+            },
+            TypeExpr::GenericInstance(name, args) => {
+                let parsed_args = args.iter().map(|a| self.parse_type(a, span)).collect();
                 if self.classes.contains_key(name) {
-                    Type::Instance(name.to_string())
+                    Type::GenericInstance(name.clone(), parsed_args)
                 } else {
-                    self.error(span, &format!("Unknown type '{}'.", name));
+                    self.error(span, &format!("Unknown generic class '{}'.", name));
                     Type::Error
                 }
             }
         }
+    }
+
+    fn is_assignable(&self, source: &Type, target: &Type) -> bool {
+        if source == target {
+            return true;
+        }
+        if *target == Type::Any {
+            return true;
+        }
+        if let (Type::Instance(class_name), Type::Interface(interface_name)) = (source, target) {
+            if let Some(implements) = self.class_implements.get(class_name) {
+                if implements.contains(interface_name) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     fn error(&mut self, span: Span, message: &str) {

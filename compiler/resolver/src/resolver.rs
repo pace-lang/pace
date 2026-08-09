@@ -45,7 +45,7 @@ impl Resolver {
                     self.error(stmt.span, &format!("Variable '{}' is already declared in this scope.", name));
                 }
             }
-            StmtKind::Class { name, methods, fields } => {
+            StmtKind::Class { name, type_params: _, implements: _, methods, fields } => {
                 if !self.scopes.declare(name.clone()) {
                     self.error(stmt.span, &format!("Class '{}' is already declared in this scope.", name));
                 }
@@ -62,7 +62,15 @@ impl Resolver {
                 
                 self.scopes.pop_scope();
             }
-            StmtKind::Func { name, params, body, .. } => {
+            StmtKind::Interface { name, methods } => {
+                if !self.scopes.declare(name.clone()) {
+                    self.error(stmt.span, &format!("Interface '{}' is already declared in this scope.", name));
+                }
+                
+                // No need to push scope for interface since methods are just signatures without bodies
+                // and they don't have their own scope resolution here (Typechecker will handle it).
+            }
+            StmtKind::Func { name, type_params: _, params, return_type: _, body } => {
                 if !self.scopes.declare(name.clone()) {
                     self.error(stmt.span, &format!("Function '{}' is already declared in this scope.", name));
                 }
@@ -124,7 +132,7 @@ impl Resolver {
             ExprKind::Grouping(inner) => {
                 self.resolve_expr(inner);
             }
-            ExprKind::Call { callee, arguments } => {
+            ExprKind::Call { callee, type_args: _, arguments } => {
                 self.resolve_expr(callee);
                 for arg in arguments {
                     self.resolve_expr(arg);

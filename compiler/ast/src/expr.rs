@@ -1,4 +1,5 @@
 use crate::span::Span;
+use crate::stmt::TypeExpr;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOp {
@@ -37,9 +38,10 @@ pub enum ExprKind {
     Unary(UnaryOp, Box<Expr>),
     /// A grouped expression like `(a + b)`
     Grouping(Box<Expr>),
-    /// A function call like `f(a, b)`
+    /// A function call like `f<T>(a, b)`
     Call {
         callee: Box<Expr>,
+        type_args: Vec<TypeExpr>,
         arguments: Vec<Expr>,
     },
     /// Property access: `object.name`
