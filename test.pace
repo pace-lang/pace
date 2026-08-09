@@ -1,3 +1,66 @@
-let x = 10;
-let y = 5;
-print("The answer is:", x + y);
+// --- Variables and Data Types ---
+let greeting: String = "Welcome to Pace!";
+var counter: Int = 10;
+let pi: Float = 3.14159;
+let isAwesome: Boolean = true;
+
+print(greeting);
+print("Pi is approximately", pi);
+
+// --- Functions and Control Flow ---
+func calculate_factorial(n: Int) -> Int {
+    var result = 1;
+    var current = n;
+    
+    while current > 0 {
+        result = result * current;
+        current = current - 1;
+    }
+    
+    return result;
+}
+
+let fact5 = calculate_factorial(5);
+print("Factorial of 5 is:", fact5);
+
+func check_magnitude(num: Int) {
+    if num > 10 {
+        print(num, "is greater than 10");
+    } else {
+        print(num, "is 10 or less");
+    }
+}
+
+check_magnitude(fact5);
+check_magnitude(counter);
+
+// --- Classes and Objects ---
+class BankAccount {
+    var owner: String;
+    var balance: Float;
+
+    init(owner: String, initial_deposit: Float) {
+        self.owner = owner;
+        self.balance = initial_deposit;
+    }
+
+    func deposit(amount: Float) {
+        self.balance = self.balance + amount;
+        print("Deposited", amount, "New balance:", self.balance);
+    }
+
+    func withdraw(amount: Float) {
+        if self.balance > amount {
+            self.balance = self.balance - amount;
+            print("Withdrew", amount, "Remaining balance:", self.balance);
+        } else {
+            print("Insufficient funds for", self.owner);
+        }
+    }
+}
+
+let alice_account = BankAccount("Alice", 100.5);
+print("Account owner:", alice_account.owner);
+alice_account.deposit(50.25);
+alice_account.withdraw(200.0);
+alice_account.withdraw(30.0);

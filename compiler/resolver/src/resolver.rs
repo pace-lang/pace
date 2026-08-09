@@ -35,13 +35,32 @@ impl Resolver {
                 self.resolve(stmts);
                 self.scopes.pop_scope();
             }
-            StmtKind::Let { name, initializer } | StmtKind::Var { name, initializer } => {
+            StmtKind::Let { name, type_annotation: _, initializer } | StmtKind::Var { name, type_annotation: _, initializer } => {
                 // Resolve initializer first so it can't reference the variable being declared
-                self.resolve_expr(initializer);
+                if let Some(init) = initializer {
+                    self.resolve_expr(init);
+                }
                 
                 if !self.scopes.declare(name.clone()) {
                     self.error(stmt.span, &format!("Variable '{}' is already declared in this scope.", name));
                 }
+            }
+            StmtKind::Class { name, methods, fields } => {
+                if !self.scopes.declare(name.clone()) {
+                    self.error(stmt.span, &format!("Class '{}' is already declared in this scope.", name));
+                }
+
+                self.scopes.push_scope();
+                self.scopes.declare("self".into());
+                
+                for field in fields {
+                    self.resolve_stmt(field);
+                }
+                for method in methods {
+                    self.resolve_stmt(method);
+                }
+                
+                self.scopes.pop_scope();
             }
             StmtKind::Func { name, params, body, .. } => {
                 if !self.scopes.declare(name.clone()) {
@@ -111,6 +130,24 @@ impl Resolver {
                     self.resolve_expr(arg);
                 }
             }
+            ExprKind::Get { object, name: _ } => {
+                self.resolve_expr(object);
+            }
+            ExprKind::Set { object, name: _, value } => {
+                self.resolve_expr(object);
+                self.resolve_expr(value);
+            }
+            ExprKind::Assign { name, value } => {
+                if !self.scopes.resolve(name) {
+                    self.error(expr.span, &format!("Cannot assign to undefined variable '{}'.", name));
+                }
+                self.resolve_expr(value);
+            }
+            ExprKind::SelfRef => {
+                if !self.scopes.resolve(&"self".to_string()) {
+                    self.error(expr.span, "Cannot use 'self' outside of a class method.");
+                }
+            }
             // Literals have no names to resolve
             ExprKind::Integer(_) | ExprKind::Float(_) | ExprKind::String(_) | ExprKind::Boolean(_) => {}
         }
@@ -138,12 +175,14 @@ mod tests {
         // let x = 1; { let x = 2; print(x); }
         let outer_let = Stmt::new(StmtKind::Let {
             name: "x".into(),
-            initializer: Expr::new(ExprKind::Integer(1), make_span()),
+            type_annotation: None,
+            initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
         }, make_span());
 
         let inner_let = Stmt::new(StmtKind::Let {
             name: "x".into(),
-            initializer: Expr::new(ExprKind::Integer(2), make_span()),
+            type_annotation: None,
+            initializer: Some(Expr::new(ExprKind::Integer(2), make_span())),
         }, make_span());
 
         let inner_usage = Stmt::new(StmtKind::Expression(Expr::new(ExprKind::Variable("x".into()), make_span())), make_span());
@@ -161,12 +200,14 @@ mod tests {
         // let x = 1; let x = 2;
         let let1 = Stmt::new(StmtKind::Let {
             name: "x".into(),
-            initializer: Expr::new(ExprKind::Integer(1), make_span()),
+            type_annotation: None,
+            initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
         }, make_span());
 
         let let2 = Stmt::new(StmtKind::Let {
             name: "x".into(),
-            initializer: Expr::new(ExprKind::Integer(2), make_span()),
+            type_annotation: None,
+            initializer: Some(Expr::new(ExprKind::Integer(2), make_span())),
         }, make_span());
 
         let mut resolver = Resolver::new();

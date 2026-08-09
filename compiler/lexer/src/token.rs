@@ -6,6 +6,8 @@ pub enum TokenKind {
     Let,
     Var,
     Func,
+    Init,
+    SelfKeyword,
     Class,
     Interface,
     Type,

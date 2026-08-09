@@ -27,7 +27,9 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Option<Stmt> {
-        let res = if self.match_token(&[TokenKind::Func]) {
+        let res = if self.match_token(&[TokenKind::Class]) {
+            self.class_declaration()
+        } else if self.match_token(&[TokenKind::Func]) {
             self.function_declaration()
         } else if self.match_token(&[TokenKind::Let]) {
             self.let_declaration(false)
@@ -41,6 +43,118 @@ impl Parser {
             self.synchronize();
         }
         res
+    }
+
+    fn class_declaration(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+
+        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+            self.advance();
+            n
+        } else {
+            self.error_at_current("Expected class name.");
+            return None;
+        };
+
+        if !self.match_token(&[TokenKind::LeftBrace]) {
+            self.error_at_current("Expected '{' before class body.");
+            return None;
+        }
+
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+
+        while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+            if self.match_token(&[TokenKind::Let]) {
+                if let Some(field) = self.let_declaration(false) {
+                    fields.push(field);
+                }
+            } else if self.match_token(&[TokenKind::Var]) {
+                if let Some(field) = self.let_declaration(true) {
+                    fields.push(field);
+                }
+            } else if self.match_token(&[TokenKind::Func]) {
+                if let Some(method) = self.function_declaration() {
+                    methods.push(method);
+                }
+            } else if self.match_token(&[TokenKind::Init]) {
+                if let Some(init_method) = self.init_declaration() {
+                    methods.push(init_method);
+                }
+            } else {
+                self.error_at_current("Expected property or method inside class.");
+                self.advance();
+            }
+        }
+
+        if !self.match_token(&[TokenKind::RightBrace]) {
+            self.error_at_current("Expected '}' after class body.");
+            return None;
+        }
+
+        let end_span = self.previous().span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        Some(Stmt::new(StmtKind::Class { name, methods, fields }, span))
+    }
+
+    fn init_declaration(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+        let name = "init".to_string();
+
+        if !self.match_token(&[TokenKind::LeftParen]) {
+            self.error_at_current("Expected '(' after init.");
+            return None;
+        }
+
+        let mut params = Vec::new();
+        if !self.check(&TokenKind::RightParen) {
+            loop {
+                let param_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                    self.advance();
+                    n
+                } else {
+                    self.error_at_current("Expected parameter name.");
+                    return None;
+                };
+
+                if !self.match_token(&[TokenKind::Colon]) {
+                    self.error_at_current("Expected ':' after parameter name.");
+                    return None;
+                }
+
+                let param_type = if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
+                    self.advance();
+                    t
+                } else {
+                    self.error_at_current("Expected parameter type.");
+                    return None;
+                };
+
+                params.push((param_name, param_type));
+
+                if !self.match_token(&[TokenKind::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        if !self.match_token(&[TokenKind::RightParen]) {
+            self.error_at_current("Expected ')' after parameters.");
+            return None;
+        }
+
+        let return_type = Some("Void".to_string());
+
+        if !self.match_token(&[TokenKind::LeftBrace]) {
+            self.error_at_current("Expected '{' before init body.");
+            return None;
+        }
+
+        let body = self.block()?;
+        let end_span = body.span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+
+        Some(Stmt::new(StmtKind::Func { name, params, return_type, body: Box::new(body) }, span))
     }
 
     fn function_declaration(&mut self) -> Option<Stmt> {
@@ -130,25 +244,33 @@ impl Parser {
             return None;
         };
 
-        if !self.match_token(&[TokenKind::Equal]) {
-            self.error_at_current("Expected '=' after variable name.");
-            return None;
-        }
+        let type_annotation = if self.match_token(&[TokenKind::Colon]) {
+            if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
+                self.advance();
+                Some(t)
+            } else {
+                self.error_at_current("Expected type after ':'.");
+                return None;
+            }
+        } else {
+            None
+        };
 
-        let initializer = self.expression()?;
+        let initializer = if self.match_token(&[TokenKind::Equal]) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
 
-        if !self.match_token(&[TokenKind::Semicolon]) {
-            self.error_at_current("Expected ';' after variable declaration.");
-            return None;
-        }
+        self.match_token(&[TokenKind::Semicolon]);
 
         let end_span = self.previous().span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
         let kind = if is_var {
-            StmtKind::Var { name, initializer }
+            StmtKind::Var { name, type_annotation, initializer }
         } else {
-            StmtKind::Let { name, initializer }
+            StmtKind::Let { name, type_annotation, initializer }
         };
 
         Some(Stmt::new(kind, span))
@@ -301,17 +423,39 @@ impl Parser {
     fn expression_statement(&mut self) -> Option<Stmt> {
         let expr = self.expression()?;
 
-        if !self.match_token(&[TokenKind::Semicolon]) {
-            self.error_at_current("Expected ';' after expression.");
-            return None;
-        }
+        self.match_token(&[TokenKind::Semicolon]);
 
         let span = expr.span;
         Some(Stmt::new(StmtKind::Expression(expr), span))
     }
 
     fn expression(&mut self) -> Option<Expr> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Option<Expr> {
+        let expr = self.equality()?;
+
+        if self.match_token(&[TokenKind::Equal]) {
+            let equals = self.previous().clone();
+            let value = self.assignment()?;
+
+            match expr.kind {
+                ExprKind::Variable(name) => {
+                    let span = Span::new(expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
+                    return Some(Expr::new(ExprKind::Assign { name, value: Box::new(value) }, span));
+                }
+                ExprKind::Get { object, name } => {
+                    let span = Span::new(expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
+                    return Some(Expr::new(ExprKind::Set { object, name, value: Box::new(value) }, span));
+                }
+                _ => {
+                    self.error_at_current("Invalid assignment target.");
+                }
+            }
+        }
+
+        Some(expr)
     }
 
     fn equality(&mut self) -> Option<Expr> {
@@ -401,6 +545,17 @@ impl Parser {
         loop {
             if self.match_token(&[TokenKind::LeftParen]) {
                 expr = self.finish_call(expr)?;
+            } else if self.match_token(&[TokenKind::Dot]) {
+                let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                    self.advance();
+                    n
+                } else {
+                    self.error_at_current("Expected property name after '.'.");
+                    return None;
+                };
+
+                let span = Span::new(expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
+                expr = Expr::new(ExprKind::Get { object: Box::new(expr), name }, span);
             } else {
                 break;
             }
@@ -432,6 +587,9 @@ impl Parser {
         }
         if self.match_token(&[TokenKind::True]) {
             return Some(Expr::new(ExprKind::Boolean(true), self.previous().span));
+        }
+        if self.match_token(&[TokenKind::SelfKeyword]) {
+            return Some(Expr::new(ExprKind::SelfRef, self.previous().span));
         }
         
         if let Some(token) = self.peek().cloned() {

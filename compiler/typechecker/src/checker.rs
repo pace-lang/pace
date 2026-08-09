@@ -1,6 +1,7 @@
 use ast::{Expr, ExprKind, Stmt, StmtKind, Span, BinaryOp, UnaryOp};
 use crate::types::Type;
 use crate::env::TypeEnvironment;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct TypeError {
@@ -12,6 +13,8 @@ pub struct TypeChecker {
     env: TypeEnvironment,
     pub errors: Vec<TypeError>,
     current_return_type: Option<Type>,
+    pub classes: HashMap<String, HashMap<String, Type>>,
+    current_class: Option<String>,
 }
 
 impl TypeChecker {
@@ -20,6 +23,8 @@ impl TypeChecker {
             env: TypeEnvironment::new(),
             errors: Vec::new(),
             current_return_type: None,
+            classes: HashMap::new(),
+            current_class: None,
         }
     }
 
@@ -36,9 +41,67 @@ impl TypeChecker {
                 self.check(stmts);
                 self.env.pop_scope();
             }
-            StmtKind::Let { name, initializer } | StmtKind::Var { name, initializer } => {
-                let init_type = self.check_expr(initializer);
+            StmtKind::Let { name, type_annotation, initializer } | StmtKind::Var { name, type_annotation, initializer } => {
+                let mut init_type = if let Some(init) = initializer {
+                    self.check_expr(init)
+                } else {
+                    Type::Any
+                };
+                
+                if let Some(ann) = type_annotation {
+                    let ann_type = self.parse_type(ann, stmt.span);
+                    if init_type == Type::Any {
+                        init_type = ann_type;
+                    } else if init_type != ann_type && init_type != Type::Error {
+                        self.error(stmt.span, &format!("Cannot assign type '{}' to variable of type '{}'.", init_type, ann_type));
+                    }
+                }
+                
                 self.env.declare(name.clone(), init_type);
+            }
+            StmtKind::Class { name, methods, fields } => {
+                self.env.declare(name.clone(), Type::Class(name.clone()));
+                
+                let mut class_members = HashMap::new();
+                
+                for field in fields {
+                    if let StmtKind::Var { name: f_name, type_annotation, initializer } | StmtKind::Let { name: f_name, type_annotation, initializer } = &field.kind {
+                        let ty = if let Some(ann) = type_annotation {
+                            self.parse_type(ann, field.span)
+                        } else if let Some(init) = initializer {
+                            self.check_expr(init)
+                        } else {
+                            Type::Any
+                        };
+                        class_members.insert(f_name.clone(), ty);
+                    }
+                }
+
+                for method in methods {
+                    if let StmtKind::Func { name: m_name, params, return_type, .. } = &method.kind {
+                        let ret_ty = if let Some(rt) = return_type {
+                            self.parse_type(rt, method.span)
+                        } else {
+                            Type::Void
+                        };
+                        let mut param_types = Vec::new();
+                        for (_, pt) in params {
+                            param_types.push(self.parse_type(pt, method.span));
+                        }
+                        class_members.insert(m_name.clone(), Type::Function(param_types, Box::new(ret_ty)));
+                    }
+                }
+                
+                self.classes.insert(name.clone(), class_members);
+                
+                let prev_class = self.current_class.clone();
+                self.current_class = Some(name.clone());
+                
+                for method in methods {
+                    self.check_stmt(method);
+                }
+                
+                self.current_class = prev_class;
             }
             StmtKind::Func { name, params, return_type, body } => {
                 // Parse return type from AST string
@@ -48,14 +111,20 @@ impl TypeChecker {
                     Type::Void
                 };
 
-                // Functions are declared in the current scope
-                // (Assuming functions are just a special type of variable for now, though full Pace has distinct func tracking)
-                // For this basic pass, we won't strictly enforce function type tracking yet, just their body types.
-                self.env.declare(name.clone(), Type::Void); // Placeholder for function type
+                let mut param_types = Vec::new();
+                for (_, param_type_str) in params {
+                    param_types.push(self.parse_type(param_type_str, stmt.span));
+                }
+
+                self.env.declare(name.clone(), Type::Function(param_types.clone(), Box::new(ret_ty.clone())));
 
                 self.env.push_scope();
-                for (param_name, param_type_str) in params {
-                    let param_ty = self.parse_type(param_type_str, stmt.span);
+                
+                if let Some(ref class_name) = self.current_class {
+                    self.env.declare("self".to_string(), Type::Instance(class_name.clone()));
+                }
+
+                for ((param_name, _), param_ty) in params.iter().zip(param_types.into_iter()) {
                     self.env.declare(param_name.clone(), param_ty);
                 }
 
@@ -126,20 +195,110 @@ impl TypeChecker {
                 if let Some(ty) = self.env.resolve(name) {
                     ty
                 } else {
-                    Type::Error // Resolver should have caught this, but fallback to Error
+                    Type::Error
                 }
+            }
+            ExprKind::Assign { name, value } => {
+                let val_type = self.check_expr(value);
+                if let Some(var_type) = self.env.resolve(name) {
+                    if val_type != var_type && val_type != Type::Error && var_type != Type::Error && var_type != Type::Any {
+                        self.error(expr.span, &format!("Cannot assign type '{}' to variable of type '{}'.", val_type, var_type));
+                    }
+                } else {
+                    self.error(expr.span, &format!("Variable '{}' not found.", name));
+                }
+                val_type
+            }
+            ExprKind::SelfRef => {
+                if let Some(ty) = self.env.resolve(&"self".to_string()) {
+                    ty
+                } else {
+                    self.error(expr.span, "Cannot use 'self' outside a class.");
+                    Type::Error
+                }
+            }
+            ExprKind::Get { object, name } => {
+                let obj_type = self.check_expr(object);
+                if let Type::Instance(class_name) = obj_type {
+                    if let Some(class_props) = self.classes.get(&class_name) {
+                        if let Some(prop_ty) = class_props.get(name) {
+                            prop_ty.clone()
+                        } else {
+                            self.error(expr.span, &format!("Property '{}' not found on class '{}'.", name, class_name));
+                            Type::Error
+                        }
+                    } else {
+                        Type::Error
+                    }
+                } else if obj_type == Type::Error {
+                    Type::Error
+                } else {
+                    self.error(expr.span, &format!("Cannot get property '{}' on non-instance type '{}'.", name, obj_type));
+                    Type::Error
+                }
+            }
+            ExprKind::Set { object, name, value } => {
+                let obj_type = self.check_expr(object);
+                let val_type = self.check_expr(value);
+                
+                if let Type::Instance(class_name) = obj_type {
+                    if let Some(class_props) = self.classes.get(&class_name) {
+                        if let Some(prop_ty) = class_props.get(name) {
+                            if val_type != *prop_ty && val_type != Type::Error && *prop_ty != Type::Error && *prop_ty != Type::Any {
+                                self.error(expr.span, &format!("Cannot assign type '{}' to property of type '{}'.", val_type, prop_ty));
+                            }
+                        } else {
+                            self.error(expr.span, &format!("Property '{}' not found on class '{}'.", name, class_name));
+                        }
+                    }
+                } else if obj_type != Type::Error {
+                    self.error(expr.span, &format!("Cannot set property '{}' on non-instance type '{}'.", name, obj_type));
+                }
+                val_type
             }
             ExprKind::Grouping(inner) => {
                 self.check_expr(inner)
             }
             ExprKind::Call { callee, arguments } => {
                 let callee_type = self.check_expr(callee);
+                let mut arg_types = Vec::new();
                 for arg in arguments {
-                    self.check_expr(arg);
+                    arg_types.push(self.check_expr(arg));
                 }
                 
                 match callee_type {
                     Type::BuiltinFunc => Type::Void,
+                    Type::Class(class_name) => {
+                        let constructor_ty = self.classes.get(&class_name)
+                            .and_then(|props| props.get("init").cloned());
+                        
+                        if let Some(Type::Function(param_types, _)) = constructor_ty {
+                            if param_types.len() != arg_types.len() {
+                                self.error(expr.span, &format!("Constructor expected {} arguments, found {}.", param_types.len(), arg_types.len()));
+                            } else {
+                                for (i, (expected, actual)) in param_types.iter().zip(arg_types.iter()).enumerate() {
+                                    if expected != actual && *expected != Type::Any && *actual != Type::Error {
+                                        self.error(expr.span, &format!("Argument {} expected type '{}', found '{}'.", i + 1, expected, actual));
+                                    }
+                                }
+                            }
+                        } else if !arg_types.is_empty() {
+                            self.error(expr.span, &format!("Class '{}' has no init method, expected 0 arguments.", class_name));
+                        }
+                        Type::Instance(class_name)
+                    }
+                    Type::Function(param_types, ret_ty) => {
+                        if param_types.len() != arg_types.len() {
+                            self.error(expr.span, &format!("Expected {} arguments, found {}.", param_types.len(), arg_types.len()));
+                        } else {
+                            for (i, (expected, actual)) in param_types.iter().zip(arg_types.iter()).enumerate() {
+                                if expected != actual && *expected != Type::Any && *actual != Type::Error {
+                                    self.error(expr.span, &format!("Argument {} expected type '{}', found '{}'.", i + 1, expected, actual));
+                                }
+                            }
+                        }
+                        *ret_ty
+                    }
                     Type::Error => Type::Error,
                     _ => {
                         self.error(expr.span, "Cannot call non-function type.");
@@ -212,8 +371,12 @@ impl TypeChecker {
             "Boolean" => Type::Boolean,
             "Void" => Type::Void,
             _ => {
-                self.error(span, &format!("Unknown type '{}'.", name));
-                Type::Error
+                if self.classes.contains_key(name) {
+                    Type::Instance(name.to_string())
+                } else {
+                    self.error(span, &format!("Unknown type '{}'.", name));
+                    Type::Error
+                }
             }
         }
     }
@@ -241,11 +404,12 @@ mod tests {
         // let x = 10 + 5;
         let stmt = Stmt::new(StmtKind::Let {
             name: "x".into(),
-            initializer: Expr::new(ExprKind::Binary(
+            type_annotation: None,
+            initializer: Some(Expr::new(ExprKind::Binary(
                 Box::new(Expr::new(ExprKind::Integer(10), make_span())),
                 BinaryOp::Add,
                 Box::new(Expr::new(ExprKind::Integer(5), make_span())),
-            ), make_span()),
+            ), make_span())),
         }, make_span());
 
         checker.check(&[stmt]);
@@ -259,11 +423,12 @@ mod tests {
         // let x = 10 + "hello";
         let stmt = Stmt::new(StmtKind::Let {
             name: "x".into(),
-            initializer: Expr::new(ExprKind::Binary(
+            type_annotation: None,
+            initializer: Some(Expr::new(ExprKind::Binary(
                 Box::new(Expr::new(ExprKind::Integer(10), make_span())),
                 BinaryOp::Add,
                 Box::new(Expr::new(ExprKind::String("hello".into()), make_span())),
-            ), make_span()),
+            ), make_span())),
         }, make_span());
 
         checker.check(&[stmt]);

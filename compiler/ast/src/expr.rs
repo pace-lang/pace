@@ -42,6 +42,24 @@ pub enum ExprKind {
         callee: Box<Expr>,
         arguments: Vec<Expr>,
     },
+    /// Property access: `object.name`
+    Get {
+        object: Box<Expr>,
+        name: String,
+    },
+    /// Property assignment: `object.name = value`
+    Set {
+        object: Box<Expr>,
+        name: String,
+        value: Box<Expr>,
+    },
+    /// Variable assignment: `name = value`
+    Assign {
+        name: String,
+        value: Box<Expr>,
+    },
+    /// Self reference: `self`
+    SelfRef,
 }
 
 #[derive(Debug, Clone, PartialEq)]

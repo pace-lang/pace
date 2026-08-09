@@ -6,12 +6,14 @@ pub enum StmtKind {
     /// A let declaration: `let name = expression;`
     Let {
         name: String,
-        initializer: Expr,
+        type_annotation: Option<String>,
+        initializer: Option<Expr>,
     },
-    /// A var declaration: `var name = expression;`
+    /// A var declaration: `var name: type = expression;`
     Var {
         name: String,
-        initializer: Expr,
+        type_annotation: Option<String>,
+        initializer: Option<Expr>,
     },
     /// An expression evaluated for side effects: `10 + 20;`
     Expression(Expr),
@@ -44,6 +46,12 @@ pub enum StmtKind {
     /// A return statement: `return value;`
     Return {
         value: Option<Expr>,
+    },
+    /// A class declaration: `class name { fields; methods; }`
+    Class {
+        name: String,
+        methods: Vec<Stmt>,
+        fields: Vec<Stmt>,
     },
 }
 

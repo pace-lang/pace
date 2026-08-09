@@ -232,6 +232,8 @@ impl<'a> Scanner<'a> {
             "let" => TokenKind::Let,
             "var" => TokenKind::Var,
             "func" => TokenKind::Func,
+            "init" => TokenKind::Init,
+            "self" => TokenKind::SelfKeyword,
             "class" => TokenKind::Class,
             "interface" => TokenKind::Interface,
             "type" => TokenKind::Type,

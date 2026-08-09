@@ -13,6 +13,7 @@ pub enum Value {
     String(String),
     Boolean(bool),
     Place(Place),
+    Object(usize),
     Void,
 }
 
@@ -22,11 +23,15 @@ pub enum RValue {
     BinaryOp(BinaryOp, Value, Value),
     UnaryOp(UnaryOp, Value),
     Call(String, Vec<Value>),
+    MethodCall(Value, String, Vec<Value>),
+    AllocateObject(String),
+    GetProperty(Value, String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inst {
     Assign(Place, RValue),
+    SetProperty(Value, String, Value),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

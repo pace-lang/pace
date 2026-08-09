@@ -10,6 +10,9 @@ pub enum Type {
     Error,
     Any,
     BuiltinFunc,
+    Function(Vec<Type>, Box<Type>),
+    Class(String),
+    Instance(String),
 } // Used to prevent cascading type errors during invalid parsing/resolution
 
 impl fmt::Display for Type {
@@ -23,6 +26,16 @@ impl fmt::Display for Type {
             Type::Error => write!(f, "<ErrorType>"),
             Type::Any => write!(f, "Any"),
             Type::BuiltinFunc => write!(f, "<BuiltinFunc>"),
+            Type::Function(params, ret) => {
+                write!(f, "Func(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", p)?;
+                }
+                write!(f, ") -> {}", ret)
+            }
+            Type::Class(name) => write!(f, "Class({})", name),
+            Type::Instance(name) => write!(f, "{}", name),
         }
     }
 }

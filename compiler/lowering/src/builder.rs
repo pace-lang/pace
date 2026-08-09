@@ -1,5 +1,78 @@
 use ast::{Expr, ExprKind, Stmt, StmtKind};
-use mir::{BasicBlock, BlockId, Function, Inst, Place, RValue, Terminator, Value};
+use mir::{BasicBlock, BlockId, Function, Inst, Place, RValue, Terminator, Value, Program};
+
+pub struct ProgramBuilder {
+    program: Program,
+    current_class: Option<String>,
+}
+
+impl ProgramBuilder {
+    pub fn new() -> Self {
+        Self {
+            program: Program::new(),
+            current_class: None,
+        }
+    }
+
+    pub fn build(mut self, statements: &[Stmt]) -> Program {
+        let mut main_stmts = Vec::new();
+        for stmt in statements {
+            if let StmtKind::Class { name, methods, fields } = &stmt.kind {
+                let mut field_names = Vec::new();
+                for field in fields {
+                    if let StmtKind::Var { name: f_name, .. } | StmtKind::Let { name: f_name, .. } = &field.kind {
+                        field_names.push(f_name.clone());
+                    }
+                }
+                let class_def = mir::ClassDef {
+                    name: name.clone(),
+                    fields: field_names,
+                };
+                self.program.classes.insert(name.clone(), class_def);
+
+                let prev_class = self.current_class.clone();
+                self.current_class = Some(name.clone());
+
+                for method in methods {
+                    if let StmtKind::Func { name: m_name, params, body, .. } = &method.kind {
+                        let mut param_names = vec!["self".to_string()];
+                        for (p, _) in params {
+                            param_names.push(p.clone());
+                        }
+                        let actual_name = format!("{}::{}", name, m_name);
+                        let builder = MirBuilder::new(actual_name.clone(), param_names);
+                        let mir_func = match &body.kind {
+                            StmtKind::Block(stmts) => builder.build(stmts),
+                            _ => builder.build(std::slice::from_ref(body)),
+                        };
+                        self.program.functions.insert(actual_name, mir_func);
+                    }
+                }
+
+                self.current_class = prev_class;
+            } else if let StmtKind::Func { name, params, body, .. } = &stmt.kind {
+                let mut param_names = Vec::new();
+                for (p, _) in params {
+                    param_names.push(p.clone());
+                }
+                let builder = MirBuilder::new(name.clone(), param_names);
+                let mir_func = match &body.kind {
+                    StmtKind::Block(stmts) => builder.build(stmts),
+                    _ => builder.build(std::slice::from_ref(body)),
+                };
+                self.program.functions.insert(name.clone(), mir_func);
+            } else {
+                main_stmts.push(stmt.clone());
+            }
+        }
+        
+        let builder = MirBuilder::new("main".into(), vec![]);
+        let main_func = builder.build(&main_stmts);
+        self.program.functions.insert("main".into(), main_func);
+
+        self.program
+    }
+}
 
 pub struct MirBuilder {
     function: Function,
@@ -8,8 +81,8 @@ pub struct MirBuilder {
 }
 
 impl MirBuilder {
-    pub fn new(name: String) -> Self {
-        let mut function = Function::new(name);
+    pub fn new(name: String, parameters: Vec<String>) -> Self {
+        let mut function = Function::new(name, parameters);
         let start_block = BlockId(0);
         function.blocks.push(BasicBlock::new(start_block));
 
@@ -54,9 +127,13 @@ impl MirBuilder {
                     self.lower_stmt(s);
                 }
             }
-            StmtKind::Let { name, initializer } | StmtKind::Var { name, initializer } => {
-                let val = self.lower_expr(initializer);
-                self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(val)));
+            StmtKind::Let { name, initializer, .. } | StmtKind::Var { name, initializer, .. } => {
+                if let Some(init) = initializer {
+                    let val = self.lower_expr(init);
+                    self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(val)));
+                } else {
+                    self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(Value::Void)));
+                }
             }
             StmtKind::Expression(expr) => {
                 self.lower_expr(expr);
@@ -118,9 +195,8 @@ impl MirBuilder {
 
                 self.current_block = merge_block;
             }
-            StmtKind::Func { .. } => {
-                // A nested function definition would typically spawn a new MIR function context.
-                // Skipped for this simplified basic pass.
+            StmtKind::Func { .. } | StmtKind::Class { .. } => {
+                // Nested functions or classes are not handled in this basic pass
             }
             StmtKind::For { .. } => {
                 // Lowering 'for' loops requires desugaring into an iterator while loop.
@@ -142,19 +218,44 @@ impl MirBuilder {
             ExprKind::Boolean(b) => Value::Boolean(*b),
             ExprKind::Variable(name) => Value::Place(Place::Var(name.clone())),
             ExprKind::Grouping(inner) => self.lower_expr(inner),
+            ExprKind::Get { object, name } => {
+                let obj_val = self.lower_expr(object);
+                let temp = self.new_temp();
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, name.clone())));
+                Value::Place(temp)
+            }
+            ExprKind::Set { object, name, value } => {
+                let obj_val = self.lower_expr(object);
+                let val_val = self.lower_expr(value);
+                self.current().instructions.push(Inst::SetProperty(obj_val, name.clone(), val_val.clone()));
+                val_val
+            }
+            ExprKind::Assign { name, value } => {
+                let val = self.lower_expr(value);
+                self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(val.clone())));
+                val
+            }
+            ExprKind::SelfRef => {
+                Value::Place(Place::Var("self".to_string()))
+            }
             ExprKind::Call { callee, arguments } => {
-                // For now, we assume the callee is just a Variable resolving to a string name.
-                // In a full implementation, callee could be a complex expression (function pointer).
+                let mut arg_values = Vec::new();
+                for arg in arguments {
+                    arg_values.push(self.lower_expr(arg));
+                }
+
+                if let ExprKind::Get { object, name } = &callee.kind {
+                    let obj_val = self.lower_expr(object);
+                    let temp = self.new_temp();
+                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::MethodCall(obj_val, name.clone(), arg_values)));
+                    return Value::Place(temp);
+                }
+
                 let func_name = if let ExprKind::Variable(name) = &callee.kind {
                     name.clone()
                 } else {
                     panic!("Only direct function calls by name are currently supported.");
                 };
-
-                let mut arg_values = Vec::new();
-                for arg in arguments {
-                    arg_values.push(self.lower_expr(arg));
-                }
 
                 let temp = self.new_temp();
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call(func_name, arg_values)));
@@ -191,14 +292,15 @@ mod tests {
         // let x = 10 + 5;
         let stmt = Stmt::new(StmtKind::Let {
             name: "x".into(),
-            initializer: Expr::new(ExprKind::Binary(
+            type_annotation: None,
+            initializer: Some(Expr::new(ExprKind::Binary(
                 Box::new(Expr::new(ExprKind::Integer(10), make_span())),
                 BinaryOp::Add,
                 Box::new(Expr::new(ExprKind::Integer(5), make_span())),
-            ), make_span()),
+            ), make_span())),
         }, make_span());
 
-        let builder = MirBuilder::new("main".into());
+        let builder = MirBuilder::new("main".into(), vec![]);
         let fun = builder.build(&[stmt]);
 
         assert_eq!(fun.blocks.len(), 1);
@@ -227,13 +329,14 @@ mod tests {
             then_branch: Box::new(Stmt::new(StmtKind::Block(vec![
                 Stmt::new(StmtKind::Let {
                     name: "x".into(),
-                    initializer: Expr::new(ExprKind::Integer(1), make_span()),
+                    type_annotation: None,
+                    initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
                 }, make_span())
             ]), make_span())),
             else_branch: None,
         }, make_span());
 
-        let builder = MirBuilder::new("main".into());
+        let builder = MirBuilder::new("main".into(), vec![]);
         let fun = builder.build(&[stmt]);
 
         // Start block, Then Block, Merge Block

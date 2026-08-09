@@ -7,7 +7,7 @@ use lexer::{Scanner, TokenKind};
 use parser::Parser as PaceParser;
 use resolver::Resolver;
 use typechecker::TypeChecker;
-use lowering::MirBuilder;
+use lowering::ProgramBuilder;
 use vm::VirtualMachine;
 
 #[derive(Parser)]
@@ -95,18 +95,18 @@ fn main() {
             }
 
             // 5. Lowering (AST -> MIR)
-            let builder = MirBuilder::new("main".into());
-            let mir_function = builder.build(&ast);
+            let builder = ProgramBuilder::new();
+            let mir_program = builder.build(&ast);
 
             // 6. Execution (VM)
-            let mut vm = VirtualMachine::new();
-            let result = vm.execute(&mir_function);
+            let mut vm = VirtualMachine::new(&mir_program);
+            let result = vm.execute();
 
             if let Some(val) = result {
-                println!("Result: {:?}", val);
+                if val != mir::Value::Void {
+                    println!("Result: {:?}", val);
+                }
             }
-            
-            vm.dump_memory();
         }
     }
 }
