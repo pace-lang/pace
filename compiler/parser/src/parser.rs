@@ -45,6 +45,8 @@ impl Parser {
                 self.error_at_current("Expected 'var' after 'weak'.");
                 None
             }
+        } else if self.match_token(&[TokenKind::Foreign]) {
+            self.foreign_declaration()
         } else {
             self.statement()
         };
@@ -369,6 +371,74 @@ impl Parser {
         Some(Stmt::new(StmtKind::Func { name, type_params: Vec::new(), params, return_type, body: Box::new(body) }, span))
     }
 
+    fn foreign_declaration(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+
+        if !self.match_token(&[TokenKind::Func]) {
+            self.error_at_current("Expected 'func' after 'foreign'.");
+            return None;
+        }
+
+        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+            self.advance();
+            n
+        } else {
+            self.error_at_current("Expected foreign function name.");
+            return None;
+        };
+
+        if !self.match_token(&[TokenKind::LeftParen]) {
+            self.error_at_current("Expected '(' after foreign function name.");
+            return None;
+        }
+
+        let mut params = Vec::new();
+        if !self.check(&TokenKind::RightParen) {
+            loop {
+                let param_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                    self.advance();
+                    n
+                } else {
+                    self.error_at_current("Expected parameter name.");
+                    return None;
+                };
+
+                if !self.match_token(&[TokenKind::Colon]) {
+                    self.error_at_current("Expected ':' after parameter name.");
+                    return None;
+                }
+
+                let param_type = self.parse_type_expr()?;
+
+                params.push((param_name, param_type));
+
+                if !self.match_token(&[TokenKind::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        if !self.match_token(&[TokenKind::RightParen]) {
+            self.error_at_current("Expected ')' after parameters.");
+            return None;
+        }
+
+        let mut return_type = None;
+        if self.match_token(&[TokenKind::Arrow]) {
+            return_type = Some(self.parse_type_expr()?);
+        }
+
+        if !self.match_token(&[TokenKind::Semicolon]) {
+            self.error_at_current("Expected ';' after foreign function declaration.");
+            return None;
+        }
+
+        let end_span = self.previous().span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+
+        Some(Stmt::new(StmtKind::ForeignFunc { name, params, return_type }, span))
+    }
+
     fn function_declaration(&mut self) -> Option<Stmt> {
         let start_span = self.previous().span;
 
@@ -633,7 +703,7 @@ impl Parser {
         let expr = self.equality()?;
 
         if self.match_token(&[TokenKind::Equal]) {
-            let equals = self.previous().clone();
+            let _equals = self.previous().clone();
             let value = self.assignment()?;
 
             match expr.kind {

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use mir::{BlockId, Function, Inst, Place, RValue, Terminator, Value, Program};
+use mir::{BlockId, Inst, Place, RValue, Terminator, Value, Program};
 use ast::{BinaryOp, UnaryOp};
 
 pub struct Frame {

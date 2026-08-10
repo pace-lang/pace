@@ -3,7 +3,7 @@ pub mod block;
 pub mod function;
 pub mod program;
 
-pub use inst::{Place, Value, RValue, Inst, Terminator, BlockId};
-pub use block::BasicBlock;
 pub use function::Function;
-pub use program::{Program, ClassDef};
+pub use inst::{Inst, RValue, Place, Value, BlockId, Terminator};
+pub use block::BasicBlock;
+pub use program::{Program, ClassDef, ForeignFunction, ForeignAbiType};

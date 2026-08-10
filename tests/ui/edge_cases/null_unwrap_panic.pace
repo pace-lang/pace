@@ -1,0 +1,8 @@
+fn main() {
+    let opt: Int? = null;
+    
+    // This should panic at runtime (unwrap_user 1)
+    let bad = opt!;
+    
+    print(bad);
+}

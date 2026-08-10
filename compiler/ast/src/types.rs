@@ -10,7 +10,7 @@ pub enum Type {
     Error,
     Any,
     BuiltinFunc,
-    Function(Vec<Type>, Box<Type>),
+    Function(Vec<String>, Vec<Type>, Box<Type>),
     Class(String, Vec<String>),
     Instance(String),
     Generic(String),
@@ -19,6 +19,12 @@ pub enum Type {
     Optional(Box<Type>),
     Array(Box<Type>),
     Null,
+    // FFI Types
+    CInt,
+    CUInt,
+    CChar,
+    CSize,
+    Pointer(Box<Type>),
 }
 
 impl fmt::Display for Type {
@@ -32,8 +38,17 @@ impl fmt::Display for Type {
             Type::Error => write!(f, "<ErrorType>"),
             Type::Any => write!(f, "Any"),
             Type::BuiltinFunc => write!(f, "<BuiltinFunc>"),
-            Type::Function(params, ret) => {
-                write!(f, "Func(")?;
+            Type::Function(type_params, params, ret) => {
+                write!(f, "Func")?;
+                if !type_params.is_empty() {
+                    write!(f, "<")?;
+                    for (i, p) in type_params.iter().enumerate() {
+                        if i > 0 { write!(f, ", ")?; }
+                        write!(f, "{}", p)?;
+                    }
+                    write!(f, ">")?;
+                }
+                write!(f, "(")?;
                 for (i, p) in params.iter().enumerate() {
                     if i > 0 { write!(f, ", ")?; }
                     write!(f, "{}", p)?;
@@ -65,7 +80,12 @@ impl fmt::Display for Type {
             Type::Interface(name) => write!(f, "Interface({})", name),
             Type::Optional(inner) => write!(f, "{}?", inner),
             Type::Array(inner) => write!(f, "[{}]", inner),
-            Type::Null => write!(f, "null"),
+            Type::Null => write!(f, "Null"),
+            Type::CInt => write!(f, "CInt"),
+            Type::CUInt => write!(f, "CUInt"),
+            Type::CChar => write!(f, "CChar"),
+            Type::CSize => write!(f, "CSize"),
+            Type::Pointer(inner) => write!(f, "Pointer<{}>", inner),
         }
     }
 }

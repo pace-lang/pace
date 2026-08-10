@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{PathBuf, Path};
 use std::process::{exit, Command};
 
-use lexer::{Scanner, TokenKind};
+use lexer::Scanner;
 use parser::Parser as PaceParser;
 use resolver::Resolver;
 use typechecker::TypeChecker;
@@ -89,7 +89,7 @@ fn compile_to_mir(file: &Path) -> mir::Program {
 
     // 4. Type Checking
     let mut typechecker = TypeChecker::new();
-    typechecker.check(&ast);
+    let typed_ast = typechecker.check_program(&ast);
     if !typechecker.errors.is_empty() {
         for diag in &typechecker.errors {
             eprintln!("Error [{}]: {} at line {}", diag.code.as_str(), diag.message, diag.primary_span.start_loc.line);
@@ -99,12 +99,13 @@ fn compile_to_mir(file: &Path) -> mir::Program {
 
     // 5. Lowering (AST -> MIR)
     let builder = ProgramBuilder::new();
-    let mut mir_program = builder.build(&ast);
+    let mut mir_program = builder.build(&typed_ast);
     
     // 6. ARC Pass
     let arc_pass = arc::arc_pass::ArcPass::new();
     arc_pass.run(&mut mir_program);
     
+    println!("{:#?}", mir_program);
     mir_program
 }
 

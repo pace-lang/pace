@@ -57,13 +57,18 @@ impl Resolver {
                 
                 self.scopes.pop_scope();
             }
-            StmtKind::Interface { name, methods } => {
+            StmtKind::Interface { name, methods: _methods } => {
                 if !self.scopes.declare(name.clone()) {
                     self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Interface '{}' is already declared in this scope.", name));
                 }
                 
                 // No need to push scope for interface since methods are just signatures without bodies
                 // and they don't have their own scope resolution here (Typechecker will handle it).
+            }
+            StmtKind::ForeignFunc { name, params: _, return_type: _ } => {
+                if !self.scopes.declare(name.clone()) {
+                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Foreign function '{}' is already declared in this scope.", name));
+                }
             }
             StmtKind::Func { name, type_params: _, params, return_type: _, body } => {
                 if !self.scopes.declare(name.clone()) {

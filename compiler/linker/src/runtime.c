@@ -14,6 +14,17 @@ int64_t pace_print(int64_t value) {
     return 0;
 }
 
+void pace_panic(int64_t code) {
+    if (code == 1) {
+        printf("Pace Runtime Error: Attempted to unwrap a null Optional\n");
+    } else if (code == 2) {
+        printf("Pace Runtime Error: Array index out of bounds\n");
+    } else {
+        printf("Pace Runtime Error: Code %lld\n", (long long)code);
+    }
+    exit(1);
+}
+
 void* pace_alloc(int64_t size, void* metadata_ptr) {
     // Allocate and zero memory
     void* ptr = calloc(1, size);
@@ -35,7 +46,7 @@ void* pace_alloc(int64_t size, void* metadata_ptr) {
 }
 
 void* pace_alloc_array_repeat(uint64_t count, uint64_t val, uint64_t metadata_val) {
-    uint64_t total_size = 24 + count * 8;
+    uint64_t total_size = 32 + count * 8;
     void* ptr = pace_alloc(total_size, (void*)metadata_val);
     *(uint64_t*)((char*)ptr + 24) = count;
     for (uint64_t i = 0; i < count; i++) {

@@ -1,0 +1,23 @@
+class Counter {
+    var count: Int;
+
+    init(start: Int) {
+        self.count = start;
+    }
+
+    func increment() {
+        self.count = self.count + 1;
+    }
+
+    func get() -> Int {
+        return self.count;
+    }
+}
+
+func main() {
+    let c = Counter(10);
+    print(c.get());
+    c.increment();
+    c.increment();
+    print(c.get());
+}

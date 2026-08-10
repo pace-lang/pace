@@ -12,7 +12,7 @@ members = [
     "compiler/linker",
     "compiler/codegen",
     "compiler/arc"
-, "compiler/diagnostics"]
+, "compiler/diagnostics", "compiler/generics"]
 resolver = "2"
 
 [workspace.package]

@@ -16,7 +16,6 @@ pub struct Translator<'a, 'b> {
     variables: HashMap<String, Variable>,
     temporaries: HashMap<usize, Variable>,
     blocks: HashMap<BlockId, Block>,
-    next_var_id: usize,
 }
 
 impl<'a, 'b> Translator<'a, 'b> {
@@ -30,7 +29,6 @@ impl<'a, 'b> Translator<'a, 'b> {
             variables: HashMap::new(),
             temporaries: HashMap::new(),
             blocks: HashMap::new(),
-            next_var_id: 0,
         }
     }
 
@@ -102,6 +100,21 @@ impl<'a, 'b> Translator<'a, 'b> {
         }
     }
 
+    fn emit_panic_if(&mut self, condition: CraneliftValue, code: i64) {
+        let panic_block = self.builder.create_block();
+        let cont_block = self.builder.create_block();
+        self.builder.ins().brif(condition, panic_block, &[], cont_block, &[]);
+
+        self.builder.switch_to_block(panic_block);
+        let panic_func = self.func_ids.get("pace_panic").expect("pace_panic not declared");
+        let local_panic = self.module.declare_func_in_func(*panic_func, self.builder.func);
+        let code_val = self.builder.ins().iconst(types::I64, code);
+        self.builder.ins().call(local_panic, &[code_val]);
+        self.builder.ins().trap(ir::TrapCode::unwrap_user(code as u8));
+
+        self.builder.switch_to_block(cont_block);
+    }
+
     fn translate_value(&mut self, value: &Value) -> Result<CraneliftValue, String> {
         match value {
             Value::Int(i) => Ok(self.builder.ins().iconst(types::I64, *i)),
@@ -112,7 +125,8 @@ impl<'a, 'b> Translator<'a, 'b> {
                 Ok(self.builder.use_var(var))
             }
             Value::Void | Value::Null => Ok(self.builder.ins().iconst(types::I64, 0)),
-            _ => Err("Value variant not supported in M1".to_string()),
+            Value::String(_) => Err("Value::String support requires the Standard Library (Post-M11)".to_string()),
+            Value::Object(_) | Value::Array(_) => Err("Value::Object and Value::Array are runtime-only variants".to_string()),
         }
     }
 
@@ -173,13 +187,43 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let local_callee = self.module.declare_func_in_func(*func_id, self.builder.func);
                         
                         let mut arg_vals = Vec::new();
-                        for arg in args {
-                            arg_vals.push(self.translate_value(arg)?);
+                        
+                        if let Some(foreign_func) = self.program.foreign_functions.get(func_name) {
+                            for (i, arg) in args.iter().enumerate() {
+                                let mut val = self.translate_value(arg)?;
+                                if let Some(abi_ty) = foreign_func.param_types.get(i) {
+                                    match abi_ty {
+                                        mir::ForeignAbiType::I8 => val = self.builder.ins().ireduce(types::I8, val),
+                                        mir::ForeignAbiType::I16 => val = self.builder.ins().ireduce(types::I16, val),
+                                        mir::ForeignAbiType::I32 => val = self.builder.ins().ireduce(types::I32, val),
+                                        _ => {}
+                                    }
+                                }
+                                arg_vals.push(val);
+                            }
+                        } else {
+                            for arg in args {
+                                arg_vals.push(self.translate_value(arg)?);
+                            }
                         }
                         
                         let call_inst = self.builder.ins().call(local_callee, &arg_vals);
                         let results = self.builder.inst_results(call_inst);
-                        results[0]
+                        let mut result_val = results[0];
+                        
+                        if let Some(foreign_func) = self.program.foreign_functions.get(func_name) {
+                            if let Some(abi_ty) = &foreign_func.return_type {
+                                match abi_ty {
+                                    mir::ForeignAbiType::I8 | mir::ForeignAbiType::I16 | mir::ForeignAbiType::I32 => {
+                                        // Assume sign extension for now, a proper implementation would differentiate uextend/sextend
+                                        result_val = self.builder.ins().sextend(types::I64, result_val);
+                                    },
+                                    _ => {}
+                                }
+                            }
+                        }
+                        
+                        result_val
                     }
                     RValue::AllocateObject(class_name) => {
                         let class_def = self.program.classes.get(class_name)
@@ -216,11 +260,11 @@ impl<'a, 'b> Translator<'a, 'b> {
                     RValue::ForceUnwrap(inner) => {
                         let cl_val = self.translate_value(inner)?;
                         let is_null = self.builder.ins().icmp_imm_u(ir::condcodes::IntCC::Equal, cl_val, 0);
-                        self.builder.ins().trapnz(is_null, ir::TrapCode::unwrap_user(1)); // Panic on null unwrap
+                        self.emit_panic_if(is_null, 1);
                         cl_val
                     }
                     RValue::Array(elements, is_ref) => {
-                        let total_size = 24 + (elements.len() as i64 * 8);
+                        let total_size = 32 + (elements.len() as i64 * 8);
                         let alloc_func = self.func_ids.get("pace_alloc").expect("pace_alloc not declared");
                         let local_alloc = self.module.declare_func_in_func(*alloc_func, self.builder.func);
                         
@@ -262,15 +306,16 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let is_neg = self.builder.ins().icmp_imm_u(ir::condcodes::IntCC::SignedLessThan, cl_index, 0);
                         let is_gte = self.builder.ins().icmp(ir::condcodes::IntCC::SignedGreaterThanOrEqual, cl_index, len_val);
                         let out_of_bounds = self.builder.ins().bor(is_neg, is_gte);
-                        self.builder.ins().trapnz(out_of_bounds, ir::TrapCode::unwrap_user(2)); // Panic out of bounds
+                        self.emit_panic_if(out_of_bounds, 2);
                         
-                        let byte_offset = self.builder.ins().imul_imm(cl_index, 8);
-                        let base_offset = self.builder.ins().iadd_imm(cl_array, 32);
+                        let byte_offset = self.builder.ins().imul_imm_s(cl_index, 8);
+                        let base_offset = self.builder.ins().iadd_imm_s(cl_array, 32);
                         let element_ptr = self.builder.ins().iadd(base_offset, byte_offset);
                         
                         self.builder.ins().load(types::I64, ir::MemFlagsData::new(), element_ptr, 0)
                     }
-                    _ => return Err("RValue variant not supported in M1-M9".to_string()),
+                    RValue::MethodCall(_, _, _) => return Err("Dynamic method calls not supported (Statically dispatched instead)".to_string()),
+                    RValue::WeakUpgrade(_) => return Err("Weak references are planned for M9".to_string()),
                 };
                 
                 let var = self.get_place_var(place);
@@ -304,10 +349,10 @@ impl<'a, 'b> Translator<'a, 'b> {
                 let is_neg = self.builder.ins().icmp_imm_u(ir::condcodes::IntCC::SignedLessThan, cl_index, 0);
                 let is_gte = self.builder.ins().icmp(ir::condcodes::IntCC::SignedGreaterThanOrEqual, cl_index, len_val);
                 let out_of_bounds = self.builder.ins().bor(is_neg, is_gte);
-                self.builder.ins().trapnz(out_of_bounds, ir::TrapCode::unwrap_user(2)); // Panic out of bounds
+                self.emit_panic_if(out_of_bounds, 2);
                 
-                let byte_offset = self.builder.ins().imul_imm(cl_index, 8);
-                let base_offset = self.builder.ins().iadd_imm(cl_array, 32);
+                let byte_offset = self.builder.ins().imul_imm_s(cl_index, 8);
+                let base_offset = self.builder.ins().iadd_imm_s(cl_array, 32);
                 let element_ptr = self.builder.ins().iadd(base_offset, byte_offset);
                 
                 self.builder.ins().store(ir::MemFlagsData::new(), cl_val, element_ptr, 0);
@@ -341,7 +386,6 @@ impl<'a, 'b> Translator<'a, 'b> {
                 self.builder.ins().call(local_release, &[cl_val]);
                 Ok(())
             }
-            _ => Err("Inst variant not supported in M1-M5".to_string()),
         }
     }
 

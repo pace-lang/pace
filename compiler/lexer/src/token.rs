@@ -28,6 +28,7 @@ pub enum TokenKind {
     False,
     Weak,
     Null,
+    Foreign,
 
     // Identifiers and Literals
     Identifier(String),

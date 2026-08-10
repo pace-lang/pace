@@ -2,4 +2,4 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-
+Error [P1002]: Expected function name. at line 4

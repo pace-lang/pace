@@ -1,0 +1,8 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+Error [P1002]: Expected property or method inside class. at line 2
+Error [P1002]: Expected property or method inside class. at line 2
+Error [P1002]: Expected property or method inside class. at line 2
+Error [P1002]: Expected property or method inside class. at line 2

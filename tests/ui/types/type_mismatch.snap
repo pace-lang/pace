@@ -1,0 +1,6 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+TYPECHECKER ERROR: Cannot apply operator to types 'Int' and 'String'. at Span { start: 63, end: 68, start_loc: Location { line: 4, column: 13 }, end_loc: Location { line: 4, column: 18 } }
+Error [P3001]: Cannot apply operator to types 'Int' and 'String'. at line 4

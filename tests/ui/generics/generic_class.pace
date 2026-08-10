@@ -1,0 +1,32 @@
+class Box<T> {
+    var value: T;
+    
+    init(val: T) {
+        self.value = val;
+    }
+    
+    func get() -> T {
+        return self.value;
+    }
+}
+
+class ArrayWrapper<T> {
+    var items: [T];
+    
+    init(arr: [T]) {
+        self.items = arr;
+    }
+    
+    func get_first() -> T {
+        return self.items[0];
+    }
+}
+
+func main() {
+    let int_box = Box(100);
+    print(int_box.get());
+    
+    let arr = [10, 20, 30];
+    let wrapper = ArrayWrapper(arr);
+    print(wrapper.get_first());
+}

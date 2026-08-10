@@ -415,6 +415,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
+name = "generics"
+version = "0.1.0"
+dependencies = [
+ "ast",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -791,6 +798,7 @@ version = "0.1.0"
 dependencies = [
  "ast",
  "diagnostics",
+ "generics",
 ]
 
 [[package]]

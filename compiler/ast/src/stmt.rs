@@ -53,6 +53,12 @@ pub enum StmtKind {
         return_type: Option<TypeExpr>,
         body: Box<Stmt>,
     },
+    /// A foreign function declaration: `foreign func name(params) -> return_type;`
+    ForeignFunc {
+        name: String,
+        params: Vec<(String, TypeExpr)>,
+        return_type: Option<TypeExpr>,
+    },
     /// A return statement: `return value;`
     Return {
         value: Option<Expr>,

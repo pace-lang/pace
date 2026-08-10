@@ -1,0 +1,6 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+Error [P2001]: Cannot find variable 'fn' in this scope. at line 1
+Error [P2001]: Cannot find variable 'main' in this scope. at line 1

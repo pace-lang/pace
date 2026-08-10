@@ -277,6 +277,7 @@ impl<'a> Scanner<'a> {
             "false" => TokenKind::False,
             "weak" => TokenKind::Weak,
             "null" => TokenKind::Null,
+            "foreign" => TokenKind::Foreign,
             _ => TokenKind::Identifier(text.to_string()),
         }
     }

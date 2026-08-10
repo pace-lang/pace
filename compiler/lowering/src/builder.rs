@@ -1,9 +1,44 @@
-use ast::{Expr, ExprKind, Stmt, StmtKind};
-use mir::{BasicBlock, BlockId, Function, Inst, Place, RValue, Terminator, Value, Program};
+use ast::{TypedExpr, TypedExprKind, TypedStmt, TypedStmtKind, TypeExpr, types::Type};
+use mir::{BasicBlock, BlockId, ForeignAbiType, ForeignFunction, Function, Inst, Place, Program, RValue, Terminator, Value};
 
 pub struct ProgramBuilder {
     program: Program,
     current_class: Option<String>,
+}
+
+fn type_expr_to_abi(type_expr: &TypeExpr) -> ForeignAbiType {
+    match type_expr {
+        TypeExpr::Named(name) => match name.as_str() {
+            "CInt" => ForeignAbiType::I32,
+            "CUInt" => ForeignAbiType::I32,
+            "CChar" => ForeignAbiType::I8,
+            "CSize" => ForeignAbiType::I64,
+            "Int" => ForeignAbiType::I64,
+            "Float" => ForeignAbiType::F64,
+            "Void" => ForeignAbiType::I64, // Not really used for params
+            _ => ForeignAbiType::I64,
+        },
+        TypeExpr::GenericInstance(name, _) if name == "Pointer" => ForeignAbiType::Pointer,
+        _ => ForeignAbiType::I64,
+    }
+}
+
+fn is_ref_type_opt(te: &Option<ast::TypeExpr>) -> bool {
+    match te {
+        Some(ast::TypeExpr::Named(name)) => {
+            !["Int", "Float", "String", "Boolean"].contains(&name.as_str())
+        }
+        Some(ast::TypeExpr::Optional(inner)) => {
+            is_ref_type_opt(&Some((**inner).clone()))
+        }
+        Some(ast::TypeExpr::Array(_)) => true,
+        Some(ast::TypeExpr::GenericInstance(_, _)) => true,
+        _ => false
+    }
+}
+
+fn is_ref_type(te: &ast::TypeExpr) -> bool {
+    is_ref_type_opt(&Some(te.clone()))
 }
 
 impl ProgramBuilder {
@@ -14,39 +49,27 @@ impl ProgramBuilder {
         }
     }
 
-    pub fn build(mut self, statements: &[Stmt]) -> Program {
+    pub fn build(mut self, statements: &[TypedStmt]) -> Program {
         let mut main_stmts = Vec::new();
         for stmt in statements {
-            if let StmtKind::Class { name, type_params: _, implements: _, methods, fields } = &stmt.kind {
+            if let TypedStmtKind::Class { name, type_params: _, implements: _, methods, fields } = &stmt.kind {
                 let mut field_names = Vec::new();
                 let mut weak_fields = std::collections::HashSet::new();
                 let mut reference_fields = std::collections::HashSet::new();
                 
-                fn is_ref_type(te: &Option<ast::TypeExpr>) -> bool {
-                    match te {
-                        Some(ast::TypeExpr::Named(name)) => {
-                            !["Int", "Float", "String", "Boolean"].contains(&name.as_str())
-                        }
-                        Some(ast::TypeExpr::Optional(inner)) => {
-                            is_ref_type(&Some((**inner).clone()))
-                        }
-                        _ => false
-                    }
-                }
-                
                 for field in fields {
                     match &field.kind {
-                        StmtKind::Var { name: f_name, is_weak, type_annotation, .. } => {
+                        TypedStmtKind::Var { name: f_name, is_weak, type_annotation, .. } => {
                             field_names.push(f_name.clone());
                             if *is_weak {
                                 weak_fields.insert(f_name.clone());
-                            } else if is_ref_type(type_annotation) {
+                            } else if is_ref_type_opt(type_annotation) {
                                 reference_fields.insert(f_name.clone());
                             }
                         }
-                        StmtKind::Let { name: f_name, type_annotation, .. } => {
+                        TypedStmtKind::Let { name: f_name, type_annotation, .. } => {
                             field_names.push(f_name.clone());
-                            if is_ref_type(type_annotation) {
+                            if is_ref_type_opt(type_annotation) {
                                 reference_fields.insert(f_name.clone());
                             }
                         }
@@ -65,15 +88,21 @@ impl ProgramBuilder {
                 self.current_class = Some(name.clone());
 
                 for method in methods {
-                    if let StmtKind::Func { name: m_name, params, body, .. } = &method.kind {
+                    if let TypedStmtKind::Func { name: m_name, params, return_type, body, .. } = &method.kind {
                         let mut param_names = vec!["self".to_string()];
-                        for (p, _) in params {
+                        let mut ref_params = std::collections::HashSet::new();
+                        ref_params.insert("self".to_string());
+                        for (p, ty) in params {
                             param_names.push(p.clone());
+                            if is_ref_type(ty) {
+                                ref_params.insert(p.clone());
+                            }
                         }
+                        let returns_ref = return_type.as_ref().map_or(false, |ty| is_ref_type(ty));
                         let actual_name = format!("{}::{}", name, m_name);
-                        let builder = MirBuilder::new(actual_name.clone(), param_names);
+                        let builder = MirBuilder::new(actual_name.clone(), param_names, ref_params, returns_ref);
                         let mir_func = match &body.kind {
-                            StmtKind::Block(stmts) => builder.build(stmts),
+                            TypedStmtKind::Block(stmts) => builder.build(stmts),
                             _ => builder.build(std::slice::from_ref(body)),
                         };
                         self.program.functions.insert(actual_name, mir_func);
@@ -81,26 +110,47 @@ impl ProgramBuilder {
                 }
 
                 self.current_class = prev_class;
-            } else if let StmtKind::Func { name, params, body, .. } = &stmt.kind {
+            } else if let TypedStmtKind::Func { name, params, return_type, body, .. } = &stmt.kind {
                 let mut param_names = Vec::new();
-                for (p, _) in params {
+                let mut ref_params = std::collections::HashSet::new();
+                for (p, ty) in params {
                     param_names.push(p.clone());
+                    if is_ref_type(ty) {
+                        ref_params.insert(p.clone());
+                    }
                 }
-                let builder = MirBuilder::new(name.clone(), param_names);
+                let returns_ref = return_type.as_ref().map_or(false, |ty| is_ref_type(ty));
+                let builder = MirBuilder::new(name.clone(), param_names, ref_params, returns_ref);
                 let mir_func = match &body.kind {
-                    StmtKind::Block(stmts) => builder.build(stmts),
+                    TypedStmtKind::Block(stmts) => builder.build(stmts),
                     _ => builder.build(std::slice::from_ref(body)),
                 };
                 self.program.functions.insert(name.clone(), mir_func);
-            } else if let StmtKind::Interface { .. } = &stmt.kind {
+            } else if let TypedStmtKind::ForeignFunc { name, params, return_type } = &stmt.kind {
+                let mut param_types = Vec::new();
+                for (_, ty) in params {
+                    param_types.push(type_expr_to_abi(ty));
+                }
+                let ret_ty = return_type.as_ref().map(type_expr_to_abi);
+                self.program.foreign_functions.insert(name.clone(), ForeignFunction {
+                    name: name.clone(),
+                    symbol: name.clone(),
+                    param_types,
+                    return_type: ret_ty,
+                });
+            } else if let TypedStmtKind::Interface { .. } = &stmt.kind {
                 // Ignore interface declarations in MIR, as they are fully erased
                 // and used strictly for compile-time type checking.
+            } else if let TypedStmtKind::Block(stmts) = &stmt.kind {
+                if !stmts.is_empty() {
+                    main_stmts.push(stmt.clone());
+                }
             } else {
                 main_stmts.push(stmt.clone());
             }
         }
         if !main_stmts.is_empty() {
-            let builder = MirBuilder::new("main".into(), vec![]);
+            let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false);
             let main_func = builder.build(&main_stmts);
             self.program.functions.insert("main".into(), main_func);
         }
@@ -116,8 +166,8 @@ pub struct MirBuilder {
 }
 
 impl MirBuilder {
-    pub fn new(name: String, parameters: Vec<String>) -> Self {
-        let mut function = Function::new(name, parameters);
+    pub fn new(name: String, parameters: Vec<String>, reference_parameters: std::collections::HashSet<String>, returns_reference: bool) -> Self {
+        let mut function = Function::new(name, parameters, reference_parameters, returns_reference);
         let start_block = BlockId(0);
         function.blocks.push(BasicBlock::new(start_block));
 
@@ -145,7 +195,7 @@ impl MirBuilder {
         &mut self.function.blocks[id]
     }
 
-    pub fn build(mut self, statements: &[Stmt]) -> Function {
+    pub fn build(mut self, statements: &[TypedStmt]) -> Function {
         for stmt in statements {
             self.lower_stmt(stmt);
         }
@@ -155,14 +205,14 @@ impl MirBuilder {
         self.function
     }
 
-    fn lower_stmt(&mut self, stmt: &Stmt) {
+    fn lower_stmt(&mut self, stmt: &TypedStmt) {
         match &stmt.kind {
-            StmtKind::Block(stmts) => {
+            TypedStmtKind::Block(stmts) => {
                 for s in stmts {
                     self.lower_stmt(s);
                 }
             }
-            StmtKind::Let { name, initializer, .. } => {
+            TypedStmtKind::Let { name, initializer, .. } => {
                 if let Some(init) = initializer {
                     let val = self.lower_expr(init);
                     self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(val)));
@@ -170,7 +220,7 @@ impl MirBuilder {
                     self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(Value::Void)));
                 }
             }
-            StmtKind::Var { name, initializer, is_weak, .. } => {
+            TypedStmtKind::Var { name, initializer, is_weak, .. } => {
                 if *is_weak {
                     self.function.weak_vars.insert(name.clone());
                 }
@@ -181,10 +231,10 @@ impl MirBuilder {
                     self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(Value::Void)));
                 }
             }
-            StmtKind::Expression(expr) => {
+            TypedStmtKind::Expression(expr) => {
                 self.lower_expr(expr);
             }
-            StmtKind::If { condition, then_branch, else_branch } => {
+            TypedStmtKind::If { condition, then_branch, else_branch } => {
                 let cond_val = self.lower_expr(condition);
                 
                 let then_block = self.new_block();
@@ -218,7 +268,7 @@ impl MirBuilder {
 
                 self.current_block = merge_block;
             }
-            StmtKind::While { condition, body } => {
+            TypedStmtKind::While { condition, body } => {
                 let cond_block = self.new_block();
                 let body_block = self.new_block();
                 let merge_block = self.new_block();
@@ -241,15 +291,15 @@ impl MirBuilder {
 
                 self.current_block = merge_block;
             }
-            StmtKind::Func { .. } | StmtKind::Class { .. } | StmtKind::Interface { .. } => {
+            TypedStmtKind::Func { .. } | TypedStmtKind::Class { .. } | TypedStmtKind::Interface { .. } | TypedStmtKind::ForeignFunc { .. } => {
                 // Nested functions/classes/interfaces are not fully supported in MIR yet,
                 // or are handled at the top level.
             }
-            StmtKind::For { .. } => {
+            TypedStmtKind::For { .. } => {
                 // Lowering 'for' loops requires desugaring into an iterator while loop.
                 // Skipped for this simplified pass.
             }
-            StmtKind::Return { value } => {
+            TypedStmtKind::Return { value } => {
                 let val = value.as_ref().map(|v| self.lower_expr(v));
                 self.current().terminator = Some(Terminator::Return(val));
                 self.current_block = self.new_block(); // Any following code goes to a dead block
@@ -257,15 +307,15 @@ impl MirBuilder {
         }
     }
 
-    fn lower_expr(&mut self, expr: &Expr) -> Value {
+    fn lower_expr(&mut self, expr: &TypedExpr) -> Value {
         match &expr.kind {
-            ExprKind::Integer(i) => Value::Int(*i),
-            ExprKind::Float(f) => Value::Float(*f),
-            ExprKind::String(s) => Value::String(s.clone()),
-            ExprKind::Boolean(b) => Value::Boolean(*b),
-            ExprKind::Null => Value::Null,
-            ExprKind::Variable(name) => Value::Place(Place::Var(name.clone())),
-            ExprKind::Array(elements) => {
+            TypedExprKind::Integer(i) => Value::Int(*i),
+            TypedExprKind::Float(f) => Value::Float(*f),
+            TypedExprKind::String(s) => Value::String(s.clone()),
+            TypedExprKind::Boolean(b) => Value::Boolean(*b),
+            TypedExprKind::Null => Value::Null,
+            TypedExprKind::Variable(name) => Value::Place(Place::Var(name.clone())),
+            TypedExprKind::Array(elements) => {
                 let mut vals = Vec::new();
                 for el in elements {
                     vals.push(self.lower_expr(el));
@@ -274,41 +324,41 @@ impl MirBuilder {
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Array(vals, false)));
                 Value::Place(temp)
             }
-            ExprKind::ArrayRepeat { value, count } => {
+            TypedExprKind::ArrayRepeat { value, count } => {
                 let val = self.lower_expr(value);
                 let count_val = self.lower_expr(count);
                 let temp = self.new_temp();
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ArrayRepeat(val, count_val, false)));
                 Value::Place(temp)
             }
-            ExprKind::IndexGet { object, index } => {
+            TypedExprKind::IndexGet { object, index } => {
                 let obj_val = self.lower_expr(object);
                 let idx_val = self.lower_expr(index);
                 let temp = self.new_temp();
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::IndexGet(obj_val, idx_val)));
                 Value::Place(temp)
             }
-            ExprKind::IndexSet { object, index, value } => {
+            TypedExprKind::IndexSet { object, index, value } => {
                 let obj_val = self.lower_expr(object);
                 let idx_val = self.lower_expr(index);
                 let val_val = self.lower_expr(value);
                 self.current().instructions.push(Inst::IndexSet(obj_val, idx_val, val_val.clone()));
                 val_val
             }
-            ExprKind::Grouping(inner) => self.lower_expr(inner),
-            ExprKind::Get { object, name } => {
+            TypedExprKind::Grouping(inner) => self.lower_expr(inner),
+            TypedExprKind::Get { object, name } => {
                 let obj_val = self.lower_expr(object);
                 let temp = self.new_temp();
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, name.clone())));
                 Value::Place(temp)
             }
-            ExprKind::ForceUnwrap(inner) => {
+            TypedExprKind::ForceUnwrap(inner) => {
                 let inner_val = self.lower_expr(inner);
                 let temp = self.new_temp();
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ForceUnwrap(inner_val)));
                 Value::Place(temp)
             }
-            ExprKind::OptionalGet { object, name } => {
+            TypedExprKind::OptionalGet { object, name } => {
                 let obj_val = self.lower_expr(object);
                 let temp = self.new_temp();
                 
@@ -339,34 +389,54 @@ impl MirBuilder {
                 self.current_block = merge_block;
                 Value::Place(temp)
             }
-            ExprKind::Set { object, name, value } => {
+            TypedExprKind::Set { object, name, value } => {
                 let obj_val = self.lower_expr(object);
                 let val_val = self.lower_expr(value);
                 self.current().instructions.push(Inst::SetProperty(obj_val, name.clone(), val_val.clone()));
                 val_val
             }
-            ExprKind::Assign { name, value } => {
+            TypedExprKind::Assign { name, value } => {
                 let val = self.lower_expr(value);
                 self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(val.clone())));
                 val
             }
-            ExprKind::SelfRef => {
+            TypedExprKind::SelfRef => {
                 Value::Place(Place::Var("self".to_string()))
             }
-            ExprKind::Call { callee, type_args: _, arguments } => {
+            TypedExprKind::Call { callee, type_args: _, arguments } => {
                 let mut arg_values = Vec::new();
                 for arg in arguments {
                     arg_values.push(self.lower_expr(arg));
                 }
 
-                if let ExprKind::Get { object, name } = &callee.kind {
+                if let TypedExprKind::Get { object, name } = &callee.kind {
                     let obj_val = self.lower_expr(object);
                     let temp = self.new_temp();
+                    
+                    if let Type::Instance(class_name) | Type::GenericInstance(class_name, _) = &object.ty {
+                        let actual_name = format!("{}::{}", class_name, name);
+                        arg_values.insert(0, obj_val);
+                        self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call(actual_name, arg_values)));
+                        return Value::Place(temp);
+                    }
+                    
                     self.current().instructions.push(Inst::Assign(temp.clone(), RValue::MethodCall(obj_val, name.clone(), arg_values)));
                     return Value::Place(temp);
                 }
 
-                let func_name = if let ExprKind::Variable(name) = &callee.kind {
+                if let Type::Class(class_name, _) = &callee.ty {
+                    let obj_temp = self.new_temp();
+                    self.current().instructions.push(Inst::Assign(obj_temp.clone(), RValue::AllocateObject(class_name.clone())));
+                    
+                    let actual_name = format!("{}::init", class_name);
+                    arg_values.insert(0, Value::Place(obj_temp.clone()));
+                    let init_temp = self.new_temp();
+                    self.current().instructions.push(Inst::Assign(init_temp, RValue::Call(actual_name, arg_values)));
+                    
+                    return Value::Place(obj_temp);
+                }
+
+                let func_name = if let TypedExprKind::Variable(name) = &callee.kind {
                     name.clone()
                 } else {
                     panic!("Only direct function calls by name are currently supported.");
@@ -376,13 +446,13 @@ impl MirBuilder {
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call(func_name, arg_values)));
                 Value::Place(temp)
             }
-            ExprKind::Unary(op, right) => {
+            TypedExprKind::Unary(op, right) => {
                 let right_val = self.lower_expr(right);
                 let temp = self.new_temp();
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::UnaryOp(op.clone(), right_val)));
                 Value::Place(temp)
             }
-            ExprKind::Binary(left, op, right) => {
+            TypedExprKind::Binary(left, op, right) => {
                 let left_val = self.lower_expr(left);
                 let right_val = self.lower_expr(right);
                 let temp = self.new_temp();
@@ -405,17 +475,17 @@ mod tests {
     #[test]
     fn test_lower_assignment() {
         // let x = 10 + 5;
-        let stmt = Stmt::new(StmtKind::Let {
+        let stmt = TypedStmt::new(TypedStmtKind::Let {
             name: "x".into(),
             type_annotation: None,
-            initializer: Some(Expr::new(ExprKind::Binary(
-                Box::new(Expr::new(ExprKind::Integer(10), make_span())),
+            initializer: Some(TypedExpr::new(TypedExprKind::Binary(
+                Box::new(TypedExpr::new(TypedExprKind::Integer(10), ast::types::Type::Int, make_span())),
                 BinaryOp::Add,
-                Box::new(Expr::new(ExprKind::Integer(5), make_span())),
-            ), make_span())),
+                Box::new(TypedExpr::new(TypedExprKind::Integer(5), ast::types::Type::Int, make_span())),
+            ), ast::types::Type::Int, make_span())),
         }, make_span());
 
-        let builder = MirBuilder::new("main".into(), vec![]);
+        let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false);
         let fun = builder.build(&[stmt]);
 
         assert_eq!(fun.blocks.len(), 1);
@@ -439,19 +509,19 @@ mod tests {
     #[test]
     fn test_lower_if_statement() {
         // if true { let x = 1; }
-        let stmt = Stmt::new(StmtKind::If {
-            condition: Expr::new(ExprKind::Boolean(true), make_span()),
-            then_branch: Box::new(Stmt::new(StmtKind::Block(vec![
-                Stmt::new(StmtKind::Let {
+        let stmt = TypedStmt::new(TypedStmtKind::If {
+            condition: TypedExpr::new(TypedExprKind::Boolean(true), ast::types::Type::Boolean, make_span()),
+            then_branch: Box::new(TypedStmt::new(TypedStmtKind::Block(vec![
+                TypedStmt::new(TypedStmtKind::Let {
                     name: "x".into(),
                     type_annotation: None,
-                    initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
+                    initializer: Some(TypedExpr::new(TypedExprKind::Integer(1), ast::types::Type::Int, make_span())),
                 }, make_span())
             ]), make_span())),
             else_branch: None,
         }, make_span());
 
-        let builder = MirBuilder::new("main".into(), vec![]);
+        let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false);
         let fun = builder.build(&[stmt]);
 
         // Start block, Then Block, Merge Block

@@ -1,0 +1,19 @@
+func id<T>(val: T) -> T {
+    return val;
+}
+
+func pair<A, B>(first: A, second: B) -> A {
+    return first;
+}
+
+func main() {
+    let x = id(10);
+    print(x);
+    
+    let arr = [100, 200];
+    let y = id(arr);
+    print(y[0]);
+    
+    let z = pair(42, arr);
+    print(z);
+}

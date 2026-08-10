@@ -1,0 +1,16 @@
+class Box<T> {
+    var value: T;
+    
+    func init(val: T) {
+        self.value = val;
+    }
+}
+
+fn main() {
+    let inner = Box<Int>(42);
+    let outer = Box<Box<Int>>(inner);
+    
+    let arr = [outer];
+    
+    print(arr[0].value.value);
+}

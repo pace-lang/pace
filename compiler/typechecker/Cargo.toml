@@ -7,5 +7,6 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-ast = { version = "0.1.0", path = "../ast" }
+ast = { path = "../ast" }
 diagnostics = { path = "../diagnostics" }
+generics = { path = "../generics" }

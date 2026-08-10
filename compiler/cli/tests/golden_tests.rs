@@ -31,11 +31,15 @@ fn run_ui_test(file_path: &Path) {
     settings.bind(|| {
         insta::assert_snapshot!(snapshot_name, normalized_stderr);
     });
+
+    // Cleanup generated files
+    let _ = std::fs::remove_file(file_path.with_extension("o"));
+    let _ = std::fs::remove_file(file_path.with_extension(""));
 }
 
 #[test]
 fn ui_tests() {
-    let ui_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/ui");
+    let ui_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/ui");
     if !ui_dir.exists() {
         return;
     }

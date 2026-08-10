@@ -6,19 +6,32 @@ mod translator;
 
 
 use cranelift_codegen::{
-    ir::{types, InstBuilder, AbiParam},
+    ir::{types, AbiParam},
     settings::{self, Configurable},
 };
-use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
-use cranelift_module::{Linkage, Module, default_libcall_names, DataDescription, DataId};
+use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
+use cranelift_module::{Linkage, Module, default_libcall_names, DataDescription};
 use cranelift_object::{ObjectBuilder, ObjectModule};
 use cranelift_native;
+use mir::ForeignAbiType;
 
 pub struct CraneliftGenerator;
 
 impl CraneliftGenerator {
     pub fn new() -> Self {
         Self
+    }
+
+    fn translate_abi_type(ty: &ForeignAbiType) -> cranelift_codegen::ir::Type {
+        match ty {
+            ForeignAbiType::I8 => types::I8,
+            ForeignAbiType::I16 => types::I16,
+            ForeignAbiType::I32 => types::I32,
+            ForeignAbiType::I64 => types::I64,
+            ForeignAbiType::F32 => types::F32,
+            ForeignAbiType::F64 => types::F64,
+            ForeignAbiType::Pointer => types::I64, // Pointers are 64-bit on our target
+        }
     }
 
     pub fn compile_program(&self, program: &mir::Program, output_file: &Path) -> Result<(), String> {
@@ -53,6 +66,21 @@ impl CraneliftGenerator {
             
             let func_id = module.declare_function(name, Linkage::Export, &sig)
                 .map_err(|e| format!("Failed to declare {}: {}", name, e))?;
+            func_ids.insert(name.clone(), func_id);
+        }
+        
+        // Declare User FFI functions
+        for (name, foreign_func) in &program.foreign_functions {
+            let mut sig = module.make_signature();
+            for param_ty in &foreign_func.param_types {
+                sig.params.push(AbiParam::new(Self::translate_abi_type(param_ty)));
+            }
+            if let Some(ret_ty) = &foreign_func.return_type {
+                sig.returns.push(AbiParam::new(Self::translate_abi_type(ret_ty)));
+            }
+            
+            let func_id = module.declare_function(&foreign_func.symbol, Linkage::Import, &sig)
+                .map_err(|e| format!("Failed to declare foreign func {}: {}", name, e))?;
             func_ids.insert(name.clone(), func_id);
         }
         
@@ -108,6 +136,11 @@ impl CraneliftGenerator {
         weak_upgrade_sig.returns.push(AbiParam::new(types::I64));
         let weak_upgrade_id = module.declare_function("pace_weak_upgrade", Linkage::Import, &weak_upgrade_sig).unwrap();
         func_ids.insert("pace_weak_upgrade".to_string(), weak_upgrade_id);
+
+        let mut panic_sig = module.make_signature();
+        panic_sig.params.push(AbiParam::new(types::I64));
+        let panic_id = module.declare_function("pace_panic", Linkage::Import, &panic_sig).unwrap();
+        func_ids.insert("pace_panic".to_string(), panic_id);
 
         let mut class_metadata_ids = HashMap::new();
         
