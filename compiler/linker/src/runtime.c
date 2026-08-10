@@ -14,6 +14,11 @@ int64_t pace_print(int64_t value) {
     return 0;
 }
 
+int64_t pace_print_str(int64_t str_ptr) {
+    printf("%s\n", (char*)str_ptr);
+    return 0;
+}
+
 void pace_panic(int64_t code) {
     if (code == 1) {
         printf("Pace Runtime Error: Attempted to unwrap a null Optional\n");

@@ -125,7 +125,22 @@ impl<'a, 'b> Translator<'a, 'b> {
                 Ok(self.builder.use_var(var))
             }
             Value::Void | Value::Null => Ok(self.builder.ins().iconst(types::I64, 0)),
-            Value::String(_) => Err("Value::String support requires the Standard Library (Post-M11)".to_string()),
+            Value::String(s) => {
+                use cranelift_module::DataDescription;
+                let data_id = self.module.declare_data(
+                    &format!("str_{}", std::sync::atomic::AtomicUsize::new(0).fetch_add(1, std::sync::atomic::Ordering::SeqCst) + std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos() as usize),
+                    cranelift_module::Linkage::Local,
+                    false,
+                    false,
+                ).unwrap();
+                let mut data_desc = DataDescription::new();
+                let mut bytes = s.clone().into_bytes();
+                bytes.push(0); // Null terminator
+                data_desc.define(bytes.into_boxed_slice());
+                self.module.define_data(data_id, &data_desc).unwrap();
+                let local_data = self.module.declare_data_in_func(data_id, self.builder.func);
+                Ok(self.builder.ins().symbol_value(types::I64, local_data))
+            }
             Value::Object(_) | Value::Array(_) => Err("Value::Object and Value::Array are runtime-only variants".to_string()),
         }
     }
@@ -179,6 +194,8 @@ impl<'a, 'b> Translator<'a, 'b> {
                     RValue::Call(func_name, args) => {
                         let target_func_name = if func_name == "print" {
                             "pace_print"
+                        } else if func_name == "print_str" {
+                            "pace_print_str"
                         } else {
                             func_name.as_str()
                         };

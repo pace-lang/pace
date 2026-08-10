@@ -92,6 +92,13 @@ impl CraneliftGenerator {
             .map_err(|e| format!("Failed to declare pace_print: {}", e))?;
         func_ids.insert("pace_print".to_string(), print_id);
 
+        let mut print_str_sig = module.make_signature();
+        print_str_sig.params.push(AbiParam::new(types::I64));
+        print_str_sig.returns.push(AbiParam::new(types::I64));
+        let print_str_id = module.declare_function("pace_print_str", Linkage::Import, &print_str_sig)
+            .map_err(|e| format!("Failed to declare pace_print_str: {}", e))?;
+        func_ids.insert("pace_print_str".to_string(), print_str_id);
+
         let mut alloc_sig = module.make_signature();
         alloc_sig.params.push(AbiParam::new(types::I64));
         alloc_sig.params.push(AbiParam::new(types::I64)); // metadata_ptr

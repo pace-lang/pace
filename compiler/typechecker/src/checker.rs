@@ -671,7 +671,7 @@ impl TypeChecker {
             }
             ExprKind::Call { callee, type_args, arguments } => {
                 let typed_callee = self.check_expr(callee);
-                eprintln!("Call typed_callee ty: {:?}", typed_callee.ty);
+
                 let mut typed_args = Vec::new();
                 let mut arg_types = Vec::new();
                 for arg in arguments {
@@ -700,7 +700,7 @@ impl TypeChecker {
                                                 for (_, ty) in params {
                                                     param_types.push(self.parse_type(ty, expr.span));
                                                 }
-                                                eprintln!("constructor_ty param_types: {:?}", param_types);
+
                                                 constructor_ty = Some(Type::Function(Vec::new(), param_types, Box::new(Type::Void)));
                                             }
                                         }

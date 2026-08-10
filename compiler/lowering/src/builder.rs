@@ -436,11 +436,17 @@ impl MirBuilder {
                     return Value::Place(obj_temp);
                 }
 
-                let func_name = if let TypedExprKind::Variable(name) = &callee.kind {
+                let mut func_name = if let TypedExprKind::Variable(name) = &callee.kind {
                     name.clone()
                 } else {
                     panic!("Only direct function calls by name are currently supported.");
                 };
+                
+                if func_name == "print" && arguments.len() == 1 {
+                    if let ast::Type::String = arguments[0].ty {
+                        func_name = "print_str".to_string();
+                    }
+                }
 
                 let temp = self.new_temp();
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call(func_name, arg_values)));

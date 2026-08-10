@@ -3,7 +3,6 @@ use std::fs;
 use std::path::{PathBuf, Path};
 use std::process::{exit, Command};
 
-
 use resolver::Resolver;
 use typechecker::TypeChecker;
 use lowering::ProgramBuilder;
@@ -21,18 +20,50 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Compile and link a .pace file into a native executable
-    Build {
-        /// The .pace file to build
-        #[arg(value_name = "FILE")]
-        file: PathBuf,
+    /// Create a new pace project
+    New {
+        /// Name of the project
+        name: String,
     },
-    /// Compile, link, and run a .pace file
-    Run {
-        /// The .pace file to run
-        #[arg(value_name = "FILE")]
-        file: PathBuf,
+    /// Initialize a new pace project in the current directory
+    Init,
+    /// Compile and run the current package
+    Run,
+    /// Compile the current package
+    Build,
+    /// Analyze the current package and report errors, but don't build object files
+    Check,
+    /// Run the tests
+    Test,
+    /// Format all pace files
+    Fmt,
+    /// Lint the current package
+    Lint,
+    
+    /// Add dependencies to pace.toml
+    Add {
+        /// Name of the dependency to add
+        dep: String,
     },
+    /// Remove dependencies from pace.toml
+    Remove {
+        /// Name of the dependency to remove
+        dep: String,
+    },
+    /// Download all dependencies locally
+    Install,
+    /// Update dependencies
+    Update,
+    /// Display the dependency tree
+    Tree,
+    
+    /// Package the project into a distributable format
+    Package,
+    /// Publish the package to the registry
+    Publish,
+    /// Remove the target directory and built artifacts
+    Clean,
+
     /// Run a .pace file directly via the Virtual Machine (development only)
     DebugRun {
         /// The .pace file to run
@@ -115,83 +146,193 @@ fn compile_to_mir(file: &Path) -> mir::Program {
     mir_program
 }
 
+fn find_package_root() -> Option<PathBuf> {
+    let mut current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    loop {
+        if current_dir.join("pace.toml").exists() {
+            return Some(current_dir);
+        }
+        if !current_dir.pop() {
+            break;
+        }
+    }
+    None
+}
+
+fn create_project(path: &Path, name: &str) {
+    if path.exists() {
+        if path.read_dir().map(|mut i| i.next().is_some()).unwrap_or(false) && path.join("pace.toml").exists() {
+            eprintln!("Error: Directory {:?} already contains a pace.toml", path);
+            exit(1);
+        }
+    } else {
+        fs::create_dir_all(path).unwrap();
+    }
+    
+    fs::create_dir_all(path.join("src")).unwrap();
+    let toml = format!(
+r#"[package]
+name = "{}"
+version = "0.1.0"
+
+[dependencies]
+"#, name);
+    fs::write(path.join("pace.toml"), toml).unwrap();
+    
+    let main_pace = 
+r#"func main() {
+    print("✨ Welcome to Pace — let's make something great.");
+}
+"#;
+    fs::write(path.join("src").join("main.pace"), main_pace).unwrap();
+    println!("Created new package `{}`", name);
+}
+
+fn do_check() -> Option<PathBuf> {
+    let root = match find_package_root() {
+        Some(r) => r,
+        None => {
+            eprintln!("Error: could not find `pace.toml` in current directory or any parent directory");
+            exit(1);
+        }
+    };
+    
+    let main_file = root.join("src").join("main.pace");
+    if !main_file.exists() {
+        eprintln!("Error: `src/main.pace` not found in package");
+        exit(1);
+    }
+    
+    // We run compile_to_mir just to parse/resolve/typecheck
+    // Later we can separate compile_to_mir into check and lower.
+    let _ = compile_to_mir(&main_file);
+    println!("Check completed successfully.");
+    Some(main_file)
+}
+
+fn do_build() -> PathBuf {
+    let root = match find_package_root() {
+        Some(r) => r,
+        None => {
+            eprintln!("Error: could not find `pace.toml` in current directory or any parent directory");
+            exit(1);
+        }
+    };
+    
+    let main_file = root.join("src").join("main.pace");
+    if !main_file.exists() {
+        eprintln!("Error: `src/main.pace` not found in package");
+        exit(1);
+    }
+    
+    let ast_program = compile_to_mir(&main_file);
+
+    let generator = CraneliftGenerator::new();
+    
+    // Ensure target/debug exists
+    let target_dir = root.join("target").join("debug");
+    fs::create_dir_all(&target_dir).unwrap();
+    
+    let obj_file = target_dir.join("out.o");
+    if let Err(e) = generator.compile_program(&ast_program, &obj_file) {
+        eprintln!("Codegen error: {}", e);
+        exit(1);
+    }
+
+    let package_name = root.file_name().and_then(|n| n.to_str()).unwrap_or("app");
+    let out_file = target_dir.join(package_name);
+    if let Err(e) = Linker::link(&obj_file, &out_file) {
+        eprintln!("Linker error: {}", e);
+        exit(1);
+    }
+    
+    println!("    Finished `dev` profile [unoptimized + debuginfo] target(s)");
+    out_file
+}
+
 fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
+        Commands::New { name } => {
+            let path = PathBuf::from(name);
+            create_project(&path, name);
+        }
+        Commands::Init => {
+            let current_dir = std::env::current_dir().unwrap();
+            let name = current_dir.file_name().unwrap().to_str().unwrap();
+            create_project(&current_dir, name);
+        }
+        Commands::Check => {
+            do_check();
+        }
+        Commands::Build => {
+            do_build();
+        }
+        Commands::Run => {
+            let out_file = do_build();
+            let root = find_package_root().unwrap();
+            let package_name = root.file_name().and_then(|n| n.to_str()).unwrap_or("app");
+            println!("     Running `target/debug/{}`", package_name);
+            let status = Command::new(out_file.to_str().unwrap())
+                .status()
+                .expect("Failed to execute process");
+                
+            exit(status.code().unwrap_or(1));
+        }
         Commands::DebugRun { file } => {
-            let mir_program = compile_to_mir(file);
-            // Execution (VM)
-            let mut vm = VirtualMachine::new(&mir_program);
-            let result = vm.execute();
+            let ast_program = compile_to_mir(file);
 
+            let mut vm = VirtualMachine::new(&ast_program);
+            let result = vm.execute();
             if let Some(val) = result {
                 if val != mir::Value::Void {
                     println!("Result: {:?}", val);
                 }
             }
         }
-        Commands::Build { file } => {
-            if file.file_name().and_then(|s| s.to_str()) == Some("pace.toml") {
-                let manifest_content = fs::read_to_string(file).unwrap_or_else(|e| {
-                    eprintln!("Failed to read pace.toml: {}", e);
-                    exit(1);
-                });
-                let manifest: package::manifest::Manifest = toml::from_str(&manifest_content).unwrap_or_else(|e| {
-                    eprintln!("Failed to parse pace.toml: {}", e);
-                    exit(1);
-                });
-                println!("Loaded package manifest: {} v{}", manifest.package.name, manifest.package.version);
-                println!("Multi-file compilation is being implemented. Please build individual .pace files for now.");
-                return;
-            }
-
-            let mir_program = compile_to_mir(file);
-            
-            let obj_file = file.with_extension("o");
-            let exe_file = file.with_extension(""); // e.g. test.pace -> test
-
-            let generator = CraneliftGenerator::new();
-            if let Err(e) = generator.compile_program(&mir_program, &obj_file) {
-                eprintln!("Codegen error: {}", e);
-                exit(1);
-            }
-
-            if let Err(e) = Linker::link(&obj_file, &exe_file) {
-                eprintln!("Linker error: {}", e);
-                exit(1);
-            }
-
-            println!("Successfully built {:?}", exe_file);
+        Commands::Test => {
+            println!("Not implemented yet");
         }
-        Commands::Run { file } => {
-            let mir_program = compile_to_mir(file);
-            
-            let obj_file = file.with_extension("o");
-            let exe_file = file.with_extension("");
-
-            let generator = CraneliftGenerator::new();
-            if let Err(e) = generator.compile_program(&mir_program, &obj_file) {
-                eprintln!("Codegen error: {}", e);
-                exit(1);
+        Commands::Fmt => {
+            println!("Not implemented yet");
+        }
+        Commands::Lint => {
+            println!("Not implemented yet");
+        }
+        Commands::Add { .. } => {
+            println!("Not implemented yet");
+        }
+        Commands::Remove { .. } => {
+            println!("Not implemented yet");
+        }
+        Commands::Install => {
+            println!("Not implemented yet");
+        }
+        Commands::Update => {
+            println!("Not implemented yet");
+        }
+        Commands::Tree => {
+            println!("Not implemented yet");
+        }
+        Commands::Publish => {
+            println!("Not implemented yet");
+        }
+        Commands::Package => {
+            println!("Not implemented yet");
+        }
+        Commands::Clean => {
+            if let Some(root) = find_package_root() {
+                let target = root.join("target");
+                if target.exists() {
+                    fs::remove_dir_all(&target).unwrap();
+                    println!("Cleaned `target` directory.");
+                } else {
+                    println!("Nothing to clean.");
+                }
+            } else {
+                eprintln!("Error: could not find `pace.toml` in current directory or any parent directory");
             }
-
-            if let Err(e) = Linker::link(&obj_file, &exe_file) {
-                eprintln!("Linker error: {}", e);
-                exit(1);
-            }
-
-            // Run the executable
-            let mut exe_path = PathBuf::from(".");
-            exe_path.push(&exe_file);
-            let status = Command::new(&exe_path)
-                .status()
-                .unwrap_or_else(|e| {
-                    eprintln!("Failed to execute {:?}: {}", exe_file, e);
-                    exit(1);
-                });
-                
-            exit(status.code().unwrap_or(1));
         }
     }
 }
