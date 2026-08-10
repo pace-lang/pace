@@ -4,12 +4,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct {
+    uint64_t field_count;
+    uint64_t field_offsets[];
+} PaceClassMetadata;
+
 int64_t pace_print(int64_t value) {
     printf("%lld\n", (long long)value);
     return 0;
 }
 
-void* pace_alloc(int64_t size) {
+void* pace_alloc(int64_t size, void* metadata_ptr) {
     // Allocate and zero memory
     void* ptr = calloc(1, size);
     if (!ptr) {
@@ -23,7 +28,9 @@ void* pace_alloc(int64_t size) {
     // When strong_count reaches 0, it calls pace_weak_release().
     *(uint64_t*)((char*)ptr + 8) = 1;
     
-    // Offset 16 is type metadata (placeholder, 0 for now)
+    // Offset 16 is type metadata
+    *(uint64_t*)((char*)ptr + 16) = (uint64_t)metadata_ptr;
+    
     return ptr;
 }
 
@@ -49,9 +56,19 @@ void pace_release(void* obj) {
     // Atomic decrement of strong count at offset 0
     uint64_t new_count = __atomic_sub_fetch((uint64_t*)obj, 1, __ATOMIC_SEQ_CST);
     if (new_count == 0) {
-        // Object is no longer strongly reachable.
-        // Run any destructors/deinit here in the future.
         printf("Pace Runtime: Strong count is 0, releasing weak representation\n");
+        
+        PaceClassMetadata* metadata = (PaceClassMetadata*)(*(uint64_t*)((char*)obj + 16));
+        if (metadata) {
+            for (uint64_t i = 0; i < metadata->field_count; i++) {
+                uint64_t offset = metadata->field_offsets[i];
+                void* field_ptr = (void*)(*(uint64_t*)((char*)obj + offset));
+                if (field_ptr) {
+                    pace_release(field_ptr);
+                }
+            }
+        }
+        
         // Drop the weak count that was held on behalf of the strong count
         pace_weak_release(obj);
     }

@@ -18,6 +18,8 @@ impl ArcPass {
                     _ => false
                 }
             };
+            
+            let mut temp_counter = 90000;
 
             for block in &mut func.blocks {
                 let mut new_instructions = Vec::new();
@@ -52,7 +54,15 @@ impl ArcPass {
                                 new_instructions.push(inst.clone());
                             }
                         }
-                        Inst::SetProperty(_, _, _) => {
+                        Inst::SetProperty(obj_val, prop_name, val_val) => {
+                            let is_ref = program.classes.values().any(|c| c.reference_fields.contains(prop_name));
+                            if is_ref {
+                                let temp_place = Place::Temp(temp_counter);
+                                temp_counter += 1;
+                                new_instructions.push(Inst::Assign(temp_place.clone(), RValue::GetProperty(obj_val.clone(), prop_name.clone())));
+                                new_instructions.push(Inst::Release(Value::Place(temp_place)));
+                                new_instructions.push(Inst::Retain(val_val.clone()));
+                            }
                             new_instructions.push(inst.clone());
                         }
                         _ => {
@@ -63,12 +73,19 @@ impl ArcPass {
                 
                 block.instructions = new_instructions;
                 
-                if let Some(Terminator::Return(_)) = &block.terminator {
+                if let Some(Terminator::Return(ret_val)) = &block.terminator {
                     for place in &object_places {
-                        if is_weak(place) {
-                            block.instructions.push(Inst::WeakRelease(Value::Place(place.clone())));
-                        } else {
-                            block.instructions.push(Inst::Release(Value::Place(place.clone())));
+                        let is_returned = match ret_val {
+                            Some(Value::Place(p)) => p == place,
+                            _ => false,
+                        };
+                        
+                        if !is_returned {
+                            if is_weak(place) {
+                                block.instructions.push(Inst::WeakRelease(Value::Place(place.clone())));
+                            } else {
+                                block.instructions.push(Inst::Release(Value::Place(place.clone())));
+                            }
                         }
                     }
                 }

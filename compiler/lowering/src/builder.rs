@@ -20,16 +20,35 @@ impl ProgramBuilder {
             if let StmtKind::Class { name, type_params: _, implements: _, methods, fields } = &stmt.kind {
                 let mut field_names = Vec::new();
                 let mut weak_fields = std::collections::HashSet::new();
+                let mut reference_fields = std::collections::HashSet::new();
+                
+                fn is_ref_type(te: &Option<ast::TypeExpr>) -> bool {
+                    match te {
+                        Some(ast::TypeExpr::Named(name)) => {
+                            !["Int", "Float", "String", "Boolean"].contains(&name.as_str())
+                        }
+                        Some(ast::TypeExpr::Optional(inner)) => {
+                            is_ref_type(&Some((**inner).clone()))
+                        }
+                        _ => false
+                    }
+                }
+                
                 for field in fields {
                     match &field.kind {
-                        StmtKind::Var { name: f_name, is_weak, .. } => {
+                        StmtKind::Var { name: f_name, is_weak, type_annotation, .. } => {
                             field_names.push(f_name.clone());
                             if *is_weak {
                                 weak_fields.insert(f_name.clone());
+                            } else if is_ref_type(type_annotation) {
+                                reference_fields.insert(f_name.clone());
                             }
                         }
-                        StmtKind::Let { name: f_name, .. } => {
+                        StmtKind::Let { name: f_name, type_annotation, .. } => {
                             field_names.push(f_name.clone());
+                            if is_ref_type(type_annotation) {
+                                reference_fields.insert(f_name.clone());
+                            }
                         }
                         _ => {}
                     }
@@ -38,6 +57,7 @@ impl ProgramBuilder {
                     name: name.clone(),
                     fields: field_names,
                     weak_fields,
+                    reference_fields,
                 };
                 self.program.classes.insert(name.clone(), class_def);
 

@@ -10,7 +10,7 @@ use cranelift_codegen::{
     settings::{self, Configurable},
 };
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
-use cranelift_module::{Linkage, Module, default_libcall_names};
+use cranelift_module::{Linkage, Module, default_libcall_names, DataDescription, DataId};
 use cranelift_object::{ObjectBuilder, ObjectModule};
 use cranelift_native;
 
@@ -66,6 +66,7 @@ impl CraneliftGenerator {
 
         let mut alloc_sig = module.make_signature();
         alloc_sig.params.push(AbiParam::new(types::I64));
+        alloc_sig.params.push(AbiParam::new(types::I64)); // metadata_ptr
         alloc_sig.returns.push(AbiParam::new(types::I64)); // returns pointer as I64
         let alloc_id = module.declare_function("pace_alloc", Linkage::Import, &alloc_sig)
             .map_err(|e| format!("Failed to declare pace_alloc: {}", e))?;
@@ -99,6 +100,36 @@ impl CraneliftGenerator {
         let weak_upgrade_id = module.declare_function("pace_weak_upgrade", Linkage::Import, &weak_upgrade_sig).unwrap();
         func_ids.insert("pace_weak_upgrade".to_string(), weak_upgrade_id);
 
+        let mut class_metadata_ids = HashMap::new();
+        
+        for (class_name, class_def) in &program.classes {
+            let mut data_ctx = DataDescription::new();
+            let mut metadata_bytes = Vec::new();
+            
+            // field_count (uint64_t)
+            metadata_bytes.extend_from_slice(&(class_def.reference_fields.len() as u64).to_le_bytes());
+            
+            // field_offsets (uint64_t[])
+            for (idx, field_name) in class_def.fields.iter().enumerate() {
+                if class_def.reference_fields.contains(field_name) {
+                    let offset = 24 + idx * 8; // 24 bytes header + index * 8
+                    metadata_bytes.extend_from_slice(&(offset as u64).to_le_bytes());
+                }
+            }
+            
+            data_ctx.define(metadata_bytes.into_boxed_slice());
+            
+            let data_id = module.declare_data(
+                &format!("_pace_metadata_{}", class_name),
+                Linkage::Local,
+                true,
+                false
+            ).unwrap();
+            
+            module.define_data(data_id, &data_ctx).unwrap();
+            class_metadata_ids.insert(class_name.clone(), data_id);
+        }
+
         // 2. Define all functions
         for (name, func) in &program.functions {
             ctx.func.signature.clear(module.isa().default_call_conv());
@@ -109,7 +140,7 @@ impl CraneliftGenerator {
             
             let mut builder = FunctionBuilder::new(&mut ctx.func, &mut builder_context);
             
-            let mut translator = crate::translator::Translator::new(&mut builder, &mut module, program, &func_ids);
+            let mut translator = crate::translator::Translator::new(&mut builder, &mut module, program, &func_ids, &class_metadata_ids);
             translator.translate(func)?;
             
             builder.finalize(module.target_config());

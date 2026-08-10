@@ -1,6 +1,5 @@
 ---
 source: compiler/cli/tests/golden_tests.rs
-assertion_line: 32
 expression: normalized_stderr
 ---
 

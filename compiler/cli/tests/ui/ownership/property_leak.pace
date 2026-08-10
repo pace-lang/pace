@@ -1,0 +1,16 @@
+class Child {
+    var id: Int;
+}
+
+class Parent {
+    var child: Child;
+}
+
+func main() {
+    let p = Parent();
+    let c = Child();
+    p.child = c;
+    // When main exits, p goes out of scope and is released.
+    // The runtime should iterate p's properties and release c.
+    // If it works correctly, we should see "Freeing object memory" twice.
+}

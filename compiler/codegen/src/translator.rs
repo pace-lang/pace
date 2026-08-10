@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use cranelift_codegen::ir::{self, types, InstBuilder, Value as CraneliftValue, Block};
 use cranelift_frontend::{FunctionBuilder, Variable};
-use cranelift_module::{Module, FuncId};
+use cranelift_module::{Module, FuncId, DataId};
 use cranelift_object::ObjectModule;
 use mir::{BlockId, Function, Inst, Place, RValue, Terminator, Value};
 use ast::{BinaryOp, UnaryOp};
@@ -12,6 +12,7 @@ pub struct Translator<'a, 'b> {
     module: &'a mut ObjectModule,
     program: &'a mir::Program,
     func_ids: &'a HashMap<String, FuncId>,
+    class_metadata_ids: &'a HashMap<String, DataId>,
     variables: HashMap<String, Variable>,
     temporaries: HashMap<usize, Variable>,
     blocks: HashMap<BlockId, Block>,
@@ -19,12 +20,13 @@ pub struct Translator<'a, 'b> {
 }
 
 impl<'a, 'b> Translator<'a, 'b> {
-    pub fn new(builder: &'a mut FunctionBuilder<'b>, module: &'a mut ObjectModule, program: &'a mir::Program, func_ids: &'a HashMap<String, FuncId>) -> Self {
+    pub fn new(builder: &'a mut FunctionBuilder<'b>, module: &'a mut ObjectModule, program: &'a mir::Program, func_ids: &'a HashMap<String, FuncId>, class_metadata_ids: &'a HashMap<String, DataId>) -> Self {
         Self {
             builder,
             module,
             program,
             func_ids,
+            class_metadata_ids,
             variables: HashMap::new(),
             temporaries: HashMap::new(),
             blocks: HashMap::new(),
@@ -182,15 +184,18 @@ impl<'a, 'b> Translator<'a, 'b> {
                     RValue::AllocateObject(class_name) => {
                         let class_def = self.program.classes.get(class_name)
                             .unwrap_or_else(|| panic!("Class {} not found", class_name));
-                        // Header (16 bytes) + Fields (8 bytes each)
                         let total_size = 24 + (class_def.fields.len() as i64 * 8);
                         
                         let alloc_func = self.func_ids.get("pace_alloc")
                             .expect("pace_alloc not declared");
                         let local_alloc = self.module.declare_func_in_func(*alloc_func, self.builder.func);
                         
+                        let metadata_id = *self.class_metadata_ids.get(class_name).unwrap();
+                        let local_metadata_id = self.module.declare_data_in_func(metadata_id, self.builder.func);
+                        let metadata_ptr = self.builder.ins().symbol_value(types::I64, local_metadata_id);
+                        
                         let size_val = self.builder.ins().iconst(types::I64, total_size);
-                        let call_inst = self.builder.ins().call(local_alloc, &[size_val]);
+                        let call_inst = self.builder.ins().call(local_alloc, &[size_val, metadata_ptr]);
                         self.builder.inst_results(call_inst)[0]
                     }
                     RValue::GetProperty(obj_val, prop_name) => {

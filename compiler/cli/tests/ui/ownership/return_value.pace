@@ -1,0 +1,14 @@
+class User {
+    var id: Int;
+}
+
+func createUser() -> User {
+    let u = User();
+    u.id = 42;
+    return u;
+}
+
+func main() {
+    let a = createUser();
+    // Should not crash or use-after-free
+}
