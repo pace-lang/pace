@@ -63,6 +63,7 @@ impl<'a> VirtualMachine<'a> {
                         out.push_str(&format!("<{} object at {}>", obj.class_name, id));
                     },
                     Value::Void => out.push_str("void"),
+                    Value::Null => out.push_str("null"),
                     Value::Place(_) => unreachable!(),
                 }
             }
@@ -198,6 +199,13 @@ impl<'a> VirtualMachine<'a> {
                         } else {
                             self.call_function(func_name, &resolved_args).unwrap_or(Value::Void)
                         }
+                    }
+                    RValue::ForceUnwrap(val) => {
+                        let eval_val = self.resolve_value(val);
+                        if eval_val == Value::Null {
+                            panic!("Fatal Error: Unexpectedly found null while unwrapping an Optional value.");
+                        }
+                        eval_val
                     }
                 };
                 self.store(place, val);

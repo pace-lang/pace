@@ -263,12 +263,50 @@ impl MirBuilder {
             ExprKind::Float(f) => Value::Float(*f),
             ExprKind::String(s) => Value::String(s.clone()),
             ExprKind::Boolean(b) => Value::Boolean(*b),
+            ExprKind::Null => Value::Null,
             ExprKind::Variable(name) => Value::Place(Place::Var(name.clone())),
             ExprKind::Grouping(inner) => self.lower_expr(inner),
             ExprKind::Get { object, name } => {
                 let obj_val = self.lower_expr(object);
                 let temp = self.new_temp();
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, name.clone())));
+                Value::Place(temp)
+            }
+            ExprKind::ForceUnwrap(inner) => {
+                let inner_val = self.lower_expr(inner);
+                let temp = self.new_temp();
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ForceUnwrap(inner_val)));
+                Value::Place(temp)
+            }
+            ExprKind::OptionalGet { object, name } => {
+                let obj_val = self.lower_expr(object);
+                let temp = self.new_temp();
+                
+                let then_block = self.new_block();
+                let else_block = self.new_block();
+                let merge_block = self.new_block();
+                
+                let is_null_temp = self.new_temp();
+                self.current().instructions.push(Inst::Assign(
+                    is_null_temp.clone(), 
+                    RValue::BinaryOp(ast::BinaryOp::Equal, obj_val.clone(), Value::Null)
+                ));
+                
+                self.current().terminator = Some(Terminator::Branch {
+                    cond: Value::Place(is_null_temp),
+                    then_block,
+                    else_block,
+                });
+                
+                self.current_block = then_block;
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Use(Value::Null)));
+                self.current().terminator = Some(Terminator::Jump(merge_block));
+                
+                self.current_block = else_block;
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, name.clone())));
+                self.current().terminator = Some(Terminator::Jump(merge_block));
+                
+                self.current_block = merge_block;
                 Value::Place(temp)
             }
             ExprKind::Set { object, name, value } => {

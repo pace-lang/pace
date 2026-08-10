@@ -111,7 +111,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                 let var = self.get_place_var(place);
                 Ok(self.builder.use_var(var))
             }
-            Value::Void => Ok(self.builder.ins().iconst(types::I64, 0)), // fallback
+            Value::Void | Value::Null => Ok(self.builder.ins().iconst(types::I64, 0)),
             _ => Err("Value variant not supported in M1".to_string()),
         }
     }
@@ -212,6 +212,12 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let offset = offset.unwrap_or_else(|| panic!("Property {} not found", prop_name));
                         
                         self.builder.ins().load(types::I64, ir::MemFlagsData::new(), cl_obj, offset)
+                    }
+                    RValue::ForceUnwrap(inner) => {
+                        let cl_val = self.translate_value(inner)?;
+                        let is_null = self.builder.ins().icmp_imm_u(ir::condcodes::IntCC::Equal, cl_val, 0);
+                        self.builder.ins().trapnz(is_null, ir::TrapCode::unwrap_user(1)); // Panic on null unwrap
+                        cl_val
                     }
                     _ => return Err("RValue variant not supported in M1-M5".to_string()),
                 };

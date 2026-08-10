@@ -1,0 +1,18 @@
+class User {
+    name: String;
+}
+
+func main() {
+    let u: User? = null;
+    let s: String? = "hello";
+    let empty_str: String? = null;
+    
+    // Valid assignments
+    let u2: User? = u;
+    
+    // Implicit promotion
+    let s2: String? = "world";
+    
+    print(s);
+    print(empty_str);
+}

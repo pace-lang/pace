@@ -30,6 +30,8 @@ pub enum ExprKind {
     String(String),
     /// A boolean literal like `true` or `false`
     Boolean(bool),
+    /// A null literal `null`
+    Null,
     /// A variable reference like `count`
     Variable(String),
     /// A binary operation like `a + b`
@@ -62,6 +64,13 @@ pub enum ExprKind {
     },
     /// Self reference: `self`
     SelfRef,
+    /// Force unwrap: `expr!`
+    ForceUnwrap(Box<Expr>),
+    /// Optional property access: `object?.name`
+    OptionalGet {
+        object: Box<Expr>,
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

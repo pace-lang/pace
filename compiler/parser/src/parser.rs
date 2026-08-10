@@ -763,6 +763,20 @@ impl Parser {
 
                 let span = Span::new(expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
                 expr = Expr::new(ExprKind::Get { object: Box::new(expr), name }, span);
+            } else if self.match_token(&[TokenKind::QuestionDot]) {
+                let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                    self.advance();
+                    n
+                } else {
+                    self.error_at_current("Expected property name after '?.'.");
+                    return None;
+                };
+
+                let span = Span::new(expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
+                expr = Expr::new(ExprKind::OptionalGet { object: Box::new(expr), name }, span);
+            } else if self.match_token(&[TokenKind::Bang]) {
+                let span = Span::new(expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
+                expr = Expr::new(ExprKind::ForceUnwrap(Box::new(expr)), span);
             } else {
                 break;
             }
@@ -824,6 +838,9 @@ impl Parser {
         }
         if self.match_token(&[TokenKind::True]) {
             return Some(Expr::new(ExprKind::Boolean(true), self.previous().span));
+        }
+        if self.match_token(&[TokenKind::Null]) {
+            return Some(Expr::new(ExprKind::Null, self.previous().span));
         }
         if self.match_token(&[TokenKind::SelfKeyword]) {
             return Some(Expr::new(ExprKind::SelfRef, self.previous().span));

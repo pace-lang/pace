@@ -123,9 +123,7 @@ impl<'a> Scanner<'a> {
                 if self.match_char('=') {
                     TokenKind::BangEqual
                 } else {
-                    let span = Span::new(self.start_idx, self.current_idx, self.start_loc, self.current_loc);
-                    self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::UnexpectedToken, "Unexpected character '!'", span).build());
-                    TokenKind::Error("Unexpected character '!'".into())
+                    TokenKind::Bang
                 }
             }
             '<' => {
@@ -142,7 +140,13 @@ impl<'a> Scanner<'a> {
                     TokenKind::Greater
                 }
             }
-            '?' => TokenKind::Question,
+            '?' => {
+                if self.match_char('.') {
+                    TokenKind::QuestionDot
+                } else {
+                    TokenKind::Question
+                }
+            }
             ' ' | '\r' | '\t' | '\n' => {
                 // Ignore whitespace.
                 return None;
@@ -272,6 +276,7 @@ impl<'a> Scanner<'a> {
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "weak" => TokenKind::Weak,
+            "null" => TokenKind::Null,
             _ => TokenKind::Identifier(text.to_string()),
         }
     }

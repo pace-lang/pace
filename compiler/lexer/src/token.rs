@@ -27,6 +27,7 @@ pub enum TokenKind {
     True,
     False,
     Weak,
+    Null,
 
     // Identifiers and Literals
     Identifier(String),
@@ -59,6 +60,8 @@ pub enum TokenKind {
     Arrow, // ->
     FatArrow, // =>
     Question,
+    QuestionDot, // ?.
+    Bang, // !
 
     // Special
     Error(String),

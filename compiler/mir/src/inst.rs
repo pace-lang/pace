@@ -15,6 +15,7 @@ pub enum Value {
     Place(Place),
     Object(usize),
     Void,
+    Null,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +28,7 @@ pub enum RValue {
     AllocateObject(String),
     GetProperty(Value, String),
     WeakUpgrade(Value),
+    ForceUnwrap(Value),
 }
 
 #[derive(Debug, Clone, PartialEq)]

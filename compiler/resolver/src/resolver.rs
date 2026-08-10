@@ -152,7 +152,13 @@ impl Resolver {
                 }
             }
             // Literals have no names to resolve
-            ExprKind::Integer(_) | ExprKind::Float(_) | ExprKind::String(_) | ExprKind::Boolean(_) => {}
+            ExprKind::Integer(_) | ExprKind::Float(_) | ExprKind::String(_) | ExprKind::Boolean(_) | ExprKind::Null => {}
+            ExprKind::ForceUnwrap(inner) => {
+                self.resolve_expr(inner);
+            }
+            ExprKind::OptionalGet { object, name: _ } => {
+                self.resolve_expr(object);
+            }
         }
     }
 

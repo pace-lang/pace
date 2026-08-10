@@ -1,0 +1,27 @@
+class Address {
+    city: String;
+}
+
+class User {
+    address: Address?;
+}
+
+func main() {
+    let addr = init Address { city: "New York" };
+    let u = init User { address: addr };
+    
+    // Optional chaining
+    let c: String? = u?.address?.city;
+    print(c);
+    
+    // Force unwrap
+    let unwrapped_city: String = c!;
+    print(unwrapped_city);
+    
+    // Panic on null unwrap
+    let null_addr: Address? = null;
+    let city2 = null_addr?.city; // This is null
+    print(city2);
+    
+    let crash = city2!; // Should trap/panic
+}

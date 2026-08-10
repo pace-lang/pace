@@ -275,6 +275,7 @@ impl TypeChecker {
             ExprKind::Float(_) => Type::Float,
             ExprKind::String(_) => Type::String,
             ExprKind::Boolean(_) => Type::Boolean,
+            ExprKind::Null => Type::Null,
             ExprKind::Variable(name) => {
                 if let Some(ty) = self.env.resolve(name) {
                     ty
@@ -300,6 +301,48 @@ impl TypeChecker {
                     self.error(expr.span, DiagnosticCode::TypeMismatch, "Cannot use 'self' outside a class.");
 
                     Type::Error
+                }
+            }
+            ExprKind::ForceUnwrap(inner) => {
+                let inner_ty = self.check_expr(inner);
+                match inner_ty {
+                    Type::Optional(inner_inner) => *inner_inner,
+                    Type::Null => {
+                        self.error(expr.span, DiagnosticCode::TypeMismatch, "Cannot force unwrap a null literal.");
+                        Type::Error
+                    }
+                    Type::Error | Type::Any => inner_ty,
+                    _ => {
+                        self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot force unwrap non-optional type '{}'.", inner_ty));
+                        inner_ty
+                    }
+                }
+            }
+            ExprKind::OptionalGet { object, name } => {
+                let obj_ty = self.check_expr(object);
+                match obj_ty {
+                    Type::Optional(inner) => {
+                        if let Type::Instance(class_name) = &*inner {
+                            if let Some(fields) = self.classes.get(class_name) {
+                                if let Some(field_ty) = fields.get(name) {
+                                    Type::Optional(Box::new(field_ty.clone()))
+                                } else {
+                                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Property '{}' not found on '{}'.", name, class_name));
+                                    Type::Error
+                                }
+                            } else {
+                                Type::Error
+                            }
+                        } else {
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot access property on non-instance optional type '{}'.", inner));
+                            Type::Error
+                        }
+                    }
+                    Type::Error | Type::Any => obj_ty,
+                    _ => {
+                        self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Optional chaining '?.' requires an optional type, found '{}'.", obj_ty));
+                        Type::Error
+                    }
                 }
             }
             ExprKind::Get { object, name } => {
@@ -587,6 +630,11 @@ impl TypeChecker {
     fn is_assignable(&self, source: &Type, target: &Type) -> bool {
         if source == target {
             return true;
+        }
+        if *source == Type::Null {
+            if matches!(target, Type::Optional(_)) {
+                return true;
+            }
         }
         if let Type::Optional(inner) = target {
             if self.is_assignable(source, inner) {
