@@ -64,6 +64,7 @@ impl<'a> VirtualMachine<'a> {
                     },
                     Value::Void => out.push_str("void"),
                     Value::Null => out.push_str("null"),
+                    Value::Array(_) => out.push_str("[Array]"),
                     Value::Place(_) => unreachable!(),
                 }
             }
@@ -207,6 +208,50 @@ impl<'a> VirtualMachine<'a> {
                         }
                         eval_val
                     }
+                    RValue::Array(elements, _) => {
+                        let id = self.heap.len();
+                        self.heap.push(Object {
+                            class_name: "[Array]".to_string(),
+                            fields: HashMap::new(),
+                        });
+                        for (i, elem) in elements.iter().enumerate() {
+                            let val = self.resolve_value(elem);
+                            self.heap[id].fields.insert(i.to_string(), val);
+                        }
+                        self.heap[id].fields.insert("length".to_string(), Value::Int(elements.len() as i64));
+                        Value::Object(id)
+                    }
+                    RValue::ArrayRepeat(val, count, _) => {
+                        let id = self.heap.len();
+                        let repeat_val = self.resolve_value(val);
+                        let count_val = self.resolve_value(count);
+                        let count_int = if let Value::Int(c) = count_val { c } else { panic!("Count must be int") };
+                        self.heap.push(Object {
+                            class_name: "[Array]".to_string(),
+                            fields: HashMap::new(),
+                        });
+                        for i in 0..count_int {
+                            self.heap[id].fields.insert(i.to_string(), repeat_val.clone());
+                        }
+                        self.heap[id].fields.insert("length".to_string(), Value::Int(count_int));
+                        Value::Object(id)
+                    }
+                    RValue::IndexGet(array, index) => {
+                        let obj_val = self.resolve_value(array);
+                        let idx_val = self.resolve_value(index);
+                        let idx_int = if let Value::Int(i) = idx_val { i } else { panic!("Index must be int") };
+                        if let Value::Object(id) = obj_val {
+                            let obj = &self.heap[id];
+                            let len_val = obj.fields.get("length").unwrap();
+                            let len_int = if let Value::Int(l) = len_val { *l } else { panic!("Length must be int") };
+                            if idx_int < 0 || idx_int >= len_int {
+                                panic!("Index out of bounds");
+                            }
+                            obj.fields.get(&idx_int.to_string()).cloned().unwrap_or(Value::Void)
+                        } else {
+                            panic!("Cannot index non-object");
+                        }
+                    }
                 };
                 self.store(place, val);
             }
@@ -221,6 +266,22 @@ impl<'a> VirtualMachine<'a> {
                     }
                 } else {
                     panic!("Cannot set property on non-object");
+                }
+            }
+            Inst::IndexSet(array, index, val) => {
+                let obj_val = self.resolve_value(array);
+                let idx_val = self.resolve_value(index);
+                let set_val = self.resolve_value(val);
+                let idx_int = if let Value::Int(i) = idx_val { i } else { panic!("Index must be int") };
+                if let Value::Object(id) = obj_val {
+                    if let Some(obj) = self.heap.get_mut(id) {
+                        let len_val = obj.fields.get("length").unwrap();
+                        let len_int = if let Value::Int(l) = len_val { *l } else { panic!("Length must be int") };
+                        if idx_int < 0 || idx_int >= len_int {
+                            panic!("Index out of bounds");
+                        }
+                        obj.fields.insert(idx_int.to_string(), set_val);
+                    }
                 }
             }
             Inst::Retain(_) => {}

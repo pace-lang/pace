@@ -345,6 +345,65 @@ impl TypeChecker {
                     }
                 }
             }
+            ExprKind::Array(elements) => {
+                if elements.is_empty() {
+                    self.error(expr.span, DiagnosticCode::TypeMismatch, "Cannot infer type of empty array literal.");
+                    return Type::Error;
+                }
+                let elem_type = self.check_expr(&elements[0]);
+                for elem in elements.iter().skip(1) {
+                    let next_type = self.check_expr(elem);
+                    if next_type != elem_type && next_type != Type::Error && elem_type != Type::Error {
+                        self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Array elements have inconsistent types: expected '{}', found '{}'.", elem_type, next_type));
+                    }
+                }
+                Type::Array(Box::new(elem_type))
+            }
+            ExprKind::ArrayRepeat { value, count } => {
+                let elem_type = self.check_expr(value);
+                let count_type = self.check_expr(count);
+                if count_type != Type::Int && count_type != Type::Error {
+                    self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Array repeat count must be 'Int', found '{}'.", count_type));
+                }
+                Type::Array(Box::new(elem_type))
+            }
+            ExprKind::IndexGet { object, index } => {
+                let obj_type = self.check_expr(object);
+                let idx_type = self.check_expr(index);
+                if idx_type != Type::Int && idx_type != Type::Error {
+                    self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Array index must be 'Int', found '{}'.", idx_type));
+                }
+                match obj_type {
+                    Type::Array(inner) => *inner,
+                    Type::Error => Type::Error,
+                    _ => {
+                        self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot index into non-array type '{}'.", obj_type));
+                        Type::Error
+                    }
+                }
+            }
+            ExprKind::IndexSet { object, index, value } => {
+                let obj_type = self.check_expr(object);
+                let idx_type = self.check_expr(index);
+                let val_type = self.check_expr(value);
+                
+                if idx_type != Type::Int && idx_type != Type::Error {
+                    self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Array index must be 'Int', found '{}'.", idx_type));
+                }
+                
+                match obj_type {
+                    Type::Array(inner) => {
+                        if !self.is_assignable(&val_type, &inner) && val_type != Type::Error && *inner != Type::Error && *inner != Type::Any {
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to array element of type '{}'.", val_type, inner));
+                        }
+                    }
+                    Type::Error => {}
+                    _ => {
+                        self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot index into non-array type '{}'.", obj_type));
+                    }
+                }
+                val_type
+            }
             ExprKind::Get { object, name } => {
                 let obj_type = self.check_expr(object);
                 
@@ -623,6 +682,9 @@ impl TypeChecker {
             }
             TypeExpr::Optional(inner) => {
                 Type::Optional(Box::new(self.parse_type(inner, span)))
+            }
+            TypeExpr::Array(inner) => {
+                Type::Array(Box::new(self.parse_type(inner, span)))
             }
         }
     }

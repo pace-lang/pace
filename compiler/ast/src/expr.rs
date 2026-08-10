@@ -71,6 +71,24 @@ pub enum ExprKind {
         object: Box<Expr>,
         name: String,
     },
+    /// Array literal: `[1, 2, 3]`
+    Array(Vec<Expr>),
+    /// Array repeat initialization: `[0; 10]`
+    ArrayRepeat {
+        value: Box<Expr>,
+        count: Box<Expr>,
+    },
+    /// Index access: `arr[i]`
+    IndexGet {
+        object: Box<Expr>,
+        index: Box<Expr>,
+    },
+    /// Index assignment: `arr[i] = value`
+    IndexSet {
+        object: Box<Expr>,
+        index: Box<Expr>,
+        value: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

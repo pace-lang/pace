@@ -72,6 +72,15 @@ impl CraneliftGenerator {
             .map_err(|e| format!("Failed to declare pace_alloc: {}", e))?;
         func_ids.insert("pace_alloc".to_string(), alloc_id);
 
+        let mut alloc_repeat_sig = module.make_signature();
+        alloc_repeat_sig.params.push(AbiParam::new(types::I64)); // count
+        alloc_repeat_sig.params.push(AbiParam::new(types::I64)); // val
+        alloc_repeat_sig.params.push(AbiParam::new(types::I64)); // metadata
+        alloc_repeat_sig.returns.push(AbiParam::new(types::I64));
+        let alloc_repeat_id = module.declare_function("pace_alloc_array_repeat", Linkage::Import, &alloc_repeat_sig)
+            .map_err(|e| format!("Failed to declare pace_alloc_array_repeat: {}", e))?;
+        func_ids.insert("pace_alloc_array_repeat".to_string(), alloc_repeat_id);
+
         let mut retain_sig = module.make_signature();
         retain_sig.params.push(AbiParam::new(types::I64)); // obj pointer
         let retain_id = module.declare_function("pace_retain", Linkage::Import, &retain_sig)

@@ -219,7 +219,58 @@ impl<'a, 'b> Translator<'a, 'b> {
                         self.builder.ins().trapnz(is_null, ir::TrapCode::unwrap_user(1)); // Panic on null unwrap
                         cl_val
                     }
-                    _ => return Err("RValue variant not supported in M1-M5".to_string()),
+                    RValue::Array(elements, is_ref) => {
+                        let total_size = 24 + (elements.len() as i64 * 8);
+                        let alloc_func = self.func_ids.get("pace_alloc").expect("pace_alloc not declared");
+                        let local_alloc = self.module.declare_func_in_func(*alloc_func, self.builder.func);
+                        
+                        let metadata_val = if *is_ref { -1i64 } else { -2i64 };
+                        let metadata_ptr = self.builder.ins().iconst(types::I64, metadata_val);
+                        let size_val = self.builder.ins().iconst(types::I64, total_size);
+                        let call_inst = self.builder.ins().call(local_alloc, &[size_val, metadata_ptr]);
+                        let array_ptr = self.builder.inst_results(call_inst)[0];
+                        
+                        let len_val = self.builder.ins().iconst(types::I64, elements.len() as i64);
+                        self.builder.ins().store(ir::MemFlagsData::new(), len_val, array_ptr, 24);
+                        
+                        for (i, elem) in elements.iter().enumerate() {
+                            let cl_elem = self.translate_value(elem)?;
+                            let offset = 32 + (i as i32 * 8);
+                            self.builder.ins().store(ir::MemFlagsData::new(), cl_elem, array_ptr, offset);
+                        }
+                        array_ptr
+                    }
+                    RValue::ArrayRepeat(val, count, is_ref) => {
+                        let cl_val = self.translate_value(val)?;
+                        let cl_count = self.translate_value(count)?;
+                        
+                        let alloc_repeat_func = self.func_ids.get("pace_alloc_array_repeat").expect("pace_alloc_array_repeat not declared");
+                        let local_alloc_repeat = self.module.declare_func_in_func(*alloc_repeat_func, self.builder.func);
+                        
+                        let metadata_val = if *is_ref { -1i64 } else { -2i64 };
+                        let metadata_ptr = self.builder.ins().iconst(types::I64, metadata_val);
+                        
+                        let call_inst = self.builder.ins().call(local_alloc_repeat, &[cl_count, cl_val, metadata_ptr]);
+                        self.builder.inst_results(call_inst)[0]
+                    }
+                    RValue::IndexGet(array, index) => {
+                        let cl_array = self.translate_value(array)?;
+                        let cl_index = self.translate_value(index)?;
+                        
+                        // Bounds checking
+                        let len_val = self.builder.ins().load(types::I64, ir::MemFlagsData::new(), cl_array, 24);
+                        let is_neg = self.builder.ins().icmp_imm_u(ir::condcodes::IntCC::SignedLessThan, cl_index, 0);
+                        let is_gte = self.builder.ins().icmp(ir::condcodes::IntCC::SignedGreaterThanOrEqual, cl_index, len_val);
+                        let out_of_bounds = self.builder.ins().bor(is_neg, is_gte);
+                        self.builder.ins().trapnz(out_of_bounds, ir::TrapCode::unwrap_user(2)); // Panic out of bounds
+                        
+                        let byte_offset = self.builder.ins().imul_imm(cl_index, 8);
+                        let base_offset = self.builder.ins().iadd_imm(cl_array, 32);
+                        let element_ptr = self.builder.ins().iadd(base_offset, byte_offset);
+                        
+                        self.builder.ins().load(types::I64, ir::MemFlagsData::new(), element_ptr, 0)
+                    }
+                    _ => return Err("RValue variant not supported in M1-M9".to_string()),
                 };
                 
                 let var = self.get_place_var(place);
@@ -241,6 +292,25 @@ impl<'a, 'b> Translator<'a, 'b> {
                 let offset = offset.unwrap_or_else(|| panic!("Property {} not found", prop_name));
                 
                 self.builder.ins().store(ir::MemFlagsData::new(), cl_val, cl_obj, offset);
+                Ok(())
+            }
+            Inst::IndexSet(array, index, val) => {
+                let cl_array = self.translate_value(array)?;
+                let cl_index = self.translate_value(index)?;
+                let cl_val = self.translate_value(val)?;
+                
+                // Bounds checking
+                let len_val = self.builder.ins().load(types::I64, ir::MemFlagsData::new(), cl_array, 24);
+                let is_neg = self.builder.ins().icmp_imm_u(ir::condcodes::IntCC::SignedLessThan, cl_index, 0);
+                let is_gte = self.builder.ins().icmp(ir::condcodes::IntCC::SignedGreaterThanOrEqual, cl_index, len_val);
+                let out_of_bounds = self.builder.ins().bor(is_neg, is_gte);
+                self.builder.ins().trapnz(out_of_bounds, ir::TrapCode::unwrap_user(2)); // Panic out of bounds
+                
+                let byte_offset = self.builder.ins().imul_imm(cl_index, 8);
+                let base_offset = self.builder.ins().iadd_imm(cl_array, 32);
+                let element_ptr = self.builder.ins().iadd(base_offset, byte_offset);
+                
+                self.builder.ins().store(ir::MemFlagsData::new(), cl_val, element_ptr, 0);
                 Ok(())
             }
             Inst::Retain(val) => {

@@ -146,6 +146,24 @@ impl Resolver {
                 }
                 self.resolve_expr(value);
             }
+            ExprKind::Array(elements) => {
+                for el in elements {
+                    self.resolve_expr(el);
+                }
+            }
+            ExprKind::ArrayRepeat { value, count } => {
+                self.resolve_expr(value);
+                self.resolve_expr(count);
+            }
+            ExprKind::IndexGet { object, index } => {
+                self.resolve_expr(object);
+                self.resolve_expr(index);
+            }
+            ExprKind::IndexSet { object, index, value } => {
+                self.resolve_expr(object);
+                self.resolve_expr(index);
+                self.resolve_expr(value);
+            }
             ExprKind::SelfRef => {
                 if !self.scopes.resolve(&"self".to_string()) {
                     self.error(expr.span, DiagnosticCode::UnknownIdentifier, "Cannot use 'self' outside of a class method.");

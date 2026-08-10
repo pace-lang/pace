@@ -37,6 +37,24 @@ impl ArcPass {
                             new_instructions.push(inst.clone());
                             object_places.insert(place.clone());
                         }
+                        Inst::Assign(place, RValue::Array(vals, is_ref)) => {
+                            let mut is_ref_mut = *is_ref;
+                            if vals.iter().any(|v| {
+                                if let Value::Place(p) = v { object_places.contains(p) } else { false }
+                            }) {
+                                is_ref_mut = true;
+                            }
+                            new_instructions.push(Inst::Assign(place.clone(), RValue::Array(vals.clone(), is_ref_mut)));
+                            object_places.insert(place.clone());
+                        }
+                        Inst::Assign(place, RValue::ArrayRepeat(val, count, is_ref)) => {
+                            let mut is_ref_mut = *is_ref;
+                            if let Value::Place(p) = val {
+                                if object_places.contains(p) { is_ref_mut = true; }
+                            }
+                            new_instructions.push(Inst::Assign(place.clone(), RValue::ArrayRepeat(val.clone(), count.clone(), is_ref_mut)));
+                            object_places.insert(place.clone());
+                        }
                         Inst::Assign(place, RValue::Use(Value::Place(src_place))) => {
                             if object_places.contains(src_place) || is_weak(src_place) {
                                 object_places.insert(place.clone());

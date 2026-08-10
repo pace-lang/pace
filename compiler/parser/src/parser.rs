@@ -81,6 +81,19 @@ impl Parser {
     }
 
     fn parse_type_expr(&mut self) -> Option<TypeExpr> {
+        if self.match_token(&[TokenKind::LeftBracket]) {
+            let inner = self.parse_type_expr()?;
+            if !self.match_token(&[TokenKind::RightBracket]) {
+                self.error_at_current("Expected ']' after array element type.");
+                return None;
+            }
+            let mut ty = TypeExpr::Array(Box::new(inner));
+            if self.match_token(&[TokenKind::Question]) {
+                ty = TypeExpr::Optional(Box::new(ty));
+            }
+            return Some(ty);
+        }
+
         if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
             self.advance();
             let base_type = t;
@@ -632,6 +645,10 @@ impl Parser {
                     let span = Span::new(expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
                     return Some(Expr::new(ExprKind::Set { object, name, value: Box::new(value) }, span));
                 }
+                ExprKind::IndexGet { object, index } => {
+                    let span = Span::new(expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
+                    return Some(Expr::new(ExprKind::IndexSet { object, index, value: Box::new(value) }, span));
+                }
                 _ => {
                     self.error_at_current("Invalid assignment target.");
                 }
@@ -777,6 +794,14 @@ impl Parser {
             } else if self.match_token(&[TokenKind::Bang]) {
                 let span = Span::new(expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
                 expr = Expr::new(ExprKind::ForceUnwrap(Box::new(expr)), span);
+            } else if self.match_token(&[TokenKind::LeftBracket]) {
+                let index = self.expression()?;
+                if !self.match_token(&[TokenKind::RightBracket]) {
+                    self.error_at_current("Expected ']' after index.");
+                    return None;
+                }
+                let span = Span::new(expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
+                expr = Expr::new(ExprKind::IndexGet { object: Box::new(expr), index: Box::new(index) }, span);
             } else {
                 break;
             }
@@ -875,6 +900,42 @@ impl Parser {
                     let end_span = self.previous().span;
                     let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
                     return Some(Expr::new(ExprKind::Grouping(Box::new(expr)), span));
+                }
+                TokenKind::LeftBracket => {
+                    self.advance();
+                    let start_span = token.span;
+                    if self.match_token(&[TokenKind::RightBracket]) {
+                        let end_span = self.previous().span;
+                        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+                        return Some(Expr::new(ExprKind::Array(Vec::new()), span));
+                    }
+                    
+                    let first_expr = self.expression()?;
+                    if self.match_token(&[TokenKind::Semicolon]) {
+                        let count = self.expression()?;
+                        if !self.match_token(&[TokenKind::RightBracket]) {
+                            self.error_at_current("Expected ']' after array repeat count.");
+                            return None;
+                        }
+                        let end_span = self.previous().span;
+                        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+                        return Some(Expr::new(ExprKind::ArrayRepeat { value: Box::new(first_expr), count: Box::new(count) }, span));
+                    } else {
+                        let mut elements = vec![first_expr];
+                        while self.match_token(&[TokenKind::Comma]) {
+                            if self.check(&TokenKind::RightBracket) {
+                                break;
+                            }
+                            elements.push(self.expression()?);
+                        }
+                        if !self.match_token(&[TokenKind::RightBracket]) {
+                            self.error_at_current("Expected ']' after array elements.");
+                            return None;
+                        }
+                        let end_span = self.previous().span;
+                        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+                        return Some(Expr::new(ExprKind::Array(elements), span));
+                    }
                 }
                 _ => {}
             }

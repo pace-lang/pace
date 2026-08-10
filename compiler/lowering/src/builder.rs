@@ -265,6 +265,36 @@ impl MirBuilder {
             ExprKind::Boolean(b) => Value::Boolean(*b),
             ExprKind::Null => Value::Null,
             ExprKind::Variable(name) => Value::Place(Place::Var(name.clone())),
+            ExprKind::Array(elements) => {
+                let mut vals = Vec::new();
+                for el in elements {
+                    vals.push(self.lower_expr(el));
+                }
+                let temp = self.new_temp();
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Array(vals, false)));
+                Value::Place(temp)
+            }
+            ExprKind::ArrayRepeat { value, count } => {
+                let val = self.lower_expr(value);
+                let count_val = self.lower_expr(count);
+                let temp = self.new_temp();
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ArrayRepeat(val, count_val, false)));
+                Value::Place(temp)
+            }
+            ExprKind::IndexGet { object, index } => {
+                let obj_val = self.lower_expr(object);
+                let idx_val = self.lower_expr(index);
+                let temp = self.new_temp();
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::IndexGet(obj_val, idx_val)));
+                Value::Place(temp)
+            }
+            ExprKind::IndexSet { object, index, value } => {
+                let obj_val = self.lower_expr(object);
+                let idx_val = self.lower_expr(index);
+                let val_val = self.lower_expr(value);
+                self.current().instructions.push(Inst::IndexSet(obj_val, idx_val, val_val.clone()));
+                val_val
+            }
             ExprKind::Grouping(inner) => self.lower_expr(inner),
             ExprKind::Get { object, name } => {
                 let obj_val = self.lower_expr(object);

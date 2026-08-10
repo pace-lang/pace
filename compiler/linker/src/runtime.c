@@ -34,6 +34,16 @@ void* pace_alloc(int64_t size, void* metadata_ptr) {
     return ptr;
 }
 
+void* pace_alloc_array_repeat(uint64_t count, uint64_t val, uint64_t metadata_val) {
+    uint64_t total_size = 24 + count * 8;
+    void* ptr = pace_alloc(total_size, (void*)metadata_val);
+    *(uint64_t*)((char*)ptr + 24) = count;
+    for (uint64_t i = 0; i < count; i++) {
+        *(uint64_t*)((char*)ptr + 32 + i * 8) = val;
+    }
+    return ptr;
+}
+
 void pace_retain(void* obj) {
     if (!obj) return;
     // Atomic increment of strong count at offset 0
@@ -58,8 +68,17 @@ void pace_release(void* obj) {
     if (new_count == 0) {
         printf("Pace Runtime: Strong count is 0, releasing weak representation\n");
         
-        PaceClassMetadata* metadata = (PaceClassMetadata*)(*(uint64_t*)((char*)obj + 16));
-        if (metadata) {
+        uint64_t metadata_val = *(uint64_t*)((char*)obj + 16);
+        if (metadata_val == (uint64_t)-1) { // Array of references
+            uint64_t length = *(uint64_t*)((char*)obj + 24);
+            for (uint64_t i = 0; i < length; i++) {
+                void* element = (void*)(*(uint64_t*)((char*)obj + 32 + i * 8));
+                if (element) {
+                    pace_release(element);
+                }
+            }
+        } else if (metadata_val != (uint64_t)-2 && metadata_val != 0) { // -2 is Array of primitives
+            PaceClassMetadata* metadata = (PaceClassMetadata*)metadata_val;
             for (uint64_t i = 0; i < metadata->field_count; i++) {
                 uint64_t offset = metadata->field_offsets[i];
                 void* field_ptr = (void*)(*(uint64_t*)((char*)obj + offset));

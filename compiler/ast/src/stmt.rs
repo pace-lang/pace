@@ -6,6 +6,7 @@ pub enum TypeExpr {
     Named(String),
     GenericInstance(String, Vec<TypeExpr>),
     Optional(Box<TypeExpr>),
+    Array(Box<TypeExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

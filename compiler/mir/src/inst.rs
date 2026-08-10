@@ -14,6 +14,7 @@ pub enum Value {
     Boolean(bool),
     Place(Place),
     Object(usize),
+    Array(Vec<Value>),
     Void,
     Null,
 }
@@ -29,12 +30,17 @@ pub enum RValue {
     GetProperty(Value, String),
     WeakUpgrade(Value),
     ForceUnwrap(Value),
+    Array(Vec<Value>, bool),
+    ArrayRepeat(Value, Value, bool),
+    IndexGet(Value, Value),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inst {
     Assign(Place, RValue),
     SetProperty(Value, String, Value),
+    IndexSet(Value, Value, Value),
+
     Retain(Value),
     Release(Value),
     WeakRetain(Value),
