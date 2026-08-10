@@ -315,7 +315,13 @@ impl<'a, 'b> Translator<'a, 'b> {
                         self.builder.ins().load(types::I64, ir::MemFlagsData::new(), element_ptr, 0)
                     }
                     RValue::MethodCall(_, _, _) => return Err("Dynamic method calls not supported (Statically dispatched instead)".to_string()),
-                    RValue::WeakUpgrade(_) => return Err("Weak references are planned for M9".to_string()),
+                    RValue::WeakUpgrade(inner) => {
+                        let cl_val = self.translate_value(inner)?;
+                        let weak_upgrade_func = self.func_ids.get("pace_weak_upgrade").unwrap();
+                        let local_weak_upgrade = self.module.declare_func_in_func(*weak_upgrade_func, self.builder.func);
+                        let call_inst = self.builder.ins().call(local_weak_upgrade, &[cl_val]);
+                        self.builder.inst_results(call_inst)[0]
+                    }
                 };
                 
                 let var = self.get_place_var(place);

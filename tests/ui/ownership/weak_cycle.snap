@@ -4,4 +4,5 @@ expression: normalized_stderr
 ---
 Call typed_callee ty: Class("User", [])
 Call typed_callee ty: Class("User", [])
+Call typed_callee ty: BuiltinFunc
 Codegen error: Function User::init not found
