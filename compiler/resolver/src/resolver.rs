@@ -30,7 +30,7 @@ impl Resolver {
                 self.resolve(stmts);
                 self.scopes.pop_scope();
             }
-            StmtKind::Let { name, type_annotation: _, initializer } | StmtKind::Var { name, type_annotation: _, initializer } => {
+            StmtKind::Let { name, type_annotation: _, initializer } | StmtKind::Var { name, type_annotation: _, initializer, is_weak: _ } => {
                 // Resolve initializer first so it can't reference the variable being declared
                 if let Some(init) = initializer {
                     self.resolve_expr(init);

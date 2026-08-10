@@ -271,6 +271,7 @@ impl<'a> Scanner<'a> {
             "await" => TokenKind::Await,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
+            "weak" => TokenKind::Weak,
             _ => TokenKind::Identifier(text.to_string()),
         }
     }

@@ -5,6 +5,7 @@ pub struct Function {
     pub name: String,
     pub parameters: Vec<String>,
     pub blocks: Vec<BasicBlock>,
+    pub weak_vars: std::collections::HashSet<String>,
 }
 
 impl Function {
@@ -13,6 +14,7 @@ impl Function {
             name,
             parameters,
             blocks: Vec::new(),
+            weak_vars: std::collections::HashSet::new(),
         }
     }
 }

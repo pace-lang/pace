@@ -183,7 +183,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let class_def = self.program.classes.get(class_name)
                             .unwrap_or_else(|| panic!("Class {} not found", class_name));
                         // Header (16 bytes) + Fields (8 bytes each)
-                        let total_size = 16 + (class_def.fields.len() as i64 * 8);
+                        let total_size = 24 + (class_def.fields.len() as i64 * 8);
                         
                         let alloc_func = self.func_ids.get("pace_alloc")
                             .expect("pace_alloc not declared");
@@ -200,7 +200,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let mut offset = None;
                         for class_def in self.program.classes.values() {
                             if let Some(idx) = class_def.fields.iter().position(|f| f == prop_name) {
-                                offset = Some(16 + (idx as i32 * 8));
+                                offset = Some(24 + (idx as i32 * 8));
                                 break;
                             }
                         }
@@ -223,7 +223,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                 let mut offset = None;
                 for class_def in self.program.classes.values() {
                     if let Some(idx) = class_def.fields.iter().position(|f| f == prop_name) {
-                        offset = Some(16 + (idx as i32 * 8));
+                        offset = Some(24 + (idx as i32 * 8));
                         break;
                     }
                 }
@@ -242,6 +242,20 @@ impl<'a, 'b> Translator<'a, 'b> {
             Inst::Release(val) => {
                 let cl_val = self.translate_value(val)?;
                 let release_func = self.func_ids.get("pace_release").unwrap();
+                let local_release = self.module.declare_func_in_func(*release_func, self.builder.func);
+                self.builder.ins().call(local_release, &[cl_val]);
+                Ok(())
+            }
+            Inst::WeakRetain(val) => {
+                let cl_val = self.translate_value(val)?;
+                let retain_func = self.func_ids.get("pace_weak_retain").unwrap();
+                let local_retain = self.module.declare_func_in_func(*retain_func, self.builder.func);
+                self.builder.ins().call(local_retain, &[cl_val]);
+                Ok(())
+            }
+            Inst::WeakRelease(val) => {
+                let cl_val = self.translate_value(val)?;
+                let release_func = self.func_ids.get("pace_weak_release").unwrap();
                 let local_release = self.module.declare_func_in_func(*release_func, self.builder.func);
                 self.builder.ins().call(local_release, &[cl_val]);
                 Ok(())

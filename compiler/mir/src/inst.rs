@@ -26,6 +26,7 @@ pub enum RValue {
     MethodCall(Value, String, Vec<Value>),
     AllocateObject(String),
     GetProperty(Value, String),
+    WeakUpgrade(Value),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,6 +35,8 @@ pub enum Inst {
     SetProperty(Value, String, Value),
     Retain(Value),
     Release(Value),
+    WeakRetain(Value),
+    WeakRelease(Value),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

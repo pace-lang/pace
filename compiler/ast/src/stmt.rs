@@ -5,6 +5,7 @@ use crate::expr::Expr;
 pub enum TypeExpr {
     Named(String),
     GenericInstance(String, Vec<TypeExpr>),
+    Optional(Box<TypeExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -15,11 +16,12 @@ pub enum StmtKind {
         type_annotation: Option<TypeExpr>,
         initializer: Option<Expr>,
     },
-    /// A var declaration: `var name: type = expression;`
+    /// A var declaration: `[weak] var name: type = expression;`
     Var {
         name: String,
         type_annotation: Option<TypeExpr>,
         initializer: Option<Expr>,
+        is_weak: bool,
     },
     /// An expression evaluated for side effects: `10 + 20;`
     Expression(Expr),

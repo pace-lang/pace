@@ -19,14 +19,25 @@ impl ProgramBuilder {
         for stmt in statements {
             if let StmtKind::Class { name, type_params: _, implements: _, methods, fields } = &stmt.kind {
                 let mut field_names = Vec::new();
+                let mut weak_fields = std::collections::HashSet::new();
                 for field in fields {
-                    if let StmtKind::Var { name: f_name, .. } | StmtKind::Let { name: f_name, .. } = &field.kind {
-                        field_names.push(f_name.clone());
+                    match &field.kind {
+                        StmtKind::Var { name: f_name, is_weak, .. } => {
+                            field_names.push(f_name.clone());
+                            if *is_weak {
+                                weak_fields.insert(f_name.clone());
+                            }
+                        }
+                        StmtKind::Let { name: f_name, .. } => {
+                            field_names.push(f_name.clone());
+                        }
+                        _ => {}
                     }
                 }
                 let class_def = mir::ClassDef {
                     name: name.clone(),
                     fields: field_names,
+                    weak_fields,
                 };
                 self.program.classes.insert(name.clone(), class_def);
 
@@ -131,7 +142,18 @@ impl MirBuilder {
                     self.lower_stmt(s);
                 }
             }
-            StmtKind::Let { name, initializer, .. } | StmtKind::Var { name, initializer, .. } => {
+            StmtKind::Let { name, initializer, .. } => {
+                if let Some(init) = initializer {
+                    let val = self.lower_expr(init);
+                    self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(val)));
+                } else {
+                    self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(Value::Void)));
+                }
+            }
+            StmtKind::Var { name, initializer, is_weak, .. } => {
+                if *is_weak {
+                    self.function.weak_vars.insert(name.clone());
+                }
                 if let Some(init) = initializer {
                     let val = self.lower_expr(init);
                     self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(val)));

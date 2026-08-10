@@ -5,6 +5,7 @@ use crate::function::Function;
 pub struct ClassDef {
     pub name: String,
     pub fields: Vec<String>,
+    pub weak_fields: std::collections::HashSet<String>,
 }
 
 #[derive(Debug, Clone, Default)]

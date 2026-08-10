@@ -26,6 +26,7 @@ pub enum TokenKind {
     Await,
     True,
     False,
+    Weak,
 
     // Identifiers and Literals
     Identifier(String),

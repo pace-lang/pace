@@ -10,11 +10,14 @@ impl ArcPass {
 
     pub fn run(&self, program: &mut Program) {
         for (_, func) in &mut program.functions {
-            // Very naive ARC pass for Phase 1
-            // 1. Identify which places hold objects (AllocateObject)
-            // 2. Insert Release(place) at the end of blocks that return, for all object places created in that block.
-            
             let mut object_places = HashSet::new();
+
+            let is_weak = |place: &Place| -> bool {
+                match place {
+                    Place::Var(n) => func.weak_vars.contains(n),
+                    _ => false
+                }
+            };
 
             for block in &mut func.blocks {
                 let mut new_instructions = Vec::new();
@@ -22,7 +25,6 @@ impl ArcPass {
                     match inst {
                         Inst::Assign(place, RValue::Call(func_name, _args)) => {
                             if program.classes.contains_key(func_name) {
-                                // Rewrite to AllocateObject
                                 new_instructions.push(Inst::Assign(place.clone(), RValue::AllocateObject(func_name.clone())));
                                 object_places.insert(place.clone());
                             } else {
@@ -34,17 +36,24 @@ impl ArcPass {
                             object_places.insert(place.clone());
                         }
                         Inst::Assign(place, RValue::Use(Value::Place(src_place))) => {
-                            new_instructions.push(inst.clone());
-                            if object_places.contains(src_place) {
+                            if object_places.contains(src_place) || is_weak(src_place) {
                                 object_places.insert(place.clone());
-                                // Retain the new binding
-                                new_instructions.push(Inst::Retain(Value::Place(src_place.clone())));
+                                
+                                if is_weak(place) {
+                                    new_instructions.push(inst.clone());
+                                    new_instructions.push(Inst::WeakRetain(Value::Place(src_place.clone())));
+                                } else if is_weak(src_place) {
+                                    new_instructions.push(Inst::Assign(place.clone(), RValue::WeakUpgrade(Value::Place(src_place.clone()))));
+                                } else {
+                                    new_instructions.push(inst.clone());
+                                    new_instructions.push(Inst::Retain(Value::Place(src_place.clone())));
+                                }
+                            } else {
+                                new_instructions.push(inst.clone());
                             }
                         }
                         Inst::SetProperty(_, _, _) => {
                             new_instructions.push(inst.clone());
-                            // If we assign an object to a property, we should retain it.
-                            // Skipping for M5 basic test.
                         }
                         _ => {
                             new_instructions.push(inst.clone());
@@ -54,10 +63,13 @@ impl ArcPass {
                 
                 block.instructions = new_instructions;
                 
-                // Release all local objects at the end of the block (very naive, assumes single block or simple control flow for M5)
                 if let Some(Terminator::Return(_)) = &block.terminator {
                     for place in &object_places {
-                        block.instructions.push(Inst::Release(Value::Place(place.clone())));
+                        if is_weak(place) {
+                            block.instructions.push(Inst::WeakRelease(Value::Place(place.clone())));
+                        } else {
+                            block.instructions.push(Inst::Release(Value::Place(place.clone())));
+                        }
                     }
                 }
             }

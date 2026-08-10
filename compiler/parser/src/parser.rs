@@ -35,9 +35,16 @@ impl Parser {
         } else if self.match_token(&[TokenKind::Func]) {
             self.function_declaration()
         } else if self.match_token(&[TokenKind::Let]) {
-            self.let_declaration(false)
+            self.variable_declaration(false, false)
         } else if self.match_token(&[TokenKind::Var]) {
-            self.let_declaration(true)
+            self.variable_declaration(true, false)
+        } else if self.match_token(&[TokenKind::Weak]) {
+            if self.match_token(&[TokenKind::Var]) {
+                self.variable_declaration(true, true)
+            } else {
+                self.error_at_current("Expected 'var' after 'weak'.");
+                None
+            }
         } else {
             self.statement()
         };
@@ -98,10 +105,18 @@ impl Parser {
                     return None;
                 }
                 
-                return Some(TypeExpr::GenericInstance(base_type, type_args));
+                let mut ty = TypeExpr::GenericInstance(base_type, type_args);
+                if self.match_token(&[TokenKind::Question]) {
+                    ty = TypeExpr::Optional(Box::new(ty));
+                }
+                return Some(ty);
             }
             
-            Some(TypeExpr::Named(base_type))
+            let mut ty = TypeExpr::Named(base_type);
+            if self.match_token(&[TokenKind::Question]) {
+                ty = TypeExpr::Optional(Box::new(ty));
+            }
+            return Some(ty);
         } else {
             self.error_at_current("Expected type name.");
             None
@@ -148,12 +163,20 @@ impl Parser {
 
         while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
             if self.match_token(&[TokenKind::Let]) {
-                if let Some(field) = self.let_declaration(false) {
+                if let Some(field) = self.variable_declaration(false, false) {
                     fields.push(field);
                 }
             } else if self.match_token(&[TokenKind::Var]) {
-                if let Some(field) = self.let_declaration(true) {
+                if let Some(field) = self.variable_declaration(true, false) {
                     fields.push(field);
+                }
+            } else if self.match_token(&[TokenKind::Weak]) {
+                if self.match_token(&[TokenKind::Var]) {
+                    if let Some(field) = self.variable_declaration(true, true) {
+                        fields.push(field);
+                    }
+                } else {
+                    self.error_at_current("Expected 'var' after 'weak'.");
                 }
             } else if self.match_token(&[TokenKind::Func]) {
                 if let Some(method) = self.function_declaration() {
@@ -399,7 +422,7 @@ impl Parser {
         Some(Stmt::new(StmtKind::Func { name, type_params, params, return_type, body: Box::new(body) }, span))
     }
 
-    fn let_declaration(&mut self, is_var: bool) -> Option<Stmt> {
+    fn variable_declaration(&mut self, is_var: bool, is_weak: bool) -> Option<Stmt> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -428,7 +451,7 @@ impl Parser {
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
         let kind = if is_var {
-            StmtKind::Var { name, type_annotation, initializer }
+            StmtKind::Var { name, type_annotation, initializer, is_weak }
         } else {
             StmtKind::Let { name, type_annotation, initializer }
         };
@@ -929,7 +952,7 @@ mod tests {
                 assert_eq!(name, "add");
                 assert_eq!(params.len(), 2);
                 assert_eq!(params[0].0, "a");
-                assert_eq!(return_type.as_ref().unwrap(), "Int");
+                assert_eq!(return_type.as_ref().unwrap(), &ast::TypeExpr::Named("Int".to_string()));
             }
             _ => panic!("Expected Func statement"),
         }

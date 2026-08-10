@@ -43,26 +43,11 @@ impl TypeChecker {
                 self.check(stmts);
                 self.env.pop_scope();
             }
-            StmtKind::Let { name, type_annotation, initializer } | StmtKind::Var { name, type_annotation, initializer } => {
-                let mut init_type = if let Some(init) = initializer {
-                    self.check_expr(init)
-                } else {
-                    Type::Any
-                };
-                
-                if let Some(ann) = type_annotation {
-                    let ann_type = self.parse_type(ann, stmt.span);
-                    if init_type == Type::Any {
-                        init_type = ann_type;
-                    } else if !self.is_assignable(&init_type, &ann_type) && init_type != Type::Error {
-                        self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to variable of type '{}'.", init_type, ann_type))
-                    }
-                }
-                
-                self.env.declare(name.clone(), init_type);
-            }
+            StmtKind::Let { name, type_annotation, initializer } => self.check_var_decl(name, type_annotation, initializer, false, stmt.span),
+            StmtKind::Var { name, type_annotation, initializer, is_weak } => self.check_var_decl(name, type_annotation, initializer, *is_weak, stmt.span),
             StmtKind::Class { name, type_params, implements, methods, fields } => {
                 self.env.declare(name.clone(), Type::Class(name.clone(), type_params.clone()));
+                self.classes.insert(name.clone(), std::collections::HashMap::new());
                 
                 self.env.push_scope();
                 for tp in type_params {
@@ -72,16 +57,35 @@ impl TypeChecker {
                 let mut class_members = HashMap::new();
                 
                 for field in fields {
-                    if let StmtKind::Var { name: f_name, type_annotation, initializer } | StmtKind::Let { name: f_name, type_annotation, initializer } = &field.kind {
-                        let ty = if let Some(ann) = type_annotation {
-                            self.parse_type(ann, field.span)
-                        } else if let Some(init) = initializer {
-                            self.check_expr(init)
-                        } else {
-                            Type::Any
-                        };
-                        class_members.insert(f_name.clone(), ty);
-                    }
+                    let (f_name, type_annotation, initializer, is_weak) = match &field.kind {
+                        StmtKind::Var { name, type_annotation, initializer, is_weak } => (name, type_annotation, initializer, *is_weak),
+                        StmtKind::Let { name, type_annotation, initializer } => (name, type_annotation, initializer, false),
+                        _ => continue,
+                    };
+                    
+                    let ty = if let Some(ann) = type_annotation {
+                        let parsed = self.parse_type(ann, field.span);
+                        if is_weak {
+                            if !matches!(parsed, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
+                                self.error(field.span, DiagnosticCode::TypeMismatch, "Weak properties must be of optional instance type (e.g. 'weak var x: User?').");
+                            }
+                        }
+                        parsed
+                    } else if let Some(init) = initializer {
+                        let parsed = self.check_expr(init);
+                        if is_weak {
+                            if !matches!(parsed, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
+                                self.error(field.span, DiagnosticCode::TypeMismatch, "Weak properties must be of optional instance type (e.g. 'weak var x: User?').");
+                            }
+                        }
+                        parsed
+                    } else {
+                        if is_weak {
+                            self.error(field.span, DiagnosticCode::TypeMismatch, "Weak properties must be of optional instance type (e.g. 'weak var x: User?').");
+                        }
+                        Type::Any
+                    };
+                    class_members.insert(f_name.clone(), ty);
                 }
 
                 for method in methods {
@@ -236,6 +240,35 @@ impl TypeChecker {
         }
     }
 
+    fn check_var_decl(&mut self, name: &String, type_annotation: &Option<TypeExpr>, initializer: &Option<Expr>, is_weak: bool, span: Span) {
+        let mut init_type = if let Some(init) = initializer {
+            self.check_expr(init)
+        } else {
+            Type::Any
+        };
+        
+        if let Some(ann) = type_annotation {
+            let ann_type = self.parse_type(ann, span);
+            if init_type == Type::Any {
+                init_type = ann_type.clone();
+            } else if !self.is_assignable(&init_type, &ann_type) && init_type != Type::Error {
+                self.error(span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to variable of type '{}'.", init_type, ann_type));
+            }
+            
+            if is_weak {
+                if !matches!(ann_type, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
+                    self.error(span, DiagnosticCode::TypeMismatch, "Weak variables must be of optional instance type (e.g. 'weak var x: User?').");
+                }
+            }
+        } else if is_weak {
+             if !matches!(init_type, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
+                 self.error(span, DiagnosticCode::TypeMismatch, "Weak variables must be of optional instance type (e.g. 'weak var x: User?').");
+             }
+        }
+        
+        self.env.declare(name.clone(), init_type);
+    }
+
     fn check_expr(&mut self, expr: &Expr) -> Type {
         match &expr.kind {
             ExprKind::Integer(_) => Type::Int,
@@ -342,7 +375,7 @@ impl TypeChecker {
                             }
                         }
                         
-                        if val_type != resolved_ty && val_type != Type::Error && resolved_ty != Type::Error && resolved_ty != Type::Any {
+                        if !self.is_assignable(&val_type, &resolved_ty) && val_type != Type::Error && resolved_ty != Type::Error && resolved_ty != Type::Any {
                             self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to property of type '{}'.", val_type, resolved_ty))
                         }
                     } else {
@@ -545,12 +578,20 @@ impl TypeChecker {
                     Type::Error
                 }
             }
+            TypeExpr::Optional(inner) => {
+                Type::Optional(Box::new(self.parse_type(inner, span)))
+            }
         }
     }
 
     fn is_assignable(&self, source: &Type, target: &Type) -> bool {
         if source == target {
             return true;
+        }
+        if let Type::Optional(inner) = target {
+            if self.is_assignable(source, inner) {
+                return true;
+            }
         }
         if *target == Type::Any {
             return true;

@@ -83,6 +83,22 @@ impl CraneliftGenerator {
             .map_err(|e| format!("Failed to declare pace_release: {}", e))?;
         func_ids.insert("pace_release".to_string(), release_id);
 
+        let mut weak_retain_sig = module.make_signature();
+        weak_retain_sig.params.push(AbiParam::new(types::I64));
+        let weak_retain_id = module.declare_function("pace_weak_retain", Linkage::Import, &weak_retain_sig).unwrap();
+        func_ids.insert("pace_weak_retain".to_string(), weak_retain_id);
+
+        let mut weak_release_sig = module.make_signature();
+        weak_release_sig.params.push(AbiParam::new(types::I64));
+        let weak_release_id = module.declare_function("pace_weak_release", Linkage::Import, &weak_release_sig).unwrap();
+        func_ids.insert("pace_weak_release".to_string(), weak_release_id);
+
+        let mut weak_upgrade_sig = module.make_signature();
+        weak_upgrade_sig.params.push(AbiParam::new(types::I64));
+        weak_upgrade_sig.returns.push(AbiParam::new(types::I64));
+        let weak_upgrade_id = module.declare_function("pace_weak_upgrade", Linkage::Import, &weak_upgrade_sig).unwrap();
+        func_ids.insert("pace_weak_upgrade".to_string(), weak_upgrade_id);
+
         // 2. Define all functions
         for (name, func) in &program.functions {
             ctx.func.signature.clear(module.isa().default_call_conv());

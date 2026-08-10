@@ -149,6 +149,10 @@ impl<'a> VirtualMachine<'a> {
                             panic!("Cannot get property on non-object");
                         }
                     }
+                    RValue::WeakUpgrade(_) => {
+                        // Not fully supported in naive VM
+                        Value::Void
+                    }
                     RValue::MethodCall(object_place, method_name, args) => {
                         let obj_val = self.resolve_value(object_place);
                         if let Value::Object(id) = obj_val {
@@ -213,6 +217,8 @@ impl<'a> VirtualMachine<'a> {
             }
             Inst::Retain(_) => {}
             Inst::Release(_) => {}
+            Inst::WeakRetain(_) => {}
+            Inst::WeakRelease(_) => {}
         }
     }
 

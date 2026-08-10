@@ -16,25 +16,61 @@ void* pace_alloc(int64_t size) {
         printf("Pace Runtime Error: Out of memory\n");
         exit(1);
     }
-    // Set reference count to 1 (offset 0)
+    // Set strong reference count to 1 (offset 0)
     *(uint64_t*)ptr = 1;
-    // Offset 8 is type metadata (placeholder, 0 for now)
+    // Set weak reference count to 1 (offset 8)
+    // The strong count's existence contributes 1 to the weak count.
+    // When strong_count reaches 0, it calls pace_weak_release().
+    *(uint64_t*)((char*)ptr + 8) = 1;
+    
+    // Offset 16 is type metadata (placeholder, 0 for now)
     return ptr;
 }
 
 void pace_retain(void* obj) {
     if (!obj) return;
-    // Atomic increment of reference count at offset 0
+    // Atomic increment of strong count at offset 0
     __atomic_add_fetch((uint64_t*)obj, 1, __ATOMIC_SEQ_CST);
+}
+
+void pace_weak_release(void* obj) {
+    if (!obj) return;
+    uint64_t* weak_count_ptr = (uint64_t*)((char*)obj + 8);
+    uint64_t new_count = __atomic_sub_fetch(weak_count_ptr, 1, __ATOMIC_SEQ_CST);
+    if (new_count == 0) {
+        // Free the memory allocation
+        printf("Pace Runtime: Freeing object memory\n");
+        free(obj);
+    }
 }
 
 void pace_release(void* obj) {
     if (!obj) return;
-    // Atomic decrement of reference count at offset 0
+    // Atomic decrement of strong count at offset 0
     uint64_t new_count = __atomic_sub_fetch((uint64_t*)obj, 1, __ATOMIC_SEQ_CST);
     if (new_count == 0) {
-        // Free the object
-        printf("Pace Runtime: Freeing object\n");
-        free(obj);
+        // Object is no longer strongly reachable.
+        // Run any destructors/deinit here in the future.
+        printf("Pace Runtime: Strong count is 0, releasing weak representation\n");
+        // Drop the weak count that was held on behalf of the strong count
+        pace_weak_release(obj);
     }
+}
+
+void pace_weak_retain(void* obj) {
+    if (!obj) return;
+    uint64_t* weak_count_ptr = (uint64_t*)((char*)obj + 8);
+    __atomic_add_fetch(weak_count_ptr, 1, __ATOMIC_SEQ_CST);
+}
+
+void* pace_weak_upgrade(void* obj) {
+    if (!obj) return NULL;
+    uint64_t* strong_count_ptr = (uint64_t*)obj;
+    uint64_t count = __atomic_load_n(strong_count_ptr, __ATOMIC_SEQ_CST);
+    while (count > 0) {
+        if (__atomic_compare_exchange_n(strong_count_ptr, &count, count + 1, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+            return obj;
+        }
+    }
+    return NULL;
 }

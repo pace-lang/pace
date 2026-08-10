@@ -16,6 +16,7 @@ pub enum Type {
     Generic(String),
     GenericInstance(String, Vec<Type>),
     Interface(String),
+    Optional(Box<Type>),
 }
 
 impl fmt::Display for Type {
@@ -60,6 +61,7 @@ impl fmt::Display for Type {
                 write!(f, ">")
             }
             Type::Interface(name) => write!(f, "Interface({})", name),
+            Type::Optional(inner) => write!(f, "{}?", inner),
         }
     }
 }
