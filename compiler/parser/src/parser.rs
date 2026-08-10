@@ -1,10 +1,11 @@
 use ast::{Expr, ExprKind, Stmt, StmtKind, Span, BinaryOp, UnaryOp, TypeExpr};
 use lexer::{Token, TokenKind};
+use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
 
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
-    errors: Vec<String>,
+    pub errors: Vec<Diagnostic>,
 }
 
 impl Parser {
@@ -16,7 +17,7 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> (Vec<Stmt>, Vec<String>) {
+    pub fn parse(&mut self) -> (Vec<Stmt>, Vec<Diagnostic>) {
         let mut statements = Vec::new();
         while !self.is_at_end() {
             if let Some(stmt) = self.declaration() {
@@ -881,10 +882,12 @@ impl Parser {
 
     fn error_at_current(&mut self, message: &str) {
         if let Some(token) = self.peek() {
-            let err = format!("Error at line {}: {}", token.span.start_loc.line, message);
-            self.errors.push(err);
-        } else {
-            self.errors.push(message.into());
+            let diag = DiagnosticBuilder::error(
+                DiagnosticCode::UnexpectedToken,
+                message,
+                token.span,
+            ).build();
+            self.errors.push(diag);
         }
     }
 

@@ -1,5 +1,6 @@
 use std::str::Chars;
 use ast::{Location, Span};
+use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
 use crate::token::{Token, TokenKind};
 
 pub struct Scanner<'a> {
@@ -9,6 +10,7 @@ pub struct Scanner<'a> {
     current_loc: Location,
     start_idx: usize,
     start_loc: Location,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 impl<'a> Scanner<'a> {
@@ -20,6 +22,7 @@ impl<'a> Scanner<'a> {
             current_loc: Location::new(1, 1),
             start_idx: 0,
             start_loc: Location::new(1, 1),
+            diagnostics: Vec::new(),
         }
     }
 
@@ -120,6 +123,8 @@ impl<'a> Scanner<'a> {
                 if self.match_char('=') {
                     TokenKind::BangEqual
                 } else {
+                    let span = Span::new(self.start_idx, self.current_idx, self.start_loc, self.current_loc);
+                    self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::UnexpectedToken, "Unexpected character '!'", span).build());
                     TokenKind::Error("Unexpected character '!'".into())
                 }
             }
@@ -145,7 +150,11 @@ impl<'a> Scanner<'a> {
             '"' => self.string(),
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
-            _ => TokenKind::Error(format!("Unexpected character '{}'", c)),
+            _ => {
+                let span = Span::new(self.start_idx, self.current_idx, self.start_loc, self.current_loc);
+                self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::UnexpectedToken, format!("Unexpected character '{}'", c), span).build());
+                TokenKind::Error(format!("Unexpected character '{}'", c))
+            }
         };
 
         Some(self.make_token(kind))
@@ -160,6 +169,8 @@ impl<'a> Scanner<'a> {
         }
 
         if self.is_at_end() {
+            let span = Span::new(self.start_idx, self.current_idx, self.start_loc, self.current_loc);
+            self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::InvalidToken, "Unterminated string.", span).build());
             return TokenKind::Error("Unterminated string.".into());
         }
 
@@ -208,12 +219,20 @@ impl<'a> Scanner<'a> {
         if is_float {
             match text.parse::<f64>() {
                 Ok(f) => TokenKind::Float(f),
-                Err(_) => TokenKind::Error("Invalid float literal".into()),
+                Err(_) => {
+                    let span = Span::new(self.start_idx, self.current_idx, self.start_loc, self.current_loc);
+                    self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::InvalidToken, "Invalid float literal", span).build());
+                    TokenKind::Error("Invalid float literal".into())
+                }
             }
         } else {
             match text.parse::<i64>() {
                 Ok(i) => TokenKind::Integer(i),
-                Err(_) => TokenKind::Error("Invalid integer literal".into()),
+                Err(_) => {
+                    let span = Span::new(self.start_idx, self.current_idx, self.start_loc, self.current_loc);
+                    self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::InvalidToken, "Invalid integer literal", span).build());
+                    TokenKind::Error("Invalid integer literal".into())
+                }
             }
         }
     }

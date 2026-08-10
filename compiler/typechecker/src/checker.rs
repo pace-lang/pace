@@ -2,16 +2,14 @@ use ast::{Expr, ExprKind, Stmt, StmtKind, Span, BinaryOp, UnaryOp, TypeExpr};
 use crate::types::Type;
 use crate::env::TypeEnvironment;
 use std::collections::HashMap;
+use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
 
 #[derive(Debug)]
-pub struct TypeError {
-    pub message: String,
-    pub span: Span,
-}
+
 
 pub struct TypeChecker {
     env: TypeEnvironment,
-    pub errors: Vec<TypeError>,
+    pub errors: Vec<Diagnostic>,
     current_return_type: Option<Type>,
     pub classes: HashMap<String, HashMap<String, Type>>,
     pub interfaces: HashMap<String, HashMap<String, Type>>,
@@ -57,7 +55,7 @@ impl TypeChecker {
                     if init_type == Type::Any {
                         init_type = ann_type;
                     } else if !self.is_assignable(&init_type, &ann_type) && init_type != Type::Error {
-                        self.error(stmt.span, &format!("Cannot assign type '{}' to variable of type '{}'.", init_type, ann_type));
+                        self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to variable of type '{}'.", init_type, ann_type))
                     }
                 }
                 
@@ -110,14 +108,14 @@ impl TypeChecker {
                         for (i_method_name, i_method_ty) in interface_members {
                             if let Some(c_method_ty) = class_members.get(&i_method_name) {
                                 if *c_method_ty != i_method_ty {
-                                    self.error(stmt.span, &format!("Class '{}' incorrectly implements method '{}' of interface '{}'. Expected '{}', found '{}'.", name, i_method_name, interface_name, i_method_ty, c_method_ty));
+                                    self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Class '{}' incorrectly implements method '{}' of interface '{}'. Expected '{}', found '{}'.", name, i_method_name, interface_name, i_method_ty, c_method_ty))
                                 }
                             } else {
-                                self.error(stmt.span, &format!("Class '{}' does not implement required method '{}' of interface '{}'.", name, i_method_name, interface_name));
+                                self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Class '{}' does not implement required method '{}' of interface '{}'.", name, i_method_name, interface_name))
                             }
                         }
                     } else {
-                        self.error(stmt.span, &format!("Interface '{}' not found.", interface_name));
+                        self.error(stmt.span, DiagnosticCode::UnknownType, &format!("Interface '{}' not found.", interface_name))
                     }
                 }
                 
@@ -192,7 +190,7 @@ impl TypeChecker {
             StmtKind::If { condition, then_branch, else_branch } => {
                 let cond_type = self.check_expr(condition);
                 if cond_type != Type::Boolean && cond_type != Type::Error {
-                    self.error(condition.span, &format!("Expected 'Boolean' for if condition, found '{}'.", cond_type));
+                    self.error(condition.span, DiagnosticCode::TypeMismatch, &format!("Expected 'Boolean' for if condition, found '{}'.", cond_type))
                 }
 
                 self.check_stmt(then_branch);
@@ -203,7 +201,7 @@ impl TypeChecker {
             StmtKind::While { condition, body } => {
                 let cond_type = self.check_expr(condition);
                 if cond_type != Type::Boolean && cond_type != Type::Error {
-                    self.error(condition.span, &format!("Expected 'Boolean' for while condition, found '{}'.", cond_type));
+                    self.error(condition.span, DiagnosticCode::TypeMismatch, &format!("Expected 'Boolean' for while condition, found '{}'.", cond_type))
                 }
 
                 self.check_stmt(body);
@@ -229,10 +227,10 @@ impl TypeChecker {
 
                 if let Some(expected) = &self.current_return_type {
                     if *expected != value_type && value_type != Type::Error && *expected != Type::Error {
-                        self.error(stmt.span, &format!("Cannot return value of type '{}' from function expecting '{}'.", value_type, expected));
+                        self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Cannot return value of type '{}' from function expecting '{}'.", value_type, expected))
                     }
                 } else {
-                    self.error(stmt.span, "Cannot return from outside a function.");
+                    self.error(stmt.span, DiagnosticCode::TypeMismatch, "Cannot return from outside a function.")
                 }
             }
         }
@@ -255,10 +253,10 @@ impl TypeChecker {
                 let val_type = self.check_expr(value);
                 if let Some(var_type) = self.env.resolve(name) {
                     if val_type != var_type && val_type != Type::Error && var_type != Type::Error && var_type != Type::Any {
-                        self.error(expr.span, &format!("Cannot assign type '{}' to variable of type '{}'.", val_type, var_type));
+                        self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to variable of type '{}'.", val_type, var_type))
                     }
                 } else {
-                    self.error(expr.span, &format!("Variable '{}' not found.", name));
+                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Variable '{}' not found.", name))
                 }
                 val_type
             }
@@ -266,7 +264,8 @@ impl TypeChecker {
                 if let Some(ty) = self.env.resolve(&"self".to_string()) {
                     ty
                 } else {
-                    self.error(expr.span, "Cannot use 'self' outside a class.");
+                    self.error(expr.span, DiagnosticCode::TypeMismatch, "Cannot use 'self' outside a class.");
+
                     Type::Error
                 }
             }
@@ -279,7 +278,7 @@ impl TypeChecker {
                     Type::Interface(n) => (n.clone(), Vec::new()),
                     _ => {
                         if obj_type != Type::Error {
-                            self.error(expr.span, &format!("Cannot get property '{}' on non-instance type '{}'.", name, obj_type));
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot get property '{}' on non-instance type '{}'.", name, obj_type))
                         }
                         return Type::Error;
                     }
@@ -299,14 +298,15 @@ impl TypeChecker {
                         }
                         resolved_ty
                     } else {
-                        self.error(expr.span, &format!("Property '{}' not found on class '{}'.", name, class_name));
+                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Property '{}' not found on class '{}'.", name, class_name));
                         Type::Error
                     }
                 } else if let Some(interface_props) = self.interfaces.get(&class_name) {
                     if let Some(prop_ty) = interface_props.get(name) {
                         prop_ty.clone()
                     } else {
-                        self.error(expr.span, &format!("Property '{}' not found on interface '{}'.", name, class_name));
+                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Property '{}' not found on interface '{}'.", name, class_name));
+
                         Type::Error
                     }
                 } else {
@@ -323,7 +323,7 @@ impl TypeChecker {
                     Type::Interface(n) => (n.clone(), Vec::new()),
                     _ => {
                         if obj_type != Type::Error {
-                            self.error(expr.span, &format!("Cannot set property '{}' on non-instance type '{}'.", name, obj_type));
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot set property '{}' on non-instance type '{}'.", name, obj_type))
                         }
                         return val_type;
                     }
@@ -343,10 +343,10 @@ impl TypeChecker {
                         }
                         
                         if val_type != resolved_ty && val_type != Type::Error && resolved_ty != Type::Error && resolved_ty != Type::Any {
-                            self.error(expr.span, &format!("Cannot assign type '{}' to property of type '{}'.", val_type, resolved_ty));
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to property of type '{}'.", val_type, resolved_ty))
                         }
                     } else {
-                        self.error(expr.span, &format!("Property '{}' not found on class '{}'.", name, class_name));
+                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Property '{}' not found on class '{}'.", name, class_name))
                     }
                 }
                 val_type
@@ -371,7 +371,7 @@ impl TypeChecker {
 
                         if let Some(Type::Function(param_types, _)) = constructor_ty {
                             if param_types.len() != arg_types.len() {
-                                self.error(expr.span, &format!("Constructor expected {} arguments, found {}.", param_types.len(), arg_types.len()));
+                                self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Constructor expected {} arguments, found {}.", param_types.len(), arg_types.len()))
                             } else {
                                 // Basic Local Inference & Checking
                                 if !class_type_params.is_empty() {
@@ -390,14 +390,15 @@ impl TypeChecker {
                                             if let Some(ty) = inferred_map.get(tp) {
                                                 resolved_type_args.push(ty.clone());
                                             } else {
-                                                self.error(expr.span, &format!("Cannot infer generic type '{}'. Please provide explicit type arguments.", tp));
+                                                self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot infer generic type '{}'. Please provide explicit type arguments.", tp));
+
                                                 resolved_type_args.push(Type::Error);
                                             }
                                         }
                                     } else {
                                         // Explicit arguments provided
                                         if type_args.len() != class_type_params.len() {
-                                            self.error(expr.span, &format!("Expected {} generic arguments, found {}.", class_type_params.len(), type_args.len()));
+                                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Expected {} generic arguments, found {}.", class_type_params.len(), type_args.len()))
                                         }
                                         for arg_expr in type_args {
                                             resolved_type_args.push(self.parse_type(arg_expr, expr.span));
@@ -418,12 +419,12 @@ impl TypeChecker {
                                     }
                                     
                                     if !self.is_assignable(actual, &expected_sub) && expected_sub != Type::Any && *actual != Type::Error {
-                                        self.error(expr.span, &format!("Argument {} to constructor expects '{}', found '{}'.", i + 1, expected_sub, actual));
+                                        self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Argument {} to constructor expects '{}', found '{}'.", i + 1, expected_sub, actual))
                                     }
                                 }
                             }
                         } else if !arg_types.is_empty() {
-                            self.error(expr.span, &format!("Class '{}' has no 'init' method but arguments were provided.", class_name));
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Class '{}' has no 'init' method but arguments were provided.", class_name))
                         }
                         
                         if class_type_params.is_empty() {
@@ -434,11 +435,11 @@ impl TypeChecker {
                     }
                     Type::Function(param_types, ret_ty) => {
                         if param_types.len() != arg_types.len() {
-                            self.error(expr.span, &format!("Expected {} arguments, found {}.", param_types.len(), arg_types.len()));
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Expected {} arguments, found {}.", param_types.len(), arg_types.len()))
                         } else {
                             for (i, (expected, actual)) in param_types.iter().zip(arg_types.iter()).enumerate() {
                                 if !self.is_assignable(actual, expected) && *expected != Type::Any && *actual != Type::Error {
-                                    self.error(expr.span, &format!("Argument {} expected type '{}', found '{}'.", i + 1, expected, actual));
+                                    self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Argument {} expected type '{}', found '{}'.", i + 1, expected, actual))
                                 }
                             }
                         }
@@ -446,7 +447,8 @@ impl TypeChecker {
                     }
                     Type::Error => Type::Error,
                     _ => {
-                        self.error(expr.span, "Cannot call non-function type.");
+                        self.error(expr.span, DiagnosticCode::TypeMismatch, "Cannot call non-function type.");
+
                         Type::Error
                     }
                 }
@@ -462,7 +464,8 @@ impl TypeChecker {
                         if right_type == Type::Int || right_type == Type::Float {
                             right_type
                         } else {
-                            self.error(expr.span, &format!("Cannot negate type '{}'.", right_type));
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot negate type '{}'.", right_type));
+
                             Type::Error
                         }
                     }
@@ -483,13 +486,13 @@ impl TypeChecker {
                         } else if *op == BinaryOp::Add && left_type == Type::String && right_type == Type::String {
                             Type::String
                         } else {
-                            self.error(expr.span, &format!("Cannot apply operator to types '{}' and '{}'.", left_type, right_type));
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot apply operator to types '{}' and '{}'.", left_type, right_type));
                             Type::Error
                         }
                     }
                     BinaryOp::Equal | BinaryOp::NotEqual => {
                         if left_type != right_type {
-                            self.error(expr.span, &format!("Cannot compare types '{}' and '{}' for equality.", left_type, right_type));
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot compare types '{}' and '{}' for equality.", left_type, right_type));
                             Type::Error
                         } else {
                             Type::Boolean
@@ -499,7 +502,8 @@ impl TypeChecker {
                         if left_type == right_type && (left_type == Type::Int || left_type == Type::Float) {
                             Type::Boolean
                         } else {
-                            self.error(expr.span, &format!("Cannot apply comparison to types '{}' and '{}'.", left_type, right_type));
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot apply comparison to types '{}' and '{}'.", left_type, right_type));
+
                             Type::Error
                         }
                     }
@@ -525,7 +529,8 @@ impl TypeChecker {
                     } else if self.interfaces.contains_key(name) {
                         Type::Interface(name.to_string())
                     } else {
-                        self.error(span, &format!("Unknown type '{}'.", name));
+                        self.error(span, DiagnosticCode::UnknownType, &format!("Unknown type '{}'.", name));
+
                         Type::Error
                     }
                 }
@@ -535,7 +540,8 @@ impl TypeChecker {
                 if self.classes.contains_key(name) {
                     Type::GenericInstance(name.clone(), parsed_args)
                 } else {
-                    self.error(span, &format!("Unknown generic class '{}'.", name));
+                    self.error(span, DiagnosticCode::UnknownType, &format!("Unknown generic class '{}'.", name));
+
                     Type::Error
                 }
             }
@@ -559,11 +565,8 @@ impl TypeChecker {
         false
     }
 
-    fn error(&mut self, span: Span, message: &str) {
-        self.errors.push(TypeError {
-            message: message.to_string(),
-            span,
-        });
+    fn error(&mut self, span: Span, code: DiagnosticCode, message: &str) {
+        self.errors.push(DiagnosticBuilder::error(code, message, span).build());
     }
 }
 

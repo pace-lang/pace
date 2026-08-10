@@ -9,3 +9,4 @@ license.workspace = true
 [dependencies]
 ast = { version = "0.1.0", path = "../ast" }
 mir = { version = "0.1.0", path = "../mir" }
+diagnostics = { path = "../diagnostics" }

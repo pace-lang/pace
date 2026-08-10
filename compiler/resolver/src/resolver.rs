@@ -1,15 +1,10 @@
 use ast::{Expr, ExprKind, Stmt, StmtKind, Span};
+use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
 use crate::scope::ScopeStack;
-
-#[derive(Debug)]
-pub struct ResolverError {
-    pub message: String,
-    pub span: Span,
-}
 
 pub struct Resolver {
     scopes: ScopeStack,
-    pub errors: Vec<ResolverError>,
+    pub errors: Vec<Diagnostic>,
 }
 
 impl Resolver {
@@ -42,12 +37,12 @@ impl Resolver {
                 }
                 
                 if !self.scopes.declare(name.clone()) {
-                    self.error(stmt.span, &format!("Variable '{}' is already declared in this scope.", name));
+                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Variable '{}' is already declared in this scope.", name));
                 }
             }
             StmtKind::Class { name, type_params: _, implements: _, methods, fields } => {
                 if !self.scopes.declare(name.clone()) {
-                    self.error(stmt.span, &format!("Class '{}' is already declared in this scope.", name));
+                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Class '{}' is already declared in this scope.", name));
                 }
 
                 self.scopes.push_scope();
@@ -64,7 +59,7 @@ impl Resolver {
             }
             StmtKind::Interface { name, methods } => {
                 if !self.scopes.declare(name.clone()) {
-                    self.error(stmt.span, &format!("Interface '{}' is already declared in this scope.", name));
+                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Interface '{}' is already declared in this scope.", name));
                 }
                 
                 // No need to push scope for interface since methods are just signatures without bodies
@@ -72,13 +67,13 @@ impl Resolver {
             }
             StmtKind::Func { name, type_params: _, params, return_type: _, body } => {
                 if !self.scopes.declare(name.clone()) {
-                    self.error(stmt.span, &format!("Function '{}' is already declared in this scope.", name));
+                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Function '{}' is already declared in this scope.", name));
                 }
 
                 self.scopes.push_scope();
                 for (param_name, _) in params {
                     if !self.scopes.declare(param_name.clone()) {
-                        self.error(stmt.span, &format!("Parameter '{}' is declared multiple times.", param_name));
+                        self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Parameter '{}' is declared multiple times.", param_name));
                     }
                 }
                 
@@ -119,7 +114,7 @@ impl Resolver {
         match &expr.kind {
             ExprKind::Variable(name) => {
                 if !self.scopes.resolve(name) {
-                    self.error(expr.span, &format!("Cannot find variable '{}' in this scope.", name));
+                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot find variable '{}' in this scope.", name));
                 }
             }
             ExprKind::Binary(left, _, right) => {
@@ -147,13 +142,13 @@ impl Resolver {
             }
             ExprKind::Assign { name, value } => {
                 if !self.scopes.resolve(name) {
-                    self.error(expr.span, &format!("Cannot assign to undefined variable '{}'.", name));
+                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot assign to undefined variable '{}'.", name));
                 }
                 self.resolve_expr(value);
             }
             ExprKind::SelfRef => {
                 if !self.scopes.resolve(&"self".to_string()) {
-                    self.error(expr.span, "Cannot use 'self' outside of a class method.");
+                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, "Cannot use 'self' outside of a class method.");
                 }
             }
             // Literals have no names to resolve
@@ -161,11 +156,8 @@ impl Resolver {
         }
     }
 
-    fn error(&mut self, span: Span, message: &str) {
-        self.errors.push(ResolverError {
-            message: message.to_string(),
-            span,
-        });
+    fn error(&mut self, span: Span, code: DiagnosticCode, message: &str) {
+        self.errors.push(DiagnosticBuilder::error(code, message, span).build());
     }
 }
 

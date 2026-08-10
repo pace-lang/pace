@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 ast = { version = "0.1.0", path = "../ast" }
 lexer = { version = "0.1.0", path = "../lexer" }
+diagnostics = { path = "../diagnostics" }

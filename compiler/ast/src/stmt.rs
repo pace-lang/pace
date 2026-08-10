@@ -1,4 +1,4 @@
-use crate::span::Span;
+use diagnostics::Span;
 use crate::expr::Expr;
 
 #[derive(Debug, Clone, PartialEq)]

@@ -8,3 +8,4 @@ license.workspace = true
 
 [dependencies]
 mir = { path = "../mir" }
+diagnostics = { path = "../diagnostics" }

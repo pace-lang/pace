@@ -60,14 +60,10 @@ fn compile_to_mir(file: &Path) -> mir::Program {
     let mut scanner = Scanner::new(&source);
     let tokens = scanner.scan_tokens();
     
-    let mut has_lexer_errors = false;
-    for token in &tokens {
-        if let TokenKind::Error(msg) = &token.kind {
-            eprintln!("Lexer error at line {}: {}", token.span.start_loc.line, msg);
-            has_lexer_errors = true;
+    if !scanner.diagnostics.is_empty() {
+        for diag in &scanner.diagnostics {
+            eprintln!("Error [{}]: {} at line {}", diag.code.as_str(), diag.message, diag.primary_span.start_loc.line);
         }
-    }
-    if has_lexer_errors {
         exit(1);
     }
 
@@ -75,9 +71,8 @@ fn compile_to_mir(file: &Path) -> mir::Program {
     let mut parser = PaceParser::new(tokens);
     let (ast, parse_errors) = parser.parse();
     if !parse_errors.is_empty() {
-        eprintln!("Parse errors occurred:");
-        for err in parse_errors {
-            eprintln!("{}", err);
+        for diag in &parse_errors {
+            eprintln!("Error [{}]: {} at line {}", diag.code.as_str(), diag.message, diag.primary_span.start_loc.line);
         }
         exit(1);
     }
@@ -86,9 +81,8 @@ fn compile_to_mir(file: &Path) -> mir::Program {
     let mut resolver = Resolver::new();
     resolver.resolve(&ast);
     if !resolver.errors.is_empty() {
-        eprintln!("Resolution errors occurred:");
-        for err in &resolver.errors {
-            eprintln!("{:?}", err);
+        for diag in &resolver.errors {
+            eprintln!("Error [{}]: {} at line {}", diag.code.as_str(), diag.message, diag.primary_span.start_loc.line);
         }
         exit(1);
     }
@@ -97,9 +91,8 @@ fn compile_to_mir(file: &Path) -> mir::Program {
     let mut typechecker = TypeChecker::new();
     typechecker.check(&ast);
     if !typechecker.errors.is_empty() {
-        eprintln!("Type errors occurred:");
-        for err in &typechecker.errors {
-            eprintln!("{:?}", err);
+        for diag in &typechecker.errors {
+            eprintln!("Error [{}]: {} at line {}", diag.code.as_str(), diag.message, diag.primary_span.start_loc.line);
         }
         exit(1);
     }
