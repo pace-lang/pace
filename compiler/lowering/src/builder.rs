@@ -68,10 +68,11 @@ impl ProgramBuilder {
                 main_stmts.push(stmt.clone());
             }
         }
-        
-        let builder = MirBuilder::new("main".into(), vec![]);
-        let main_func = builder.build(&main_stmts);
-        self.program.functions.insert("main".into(), main_func);
+        if !main_stmts.is_empty() {
+            let builder = MirBuilder::new("main".into(), vec![]);
+            let main_func = builder.build(&main_stmts);
+            self.program.functions.insert("main".into(), main_func);
+        }
 
         self.program
     }

@@ -2,8 +2,17 @@
 members = [
     "compiler/lexer",
     "compiler/parser",
-    "compiler/ast"
-, "compiler/resolver", "compiler/typechecker", "compiler/mir", "compiler/lowering", "compiler/vm", "compiler/cli"]
+    "compiler/ast",
+    "compiler/resolver",
+    "compiler/typechecker",
+    "compiler/mir",
+    "compiler/lowering",
+    "compiler/vm",
+    "compiler/cli",
+    "compiler/linker",
+    "compiler/codegen",
+    "compiler/arc"
+]
 resolver = "2"
 
 [workspace.package]

@@ -1,0 +1,15 @@
+func fib(n: Int) -> Int {
+    if n <= 1 {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+func main() -> Int {
+    let result = fib(10);
+    if result == 55 {
+        return 0; // Success
+    } else {
+        return 1; // Error
+    }
+}

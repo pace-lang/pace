@@ -211,6 +211,8 @@ impl<'a> VirtualMachine<'a> {
                     panic!("Cannot set property on non-object");
                 }
             }
+            Inst::Retain(_) => {}
+            Inst::Release(_) => {}
         }
     }
 

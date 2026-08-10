@@ -1,6 +1,6 @@
 use ast::{BinaryOp, UnaryOp};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Place {
     Var(String),
     Temp(usize),
@@ -32,6 +32,8 @@ pub enum RValue {
 pub enum Inst {
     Assign(Place, RValue),
     SetProperty(Value, String, Value),
+    Retain(Value),
+    Release(Value),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
