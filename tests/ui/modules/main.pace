@@ -1,0 +1,12 @@
+import "utils.pace";
+
+class _Helper {}
+
+func test() {
+    let x = get_value();
+    print(x);
+}
+
+func main() {
+    test();
+}

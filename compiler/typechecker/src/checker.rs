@@ -1,3 +1,4 @@
+use module::graph::ModuleGraph;
 use ast::{Expr, ExprKind, Stmt, StmtKind, Span, BinaryOp, UnaryOp, TypeExpr, TypedExpr, TypedExprKind, TypedStmt, TypedStmtKind};
 use ast::types::Type;
 use crate::env::TypeEnvironment;
@@ -36,6 +37,25 @@ impl TypeChecker {
         }
     }
 
+
+    pub fn check_graph(&mut self, graph: &ModuleGraph) -> Vec<TypedStmt> {
+        let mut all_stmts = Vec::new();
+        for module in graph.topological_sort() {
+            let typed_ast = self.check(&module.ast);
+            all_stmts.extend(typed_ast);
+        }
+        
+        // Also drain pending generic instantiations
+        let mut final_stmts = Vec::new();
+        while !self.pending_instantiations.is_empty() {
+            let pending: Vec<TypedStmt> = self.pending_instantiations.drain(..).collect();
+            final_stmts.extend(pending);
+        }
+        
+        final_stmts.extend(all_stmts);
+        final_stmts
+    }
+
     pub fn check_program(&mut self, statements: &[Stmt]) -> Vec<TypedStmt> {
         let typed_stmts = self.check(statements);
         
@@ -65,9 +85,9 @@ impl TypeChecker {
                 self.env.pop_scope();
                 TypedStmtKind::Block(typed_stmts)
             }
-            StmtKind::Let { name, type_annotation, initializer } => self.check_var_decl(name, type_annotation, initializer, false, stmt.span).kind,
-            StmtKind::Var { name, type_annotation, initializer, is_weak } => self.check_var_decl(name, type_annotation, initializer, *is_weak, stmt.span).kind,
-            StmtKind::Class { name, type_params, implements, methods, fields } => {
+            StmtKind::Let { name, type_annotation, initializer, is_private: _ } => self.check_var_decl(name, type_annotation, initializer, false, stmt.span).kind,
+            StmtKind::Var { name, type_annotation, initializer, is_weak, is_private: _ } => self.check_var_decl(name, type_annotation, initializer, *is_weak, stmt.span).kind,
+            StmtKind::Class { name, type_params, implements, methods, fields, is_private: _ } => {
                 if !type_params.is_empty() {
                     self.generic_registry.register_class(name.clone(), stmt.clone());
                     return TypedStmt { kind: TypedStmtKind::Block(Vec::new()), span: stmt.span };
@@ -85,8 +105,8 @@ impl TypeChecker {
                 
                 for field in fields {
                     let (f_name, type_annotation, initializer, is_weak) = match &field.kind {
-                        StmtKind::Var { name, type_annotation, initializer, is_weak } => (name, type_annotation, initializer, *is_weak),
-                        StmtKind::Let { name, type_annotation, initializer } => (name, type_annotation, initializer, false),
+                        StmtKind::Var { name, type_annotation, initializer, is_weak, is_private: _ } => (name, type_annotation, initializer, *is_weak),
+                        StmtKind::Let { name, type_annotation, initializer, is_private: _ } => (name, type_annotation, initializer, false),
                         _ => continue,
                     };
                     
@@ -173,7 +193,7 @@ impl TypeChecker {
                     fields: typed_fields,
                 }
             }
-            StmtKind::Interface { name, methods } => {
+            StmtKind::Interface { name, methods, is_private: _ } => {
                 self.env.declare(name.clone(), Type::Interface(name.clone()));
                 
                 let mut interface_members = HashMap::new();
@@ -203,7 +223,7 @@ impl TypeChecker {
                     methods: typed_methods,
                 }
             }
-            StmtKind::ForeignFunc { name, params, return_type } => {
+            StmtKind::ForeignFunc { name, params, return_type, is_private: _ } => {
                 let ret_ty = if let Some(rt) = return_type {
                     self.parse_type(rt, stmt.span)
                 } else {
@@ -222,15 +242,10 @@ impl TypeChecker {
                     return_type: return_type.clone(),
                 }
             }
-            StmtKind::Func { name, type_params, params, return_type, body } => {
+            StmtKind::Func { name, type_params, params, return_type, body, is_private: _ } => {
                 if !type_params.is_empty() {
                     self.generic_registry.register_function(name.clone(), stmt.clone());
                     return TypedStmt { kind: TypedStmtKind::Block(Vec::new()), span: stmt.span };
-                }
-
-                self.env.push_scope();
-                for tp in type_params {
-                    self.env.declare(tp.clone(), Type::Generic(tp.clone()));
                 }
 
                 // Parse return type from AST string
@@ -246,6 +261,11 @@ impl TypeChecker {
                 }
 
                 self.env.declare(name.clone(), Type::Function(type_params.clone(), param_types.clone(), Box::new(ret_ty.clone())));
+
+                self.env.push_scope();
+                for tp in type_params {
+                    self.env.declare(tp.clone(), Type::Generic(tp.clone()));
+                }
 
                 
                 if let Some(ref class_name) = self.current_class {
@@ -315,6 +335,7 @@ impl TypeChecker {
                     body: Box::new(typed_body),
                 }
             }
+            StmtKind::Import { .. } | StmtKind::Export { .. } => ast::TypedStmtKind::Block(vec![]),
             StmtKind::Expression(expr) => {
                 TypedStmtKind::Expression(self.check_expr(expr))
             }

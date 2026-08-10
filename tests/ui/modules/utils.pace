@@ -1,0 +1,5 @@
+func get_value() -> Int {
+    return 42;
+}
+
+class Utils {}

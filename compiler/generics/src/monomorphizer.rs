@@ -13,7 +13,7 @@ impl<'a> Monomorphizer<'a> {
 
     pub fn monomorphize_stmt(&self, stmt: &Stmt) -> Stmt {
         let kind = match &stmt.kind {
-            StmtKind::Class { name: _, type_params: _, implements, methods, fields } => {
+            StmtKind::Class { name: _, type_params: _, implements, methods, fields, is_private } => {
                 let new_methods = methods.iter().map(|m| self.monomorphize_stmt(m)).collect();
                 let new_fields = fields.iter().map(|f| self.monomorphize_stmt(f)).collect();
                 
@@ -23,9 +23,10 @@ impl<'a> Monomorphizer<'a> {
                     implements: implements.clone(), // Ignore interfaces for now
                     methods: new_methods,
                     fields: new_fields,
+                 is_private: *is_private,
                 }
             }
-            StmtKind::Func { name, type_params: _, params, return_type, body } => {
+            StmtKind::Func { name, type_params: _, params, return_type, body, is_private } => {
                 // If this is a standalone function, we rename it. If it's a method inside a class, we keep the name!
                 // We'll rename it ONLY if it's the top-level generic function being monomorphized.
                 // Wait, if it's a method, we shouldn't rename it to the class's mangled name.
@@ -41,21 +42,24 @@ impl<'a> Monomorphizer<'a> {
                     params: new_params,
                     return_type: new_return,
                     body: new_body,
+                 is_private: *is_private,
                 }
             }
-            StmtKind::Let { name, type_annotation, initializer } => {
+            StmtKind::Let { name, type_annotation, initializer, is_private } => {
                 StmtKind::Let {
                     name: name.clone(),
                     type_annotation: type_annotation.as_ref().map(|t| self.subst.substitute(t)),
                     initializer: initializer.as_ref().map(|e| self.monomorphize_expr(e)),
+                 is_private: *is_private,
                 }
             }
-            StmtKind::Var { name, type_annotation, initializer, is_weak } => {
+            StmtKind::Var { name, type_annotation, initializer, is_weak, is_private } => {
                 StmtKind::Var {
                     name: name.clone(),
                     type_annotation: type_annotation.as_ref().map(|t| self.subst.substitute(t)),
                     initializer: initializer.as_ref().map(|e| self.monomorphize_expr(e)),
                     is_weak: *is_weak,
+                 is_private: *is_private,
                 }
             }
             StmtKind::Expression(expr) => StmtKind::Expression(self.monomorphize_expr(expr)),

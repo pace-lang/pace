@@ -47,6 +47,10 @@ impl Parser {
             }
         } else if self.match_token(&[TokenKind::Foreign]) {
             self.foreign_declaration()
+        } else if self.match_token(&[TokenKind::Import]) {
+            self.import_declaration()
+        } else if self.match_token(&[TokenKind::Export]) {
+            self.export_declaration()
         } else {
             self.statement()
         };
@@ -214,7 +218,8 @@ impl Parser {
 
         let end_span = self.previous().span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::Class { name, type_params, implements, methods, fields }, span))
+        let is_private = name.starts_with('_');
+        Some(Stmt::new(StmtKind::Class { name: name.clone(), type_params, implements, methods, fields, is_private }, span))
     }
 
     fn interface_declaration(&mut self) -> Option<Stmt> {
@@ -253,7 +258,8 @@ impl Parser {
 
         let end_span = self.previous().span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::Interface { name, methods }, span))
+        let is_private = name.starts_with('_');
+        Some(Stmt::new(StmtKind::Interface { name: name.clone(), methods, is_private }, span))
     }
 
     fn interface_method_declaration(&mut self) -> Option<Stmt> {
@@ -313,8 +319,8 @@ impl Parser {
 
         // We use StmtKind::Func but with an empty block for the body.
         let empty_body = Box::new(Stmt::new(StmtKind::Block(Vec::new()), span.clone()));
-
-        Some(Stmt::new(StmtKind::Func { name, type_params: Vec::new(), params, return_type, body: empty_body }, span))
+        let is_private = name.starts_with('_');
+        Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params: Vec::new(), params, return_type, body: empty_body, is_private }, span))
     }
 
     fn init_declaration(&mut self) -> Option<Stmt> {
@@ -367,8 +373,8 @@ impl Parser {
         let body = self.block()?;
         let end_span = body.span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-
-        Some(Stmt::new(StmtKind::Func { name, type_params: Vec::new(), params, return_type, body: Box::new(body) }, span))
+        let is_private = name.starts_with('_');
+        Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params: Vec::new(), params, return_type, body: Box::new(body), is_private }, span))
     }
 
     fn foreign_declaration(&mut self) -> Option<Stmt> {
@@ -435,8 +441,8 @@ impl Parser {
 
         let end_span = self.previous().span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-
-        Some(Stmt::new(StmtKind::ForeignFunc { name, params, return_type }, span))
+        let is_private = name.starts_with('_');
+        Some(Stmt::new(StmtKind::ForeignFunc { name: name.clone(), params, return_type, is_private }, span))
     }
 
     fn function_declaration(&mut self) -> Option<Stmt> {
@@ -501,8 +507,8 @@ impl Parser {
         let body = self.block()?;
         let end_span = body.span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-
-        Some(Stmt::new(StmtKind::Func { name, type_params, params, return_type, body: Box::new(body) }, span))
+        let is_private = name.starts_with('_');
+        Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params, params, return_type, body: Box::new(body), is_private }, span))
     }
 
     fn variable_declaration(&mut self, is_var: bool, is_weak: bool) -> Option<Stmt> {
@@ -532,11 +538,12 @@ impl Parser {
 
         let end_span = self.previous().span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-
+        let is_private = name.starts_with('_');
+        
         let kind = if is_var {
-            StmtKind::Var { name, type_annotation, initializer, is_weak }
+            StmtKind::Var { name: name.clone(), type_annotation, initializer, is_weak, is_private }
         } else {
-            StmtKind::Let { name, type_annotation, initializer }
+            StmtKind::Let { name: name.clone(), type_annotation, initializer, is_private }
         };
 
         Some(Stmt::new(kind, span))
@@ -1079,6 +1086,93 @@ impl Parser {
             self.advance();
         }
     }
+
+    fn import_declaration(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+        
+        let path = if let Some(Token { kind: TokenKind::String(p), .. }) = self.peek().cloned() {
+            self.advance();
+            p
+        } else {
+            self.error_at_current("Expected string after 'import'.");
+            return None;
+        };
+
+        let mut alias = None;
+        if self.match_token(&[TokenKind::As]) {
+            if let Some(Token { kind: TokenKind::Identifier(a), .. }) = self.peek().cloned() {
+                self.advance();
+                alias = Some(a);
+            } else {
+                self.error_at_current("Expected identifier after 'as'.");
+            }
+        }
+        
+        let mut show = Vec::new();
+        if self.match_token(&[TokenKind::Show]) {
+            loop {
+                if let Some(Token { kind: TokenKind::Identifier(i), .. }) = self.peek().cloned() {
+                    self.advance();
+                    show.push(i);
+                } else {
+                    self.error_at_current("Expected identifier after 'show'.");
+                    break;
+                }
+                if !self.match_token(&[TokenKind::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        let mut hide = Vec::new();
+        if self.match_token(&[TokenKind::Hide]) {
+            loop {
+                if let Some(Token { kind: TokenKind::Identifier(i), .. }) = self.peek().cloned() {
+                    self.advance();
+                    hide.push(i);
+                } else {
+                    self.error_at_current("Expected identifier after 'hide'.");
+                    break;
+                }
+                if !self.match_token(&[TokenKind::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        if !self.match_token(&[TokenKind::Semicolon]) {
+            self.error_at_current("Expected ';' after import declaration.");
+            return None;
+        }
+
+        let end_span = self.previous().span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+
+        Some(Stmt::new(StmtKind::Import { path, alias, show, hide }, span))
+    }
+
+    fn export_declaration(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+        
+        let path = if let Some(Token { kind: TokenKind::String(p), .. }) = self.peek().cloned() {
+            self.advance();
+            p
+        } else {
+            self.error_at_current("Expected string after 'export'.");
+            return None;
+        };
+
+        if !self.match_token(&[TokenKind::Semicolon]) {
+            self.error_at_current("Expected ';' after export declaration.");
+            return None;
+        }
+
+        let end_span = self.previous().span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+
+        Some(Stmt::new(StmtKind::Export { path }, span))
+    }
+
 }
 
 #[cfg(test)]

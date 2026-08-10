@@ -10,3 +10,4 @@ license.workspace = true
 ast = { path = "../ast" }
 diagnostics = { path = "../diagnostics" }
 generics = { path = "../generics" }
+module = { version = "0.1.0", path = "../module" }

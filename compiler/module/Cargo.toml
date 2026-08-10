@@ -1,5 +1,5 @@
 [package]
-name = "resolver"
+name = "module"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 ast = { version = "0.1.0", path = "../ast" }
-diagnostics = { path = "../diagnostics" }
-module = { version = "0.1.0", path = "../module" }
+diagnostics = { version = "0.1.0", path = "../diagnostics" }
+lexer = { version = "0.1.0", path = "../lexer" }
 package = { version = "0.1.0", path = "../package" }
+parser = { version = "0.1.0", path = "../parser" }

@@ -1,0 +1,6 @@
+import "math/calc";
+
+func main() {
+    let result = add(10, 32);
+    print(result);
+}

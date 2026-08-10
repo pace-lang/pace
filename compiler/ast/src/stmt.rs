@@ -11,11 +11,23 @@ pub enum TypeExpr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StmtKind {
+    /// An import statement: `import "path" [as alias] [show a, b] [hide x, y]`
+    Import {
+        path: String,
+        alias: Option<String>,
+        show: Vec<String>,
+        hide: Vec<String>,
+    },
+    /// An export statement: `export "path"`
+    Export {
+        path: String,
+    },
     /// A let declaration: `let name = expression;`
     Let {
         name: String,
         type_annotation: Option<TypeExpr>,
         initializer: Option<Expr>,
+        is_private: bool,
     },
     /// A var declaration: `[weak] var name: type = expression;`
     Var {
@@ -23,6 +35,7 @@ pub enum StmtKind {
         type_annotation: Option<TypeExpr>,
         initializer: Option<Expr>,
         is_weak: bool,
+        is_private: bool,
     },
     /// An expression evaluated for side effects: `10 + 20;`
     Expression(Expr),
@@ -52,12 +65,14 @@ pub enum StmtKind {
         params: Vec<(String, TypeExpr)>, // (name, type)
         return_type: Option<TypeExpr>,
         body: Box<Stmt>,
+        is_private: bool,
     },
     /// A foreign function declaration: `foreign func name(params) -> return_type;`
     ForeignFunc {
         name: String,
         params: Vec<(String, TypeExpr)>,
         return_type: Option<TypeExpr>,
+        is_private: bool,
     },
     /// A return statement: `return value;`
     Return {
@@ -70,11 +85,13 @@ pub enum StmtKind {
         implements: Vec<String>,
         methods: Vec<Stmt>,
         fields: Vec<Stmt>,
+        is_private: bool,
     },
     /// An interface declaration: `interface name { methods; }`
     Interface {
         name: String,
         methods: Vec<Stmt>,
+        is_private: bool,
     },
 }
 

@@ -1,3 +1,8 @@
+use module::graph::ModuleGraph;
+use module::module::Module;
+use module::module_id::ModuleId;
+use std::collections::{HashMap, HashSet};
+
 use ast::{Expr, ExprKind, Stmt, StmtKind, Span};
 use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
 use crate::scope::ScopeStack;
@@ -5,6 +10,8 @@ use crate::scope::ScopeStack;
 pub struct Resolver {
     scopes: ScopeStack,
     pub errors: Vec<Diagnostic>,
+    // module_exports maps a ModuleId to a set of exported names
+    module_exports: HashMap<ModuleId, HashSet<String>>,
 }
 
 impl Resolver {
@@ -14,7 +21,71 @@ impl Resolver {
         Self {
             scopes,
             errors: Vec::new(),
+            module_exports: HashMap::new(),
         }
+    }
+
+
+    pub fn resolve_graph(&mut self, graph: &ModuleGraph) {
+        // Collect exports for all modules first
+        for module in graph.modules() {
+            let mut exports = HashSet::new();
+            for stmt in &module.ast {
+                match &stmt.kind {
+                    StmtKind::Let { name, is_private: false, .. } |
+                    StmtKind::Var { name, is_private: false, .. } |
+                    StmtKind::Class { name, is_private: false, .. } |
+                    StmtKind::Interface { name, is_private: false, .. } |
+                    StmtKind::ForeignFunc { name, is_private: false, .. } |
+                    StmtKind::Func { name, is_private: false, .. } => {
+                        exports.insert(name.clone());
+                    }
+                    // We don't fully implement re-exports (StmtKind::Export) just yet
+                    _ => {}
+                }
+            }
+            self.module_exports.insert(module.id, exports);
+        }
+
+        // Now resolve each module
+        for module in graph.modules() {
+            self.resolve_module(module, graph);
+        }
+    }
+
+    fn resolve_module(&mut self, module: &Module, graph: &ModuleGraph) {
+        self.scopes.push_scope(); // Module scope
+
+        // Resolve imports and inject into module scope
+        for stmt in &module.ast {
+            if let StmtKind::Import { path, alias, show, hide } = &stmt.kind {
+                // Find the imported module
+                let clean_path = path.trim_matches('"').trim_matches('\'');
+                let imported_id = graph.resolve_import(module.id, clean_path);
+
+                if let Some(id) = imported_id {
+                    if let Some(exports) = self.module_exports.get(&id) {
+                        if let Some(alias_name) = alias {
+                            // alias imports act as a namespace, but for now we just declare the alias
+                            // In a real implementation, we'd bind it to a module object.
+                            self.scopes.declare(alias_name.clone());
+                        } else {
+                            for export in exports {
+                                if (!show.is_empty() && !show.contains(export)) || hide.contains(export) {
+                                    continue;
+                                }
+                                self.scopes.declare(export.clone());
+                            }
+                        }
+                    }
+                } else {
+                    self.error(stmt.span.clone(), DiagnosticCode::UnknownIdentifier, &format!("Cannot resolve import '{}'", path));
+                }
+            }
+        }
+
+        self.resolve(&module.ast);
+        self.scopes.pop_scope();
     }
 
     pub fn resolve(&mut self, statements: &[Stmt]) {
@@ -30,7 +101,7 @@ impl Resolver {
                 self.resolve(stmts);
                 self.scopes.pop_scope();
             }
-            StmtKind::Let { name, type_annotation: _, initializer } | StmtKind::Var { name, type_annotation: _, initializer, is_weak: _ } => {
+            StmtKind::Let { name, type_annotation: _, initializer, is_private: _ } | StmtKind::Var { name, type_annotation: _, initializer, is_weak: _, is_private: _ } => {
                 // Resolve initializer first so it can't reference the variable being declared
                 if let Some(init) = initializer {
                     self.resolve_expr(init);
@@ -40,7 +111,7 @@ impl Resolver {
                     self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Variable '{}' is already declared in this scope.", name));
                 }
             }
-            StmtKind::Class { name, type_params: _, implements: _, methods, fields } => {
+            StmtKind::Class { name, type_params: _, implements: _, methods, fields, is_private: _ } => {
                 if !self.scopes.declare(name.clone()) {
                     self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Class '{}' is already declared in this scope.", name));
                 }
@@ -57,7 +128,7 @@ impl Resolver {
                 
                 self.scopes.pop_scope();
             }
-            StmtKind::Interface { name, methods: _methods } => {
+            StmtKind::Interface { name, methods: _methods, is_private: _ } => {
                 if !self.scopes.declare(name.clone()) {
                     self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Interface '{}' is already declared in this scope.", name));
                 }
@@ -65,12 +136,12 @@ impl Resolver {
                 // No need to push scope for interface since methods are just signatures without bodies
                 // and they don't have their own scope resolution here (Typechecker will handle it).
             }
-            StmtKind::ForeignFunc { name, params: _, return_type: _ } => {
+            StmtKind::ForeignFunc { name, params: _, return_type: _, is_private: _ } => {
                 if !self.scopes.declare(name.clone()) {
                     self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Foreign function '{}' is already declared in this scope.", name));
                 }
             }
-            StmtKind::Func { name, type_params: _, params, return_type: _, body } => {
+            StmtKind::Func { name, type_params: _, params, return_type: _, body, is_private: _ } => {
                 if !self.scopes.declare(name.clone()) {
                     self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Function '{}' is already declared in this scope.", name));
                 }
@@ -104,6 +175,7 @@ impl Resolver {
                 self.resolve_stmt(body);
                 self.scopes.pop_scope();
             }
+            StmtKind::Import { .. } | StmtKind::Export { .. } => {},
             StmtKind::Expression(expr) => {
                 self.resolve_expr(expr);
             }
