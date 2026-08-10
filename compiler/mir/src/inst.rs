@@ -33,6 +33,9 @@ pub enum RValue {
     Array(Vec<Value>, bool),
     ArrayRepeat(Value, Value, bool),
     IndexGet(Value, Value),
+    ConstructVariant(String, usize, Vec<Value>),
+    ExtractPayload(Value, usize, usize),
+    GetVariantTag(Value),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,5 +57,6 @@ pub struct BlockId(pub usize);
 pub enum Terminator {
     Jump(BlockId),
     Branch { cond: Value, then_block: BlockId, else_block: BlockId },
+    Switch { cond: Value, cases: Vec<(usize, BlockId)>, default: Option<BlockId> },
     Return(Option<Value>),
 }

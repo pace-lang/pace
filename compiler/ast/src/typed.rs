@@ -1,7 +1,13 @@
 use diagnostics::Span;
-use crate::expr::{BinaryOp, UnaryOp};
-use crate::stmt::TypeExpr;
+use crate::expr::{BinaryOp, UnaryOp, Pattern};
+use crate::stmt::{TypeExpr, EnumVariant};
 use crate::types::Type;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypedMatchArm {
+    pub pattern: Pattern,
+    pub body: Box<TypedExpr>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypedExprKind {
@@ -51,6 +57,14 @@ pub enum TypedExprKind {
         object: Box<TypedExpr>,
         index: Box<TypedExpr>,
         value: Box<TypedExpr>,
+    },
+    Match {
+        value: Box<TypedExpr>,
+        arms: Vec<TypedMatchArm>,
+    },
+    EnumVariant {
+        enum_name: String,
+        variant_name: String,
     },
 }
 
@@ -121,6 +135,11 @@ pub enum TypedStmtKind {
     Interface {
         name: String,
         methods: Vec<TypedStmt>,
+    },
+    Enum {
+        name: String,
+        type_params: Vec<String>,
+        variants: Vec<EnumVariant>,
     },
 }
 

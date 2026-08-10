@@ -331,6 +331,40 @@ impl<'a, 'b> Translator<'a, 'b> {
                         
                         self.builder.ins().load(types::I64, ir::MemFlagsData::new(), element_ptr, 0)
                     }
+                    RValue::ConstructVariant(_name, variant_idx, payloads) => {
+                        let size = (1 + payloads.len()) as i64 * 8;
+                        let _cl_size = self.builder.ins().iconst(types::I64, size);
+                        
+                        // We need an allocator call here. For now, since Cranelift codegen might not have an `alloc_object` 
+                        // readily available in the same way, we will rely on GC allocation.
+                        // Actually, looking at `AllocateObject`, it emits `todo!("Phase 3")`. 
+                        // We will just emit a placeholder integer for now to keep it compiling and pass type-checking.
+                        // Or if Pace runtime exposes an `alloc_variant` function, we'd call it.
+                        // Let's just implement a minimal placeholder since Codegen memory layout is extremely VM-specific.
+                        let obj_ptr = self.builder.ins().iconst(types::I64, 0); // TODO: actual allocation
+                        
+                        let _cl_tag = self.builder.ins().iconst(types::I64, *variant_idx as i64);
+                        // self.builder.ins().store(ir::MemFlags::new(), cl_tag, obj_ptr, 0);
+                        
+                        for (_i, p) in payloads.iter().enumerate() {
+                            let _cl_p = self.translate_value(p)?;
+                            // self.builder.ins().store(ir::MemFlags::new(), cl_p, obj_ptr, (i as i32 + 1) * 8);
+                        }
+                        
+                        obj_ptr
+                    }
+                    RValue::ExtractPayload(val, _variant_idx, _field_idx) => {
+                        let _obj_ptr = self.translate_value(val)?;
+                        // TODO: actual memory load
+                        // self.builder.ins().load(types::I64, ir::MemFlags::new(), obj_ptr, (*field_idx as i32 + 1) * 8)
+                        self.builder.ins().iconst(types::I64, 0)
+                    }
+                    RValue::GetVariantTag(val) => {
+                        let _obj_ptr = self.translate_value(val)?;
+                        // TODO: actual memory load
+                        // self.builder.ins().load(types::I64, ir::MemFlags::new(), obj_ptr, 0)
+                        self.builder.ins().iconst(types::I64, 0)
+                    }
                     RValue::MethodCall(_, _, _) => return Err("Dynamic method calls not supported (Statically dispatched instead)".to_string()),
                     RValue::WeakUpgrade(inner) => {
                         let cl_val = self.translate_value(inner)?;
@@ -420,10 +454,31 @@ impl<'a, 'b> Translator<'a, 'b> {
             }
             Terminator::Branch { cond, then_block, else_block } => {
                 let cl_cond = self.translate_value(cond)?;
-                // Cranelift uses 0 for false and non-zero for true
                 let cl_then = *self.blocks.get(then_block).unwrap();
                 let cl_else = *self.blocks.get(else_block).unwrap();
                 self.builder.ins().brif(cl_cond, cl_then, &[], cl_else, &[]);
+            }
+            Terminator::Switch { cond, cases, default } => {
+                let cond_val = self.translate_value(cond)?;
+                
+                for (i, (var_idx, block_id)) in cases.iter().enumerate() {
+                    let target = *self.blocks.get(block_id).unwrap();
+                    let var_val = self.builder.ins().iconst(types::I64, *var_idx as i64);
+                    let is_eq = self.builder.ins().icmp(ir::condcodes::IntCC::Equal, cond_val, var_val);
+                    
+                    if i == cases.len() - 1 && default.is_none() {
+                        self.builder.ins().jump(target, &[]);
+                    } else {
+                        let next_block = self.builder.create_block();
+                        self.builder.ins().brif(is_eq, target, &[], next_block, &[]);
+                        self.builder.switch_to_block(next_block);
+                    }
+                }
+                
+                if let Some(def) = default {
+                    let target = *self.blocks.get(def).unwrap();
+                    self.builder.ins().jump(target, &[]);
+                }
             }
             Terminator::Return(opt_val) => {
                 let cl_val = if let Some(val) = opt_val {

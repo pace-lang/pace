@@ -14,6 +14,7 @@ pub struct TypeChecker {
     current_return_type: Option<Type>,
     pub classes: HashMap<String, HashMap<String, Type>>,
     pub interfaces: HashMap<String, HashMap<String, Type>>,
+    pub enums: HashMap<String, HashMap<String, Type>>,
     pub class_implements: HashMap<String, Vec<String>>,
     current_class: Option<String>,
     pub generic_registry: generics::GenericDefinitionRegistry,
@@ -29,6 +30,7 @@ impl TypeChecker {
             current_return_type: None,
             classes: HashMap::new(),
             interfaces: HashMap::new(),
+            enums: HashMap::new(),
             class_implements: HashMap::new(),
             current_class: None,
             generic_registry: generics::GenericDefinitionRegistry::new(),
@@ -194,9 +196,7 @@ impl TypeChecker {
                 }
             }
             StmtKind::Interface { name, methods, is_private: _ } => {
-                self.env.declare(name.clone(), Type::Interface(name.clone()));
-                
-                let mut interface_members = HashMap::new();
+                let mut interface_methods = std::collections::HashMap::new();
                 for method in methods {
                     if let StmtKind::Func { name: m_name, params, return_type, .. } = &method.kind {
                         let ret_ty = if let Some(rt) = return_type {
@@ -208,19 +208,51 @@ impl TypeChecker {
                         for (_, pt) in params {
                             param_types.push(self.parse_type(pt, method.span));
                         }
-                        interface_members.insert(m_name.clone(), Type::Function(Vec::new(), param_types, Box::new(ret_ty)));
+                        interface_methods.insert(m_name.clone(), Type::Function(Vec::new(), param_types, Box::new(ret_ty)));
                     }
                 }
                 
-                self.interfaces.insert(name.clone(), interface_members);
+                self.interfaces.insert(name.clone(), interface_methods);
+                self.env.declare(name.clone(), Type::Interface(name.clone()));
                 
-                let mut typed_methods = Vec::new();
-                for method in methods {
-                    typed_methods.push(self.check_stmt(method));
-                }
                 TypedStmtKind::Interface {
                     name: name.clone(),
-                    methods: typed_methods,
+                    methods: Vec::new(),
+                }
+            }
+            StmtKind::Enum { name, type_params, variants, is_private: _ } => {
+                if !type_params.is_empty() {
+                    // Similar to generic classes, register them for instantiation
+                    // self.generic_registry.register_enum(name.clone(), stmt.clone());
+                }
+
+                self.env.declare(name.clone(), Type::Enum(name.clone(), type_params.clone()));
+                
+                let mut enum_variants = HashMap::new();
+                
+                for variant in variants {
+                    let mut param_types = Vec::new();
+                    if let Some(fields) = &variant.fields {
+                        for field in fields {
+                            param_types.push(self.parse_type(&field.ty, stmt.span));
+                        }
+                    }
+                    
+                    let variant_ty = if param_types.is_empty() {
+                        Type::Enum(name.clone(), type_params.clone())
+                    } else {
+                        Type::Function(type_params.clone(), param_types, Box::new(Type::Enum(name.clone(), type_params.clone())))
+                    };
+                    
+                    enum_variants.insert(variant.name.clone(), variant_ty);
+                }
+                
+                self.enums.insert(name.clone(), enum_variants);
+
+                TypedStmtKind::Enum {
+                    name: name.clone(),
+                    type_params: type_params.clone(),
+                    variants: variants.clone(),
                 }
             }
             StmtKind::ForeignFunc { name, params, return_type, is_private: _ } => {
@@ -588,6 +620,7 @@ impl TypeChecker {
                     Type::Instance(n) => (n.clone(), Vec::new()),
                     Type::GenericInstance(n, args) => (n.clone(), args.clone()),
                     Type::Interface(n) => (n.clone(), Vec::new()),
+                    Type::Enum(n, _args) => (n.clone(), Vec::new()),
                     _ => {
                         if typed_obj.ty != Type::Error {
                             self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot get property '{}' on non-instance type '{}'.", name, typed_obj.ty))
@@ -620,8 +653,29 @@ impl TypeChecker {
                         self.error(expr.span, DiagnosticCode::UnknownType, &format!("Property '{}' not found on interface '{}'.", name, class_name));
                         Type::Error
                     }
+                } else if let Some(enum_variants) = self.enums.get(&class_name) {
+                    if let Some(variant_ty) = enum_variants.get(name) {
+                        let mut resolved_ty = variant_ty.clone();
+                        // Instantiate generic arguments if present
+                        if let Type::Enum(_, params) = &typed_obj.ty {
+                            let mut inferred_map = std::collections::HashMap::new();
+                            for (i, p) in params.iter().enumerate() {
+                                if i < instance_args.len() {
+                                    inferred_map.insert(p.clone(), instance_args[i].clone());
+                                }
+                            }
+                            resolved_ty = self.substitute_generics(variant_ty, &inferred_map);
+                        }
+                        return TypedExpr::new(TypedExprKind::EnumVariant {
+                            enum_name: class_name.clone(),
+                            variant_name: name.clone(),
+                        }, resolved_ty, expr.span);
+                    } else {
+                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Variant '{}' not found in enum '{}'.", name, class_name));
+                        Type::Error
+                    }
                 } else {
-                    self.error(expr.span, DiagnosticCode::UnknownType, &format!("Class or Interface '{}' not found.", class_name));
+                    self.error(expr.span, DiagnosticCode::UnknownType, &format!("Type '{}' not found.", class_name));
                     Type::Error
                 };
                 (TypedExprKind::Get { object: Box::new(typed_obj), name: name.clone() }, ty)
@@ -668,6 +722,49 @@ impl TypeChecker {
                 let typed_inner = self.check_expr(inner);
                 let ty = typed_inner.ty.clone();
                 (TypedExprKind::Grouping(Box::new(typed_inner)), ty)
+            }
+            ExprKind::Match { value, arms } => {
+                let typed_value = self.check_expr(value);
+                let mut typed_arms = Vec::new();
+                let mut common_return_type = None;
+
+                for arm in arms {
+                    self.env.push_scope();
+
+                    // Declare bindings in scope
+                    match &arm.pattern {
+                        ast::Pattern::Wildcard => {}
+                        ast::Pattern::Variant { path: _, bindings } => {
+                            if let Some(binds) = bindings {
+                                for bind in binds {
+                                    if bind != "_" {
+                                        // A real implementation needs to extract types from the variant signature.
+                                        // For now, we bind to Type::Any to satisfy the typechecker.
+                                        self.env.declare(bind.clone(), Type::Any);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let typed_body = self.check_expr(&arm.body);
+                    self.env.pop_scope();
+
+                    if let Some(ref crt) = common_return_type {
+                        if typed_body.ty != *crt && typed_body.ty != Type::Error && *crt != Type::Error {
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Match arms have incompatible return types. Expected '{}', found '{}'.", crt, typed_body.ty));
+                        }
+                    } else {
+                        common_return_type = Some(typed_body.ty.clone());
+                    }
+
+                    typed_arms.push(ast::TypedMatchArm { pattern: arm.pattern.clone(), body: Box::new(typed_body) });
+                }
+
+                // Exhaustiveness checking should happen here.
+
+                let ty = common_return_type.unwrap_or(Type::Void);
+                (TypedExprKind::Match { value: Box::new(typed_value), arms: typed_arms }, ty)
             }
             ExprKind::Call { callee, type_args, arguments } => {
                 let typed_callee = self.check_expr(callee);

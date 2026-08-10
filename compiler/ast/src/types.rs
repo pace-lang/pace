@@ -12,6 +12,7 @@ pub enum Type {
     BuiltinFunc,
     Function(Vec<String>, Vec<Type>, Box<Type>),
     Class(String, Vec<String>),
+    Enum(String, Vec<String>),
     Instance(String),
     Generic(String),
     GenericInstance(String, Vec<Type>),
@@ -57,6 +58,18 @@ impl fmt::Display for Type {
             }
             Type::Class(name, type_params) => {
                 write!(f, "Class({})", name)?;
+                if !type_params.is_empty() {
+                    write!(f, "<")?;
+                    for (i, p) in type_params.iter().enumerate() {
+                        if i > 0 { write!(f, ", ")?; }
+                        write!(f, "{}", p)?;
+                    }
+                    write!(f, ">")?;
+                }
+                Ok(())
+            }
+            Type::Enum(name, type_params) => {
+                write!(f, "Enum({})", name)?;
                 if !type_params.is_empty() {
                     write!(f, "<")?;
                     for (i, p) in type_params.iter().enumerate() {

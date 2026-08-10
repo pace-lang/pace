@@ -4,7 +4,7 @@ pub mod types;
 pub mod typed;
 
 pub use diagnostics::{Location, Span};
-pub use expr::{Expr, ExprKind, BinaryOp, UnaryOp};
-pub use stmt::{Stmt, StmtKind, TypeExpr};
+pub use expr::{Expr, ExprKind, BinaryOp, UnaryOp, Pattern, MatchArm};
+pub use stmt::{Stmt, StmtKind, TypeExpr, EnumField, EnumVariant};
 pub use types::Type;
-pub use typed::{TypedExpr, TypedExprKind, TypedStmt, TypedStmtKind};
+pub use typed::{TypedExpr, TypedExprKind, TypedStmt, TypedStmtKind, TypedMatchArm};

@@ -10,7 +10,26 @@ pub enum TypeExpr {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct EnumField {
+    pub name: Option<String>,
+    pub ty: TypeExpr,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumVariant {
+    pub name: String,
+    pub fields: Option<Vec<EnumField>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum StmtKind {
+    /// An enum declaration: `enum Name<T> { Variant(Int), Unit }`
+    Enum {
+        name: String,
+        type_params: Vec<String>,
+        variants: Vec<EnumVariant>,
+        is_private: bool,
+    },
     /// An import statement: `import "path" [as alias] [show a, b] [hide x, y]`
     Import {
         path: String,

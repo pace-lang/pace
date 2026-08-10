@@ -147,13 +147,22 @@ impl<'a> Scanner<'a> {
                     TokenKind::Question
                 }
             }
+            '_' => {
+                if self.peek().map(|c| c.is_ascii_alphanumeric() || c == '_').unwrap_or(false) {
+                    // It's the start of an identifier like _varName
+                    self.identifier()
+                } else {
+                    // It's just a lone underscore
+                    TokenKind::Underscore
+                }
+            }
             ' ' | '\r' | '\t' | '\n' => {
                 // Ignore whitespace.
                 return None;
             }
             '"' => self.string(),
             c if c.is_ascii_digit() => self.number(),
-            c if c.is_ascii_alphabetic() || c == '_' => self.identifier(),
+            c if c.is_ascii_alphabetic() => self.identifier(),
             _ => {
                 let span = Span::new(self.start_idx, self.current_idx, self.start_loc, self.current_loc);
                 self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::UnexpectedToken, format!("Unexpected character '{}'", c), span).build());
@@ -258,6 +267,8 @@ impl<'a> Scanner<'a> {
             "init" => TokenKind::Init,
             "self" => TokenKind::SelfKeyword,
             "class" => TokenKind::Class,
+            "enum" => TokenKind::Enum,
+            "match" => TokenKind::Match,
             "interface" => TokenKind::Interface,
             "implements" => TokenKind::Implements,
             "type" => TokenKind::Type,

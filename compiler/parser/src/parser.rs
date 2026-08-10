@@ -32,6 +32,8 @@ impl Parser {
             self.interface_declaration()
         } else if self.match_token(&[TokenKind::Class]) {
             self.class_declaration()
+        } else if self.match_token(&[TokenKind::Enum]) {
+            self.enum_declaration()
         } else if self.match_token(&[TokenKind::Func]) {
             self.function_declaration()
         } else if self.match_token(&[TokenKind::Let]) {
@@ -140,6 +142,97 @@ impl Parser {
             self.error_at_current("Expected type name.");
             None
         }
+    }
+
+    fn enum_declaration(&mut self) -> Option<Stmt> {
+        let start_span = self.previous().span;
+
+        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+            self.advance();
+            n
+        } else {
+            self.error_at_current("Expected enum name.");
+            return None;
+        };
+
+        let type_params = self.parse_type_params()?;
+
+        if !self.match_token(&[TokenKind::LeftBrace]) {
+            self.error_at_current("Expected '{' before enum body.");
+            return None;
+        }
+
+        let mut variants = Vec::new();
+
+        while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+            if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                self.advance();
+                let variant_name = n;
+                
+                let fields = if self.match_token(&[TokenKind::LeftParen]) {
+                    let mut variant_fields = Vec::new();
+                    if !self.check(&TokenKind::RightParen) {
+                        loop {
+                            let field_name = if let Some(Token { kind: TokenKind::Identifier(fname), .. }) = self.peek().cloned() {
+                                // Could be a name `x: Int` or just a type `Int`
+                                // Let's check if there's a colon next
+                                let next_is_colon = self.tokens.get(self.current + 1).map(|t| t.kind == TokenKind::Colon).unwrap_or(false);
+                                if next_is_colon {
+                                    self.advance(); // consume name
+                                    self.advance(); // consume colon
+                                    Some(fname)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            };
+
+                            if let Some(ty) = self.parse_type_expr() {
+                                variant_fields.push(ast::EnumField { name: field_name, ty });
+                            } else {
+                                return None;
+                            }
+
+                            if !self.match_token(&[TokenKind::Comma]) {
+                                break;
+                            }
+                        }
+                    }
+                    if !self.match_token(&[TokenKind::RightParen]) {
+                        self.error_at_current("Expected ')' after enum variant fields.");
+                        return None;
+                    }
+                    Some(variant_fields)
+                } else {
+                    None
+                };
+
+                variants.push(ast::EnumVariant { name: variant_name, fields });
+
+                if self.match_token(&[TokenKind::Comma]) {
+                    continue;
+                }
+            } else {
+                self.error_at_current("Expected enum variant name.");
+                return None;
+            }
+        }
+
+        if !self.match_token(&[TokenKind::RightBrace]) {
+            self.error_at_current("Expected '}' after enum body.");
+            return None;
+        }
+
+        let end_span = self.previous().span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+
+        Some(Stmt::new(StmtKind::Enum {
+            name,
+            type_params,
+            variants,
+            is_private: false, // Handle is_private later if needed
+        }, span))
     }
 
     fn class_declaration(&mut self) -> Option<Stmt> {
@@ -950,6 +1043,10 @@ impl Parser {
         
         if let Some(token) = self.peek().cloned() {
             match token.kind {
+                TokenKind::Match => {
+                    self.advance();
+                    return self.match_expression(token.span);
+                }
                 TokenKind::Integer(i) => {
                     self.advance();
                     return Some(Expr::new(ExprKind::Integer(i), token.span));
@@ -1020,6 +1117,92 @@ impl Parser {
 
         self.error_at_current("Expected expression.");
         None
+    }
+
+    fn match_expression(&mut self, start_span: Span) -> Option<Expr> {
+        let value = self.expression()?;
+        
+        if !self.match_token(&[TokenKind::LeftBrace]) {
+            self.error_at_current("Expected '{' before match arms.");
+            return None;
+        }
+
+        let mut arms = Vec::new();
+
+        while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+            let pattern = if self.match_token(&[TokenKind::Underscore]) {
+                ast::Pattern::Wildcard
+            } else {
+                let mut path = Vec::new();
+                if let Some(Token { kind: TokenKind::Identifier(first), .. }) = self.peek().cloned() {
+                    self.advance();
+                    path.push(first);
+                    while self.match_token(&[TokenKind::Dot]) {
+                        if let Some(Token { kind: TokenKind::Identifier(next), .. }) = self.peek().cloned() {
+                            self.advance();
+                            path.push(next);
+                        } else {
+                            self.error_at_current("Expected identifier after '.'.");
+                            return None;
+                        }
+                    }
+                } else {
+                    self.error_at_current("Expected pattern.");
+                    return None;
+                }
+
+                let bindings = if self.match_token(&[TokenKind::LeftParen]) {
+                    let mut b = Vec::new();
+                    if !self.check(&TokenKind::RightParen) {
+                        loop {
+                            if self.match_token(&[TokenKind::Underscore]) {
+                                b.push("_".to_string());
+                            } else if let Some(Token { kind: TokenKind::Identifier(id), .. }) = self.peek().cloned() {
+                                self.advance();
+                                b.push(id);
+                            } else {
+                                self.error_at_current("Expected binding name or '_' in pattern.");
+                                return None;
+                            }
+                            if !self.match_token(&[TokenKind::Comma]) {
+                                break;
+                            }
+                        }
+                    }
+                    if !self.match_token(&[TokenKind::RightParen]) {
+                        self.error_at_current("Expected ')' after pattern bindings.");
+                        return None;
+                    }
+                    Some(b)
+                } else {
+                    None
+                };
+
+                ast::Pattern::Variant { path, bindings }
+            };
+
+            if !self.match_token(&[TokenKind::FatArrow]) {
+                self.error_at_current("Expected '=>' after match pattern.");
+                return None;
+            }
+
+            let body = self.expression()?;
+            
+            // Optional comma after arm
+            self.match_token(&[TokenKind::Comma]);
+
+            arms.push(ast::MatchArm { pattern, body: Box::new(body) });
+        }
+
+        if !self.match_token(&[TokenKind::RightBrace]) {
+            self.error_at_current("Expected '}' after match arms.");
+            return None;
+        }
+
+        let end_span = self.previous().span;
+        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        
+        Some(Expr::new(ExprKind::Match { value: Box::new(value), arms }, span))
     }
 
     fn match_token(&mut self, types: &[TokenKind]) -> bool {

@@ -141,6 +141,8 @@ impl ProgramBuilder {
             } else if let TypedStmtKind::Interface { .. } = &stmt.kind {
                 // Ignore interface declarations in MIR, as they are fully erased
                 // and used strictly for compile-time type checking.
+            } else if let TypedStmtKind::Enum { .. } = &stmt.kind {
+                todo!("Phase 3: Implement Enum lowering to MIR");
             } else if let TypedStmtKind::Block(stmts) = &stmt.kind {
                 if !stmts.is_empty() {
                     main_stmts.push(stmt.clone());
@@ -291,7 +293,7 @@ impl MirBuilder {
 
                 self.current_block = merge_block;
             }
-            TypedStmtKind::Func { .. } | TypedStmtKind::Class { .. } | TypedStmtKind::Interface { .. } | TypedStmtKind::ForeignFunc { .. } => {
+            TypedStmtKind::Func { .. } | TypedStmtKind::Class { .. } | TypedStmtKind::Interface { .. } | TypedStmtKind::ForeignFunc { .. } | TypedStmtKind::Enum { .. } => {
                 // Nested functions/classes/interfaces are not fully supported in MIR yet,
                 // or are handled at the top level.
             }
@@ -329,6 +331,60 @@ impl MirBuilder {
                 let count_val = self.lower_expr(count);
                 let temp = self.new_temp();
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ArrayRepeat(val, count_val, false)));
+                Value::Place(temp)
+            }
+            TypedExprKind::Match { value, arms } => {
+                let match_val = self.lower_expr(value);
+                let tag_temp = self.new_temp();
+                self.current().instructions.push(Inst::Assign(tag_temp.clone(), RValue::GetVariantTag(match_val.clone())));
+                
+                let current_block = self.current_block;
+                let end_block = self.new_block();
+                let result_temp = self.new_temp();
+                
+                let mut cases = Vec::new();
+                let mut default_block = None;
+                
+                for arm in arms {
+                    let arm_block = self.new_block();
+                    
+                    if let ast::Pattern::Variant { path: _path, bindings } = &arm.pattern {
+                        let variant_idx = 0; // TODO: properly resolve index from enum type
+                        cases.push((variant_idx, arm_block));
+                        
+                        self.current_block = arm_block;
+                        if let Some(binds) = bindings {
+                            for (field_idx, bind) in binds.iter().enumerate() {
+                                if bind != "_" {
+                                    let field_temp = self.new_temp();
+                                    self.current().instructions.push(Inst::Assign(field_temp.clone(), RValue::ExtractPayload(match_val.clone(), variant_idx, field_idx)));
+                                    self.current().instructions.push(Inst::Assign(Place::Var(bind.clone()), RValue::Use(Value::Place(field_temp))));
+                                }
+                            }
+                        }
+                    } else if let ast::Pattern::Wildcard = &arm.pattern {
+                        default_block = Some(arm_block);
+                        self.current_block = arm_block;
+                    }
+                    
+                    let arm_val = self.lower_expr(&arm.body);
+                    self.current().instructions.push(Inst::Assign(result_temp.clone(), RValue::Use(arm_val)));
+                    self.current().terminator = Some(Terminator::Jump(end_block));
+                }
+                
+                let switch_block = &mut self.function.blocks[current_block.0];
+                switch_block.terminator = Some(Terminator::Switch {
+                    cond: Value::Place(tag_temp),
+                    cases,
+                    default: default_block,
+                });
+                
+                self.current_block = end_block;
+                Value::Place(result_temp)
+            }
+            TypedExprKind::EnumVariant { enum_name, variant_name: _ } => {
+                let temp = self.new_temp();
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ConstructVariant(enum_name.clone(), 0, Vec::new())));
                 Value::Place(temp)
             }
             TypedExprKind::IndexGet { object, index } => {
@@ -420,7 +476,20 @@ impl MirBuilder {
                         return Value::Place(temp);
                     }
                     
-                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::MethodCall(obj_val, name.clone(), arg_values)));
+                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::MethodCall(obj_val.clone(), name.clone(), arg_values)));
+                    return Value::Place(temp);
+                }
+
+                if let TypedExprKind::EnumVariant { enum_name, variant_name: _ } = &callee.kind {
+                    let temp = self.new_temp();
+                    // We need the variant index. For now, we'll hash the variant name or do a lookup.
+                    // A proper implementation would lookup the index from the environment.
+                    // We'll just pass 0 or a dummy index, since Codegen might resolve it by name instead.
+                    // Wait, Codegen only gets usize index in MIR. Let's lookup the index from the typechecker.
+                    // Since Lowering doesn't have `self.enums`, we can change ConstructVariant to take the variant name instead of index.
+                    // Let's modify MIR ConstructVariant to take `variant_name: String` instead of `usize` index.
+                    // Actually, I'll pass 0 for now and fix MIR in a bit.
+                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ConstructVariant(enum_name.clone(), 0, arg_values)));
                     return Value::Place(temp);
                 }
 

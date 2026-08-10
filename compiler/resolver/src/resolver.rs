@@ -35,6 +35,7 @@ impl Resolver {
                     StmtKind::Let { name, is_private: false, .. } |
                     StmtKind::Var { name, is_private: false, .. } |
                     StmtKind::Class { name, is_private: false, .. } |
+                    StmtKind::Enum { name, is_private: false, .. } |
                     StmtKind::Interface { name, is_private: false, .. } |
                     StmtKind::ForeignFunc { name, is_private: false, .. } |
                     StmtKind::Func { name, is_private: false, .. } => {
@@ -132,9 +133,11 @@ impl Resolver {
                 if !self.scopes.declare(name.clone()) {
                     self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Interface '{}' is already declared in this scope.", name));
                 }
-                
-                // No need to push scope for interface since methods are just signatures without bodies
-                // and they don't have their own scope resolution here (Typechecker will handle it).
+            }
+            StmtKind::Enum { name, type_params: _, variants: _, is_private: _ } => {
+                if !self.scopes.declare(name.clone()) {
+                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Enum '{}' is already declared in this scope.", name));
+                }
             }
             StmtKind::ForeignFunc { name, params: _, return_type: _, is_private: _ } => {
                 if !self.scopes.declare(name.clone()) {
@@ -253,6 +256,33 @@ impl Resolver {
             }
             ExprKind::OptionalGet { object, name: _ } => {
                 self.resolve_expr(object);
+            }
+            ExprKind::Match { value, arms } => {
+                self.resolve_expr(value);
+                for arm in arms {
+                    self.scopes.push_scope();
+                    
+                    match &arm.pattern {
+                        ast::Pattern::Wildcard => {}
+                        ast::Pattern::Variant { path, bindings } => {
+                            if !path.is_empty() {
+                                if !self.scopes.resolve(&path[0]) {
+                                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot find '{}' in this scope.", path[0]));
+                                }
+                            }
+                            if let Some(binds) = bindings {
+                                for bind in binds {
+                                    if bind != "_" {
+                                        self.scopes.declare(bind.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    self.resolve_expr(&arm.body);
+                    self.scopes.pop_scope();
+                }
             }
         }
     }

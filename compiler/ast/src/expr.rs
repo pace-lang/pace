@@ -21,7 +21,30 @@ pub enum UnaryOp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    /// `_`
+    Wildcard,
+    /// `Ok(x)` or `Move(x, y)` or `Quit`
+    Variant {
+        // Can be just "Quit" or "Message.Quit"
+        path: Vec<String>,
+        bindings: Option<Vec<String>>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub body: Box<Expr>, // Using Expr for fat arrow block or single expr
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
+    /// A match expression: `match expr { ... }`
+    Match {
+        value: Box<Expr>,
+        arms: Vec<MatchArm>,
+    },
     /// A literal integer like `10`
     Integer(i64),
     /// A literal float like `3.14`

@@ -112,6 +112,7 @@ impl<'a> VirtualMachine<'a> {
                         panic!("Branch condition must be a Boolean.");
                     }
                 }
+                Some(Terminator::Switch { .. }) => todo!("Phase 3: VM Switch"),
                 Some(Terminator::Return(val_opt)) => {
                     let ret = val_opt.as_ref().map(|v| self.resolve_value(v));
                     self.frames.pop();
@@ -251,6 +252,9 @@ impl<'a> VirtualMachine<'a> {
                         } else {
                             panic!("Cannot index non-object");
                         }
+                    }
+                    RValue::ConstructVariant(..) | RValue::ExtractPayload(..) | RValue::GetVariantTag(_) => {
+                        todo!("Phase 3: VM Enum variants");
                     }
                 };
                 self.store(place, val);

@@ -23,6 +23,8 @@ pub enum TokenKind {
     Import,
     Package,
     Export,
+    Enum,
+    Match,
     As,
     Show,
     Hide,
@@ -62,6 +64,7 @@ pub enum TokenKind {
     Dot,
     Colon,
     Semicolon,
+    Underscore,
     Arrow, // ->
     FatArrow, // =>
     Question,
