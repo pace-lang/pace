@@ -6,4 +6,4 @@ func test(value: Result<String, Int>) -> String {
         Err(e) => "error"
     };
 }
-func main() { test(Ok("hello")); }
+func main() { print(test(Ok("hello"))); print(test(Err(404))); }

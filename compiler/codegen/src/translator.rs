@@ -332,38 +332,37 @@ impl<'a, 'b> Translator<'a, 'b> {
                         self.builder.ins().load(types::I64, ir::MemFlagsData::new(), element_ptr, 0)
                     }
                     RValue::ConstructVariant(_name, variant_idx, payloads) => {
-                        let size = (1 + payloads.len()) as i64 * 8;
-                        let _cl_size = self.builder.ins().iconst(types::I64, size);
+                        let total_size = 24 + 8 + (payloads.len() as i64 * 8);
                         
-                        // We need an allocator call here. For now, since Cranelift codegen might not have an `alloc_object` 
-                        // readily available in the same way, we will rely on GC allocation.
-                        // Actually, looking at `AllocateObject`, it emits `todo!("Phase 3")`. 
-                        // We will just emit a placeholder integer for now to keep it compiling and pass type-checking.
-                        // Or if Pace runtime exposes an `alloc_variant` function, we'd call it.
-                        // Let's just implement a minimal placeholder since Codegen memory layout is extremely VM-specific.
-                        let obj_ptr = self.builder.ins().iconst(types::I64, 0); // TODO: actual allocation
+                        let alloc_func = self.func_ids.get("pace_alloc")
+                            .expect("pace_alloc not declared");
+                        let local_alloc = self.module.declare_func_in_func(*alloc_func, self.builder.func);
                         
-                        let _cl_tag = self.builder.ins().iconst(types::I64, *variant_idx as i64);
-                        // self.builder.ins().store(ir::MemFlags::new(), cl_tag, obj_ptr, 0);
+                        let metadata_ptr = self.builder.ins().iconst(types::I64, 0); // 0 for dummy metadata (prevents segfaults in pace_release)
+                        let size_val = self.builder.ins().iconst(types::I64, total_size);
                         
-                        for (_i, p) in payloads.iter().enumerate() {
-                            let _cl_p = self.translate_value(p)?;
-                            // self.builder.ins().store(ir::MemFlags::new(), cl_p, obj_ptr, (i as i32 + 1) * 8);
+                        let call_inst = self.builder.ins().call(local_alloc, &[size_val, metadata_ptr]);
+                        let obj_ptr = self.builder.inst_results(call_inst)[0];
+                        
+                        let cl_tag = self.builder.ins().iconst(types::I64, *variant_idx as i64);
+                        self.builder.ins().store(ir::MemFlagsData::new(), cl_tag, obj_ptr, 24);
+                        
+                        for (i, p) in payloads.iter().enumerate() {
+                            let cl_p = self.translate_value(p)?;
+                            let offset = 32 + (i as i32 * 8);
+                            self.builder.ins().store(ir::MemFlagsData::new(), cl_p, obj_ptr, offset);
                         }
                         
                         obj_ptr
                     }
-                    RValue::ExtractPayload(val, _variant_idx, _field_idx) => {
-                        let _obj_ptr = self.translate_value(val)?;
-                        // TODO: actual memory load
-                        // self.builder.ins().load(types::I64, ir::MemFlags::new(), obj_ptr, (*field_idx as i32 + 1) * 8)
-                        self.builder.ins().iconst(types::I64, 0)
+                    RValue::ExtractPayload(val, _variant_idx, field_idx) => {
+                        let obj_ptr = self.translate_value(val)?;
+                        let offset = 32 + (*field_idx as i32 * 8);
+                        self.builder.ins().load(types::I64, ir::MemFlagsData::new(), obj_ptr, offset)
                     }
                     RValue::GetVariantTag(val) => {
-                        let _obj_ptr = self.translate_value(val)?;
-                        // TODO: actual memory load
-                        // self.builder.ins().load(types::I64, ir::MemFlags::new(), obj_ptr, 0)
-                        self.builder.ins().iconst(types::I64, 0)
+                        let obj_ptr = self.translate_value(val)?;
+                        self.builder.ins().load(types::I64, ir::MemFlagsData::new(), obj_ptr, 24)
                     }
                     RValue::MethodCall(_, _, _) => return Err("Dynamic method calls not supported (Statically dispatched instead)".to_string()),
                     RValue::WeakUpgrade(inner) => {
