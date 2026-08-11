@@ -14,3 +14,8 @@ target/
 # Ignore IDE configs
 .idea/
 .vscode/
+
+# VS Code Extension & Node.js
+node_modules/
+editors/vscode/out/
+*.vsix

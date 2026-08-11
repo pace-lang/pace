@@ -1,0 +1,58 @@
+{
+  "Function": {
+    "prefix": "func",
+    "body": [
+      "func ${1:name}(${2:args}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a Pace function"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name} {",
+      "\tinit(${2:args}) {",
+      "\t\t$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Create a Pace class"
+  },
+  "Main Function": {
+    "prefix": "main",
+    "body": [
+      "func main() {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create the main entry point"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": [
+      "if ${1:condition} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create an if statement"
+  },
+  "Match Statement": {
+    "prefix": "match",
+    "body": [
+      "match ${1:expression} {",
+      "\t${2:pattern} => ${0:result}",
+      "}"
+    ],
+    "description": "Create a match statement"
+  },
+  "Enum": {
+    "prefix": "enum",
+    "body": [
+      "enum ${1:Name} {",
+      "\t${2:Variant}",
+      "}"
+    ],
+    "description": "Create a Pace enum"
+  }
+}

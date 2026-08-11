@@ -1,0 +1,64 @@
+{
+  "name": "pace",
+  "displayName": "Pace Language",
+  "description": "Language support for the Pace programming language.",
+  "version": "0.1.0",
+  "publisher": "pace-lang",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pace-lang/pace.git"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "icon": "assets/pace.png",
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "pace",
+        "aliases": [
+          "Pace",
+          "pace"
+        ],
+        "extensions": [
+          ".pace"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "pace",
+        "scopeName": "source.pace",
+        "path": "./syntaxes/pace.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "pace",
+        "path": "./snippets/pace.code-snippets.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "tsc -noEmit",
+    "package": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "watch": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.0",
+    "@types/vscode": "^1.75.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  }
+}
