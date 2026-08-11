@@ -321,12 +321,14 @@ mod tests {
         // let x = 1; { let x = 2; print(x); }
         let outer_let = Stmt::new(StmtKind::Let {
             name: "x".into(),
+            is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
         }, make_span());
 
         let inner_let = Stmt::new(StmtKind::Let {
             name: "x".into(),
+            is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Integer(2), make_span())),
         }, make_span());
@@ -346,12 +348,14 @@ mod tests {
         // let x = 1; let x = 2;
         let let1 = Stmt::new(StmtKind::Let {
             name: "x".into(),
+            is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
         }, make_span());
 
         let let2 = Stmt::new(StmtKind::Let {
             name: "x".into(),
+            is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Integer(2), make_span())),
         }, make_span());

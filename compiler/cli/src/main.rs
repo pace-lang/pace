@@ -33,8 +33,11 @@ enum Commands {
         /// Optional file to run
         file: Option<String>,
     },
-    /// Compile the current package
-    Build,
+    /// Compile the current package or a specific file
+    Build {
+        /// Optional file to build
+        file: Option<String>,
+    },
     /// Analyze the current package and report errors, but don't build object files
     Check,
     /// Run the tests
@@ -284,8 +287,8 @@ fn main() {
         Commands::Check => {
             do_check();
         }
-        Commands::Build => {
-            do_build(None);
+        Commands::Build { file } => {
+            do_build(file.as_deref());
         }
         Commands::Run { file } => {
             let out_file = do_build(file.as_deref());

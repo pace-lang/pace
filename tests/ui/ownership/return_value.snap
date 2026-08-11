@@ -1,8 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-Call typed_callee ty: Class("User", [])
-TYPECHECKER ERROR: Variable 'createUser' not found. at Span { start: 139, end: 149, start_loc: Location { line: 12, column: 13 }, end_loc: Location { line: 12, column: 23 } }
-Call typed_callee ty: Error
-Error [P2001]: Variable 'createUser' not found. at line 12

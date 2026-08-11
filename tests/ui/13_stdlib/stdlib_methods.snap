@@ -1,0 +1,10 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+Eagerly typechecking Map_String_Int
+Finished eagerly typechecking Map_String_Int
+
+thread 'main' panicked at compiler/codegen/src/translator.rs:231:46:
+index out of bounds: the len is 0 but the index is 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

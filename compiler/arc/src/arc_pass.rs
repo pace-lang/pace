@@ -70,7 +70,7 @@ impl ArcPass {
                             reference_places.insert(place.clone());
                             owned_places.insert(place.clone());
                         }
-                        Inst::Assign(place, RValue::ExtractPayload(val, _, _)) => {
+                        Inst::Assign(_place, RValue::ExtractPayload(_val, _, _)) => {
                             // ExtractPayload returns the payload directly.
                             // However, we don't know if the payload is a reference statically here easily.
                             // In Pace, we track if a place is a reference by AST types during Builder!
@@ -146,7 +146,9 @@ impl ArcPass {
                         }
                     }
                     
-                    for place in &owned_places {
+                    let mut sorted_owned_places: Vec<_> = owned_places.iter().collect();
+                    sorted_owned_places.sort();
+                    for place in sorted_owned_places {
                         let is_returned = match ret_val {
                             Some(Value::Place(p)) => p == place,
                             _ => false,

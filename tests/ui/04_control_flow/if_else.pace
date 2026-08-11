@@ -1,0 +1,13 @@
+fn main() {
+    let a = 5;
+    
+    if a < 10 {
+        print_str("a is less than 10");
+    } else {
+        print_str("a is >= 10");
+    }
+    
+    if a == 5 {
+        print_str("a is 5");
+    }
+}

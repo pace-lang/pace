@@ -861,7 +861,7 @@ impl TypeChecker {
                                         if let ast::StmtKind::Func { name, params, .. } = &method.kind {
                                             if name == "init" {
                                                 
-                                                for (_, ty) in params {
+                                                for _ in params {
                                                      // Dummy for now, we'd need parse_type which needs mut self
                                                     // Let's just not do Class expected types here for now, 
                                                     // it's not strictly necessary for Enum fixes.
@@ -1507,6 +1507,7 @@ mod tests {
         // let x = 10 + 5;
         let stmt = Stmt::new(StmtKind::Let {
             name: "x".into(),
+            is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Binary(
                 Box::new(Expr::new(ExprKind::Integer(10), make_span())),
@@ -1526,6 +1527,7 @@ mod tests {
         // let x = 10 + "hello";
         let stmt = Stmt::new(StmtKind::Let {
             name: "x".into(),
+            is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Binary(
                 Box::new(Expr::new(ExprKind::Integer(10), make_span())),

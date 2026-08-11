@@ -1,0 +1,7 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+Finished `dev` profile [unoptimized + debuginfo] target(s)
+     Running `target/debug/12_ffi`
+Hello

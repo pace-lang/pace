@@ -1,0 +1,12 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+Error [P2001]: Cannot find variable 'fn' in this scope. at line 1
+Error [P2001]: Cannot find variable 'main' in this scope. at line 1
+Error [P2001]: Cannot find variable 'print_str' in this scope. at line 5
+Error [P2001]: Cannot find variable 'print_str' in this scope. at line 6
+Error [P2001]: Cannot find variable 'print_str' in this scope. at line 7
+Error [P2001]: Cannot find variable 'print_str' in this scope. at line 8
+Error [P2001]: Cannot find variable 'print_str' in this scope. at line 9
+Error [P2001]: Cannot find variable 'print_str' in this scope. at line 10

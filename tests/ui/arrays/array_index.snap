@@ -1,6 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-Call typed_callee ty: BuiltinFunc
-Call typed_callee ty: BuiltinFunc

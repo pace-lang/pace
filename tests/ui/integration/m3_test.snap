@@ -1,9 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-Call typed_callee ty: Function([], [Int], Int)
-Call typed_callee ty: Function([], [Int], Int)
-TYPECHECKER ERROR: Variable 'fib' not found. at Span { start: 143, end: 146, start_loc: Location { line: 9, column: 18 }, end_loc: Location { line: 9, column: 21 } }
-Call typed_callee ty: Error
-Error [P2001]: Variable 'fib' not found. at line 9

@@ -57,7 +57,10 @@ impl CraneliftGenerator {
         let mut func_ids = HashMap::new();
         
         // 1. Declare all functions
-        for (name, func) in &program.functions {
+        let mut sorted_functions: Vec<_> = program.functions.iter().collect();
+        sorted_functions.sort_by_key(|(name, _)| *name);
+        
+        for (name, func) in sorted_functions {
             let mut sig = module.make_signature();
             for _ in &func.parameters {
                 sig.params.push(AbiParam::new(types::I64));
@@ -210,7 +213,10 @@ impl CraneliftGenerator {
         }
 
         // 2. Define all functions
-        for (name, func) in &program.functions {
+        let mut sorted_functions_def: Vec<_> = program.functions.iter().collect();
+        sorted_functions_def.sort_by_key(|(name, _)| *name);
+        
+        for (name, func) in sorted_functions_def {
             ctx.func.signature.clear(module.isa().default_call_conv());
             for _ in &func.parameters {
                 ctx.func.signature.params.push(AbiParam::new(types::I64));

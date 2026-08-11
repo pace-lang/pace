@@ -1,8 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-Call typed_callee ty: Class("User", [])
-Call typed_callee ty: BuiltinFunc
-Call typed_callee ty: BuiltinFunc
-Codegen error: Function User::init not found

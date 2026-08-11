@@ -1,0 +1,11 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+Finished `dev` profile [unoptimized + debuginfo] target(s)
+     Running `target/debug/13_stdlib`
+Pace Runtime: Strong count is 0, releasing weak representation
+Pace Runtime: Strong count is 0, releasing weak representation
+Pace Runtime: Freeing object memory
+Pace Runtime: Freeing object memory
+Test Complete

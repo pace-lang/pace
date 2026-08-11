@@ -10,16 +10,34 @@ fn run_ui_test(file_path: &Path) {
     assert!(cli_path.exists(), "CLI executable not found at {:?}", cli_path);
 
     let output = Command::new(&cli_path)
-        .arg("build")
+        .arg("run")
         .arg(file_path)
         .output()
         .expect("Failed to execute cli command");
 
-    // We only care about stderr for diagnostics tests
-    let stderr = String::from_utf8(output.stderr).unwrap();
+    // We care about both stdout and stderr to verify compilation and execution
+    let mut combined_output = String::from_utf8(output.stderr).unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    if !stdout.is_empty() {
+        combined_output.push_str("\n");
+        combined_output.push_str(&stdout);
+    }
     
-    // Normalize paths or variable memory addresses if needed, but for now just trim
-    let normalized_stderr = stderr.trim().to_string();
+    // Normalize paths, variable memory addresses, and thread IDs in panics
+    let normalized_stderr = combined_output
+        .lines()
+        .map(|line| {
+            if line.starts_with("thread '") && line.contains("panicked at") {
+                if let Some(idx) = line.find("panicked at") {
+                    return format!("thread 'main' {}", &line[idx..]);
+                }
+            }
+            line.to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string();
 
     // Use insta to snapshot the stderr output
     let snapshot_name = file_path.file_name().unwrap().to_string_lossy().to_string().replace(".pace", "");

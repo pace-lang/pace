@@ -1,0 +1,23 @@
+interface Animal {
+    func speak();
+}
+
+class Dog implements Animal {
+    func speak() {
+        print_str("Woof");
+    }
+}
+
+class Cat implements Animal {
+    func speak() {
+        print_str("Meow");
+    }
+}
+
+fn main() {
+    let dog = Dog();
+    let cat = Cat();
+    
+    dog.speak();
+    cat.speak();
+}

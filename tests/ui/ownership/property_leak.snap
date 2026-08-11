@@ -1,7 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-Call typed_callee ty: Class("Parent", [])
-Call typed_callee ty: Class("Child", [])
-Codegen error: Function Parent::init not found
