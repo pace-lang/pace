@@ -1,0 +1,31 @@
+import "../core/option.pace";
+
+foreign func mapInit<K, V>() -> Pointer<CChar>; // Opaque pointer to underlying map
+foreign func mapSet<K, V>(ptr: Pointer<CChar>, key: K, value: V);
+foreign func mapGet<K, V>(ptr: Pointer<CChar>, key: K) -> Option<V>;
+foreign func mapRemove<K, V>(ptr: Pointer<CChar>, key: K);
+foreign func mapContains<K, V>(ptr: Pointer<CChar>, key: K) -> Boolean;
+
+class Map<K, V> {
+    var ptr: Pointer<CChar>;
+
+    init() {
+        self.ptr = mapInit<K, V>();
+    }
+
+    func set(key: K, value: V) {
+        mapSet<K, V>(self.ptr, key, value);
+    }
+
+    func get(key: K) -> Option<V> {
+        return mapGet<K, V>(self.ptr, key);
+    }
+
+    func remove(key: K) {
+        mapRemove<K, V>(self.ptr, key);
+    }
+
+    func contains(key: K) -> Boolean {
+        return mapContains<K, V>(self.ptr, key);
+    }
+}

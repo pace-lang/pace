@@ -7,7 +7,7 @@
       "name": "keyword.control.pace"
     },
     {
-      "match": "\\b(Int|Float|Bool|String|Void|Array|Option|Result)\\b",
+      "match": "\\b(Int|Float|Boolean|String|Void|Array|Option|Result|Map|File)\\b",
       "name": "support.type.pace"
     },
     {
