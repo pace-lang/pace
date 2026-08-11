@@ -17,7 +17,13 @@ impl Linker {
             .arg("-o")
             .arg(output_file)
             .output()
-            .map_err(|e| format!("Failed to invoke linker: {}", e))?;
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    "Failed to invoke linker: 'cc' not found. Please install a C compiler (like gcc or clang) and ensure it's in your PATH.".to_string()
+                } else {
+                    format!("Failed to invoke linker: {}", e)
+                }
+            })?;
 
         let _ = std::fs::remove_file(&runtime_file);
 

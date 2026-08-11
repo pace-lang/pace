@@ -12,6 +12,7 @@ use linker::Linker;
 
 #[derive(Parser)]
 #[command(name = "pace")]
+#[command(version)]
 #[command(about = "The Pace Compiler", long_about = None)]
 struct Cli {
     #[command(subcommand)]

@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - stable
+      - 'patches/*'
+  pull_request:
+    branches:
+      - main
+      - dev
+      - stable
+      - 'patches/*'
+
+jobs:
+  test:
+    name: Test and Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check
+        run: cargo check
+
+      - name: Test
+        run: cargo test
