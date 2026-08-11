@@ -1,7 +1,7 @@
 use module::graph::ModuleGraph;
 use module::module::Module;
 use module::module_id::ModuleId;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use ast::{Expr, ExprKind, Stmt, StmtKind, Span};
 use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
@@ -10,8 +10,8 @@ use crate::scope::ScopeStack;
 pub struct Resolver {
     scopes: ScopeStack,
     pub errors: Vec<Diagnostic>,
-    // module_exports maps a ModuleId to a set of exported names
-    module_exports: HashMap<ModuleId, HashSet<String>>,
+    // module_exports maps a ModuleId to a map of exported names and their sub-exports (e.g. enum variants)
+    module_exports: HashMap<ModuleId, HashMap<String, Vec<String>>>,
 }
 
 impl Resolver {
@@ -35,17 +35,23 @@ impl Resolver {
     pub fn resolve_graph(&mut self, graph: &ModuleGraph) {
         // Collect exports for all modules first
         for module in graph.modules() {
-            let mut exports = HashSet::new();
+            let mut exports = HashMap::new();
             for stmt in &module.ast {
                 match &stmt.kind {
                     StmtKind::Let { name, is_private: false, .. } |
                     StmtKind::Var { name, is_private: false, .. } |
                     StmtKind::Class { name, is_private: false, .. } |
-                    StmtKind::Enum { name, is_private: false, .. } |
                     StmtKind::Interface { name, is_private: false, .. } |
                     StmtKind::ForeignFunc { name, is_private: false, .. } |
                     StmtKind::Func { name, is_private: false, .. } => {
-                        exports.insert(name.clone());
+                        exports.insert(name.clone(), Vec::new());
+                    }
+                    StmtKind::Enum { name, is_private: false, variants, .. } => {
+                        let mut sub_exports = Vec::new();
+                        for variant in variants {
+                            sub_exports.push(variant.name.clone());
+                        }
+                        exports.insert(name.clone(), sub_exports);
                     }
                     // We don't fully implement re-exports (StmtKind::Export) just yet
                     _ => {}
@@ -77,11 +83,14 @@ impl Resolver {
                             // In a real implementation, we'd bind it to a module object.
                             self.scopes.declare(alias_name.clone());
                         } else {
-                            for export in exports {
+                            for (export, sub_exports) in exports {
                                 if (!show.is_empty() && !show.contains(export)) || hide.contains(export) {
                                     continue;
                                 }
                                 self.scopes.declare(export.clone());
+                                for sub in sub_exports {
+                                    self.scopes.declare(sub.clone());
+                                }
                             }
                         }
                     }
