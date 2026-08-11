@@ -17,6 +17,10 @@ pub struct VirtualMachine<'a> {
     program: &'a Program,
     frames: Vec<Frame>,
     heap: Vec<Object>,
+    maps: HashMap<usize, Vec<(Value, Value)>>,
+    next_map_id: usize,
+    files: HashMap<usize, std::fs::File>,
+    next_file_id: usize,
 }
 
 impl<'a> VirtualMachine<'a> {
@@ -25,6 +29,10 @@ impl<'a> VirtualMachine<'a> {
             program,
             frames: Vec::new(),
             heap: Vec::new(),
+            maps: HashMap::new(),
+            next_map_id: 1,
+            files: HashMap::new(),
+            next_file_id: 1,
         }
     }
 
@@ -75,7 +83,204 @@ impl<'a> VirtualMachine<'a> {
 
         let base_name = name.split('_').next().unwrap_or(name);
         if let Some(foreign) = self.program.foreign_functions.get(name).or_else(|| self.program.foreign_functions.get(base_name)) {
-            // Mock foreign function execution for debugging
+            // Intercept standard library foreign functions natively in VM
+            match base_name {
+                // String methods
+                "stringLen" => {
+                    if let Value::String(s) = &args[0] {
+                        return Some(Value::Int(s.len() as i64));
+                    }
+                }
+                "stringConcat" => {
+                    if let (Value::String(a), Value::String(b)) = (&args[0], &args[1]) {
+                        return Some(Value::String(format!("{}{}", a, b)));
+                    }
+                }
+                "stringSubstring" => {
+                    if let (Value::String(s), Value::Int(start), Value::Int(end)) = (&args[0], &args[1], &args[2]) {
+                        let st = (*start).max(0) as usize;
+                        let en = (*end).max(0).min(s.len() as i64) as usize;
+                        let sub = if st <= en && st < s.len() { s[st..en].to_string() } else { "".to_string() };
+                        return Some(Value::String(sub));
+                    }
+                }
+                "stringContains" => {
+                    if let (Value::String(s), Value::String(sub)) = (&args[0], &args[1]) {
+                        return Some(Value::Boolean(s.contains(sub)));
+                    }
+                }
+                // Array methods (Arrays are represented as Objects with stringified integer keys and a "length" property)
+                "arrayLen" => {
+                    if let Value::Object(id) = &args[0] {
+                        if let Some(obj) = self.heap.get(*id) {
+                            if let Some(Value::Int(len)) = obj.fields.get("length") {
+                                return Some(Value::Int(*len));
+                            }
+                        }
+                    }
+                }
+                "arrayPush" => {
+                    if let Value::Object(id) = &args[0] {
+                        let item = args[1].clone();
+                        if let Some(obj) = self.heap.get_mut(*id) {
+                            if let Some(Value::Int(len)) = obj.fields.get("length").cloned() {
+                                obj.fields.insert(len.to_string(), item);
+                                obj.fields.insert("length".to_string(), Value::Int(len + 1));
+                                return Some(Value::Void);
+                            }
+                        }
+                    }
+                }
+                "arrayPop" => {
+                    if let Value::Object(id) = &args[0] {
+                        if let Some(obj) = self.heap.get_mut(*id) {
+                            if let Some(Value::Int(len)) = obj.fields.get("length").cloned() {
+                                if len > 0 {
+                                    let item = obj.fields.remove(&(len - 1).to_string()).unwrap_or(Value::Void);
+                                    obj.fields.insert("length".to_string(), Value::Int(len - 1));
+                                    return Some(Value::EnumVariant("Option".to_string(), 0, vec![item])); // Some
+                                } else {
+                                    return Some(Value::EnumVariant("Option".to_string(), 1, vec![])); // None
+                                }
+                            }
+                        }
+                    }
+                }
+                "arrayGet" => {
+                    if let (Value::Object(id), Value::Int(idx)) = (&args[0], &args[1]) {
+                        if let Some(obj) = self.heap.get(*id) {
+                            if let Some(Value::Int(len)) = obj.fields.get("length") {
+                                if *idx >= 0 && *idx < *len {
+                                    let item = obj.fields.get(&idx.to_string()).cloned().unwrap_or(Value::Void);
+                                    return Some(Value::EnumVariant("Option".to_string(), 0, vec![item])); // Some
+                                }
+                            }
+                            return Some(Value::EnumVariant("Option".to_string(), 1, vec![])); // None
+                        }
+                    }
+                }
+                "arraySet" => {
+                    if let (Value::Object(id), Value::Int(idx)) = (&args[0], &args[1]) {
+                        let item = args[2].clone();
+                        if let Some(obj) = self.heap.get_mut(*id) {
+                            if let Some(Value::Int(len)) = obj.fields.get("length") {
+                                if *idx >= 0 && *idx < *len {
+                                    obj.fields.insert(idx.to_string(), item);
+                                }
+                            }
+                        }
+                        return Some(Value::Void);
+                    }
+                }
+                // Map methods
+                "mapInit" => {
+                    let id = self.next_map_id;
+                    self.next_map_id += 1;
+                    self.maps.insert(id, Vec::new());
+                    return Some(Value::Int(id as i64)); // Return ID as pseudo-pointer
+                }
+                "mapSet" => {
+                    if let Value::Int(id) = &args[0] {
+                        let key = args[1].clone();
+                        let value = args[2].clone();
+                        if let Some(map) = self.maps.get_mut(&(*id as usize)) {
+                            if let Some(pos) = map.iter().position(|(k, _)| *k == key) {
+                                map[pos] = (key, value);
+                            } else {
+                                map.push((key, value));
+                            }
+                        }
+                        return Some(Value::Void);
+                    }
+                }
+                "mapGet" => {
+                    if let Value::Int(id) = &args[0] {
+                        let key = args[1].clone();
+                        if let Some(map) = self.maps.get(&(*id as usize)) {
+                            if let Some((_, value)) = map.iter().find(|(k, _)| *k == key) {
+                                return Some(Value::EnumVariant("Option".to_string(), 0, vec![value.clone()])); // Some
+                            }
+                        }
+                        return Some(Value::EnumVariant("Option".to_string(), 1, vec![])); // None
+                    }
+                }
+                "mapRemove" => {
+                    if let Value::Int(id) = &args[0] {
+                        let key = args[1].clone();
+                        if let Some(map) = self.maps.get_mut(&(*id as usize)) {
+                            if let Some(pos) = map.iter().position(|(k, _)| *k == key) {
+                                map.remove(pos);
+                            }
+                        }
+                        return Some(Value::Void);
+                    }
+                }
+                "mapContains" => {
+                    if let Value::Int(id) = &args[0] {
+                        let key = args[1].clone();
+                        if let Some(map) = self.maps.get(&(*id as usize)) {
+                            return Some(Value::Boolean(map.iter().any(|(k, _)| *k == key)));
+                        }
+                        return Some(Value::Boolean(false));
+                    }
+                }
+                // File methods
+                "fileOpen" => {
+                    if let (Value::String(path), Value::String(mode)) = (&args[0], &args[1]) {
+                        use std::fs::OpenOptions;
+                        let mut options = OpenOptions::new();
+                        if mode == "r" { options.read(true); }
+                        else if mode == "w" { options.write(true).create(true).truncate(true); }
+                        else if mode == "a" { options.write(true).create(true).append(true); }
+                        
+                        if let Ok(file) = options.open(path) {
+                            let id = self.next_file_id;
+                            self.next_file_id += 1;
+                            self.files.insert(id, file);
+                            return Some(Value::Int(id as i64));
+                        }
+                        return Some(Value::Int(0)); // Null pointer on failure
+                    }
+                }
+                "fileReadAll" => {
+                    if let Value::Int(id) = &args[0] {
+                        use std::io::Read;
+                        if let Some(file) = self.files.get_mut(&(*id as usize)) {
+                            let mut buf = String::new();
+                            if file.read_to_string(&mut buf).is_ok() {
+                                return Some(Value::String(buf));
+                            }
+                        }
+                    }
+                    return Some(Value::String("".to_string()));
+                }
+                "fileWrite" => {
+                    if let (Value::Int(id), Value::String(data)) = (&args[0], &args[1]) {
+                        use std::io::Write;
+                        if let Some(file) = self.files.get_mut(&(*id as usize)) {
+                            if file.write_all(data.as_bytes()).is_ok() {
+                                return Some(Value::Int(data.len() as i64));
+                            }
+                        }
+                    }
+                    return Some(Value::Int(0));
+                }
+                "fileClose" => {
+                    if let Value::Int(id) = &args[0] {
+                        self.files.remove(&(*id as usize));
+                    }
+                    return Some(Value::Void);
+                }
+                "fileIsValid" => {
+                    if let Value::Int(id) = &args[0] {
+                        return Some(Value::Boolean(*id != 0 && self.files.contains_key(&(*id as usize))));
+                    }
+                    return Some(Value::Boolean(false));
+                }
+                _ => {}
+            }
+
+            // Fallback for missing foreign function implementation
             if let Some(ret_ty) = &foreign.return_type {
                 return Some(match ret_ty {
                     mir::ForeignAbiType::I8 | mir::ForeignAbiType::I16 | mir::ForeignAbiType::I32 | mir::ForeignAbiType::I64 => Value::Int(0),

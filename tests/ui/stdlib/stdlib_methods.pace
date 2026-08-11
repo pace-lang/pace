@@ -6,13 +6,33 @@ import "std/io/file";
 func main() {
     let s = "hello";
     let l = len(s);
+    print("string len:", l);
     let s2 = concat(s, " world");
+    print("string concat:", s2);
+    let sub = substring(s2, 0, 5);
+    print("string substring:", sub);
 
     let arr: [Int] = [1];
     push(arr, 10);
+    print("array get 1:", get(arr, 1));
+    print("array pop:", pop(arr));
 
     let m = Map<String, Int>();
-    m.set("key", 1);
+    m.set("key", 42);
+    print("map get:", m.get("key"));
+    print("map contains:", m.contains("key"));
+    m.remove("key");
+    print("map contains after remove:", m.contains("key"));
     
-    let f = open("test.txt", "r");
+    let f_res = open("test.txt", "w");
+    match f_res {
+        Ok(f) => print("file write:", f.write("Hello from Pace!")),
+        Err(e) => print("Failed to open file for writing:", e)
+    };
+    
+    let f2_res = open("test.txt", "r");
+    match f2_res {
+        Ok(f2) => print("file read:", f2.readAll()),
+        Err(e) => print("Failed to open file for reading:", e)
+    };
 }
