@@ -1,5 +1,8 @@
 # Pace Programming Language
 
+> [!WARNING]
+> Pace is an experimental hobby project in early active development. The compiler, language syntax, and standard library are subject to frequent breaking changes. It is not currently intended for production use.
+
 Pace is a modern, statically typed, and natively compiled programming language designed to prioritize safety, predictable performance, and an excellent developer experience. 
 
 It aims to bridge the gap between low-level systems programming and high-level application development by combining **C-like speed** with **Swift-like ergonomics**.
