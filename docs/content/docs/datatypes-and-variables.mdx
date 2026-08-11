@@ -1,0 +1,198 @@
+---
+title: Types & Variables
+description: Learn the design philosophy behind Pace's variable declarations and primitive data types.
+---
+
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Pace is a **statically typed** language, meaning the compiler determines the exact memory layout of your variables at compile time. This allows the compiler to generate highly optimized native machine code.
+
+While Pace is strictly typed, it uses **type inference** to deduce types automatically so you don't have to write them manually unless necessary.
+
+## Declaring Variables
+
+In many languages, deciding how to declare a variable is an afterthought. In Pace, variable declaration is a fundamental tool for program safety. You must choose whether a variable is immutable (`let`) or mutable (`var`).
+
+### Why `let` by Default?
+In Pace, you should default to using `let`. 
+
+```pace
+let name = "Pace"
+let version: Int = 1
+
+// name = "New Pace" // ERROR: Cannot reassign a 'let' variable!
+```
+
+**The Rationale:** Mutable state is one of the leading causes of bugs in large codebases. When variables can change unexpectedly, reasoning about data flow becomes incredibly difficult. By making `let` the default, Pace ensures that data remains constant after initialization unless you explicitly declare otherwise. 
+
+### Explicit Mutability (`var`)
+When an algorithm inherently requires modifying state (like a counter in a loop), you use `var`. 
+
+```pace
+var counter = 0
+counter = counter + 1 // This is perfectly fine
+```
+
+By forcing developers to use `var` for mutable state, it acts as a visual signal to anyone reading the code: *"Pay attention to this variable; its value changes over time."*
+
+### Why Postfix Types?
+Notice how explicit type declarations in Pace are placed *after* the variable name, separated by a colon (`name: String`).
+
+```pace
+let speed: Float = 3.14
+```
+
+**The Rationale:** In languages like C or Java (`Float speed`), the type is prioritized over the variable name. Pace uses postfix types because **the name of the variable is almost always more important than its type**. When reading code left-to-right, you care more about *what* the variable represents (`speed`) than *how* it's stored (`Float`). Additionally, postfix types make parsing significantly cleaner for the compiler!
+
+---
+
+## Primitive Types and Memory Representation
+
+Pace includes several core types built directly into the language. Because Pace compiles to native code, these types have strict memory representations.
+
+- **`Int`**: A 64-bit signed integer. (`42`, `-100`). Takes exactly 8 bytes of memory.
+- **`Float`**: A 64-bit IEEE 754 floating-point number. (`3.14`, `-0.001`). Takes exactly 8 bytes.
+- **`Bool`**: A boolean value. (`true`, `false`). Typically represented as a single byte.
+- **`String`**: A UTF-8 encoded text string. (`"Hello"`). Internally, this is represented as a pointer to a heap-allocated buffer along with its length.
+
+---
+
+## Arrays
+
+Pace supports dynamically sized arrays natively. Arrays are strictly typed; an array can only hold elements of one specific type.
+
+```pace
+// Type inferred as [Int]
+let numbers = [1, 2, 3, 4, 5]
+
+// Explicit type declaration
+let names: [String] = ["Alice", "Bob"]
+```
+
+### Array Repetition
+You can initialize an array with a repeated value using the `[value; count]` syntax:
+
+```pace
+// Creates an array with ten 0s: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+let zeroes = [0; 10]
+```
+
+### Indexing
+You can read and write to arrays using standard bracket `[]` notation:
+
+```pace
+var items = ["Apple", "Banana", "Cherry"]
+print(items[1]) // Prints: Banana
+
+items[1] = "Blueberry"
+```
+
+> [!NOTE]
+> **Safety First:** Array bounds are checked strictly at runtime. If you attempt to access `items[5]`, Pace will safely panic and halt the program instead of reading garbage memory (buffer overflow), protecting you from severe security vulnerabilities.
+
+---
+
+## Null Safety (Optionals)
+
+One of Pace's most defining architectural choices is **Null Safety**. 
+
+In languages like Java or C, any object reference can silently hold a `null` value. This leads to the infamous `NullPointerException` (often called the "Billion Dollar Mistake") crashing programs unexpectedly at runtime.
+
+In Pace, standard types **cannot** be null!
+
+```pace
+let safeString: String = null // COMPILER ERROR!
+```
+
+### The `?` Type
+If you actually *want* a variable to hold either a value or nothing at all, you must explicitly declare it as an **Optional** using the `?` syntax. Under the hood, this is an algebraic data type that forces you to handle the `null` case explicitly.
+
+```pace
+var maybeString: String? = null // This is allowed
+maybeString = "Hello"
+```
+
+### Unwrapping (`!`)
+If you are absolutely certain an optional contains a value, you can **force unwrap** it using the `!` operator. If you are wrong and the value is `null`, the program will safely panic.
+
+```pace
+let validString: String = maybeString!
+```
+
+### Optional Chaining (`?.`)
+If you want to access a property or method on an optional value without unwrapping it, you can use the `?.` operator. If the object is `null`, the entire expression gracefully evaluates to `null`.
+
+```pace
+class User {
+    var profile: Profile?
+}
+class Profile {
+    var age: Int = 30
+}
+
+let user = User()
+// Returns an Int? which is null if profile is null
+let userAge = user.profile?.age 
+```
+
+---
+
+## Lexical Basics
+
+For those migrating from other languages, here is a quick cheat sheet for Pace's lexical structure:
+
+### Comments
+Pace supports standard C-style comments.
+
+```pace
+// This is a single-line comment.
+
+/*
+ This is a
+ multi-line comment!
+*/
+```
+
+### Operators
+
+<TypeTable
+  type={{
+    'Arithmetic': {
+      description: 'Used for mathematical calculations.',
+      type: '+, -, *, /, %',
+    },
+    'Logical': {
+      description: 'Used for boolean logic combinations.',
+      type: '&& (AND), || (OR), ! (NOT)',
+    },
+    'Comparison': {
+      description: 'Used for comparing values.',
+      type: '==, !=, <, >, <=, >=',
+    },
+    'Assignment': {
+      description: 'Used to assign values to variables.',
+      type: '=',
+    },
+  }}
+/>
+
+### Keywords
+
+The following words are reserved by the compiler:
+
+<TypeTable
+  type={{
+    'Declaration': {
+      description: 'Used to declare variables, functions, and types.',
+      type: 'class, interface, implements, func, init, var, let, enum',
+    },
+    'Control Flow': {
+      description: 'Used to control the execution path of the program.',
+      type: 'if, else, while, for, in, break, continue, return, match',
+    },
+    'Modifiers & Values': {
+      description: 'Used to modify behavior or represent primitive literal values.',
+      type: 'weak, foreign, true, false, null',
+    }
+  }}
+/>

@@ -1,0 +1,67 @@
+---
+title: Error Handling & Diagnostics
+description: How Pace handles failures and how to read the compiler's error codes.
+---
+
+Pace is actively evolving, and so is its error handling philosophy. Currently, Pace avoids complex runtime exceptions, relying instead on explicit Optional types for predictable failures and fast panics for unrecoverable state.
+
+## Runtime Error Handling
+
+### 1. Optionals (`T?`) for Expected Failures
+When an operation might legitimately fail as part of its normal execution (for example, attempting to parse a string into an integer, or looking up a key in a dictionary), Pace relies on the **Optional** type.
+
+```pace
+// If the string isn't a valid integer, this returns `null`
+let maybeNumber: Int? = parseInt("123abc")
+
+// Explicitly handle the failure
+if (maybeNumber != null) {
+    print("Parsed successfully!")
+} else {
+    print("Failed to parse.")
+}
+```
+
+Optional types force you to acknowledge that an operation might fail, ensuring you never accidentally use garbage data.
+
+### 2. Panics for Unrecoverable States
+When your program enters a mathematically or logically impossible state (like dividing by zero, or accessing an array index that is out of bounds), Pace will **panic**. 
+
+A panic immediately halts the execution of the program. This is a deliberate safety feature: it is infinitely better for a system to crash instantly than to continue running while corrupting user data.
+
+```pace
+let items = [1, 2, 3]
+
+// This will PANIC at runtime! Program halted safely.
+let missing = items[5] 
+```
+
+*(Note: Advanced algebraic error handling using a `Result<T, E>` Enum is currently being designed for future iterations of the compiler.)*
+
+---
+
+## Compiler Diagnostics & Error Codes
+
+Pace is designed to be developer-friendly. When you make a mistake, the Pace compiler won't just throw a generic error; it will provide a specific **Diagnostic Code** with helpful context.
+
+All Pace compiler errors start with a `P` followed by a category number:
+
+### P1xxx: Lexer & Syntax Errors
+These errors occur when the compiler cannot read your code because of typos or invalid characters.
+- **`P1001` (Invalid Token):** You used a character that isn't allowed in Pace.
+- **`P1002` (Unexpected Token):** The syntax is structurally wrong (e.g., missing a closing parenthesis or curly brace).
+
+### P2xxx: Name Resolution Errors
+These errors occur when the compiler doesn't know what variable or function you are referring to.
+- **`P2001` (Unknown Identifier):** You tried to use a variable or function that hasn't been declared, or is out of scope.
+- **`P2002` (Duplicate Declaration):** You tried to declare two variables or functions with the exact same name in the same scope.
+
+### P3xxx: Type System Errors
+These errors occur when you violate Pace's strict type rules.
+- **`P3001` (Type Mismatch):** You tried to pass a `String` into a function that expects an `Int`, or tried to assign a `null` to a non-optional variable.
+- **`P3002` (Unknown Type):** You tried to declare a variable with a type (like `User`) that the compiler hasn't seen defined anywhere.
+
+### P4xxx: Ownership & ARC Errors
+These errors are related to Pace's Automatic Reference Counting memory system.
+- **`P4001` (Invalid Weak Reference):** You tried to use the `weak` keyword on a value type (like an `Int`) instead of a reference type (like a `class`), or on a non-optional variable.
+- **`P4002` (Ownership Violation):** You tried to illegally transfer or consume an object in a way that violates ARC memory rules.

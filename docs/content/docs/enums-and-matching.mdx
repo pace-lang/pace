@@ -1,0 +1,87 @@
+---
+title: Enums & Pattern Matching
+description: Define exclusive states and branch logic cleanly using Enums and Pattern Matching.
+---
+
+Enums (short for enumerations) allow you to define a type by enumerating its possible variants. In Pace, Enums are incredibly powerful because each variant can optionally store its own data.
+
+## Basic Enums
+
+At their simplest, Enums are just a list of possible states. For example, if you are building a game, you might want to track the state of the player:
+
+```pace
+enum PlayerState {
+    IDLE,
+    WALKING,
+    RUNNING,
+    JUMPING
+}
+```
+
+To create a value of this Enum type, you use the Enum name followed by a dot and the variant name:
+
+```pace
+let state: PlayerState = PlayerState.JUMPING
+```
+
+## Enums with Data (Algebraic Data Types)
+
+Unlike basic enums in languages like C or Java, Pace's Enums can hold data specific to each variant. This makes them perfect for representing complex states.
+
+For example, a network connection might be disconnected, connecting, or connected (with an active socket ID):
+
+```pace
+enum Connection {
+    DISCONNECTED,
+    CONNECTING(String), // Stores the URL being connected to
+    CONNECTED(Int)      // Stores the active socket ID
+}
+
+let activeConnection = Connection.CONNECTED(1024)
+let connecting = Connection.CONNECTING("https://pace-lang.org")
+```
+
+## Pattern Matching with `match`
+
+The real power of Enums comes when you combine them with the `match` expression. `match` allows you to execute different code depending on which variant the Enum holds.
+
+The compiler will ensure that your `match` is **exhaustive**—meaning you must handle every possible variant, so you never accidentally forget a case!
+
+```pace
+enum Message {
+    QUIT,
+    MOVE(Int, Int),
+    WRITE(String)
+}
+
+func processMessage(msg: Message) {
+    match msg {
+        Message.QUIT => {
+            print("Quitting the game...")
+        }
+        Message.MOVE(x, y) => {
+            print("Moving to coordinates")
+        }
+        Message.WRITE(text) => {
+            print("Message received: " + text)
+        }
+    }
+}
+```
+
+### Match as an Expression
+
+Because `match` is an expression in Pace, it evaluates to a value. This means you can assign the result of a `match` directly to a variable, avoiding clunky `if`/`else` chains.
+
+```pace
+let isExitMessage = match msg {
+    Message.QUIT => true
+    _ => false // The '_' is a wildcard that matches anything else
+}
+```
+
+### Why use Enums?
+
+Enums are the best way to represent data that can be *one thing or another, but never both*. 
+
+For example, instead of having a class with `isConnected`, `socketId`, and `url` fields where some fields are meaningless depending on the state, an Enum ensures that the `socketId` ONLY exists when the state is `CONNECTED`. This prevents entire categories of bugs!

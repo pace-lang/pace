@@ -1,0 +1,85 @@
+---
+title: Memory Management (ARC)
+description: Discover why Pace uses Automatic Reference Counting and how it achieves zero-pause execution.
+---
+
+Memory management is often the hardest and most consequential architectural decision when designing a programming language.
+
+- In **C or C++** (Manual Memory), you must manually `malloc` and `free` memory. While extremely fast, one tiny mistake leads to catastrophic segmentation faults, use-after-free vulnerabilities, or memory leaks.
+- In **Java, Go, or C#** (Garbage Collection), a background process automatically cleans up memory. However, the Garbage Collector (GC) must periodically pause your entire program to trace and clean up dead objects (GC Pauses). These pauses can cause massive latency spikes in web servers and stuttering in video games.
+
+**Pace offers a third way: Automatic Reference Counting (ARC).**
+
+## Why ARC? (The Philosophy)
+
+Pace is designed for building systems where **latency must be predictable**. 
+
+If you are writing a high-frequency trading bot, a 3D game engine, or a low-latency web server, you cannot afford for the runtime to arbitrarily freeze your program for 50 milliseconds to clean up memory.
+
+ARC solves this. With ARC, memory is cleaned up progressively, exactly the moment it is no longer needed. There is no background Garbage Collector, and there are no "Stop The World" pauses. Performance is highly predictable and real-time safe.
+
+## How ARC Works Under the Hood
+
+In Pace, every time you assign a class instance (an object on the heap) to a variable, the compiler automatically and invisibly injects a `retain` instruction into the Mid-level Intermediate Representation (MIR) to increment that object's "reference count." 
+
+When that variable goes out of scope, the compiler injects a `release` instruction to decrement the count.
+
+When the count reaches exactly `0`, the object is immediately and deterministically destroyed by the native OS allocator.
+
+```pace
+class DataBuffer {
+    init() { print("Buffer Created") }
+    func destroy() { print("Buffer Destroyed") } // Conceptually!
+}
+
+func processData() {
+    // 1. A DataBuffer object is allocated. 
+    // 2. The compiler injects `retain`. (Ref count = 1)
+    let buffer = DataBuffer()
+    
+} // 3. 'buffer' variable goes out of scope. 
+  // 4. Compiler injects `release`. (Ref count = 0). 
+  // 5. Memory is immediately freed!
+```
+
+This guarantees **zero-pause** performance. You get the safety of Garbage Collection with the deterministic speed of C++.
+
+## Reference Cycles & Weak References
+
+Because ARC relies on counting references, a critical problem can occur if two objects point to each other. 
+
+```pace
+class Node {
+    var next: Node?
+    init() {}
+}
+
+let a = Node()
+let b = Node()
+
+// A points to B, B points to A.
+a.next = b
+b.next = a
+```
+
+This creates a **Reference Cycle**. Even when `a` and `b` go out of scope, their reference counts will drop to `1` (because they point to each other), causing a memory leak!
+
+### The Solution: `weak` Variables
+
+To solve this architectural limitation of ARC, Pace introduces the `weak` keyword. A weak variable points to an object *without* increasing its reference count.
+
+```pace
+class Parent {
+    var child: Child?
+    init() {}
+}
+
+class Child {
+    // The child has a 'weak' reference back to the parent.
+    // This breaks the reference cycle!
+    weak var parent: Parent?
+    init() {}
+}
+```
+
+If the `Parent` goes out of scope, its reference count reaches `0` and it is destroyed. The `Child`'s `weak var parent` is automatically zeroed out by the runtime and safely becomes `null` (since it is an Optional type). This completely eliminates the memory leak while maintaining memory safety!

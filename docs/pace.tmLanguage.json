@@ -1,0 +1,35 @@
+{
+  "name": "pace",
+  "scopeName": "source.pace",
+  "patterns": [
+    {
+      "match": "\\b(func|let|var|if|else|while|for|in|return|class|interface|implements|enum|match|break|continue|weak|foreign|init)\\b",
+      "name": "keyword.control.pace"
+    },
+    {
+      "match": "\\b(Int|Float|Bool|String|Void|Array|Option|Result)\\b",
+      "name": "support.type.pace"
+    },
+    {
+      "match": "\\b(true|false|null)\\b",
+      "name": "constant.language.pace"
+    },
+    {
+      "match": "\".*?\"",
+      "name": "string.quoted.double.pace"
+    },
+    {
+      "match": "//.*",
+      "name": "comment.line.double-slash.pace"
+    },
+    {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.pace"
+    },
+    {
+      "match": "\\b[0-9]+(\\.[0-9]+)?\\b",
+      "name": "constant.numeric.pace"
+    }
+  ]
+}

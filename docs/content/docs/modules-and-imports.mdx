@@ -1,0 +1,71 @@
+---
+title: Modules & Imports
+description: Learn how Pace organizes code, handles dependencies, and links files under the hood.
+---
+
+As your Pace project grows, you'll naturally want to split your codebase into multiple files. Pace handles this elegantly through its module system. Unlike older C/C++ style `#include` directives which simply copy-paste text, Pace's module system is fully semantic.
+
+## The Module System
+
+In Pace, every `.pace` file is automatically considered a module. You do not need to explicitly declare a `module name` at the top of the file; the file's path relative to your source directory determines its module identity.
+
+By default, all declarations (classes, functions, let bindings) are **public** to the module they are defined in, but **private** to the rest of the project unless explicitly imported.
+
+## Importing Modules
+
+To use code from another file, you use the `import` statement. Imports must appear at the top of the file.
+
+```pace
+// Imports the entire math module
+import "math"
+
+func calculateArea(radius: Float) -> Float {
+    // Access members using the module namespace
+    return math.pi * radius * radius
+}
+```
+
+### How Imports Work Under the Hood
+
+When the Pace compiler encounters an `import "math"` statement, it does **not** simply read `math.pace` and shove its text into the current file. Instead, the compiler:
+1. **Resolves the path**: Locates `math.pace` in the project structure.
+2. **Parses the AST**: Builds a completely independent Abstract Syntax Tree for `math.pace`.
+3. **AST Linking**: In the type-checking phase, the compiler creates a reference between the current file's AST and the `math` module's AST.
+
+Because of this semantic linking, Pace is immune to "include order" bugs and circular definition errors that plague older languages. The compiler resolves all types globally before emitting native machine code.
+
+### Aliasing Imports
+If a module path is too long or conflicts with a local variable, you can alias it using the `as` keyword:
+
+```pace
+import "network/http/client" as HttpClient
+
+let response = HttpClient.get("https://pace-lang.org")
+```
+
+### Selective Imports (`show` and `hide`)
+Pace intentionally **does not support wildcard imports** (e.g., `import * from "module"`). 
+
+**The Rationale:** Wildcard imports pollute the local namespace, making it impossible to know where a function or variable originally came from just by reading the file. In large codebases, this leads to naming collisions and severely degrades the developer experience.
+
+Instead, Pace encourages you to either import the module namespace, or use `show` and `hide` to be explicit about what you are pulling into your local scope:
+
+```pace
+// Only import the 'User' and 'Profile' classes directly into the local scope
+import "models/user" show User, Profile
+
+// Import everything from 'utils' EXCEPT the 'printDebug' function
+import "utils" hide printDebug
+```
+
+## Exporting
+
+Sometimes, a module acts as a "barrel" or aggregate for a larger package. You can re-export another module's contents directly so that consumers only need to import your aggregate module.
+
+```pace title="api.pace"
+// Re-exports the entire internal endpoints module
+export "internal/endpoints"
+```
+
+> [!TIP]
+> Keep your dependency graphs clean! Explicit `show` imports make it instantly clear to any reader exactly which dependencies a file relies on.

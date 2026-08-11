@@ -1,0 +1,130 @@
+---
+title: Control Flow
+description: Learn the design philosophy behind Pace's branching and loop mechanics.
+---
+
+Pace provides a deliberately small, strictly typed set of control flow mechanics. The syntax is C-like but eliminates the implicit, error-prone behaviors found in older languages.
+
+## Conditional Branching (`if` / `else`)
+
+The `if` statement allows you to execute blocks of code conditionally. 
+
+```pace
+let statusCode = 404
+
+if (statusCode == 200) {
+    print("Request successful!")
+} else if (statusCode == 404) {
+    print("Error: Resource not found.")
+} else {
+    print("Unknown status.")
+}
+```
+
+### Why Strict Booleans?
+In languages like JavaScript or Python, you can write `if (myString)` or `if (0)` relying on implicit "truthy" or "falsy" coercions. This is a massive source of logical bugs. 
+
+**The Rationale:** Pace demands explicit intent. The condition in an `if` statement must strictly evaluate to a `Bool` type. `if (0)` is a compiler error in Pace. You must write `if (count != 0)`. This forces the developer to declare exactly what condition they care about, leaving zero ambiguity for the next person reading the code.
+
+---
+
+## Loops
+
+Pace provides two fundamental loop types: `while` and `for`.
+
+### `while` Loops
+Use `while` loops for manual, condition-based iteration.
+
+```pace
+var attempts = 0
+let maxAttempts = 3
+
+while (attempts < maxAttempts) {
+    print("Attempting connection...")
+    attempts = attempts + 1
+}
+```
+
+### `for` Loops
+For iterating over collections, Pace replaces the traditional, error-prone C-style `for(int i=0; i<length; i++)` loop with the highly readable `for ... in` iterator loop.
+
+```pace
+let servers = ["US-East", "EU-West", "AP-South"]
+
+for server in servers {
+    print("Pinging ")
+    print(server)
+}
+```
+
+**The Rationale:** Off-by-one errors in traditional C loops are incredibly common and often lead to buffer overflows. By forcing developers to use the `for ... in` construct, Pace completely eliminates out-of-bounds indexing errors during iteration. 
+
+### Loop Control: `break` and `continue`
+You can modify the behavior of any loop using `break` and `continue`.
+
+- **`break`**: Immediately exits the innermost loop.
+- **`continue`**: Skips the rest of the current iteration and jumps to the next condition check.
+
+```pace
+let numbers = [1, 2, 3, 4, 5, 6]
+
+for num in numbers {
+    if (num % 2 == 0) {
+        continue // Skip even numbers
+    }
+    
+    if (num > 4) {
+        break // Stop searching once we pass 4
+    }
+    
+    print(num) // Only prints 1 and 3
+}
+```
+
+---
+
+## Pattern Matching (`match`)
+
+Pace includes a powerful `match` expression, which entirely replaces the traditional `switch` statement found in other languages.
+
+### Why `match` instead of `switch`?
+Traditional `switch` statements have a severe flaw: "fall-through". If you forget a `break` keyword, execution silently falls into the next case, causing notoriously hard-to-find bugs. Furthermore, `switch` statements are not checked for exhaustiveness.
+
+**The Rationale:** Pace's `match` is strictly exhaustive. The compiler will refuse to build your code if you fail to handle every possible scenario! It also completely eliminates fall-through.
+
+`match` is incredibly powerful when used alongside **Algebraic Data Types (Enums)**, as it safely unpacks the internal data.
+
+```pace
+enum Message {
+    QUIT,
+    WRITE(String),
+    MOVE(Int, Int)
+}
+
+let msg = Message.WRITE("Hello Pace!")
+
+// The compiler guarantees you handle every variant!
+match msg {
+    Message.QUIT => {
+        print("Quitting...")
+    }
+    Message.WRITE(text) => {
+        // 'text' is safely extracted from the enum
+        print("Writing: ")
+        print(text)
+    }
+    Message.MOVE(x, y) => {
+        print("Moving coordinates")
+    }
+}
+```
+
+### `match` as an Expression
+Because `match` evaluates to a value (it is an *expression*, not just a statement), you can cleanly assign its result directly to a variable. This eliminates the need for temporary mutable variables.
+
+```pace
+let isExit = match msg {
+    Message.QUIT => true
+    _ => false // The wildcard '_' acts as a default fallback
+}
+```

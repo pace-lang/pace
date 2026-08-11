@@ -1,0 +1,82 @@
+---
+title: Classes & Interfaces
+description: Explore Pace's robust Object-Oriented Programming features.
+---
+
+Pace provides a comprehensive suite of Object-Oriented tools to help you structure large codebases logically. 
+
+## Classes
+
+A `class` acts as a blueprint for an object. Classes in Pace can hold state (properties) and behavior (methods).
+
+```pace
+class Rectangle {
+    // Properties
+    let width: Int
+    let height: Int
+    
+    // The Constructor
+    init(w: Int, h: Int) {
+        self.width = w
+        self.height = h
+    }
+    
+    // A Method
+    func area() -> Int {
+        return self.width * self.height
+    }
+}
+```
+
+To create an instance of a class, call it like a function:
+
+```pace
+let rect = Rectangle(10, 20)
+print(rect.area()) // Prints: 200
+```
+
+## Interfaces
+
+An `interface` defines a strict contract that classes can implement. Interfaces contain method signatures without actual logic.
+
+```pace
+interface Shape {
+    func area() -> Int
+    func name() -> String
+}
+```
+
+You can use the `implements` keyword to guarantee a class fulfills the contract:
+
+```pace
+class Circle implements Shape {
+    let radius: Int
+    
+    init(r: Int) {
+        self.radius = r
+    }
+    
+    func area() -> Int {
+        return 3 * self.radius * self.radius // Approximate!
+    }
+    
+    func name() -> String {
+        return "Circle"
+    }
+}
+```
+
+### Polymorphism
+
+Interfaces allow you to write generic, polymorphic code. Any variable typed as an interface can hold *any* class that implements that interface!
+
+```pace
+func printShapeInfo(shape: Shape) {
+    print(shape.name())
+    print("Area is:")
+    print(shape.area())
+}
+
+let c = Circle(5)
+printShapeInfo(c) // Works perfectly!
+```

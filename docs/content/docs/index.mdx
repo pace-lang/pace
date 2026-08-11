@@ -1,0 +1,47 @@
+---
+title: Welcome to Pace
+description: An introduction to the Pace programming language, why it exists, and how it works under the hood.
+---
+
+Welcome to the official documentation for the **Pace** programming language!
+
+Pace is a modern, statically typed, natively compiled language designed for building robust, high-performance applications and systems. 
+
+## Why Pace?
+
+The programming landscape has traditionally forced developers into a difficult compromise:
+- **High-level languages** (like Python, Ruby, or JavaScript) are incredibly fast to write and easy to learn, but they sacrifice execution speed and memory predictability.
+- **Low-level languages** (like C or C++) provide bare-metal performance and memory control, but they are notoriously difficult to write safely, leading to catastrophic segmentation faults and memory leaks.
+- **Garbage-collected systems languages** (like Java, C#, or Go) offer a middle ground, but they periodically pause your entire program to clean up memory (GC Pauses), causing unacceptable latency spikes in real-time systems or games.
+
+**Pace exists to bridge this gap.** 
+
+Pace is designed around one central principle: **Powerful systems underneath, simple programming model above.** It aims to provide the raw speed of native code without forcing the developer to become an expert in manual memory management or esoteric compiler features. 
+
+## Core Philosophy
+
+### 1. Iron-Clad Safety by Default
+Pace features a robust, statically typed system and strict null-safety (`T?`). Entire categories of bugs—such as `NullPointerException`s—are caught by the compiler before you even run your code. In Pace, variables cannot be null unless you explicitly opt-in.
+
+### 2. Zero-Pause Memory Management
+Unlike Go or Java, Pace does **not** use a tracing garbage collector. Instead, it utilizes deterministic **Automatic Reference Counting (ARC)**. Objects are memory-managed natively without unpredictable application pauses, making Pace ideal for systems programming, game development, and latency-sensitive web services.
+
+### 3. Simplicity & Explicitness
+The language provides a small number of strong concepts rather than many overlapping constructs. Pace is designed to be concise where the meaning is obvious, and explicit where ambiguity would harm readability. You won't find implicit type conversions or hidden control flow here.
+
+## How Pace Works Under the Hood
+
+Pace is not interpreted. It is compiled directly to native machine code. When you run `pace build`, the compiler executes a sophisticated pipeline to ensure your code is safe and fast:
+
+1. **Lexing & Parsing**: The Pace compiler reads your source code and breaks it down into an Abstract Syntax Tree (AST).
+2. **Type Checking & Resolution**: The compiler strictly verifies all types, ensures all variables are declared before use, and guarantees that there are no unsafe null accesses.
+3. **MIR (Mid-level Intermediate Representation)**: The typed AST is lowered into Pace's custom MIR. This is where advanced control-flow analysis happens, and where ARC memory management instructions (retain/release) are automatically injected.
+4. **Cranelift Backend**: Finally, the MIR is passed to the **Cranelift** code generator. Cranelift translates the intermediate representation directly into highly optimized native machine code for your specific CPU architecture (x86_64, ARM, etc.).
+
+Because Pace compiles to native code using Cranelift, the resulting executable is a single, blazingly fast binary with no runtime dependencies.
+
+## Who is this for?
+
+This documentation is designed as a progressive **Pace Language Guide**. It is approachable for **everyone**. If you are a complete beginner to systems languages, you will find Pace's syntax forgiving and easy to read. If you are an experienced engineer, you will appreciate Pace's explicit control over memory and its powerful native execution.
+
+Ready to dive in? Let's get started by installing Pace!

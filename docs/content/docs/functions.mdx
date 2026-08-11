@@ -1,0 +1,81 @@
+---
+title: Functions
+description: Dive into how Pace compiles and executes functions, including zero-cost C interoperability.
+---
+
+Functions are the fundamental building blocks of Pace programs. They encapsulate logic, accept inputs, and return results safely. 
+
+Because Pace compiles down to native machine code via Cranelift, functions in Pace map directly to highly optimized assembly routines.
+
+## Defining a Function
+
+In Pace, functions are defined using the `func` keyword. Because Pace is statically typed, you must specify the types for all parameters and the return type.
+
+```pace
+func calculateTotal(price: Float, taxRate: Float) -> Float {
+    let tax = price * taxRate
+    return price + tax
+}
+
+let finalPrice = calculateTotal(100.0, 0.05)
+```
+
+If a function performs an action but does not return a value, you can omit the `->` return type entirely (it defaults to `Void`).
+
+```pace
+func logError(errorMsg: String) {
+    print("ERROR: ")
+    print(errorMsg)
+}
+```
+
+### Why the `func` Keyword?
+Many languages use abbreviations like `fn` or verbose words like `function` or `def`. Pace uses `func` as a deliberate middle-ground. It is explicitly clear to read, but short enough that it doesn't clutter the screen. Furthermore, it strictly distinguishes global/standalone routines from class-bound methods (which also use `func`, keeping the syntax unified across paradigms).
+
+## Memory and Execution Under the Hood
+
+When you call a function in Pace, a new stack frame is allocated extremely quickly. 
+
+### Parameter Passing
+By default, primitive types (`Int`, `Float`, `Bool`) are passed **by value**. They are copied into the new function's stack frame. Because they are 64-bit primitives, this copy operation happens in a single CPU register and is virtually instantaneous.
+
+Reference types (`class` instances, `String`s, and `Array`s) are passed **by reference** via Automatic Reference Counting (ARC). When you pass an object into a function, Pace automatically increments its reference count, and decrements it when the function returns. This ensures you aren't copying massive amounts of memory, while maintaining 100% memory safety.
+
+## First-Class Functions
+
+In Pace, functions are first-class citizens. This means you can treat functions just like any other variable: you can assign them to variables, store them in arrays, or pass them as arguments to other functions.
+
+```pace
+// Define a function variable type: func(Float, Float) -> Float
+let calculator: func(Float, Float) -> Float = calculateTotal
+
+let result = calculator(50.0, 0.1)
+```
+
+Under the hood, `calculator` simply stores a memory pointer to the executable code of the `calculateTotal` function.
+
+## Foreign Functions (FFI) Deep Dive
+
+One of Pace's most powerful architectural features is its ability to interface directly with native C libraries using the `foreign` keyword. 
+
+### Why is this important?
+The world runs on C. Operating systems, graphics APIs (OpenGL/Vulkan), and networking stacks all expose C interfaces. If a language cannot talk to C easily, it exists in a silo. Pace uses the standard C Application Binary Interface (ABI). This means a Pace function and a C function look exactly the same to the CPU!
+
+You can call C code with **zero overhead**. There is no "translation layer", no JVM Native Interface (JNI), and no wrappers.
+
+```pace
+// Declare the exact signature of the C function we want to call
+foreign func puts(s: String) -> Int
+foreign func sleep(seconds: Int)
+
+func main() {
+    // This executes raw C code seamlessly
+    puts("Hello from C via Pace!")
+    
+    // Pauses the thread using C's native sleep
+    sleep(2)
+}
+```
+
+> [!WARNING]
+> **Safety Boundary:** When calling `foreign` functions, you bypass Pace's standard memory and type safety guarantees. The compiler cannot verify what the C library does internally. It is highly recommended to wrap `foreign` calls in safe, idiomatic Pace functions before exposing them to the rest of your application.

@@ -1,0 +1,82 @@
+---
+title: Generics
+description: Write reusable, type-safe code using type parameters.
+---
+
+Generics allow you to write functions, classes, and Enums that can operate on any data type while maintaining strict type safety. This prevents you from having to write the exact same code multiple times for different types.
+
+## Generic Classes
+
+A classic example of a generic type is a `Stack`. You might want a stack of integers, a stack of strings, or a stack of custom objects. Instead of creating `IntStack` and `StringStack`, you define one generic `Stack<T>` where `T` is a placeholder for the type.
+
+```pace
+class Stack<T> {
+    var items: [T]
+
+    init() {
+        self.items = []
+    }
+
+    func push(item: T) {
+        // Assume push is a native array method
+        self.items.push(item)
+    }
+
+    // Returns an optional T, because the stack might be empty
+    func pop() -> T? {
+        if self.items.length() == 0 {
+            return null
+        }
+        return self.items.pop()
+    }
+}
+```
+
+To use the generic class, you specify the type when you instantiate it:
+
+```pace
+let intStack = Stack<Int>()
+intStack.push(10)
+// intStack.push("Hello") // Compiler Error: Expected Int, got String
+
+let stringStack = Stack<String>()
+stringStack.push("Hello")
+```
+
+## Generic Functions
+
+Functions can also take type parameters. For example, a function that returns the first element of an array of any type:
+
+```pace
+func firstElement<T>(arr: [T]) -> T? {
+    if arr.length() == 0 {
+        return null
+    }
+    return arr[0]
+}
+```
+
+Pace's compiler is smart enough to **infer** the type parameter `T` when you call the function, so you usually don't need to specify it manually:
+
+```pace
+let numbers = [1, 2, 3]
+let firstNum = firstElement(numbers) // T is inferred as Int!
+```
+
+## Generic Enums
+
+The standard library extensively uses generic Enums. Two of the most important ones you'll use every day are `Option<T>` (used behind the scenes for `T?`) and `Result<T, E>`.
+
+You can define your own generic Enums just like classes:
+
+```pace
+enum NetworkResponse<T> {
+    SUCCESS(T),
+    FAILURE(String),
+    TIMEOUT
+}
+
+let response: NetworkResponse<User> = NetworkResponse.SUCCESS(User())
+```
+
+Using generics allows you to write highly reusable, completely type-safe code without the overhead of runtime type casting!

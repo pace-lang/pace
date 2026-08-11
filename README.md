@@ -1,14 +1,50 @@
 # Pace Programming Language
 
-Pace is a modern, statically typed, and natively compiled programming language designed to prioritize clarity, predictability, and excellent developer experience. 
+Pace is a modern, statically typed, and natively compiled programming language designed to prioritize safety, predictable performance, and an excellent developer experience. 
+
+It aims to bridge the gap between low-level systems programming and high-level application development by combining **C-like speed** with **Swift-like ergonomics**.
+
+## What is Pace?
+
+At its core, Pace is built on three pillars:
+1. **Safety**: Strict, compiler-enforced null safety and strong typing prevent entire classes of runtime errors.
+2. **Predictable Performance**: Pace uses deterministic Automatic Reference Counting (ARC) rather than a tracing garbage collector. This guarantees memory safety without unpredictable pause times, making it ideal for latency-sensitive applications.
+3. **Expressiveness**: First-class support for both Object-Oriented (Classes, Interfaces) and Functional (Algebraic Data Types, Pattern Matching) paradigms.
+
+## Core Language Features
+
+- **Classes & Interfaces**: Full support for `class` definitions with stateful properties, constructors (`init`), and methods. Classes can define robust contracts using the `interface` and `implements` keywords.
+- **Algebraic Data Types (ADTs)**: Express complex domain logic using `enum` variants with payload support, combined with powerful and exhaustive `match` pattern-matching expressions.
+- **Null Safety & Optionals**: Goodbye `NullPointerException`! Pace features strict compiler-enforced null safety. The `T?` syntax represents a nullable reference type, forcing developers to handle absence explicitly at compile time.
+- **Native Arrays**: Support for dynamically sized arrays with strict bounds checking and native, contiguous memory layouts.
+- **Module & Package System**: Cleanly organize code with the `package` system, allowing seamless dependency resolution across the workspace.
+
+## Memory Management
+
+Pace uses deterministic Automatic Reference Counting (ARC) instead of a tracing garbage collector, ensuring predictable performance without pause times.
+
+- **ARC Engine**: Objects are automatically retained and released by the compiler's MIR lowering phase, completely abstracting memory management away from the developer without sacrificing performance.
+- **Weak References**: Built-in support for `weak` variables to safely break reference cycles in complex data structures. 
+- **Thread Safety**: ARC operations are designed to be thread-safe from day one, laying the structural groundwork for future concurrency features.
+
+## Compiler Architecture
+
+The Pace compiler is a multi-pass, modern architecture built in Rust, heavily inspired by industry-leading compiler designs:
+
+1. **Frontend**: A fast, recursive descent parser building a strictly typed Abstract Syntax Tree (AST).
+2. **Semantic Analysis**: Advanced name resolution, scope tracking, and a robust Typechecker.
+3. **MIR Lowering**: Lowers the AST into a Mid-level Intermediate Representation (MIR) that explicitly models control flow and memory (ARC) operations.
+4. **Backend (Codegen)**: Translates MIR directly into highly optimized native machine code using the **Cranelift** backend.
+5. **Development VM**: Includes a built-in bytecode VM for rapid testing, debugging, and development.
+6. **Diagnostics Engine**: Beautiful, structured error reporting with precise source spans (inspired by `miette`).
 
 ## Project Structure
-This repository contains the Pace compiler, standard library, and associated tooling, written in Rust.
 
-The project is structured as a Cargo Workspace:
-- `compiler/`: Contains the modular compiler pipeline (lexer, parser, ast, typechecker, etc.)
-- `runtime/`: (Planned) Runtime utilities for Pace binaries.
-- `std/`: (Planned) The Pace standard library.
+This repository contains the Pace compiler workspace and standard library.
+
+- `compiler/`: Contains the modular compiler pipeline (lexer, parser, ast, typechecker, codegen, etc.)
+- `stdlib/`: The Pace standard library written in Pace.
+- `archive/`: Design specifications and historical design documentation.
 
 ## Getting Started
 
@@ -21,10 +57,13 @@ To compile the entire workspace:
 cargo build
 ```
 
-To run the unit tests across all sub-crates:
+To run the unit tests and golden tests across all sub-crates:
 ```bash
 cargo test
 ```
 
-## Contributing
-Please refer to the `Pace_Compiler_Development_Guide.md` (in the design docs) for architectural guidelines. Pace is developed strictly from the language-semantics outward.
+### Running Pace Files
+Pace includes a CLI for executing programs:
+```bash
+cargo run --bin pace -- run path/to/file.pace
+```
