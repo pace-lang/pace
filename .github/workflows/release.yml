@@ -72,14 +72,15 @@ jobs:
 
       - name: Package (Windows)
         if: matrix.os_name == 'windows'
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Force -Path package/pace/bin | Out-Null
-          New-Item -ItemType Directory -Force -Path package/pace/lib/pace/stdlib | Out-Null
-          Copy-Item target/${{ matrix.target }}/release/cli.exe package/pace/bin/${{ matrix.artifact_name }}
-          Copy-Item stdlib/* package/pace/lib/pace/stdlib/ -Recurse
-          Compress-Archive -Path package/pace -DestinationPath pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip
-          $hash = Get-FileHash pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip -Algorithm SHA256
-          $hash.Hash + "  pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip" | Out-File -FilePath pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip.sha256 -Encoding ASCII
+          mkdir -p package/pace/bin package/pace/lib/pace/stdlib
+          cp target/${{ matrix.target }}/release/cli.exe package/pace/bin/${{ matrix.artifact_name }}
+          cp -r stdlib/* package/pace/lib/pace/stdlib/
+          cd package
+          7z a ../pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip pace
+          cd ..
+          sha256sum pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip > pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip.sha256
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
