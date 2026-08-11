@@ -1,0 +1,18 @@
+import "std/core/string";
+import "std/core/array";
+import "std/collections/map";
+import "std/io/file";
+
+func main() {
+    let s = "hello";
+    let l = len(s);
+    let s2 = concat(s, " world");
+
+    let arr: [Int] = [1];
+    push(arr, 10);
+
+    let m = Map<String, Int>();
+    m.set("key", 1);
+    
+    let f = open("test.txt", "r");
+}

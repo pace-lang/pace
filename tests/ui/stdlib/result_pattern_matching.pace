@@ -1,0 +1,9 @@
+import "std/core/result";
+
+func test(value: Result<String, Int>) -> String {
+    return match value {
+        Ok(v) => v,
+        Err(e) => "error"
+    };
+}
+func main() { test(Ok("hello")); }

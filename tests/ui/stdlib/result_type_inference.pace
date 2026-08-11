@@ -1,0 +1,19 @@
+import "std/core/result";
+import "std/core/option";
+
+func test_ok() -> Result<String, Int> {
+    return Ok("hello");
+}
+
+func test_err() -> Result<String, Int> {
+    return Err(404);
+}
+
+func test_some() -> Option<String> {
+    return Some("hello");
+}
+
+func test_none() -> Option<String> {
+    return None();
+}
+func main() { test_ok(); test_err(); test_some(); test_none(); }

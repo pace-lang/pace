@@ -769,13 +769,44 @@ impl TypeChecker {
                     // Declare bindings in scope
                     match &arm.pattern {
                         ast::Pattern::Wildcard => {}
-                        ast::Pattern::Variant { path: _, bindings } => {
+                        ast::Pattern::Variant { path, bindings } => {
                             if let Some(binds) = bindings {
-                                for bind in binds {
+                                // Extract actual types from the variant
+                                let mut extracted_types = Vec::new();
+                                
+                                let mut enum_name_opt = None;
+                                let mut type_args = Vec::new();
+                                match &typed_value.ty {
+                                    Type::GenericInstance(name, args) => {
+                                        enum_name_opt = Some(name.clone());
+                                        type_args = args.clone();
+                                    }
+                                    Type::Instance(name) => {
+                                        enum_name_opt = Some(name.clone());
+                                    }
+                                    _ => {}
+                                }
+                                
+                                if let Some(enum_name) = enum_name_opt {
+                                    if let Some(variants) = self.enums.get(&enum_name) {
+                                        let variant_name = path.last().unwrap_or(&"".to_string()).clone();
+                                        if let Some(Type::EnumVariantConstructor(_, _, func_type_params, param_types, _)) = variants.get(&variant_name) {
+                                            // Substitute generics
+                                            let mut replacements = std::collections::HashMap::new();
+                                            for (tp, actual) in func_type_params.iter().zip(type_args.iter()) {
+                                                replacements.insert(tp.clone(), actual.clone());
+                                            }
+                                            for pt in param_types {
+                                                extracted_types.push(self.substitute_generics(pt, &replacements));
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                for (i, bind) in binds.iter().enumerate() {
                                     if bind != "_" {
-                                        // A real implementation needs to extract types from the variant signature.
-                                        // For now, we bind to Type::Any to satisfy the typechecker.
-                                        self.env.declare(bind.clone(), Type::Any);
+                                        let bind_ty = extracted_types.get(i).cloned().unwrap_or(Type::Any);
+                                        self.env.declare(bind.clone(), bind_ty);
                                     }
                                 }
                             }
@@ -786,8 +817,13 @@ impl TypeChecker {
                     self.env.pop_scope();
 
                     if let Some(ref crt) = common_return_type {
-                        if typed_body.ty != *crt && typed_body.ty != Type::Error && *crt != Type::Error {
-                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Match arms have incompatible return types. Expected '{}', found '{}'.", crt, typed_body.ty));
+                        if !self.is_assignable(&typed_body.ty, crt) && typed_body.ty != Type::Error && *crt != Type::Error {
+                            if self.is_assignable(crt, &typed_body.ty) {
+                                // Promote crt
+                                common_return_type = Some(typed_body.ty.clone());
+                            } else {
+                                self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Match arms have incompatible return types. Expected '{}', found '{}'.", crt, typed_body.ty));
+                            }
                         }
                     } else {
                         common_return_type = Some(typed_body.ty.clone());
@@ -804,10 +840,47 @@ impl TypeChecker {
             ExprKind::Call { callee, type_args, arguments } => {
                 let typed_callee = self.check_expr(callee);
 
+                let mut expected_param_types = None;
+                match &typed_callee.ty {
+                    Type::Function(_, param_types, _) => {
+                        expected_param_types = Some(param_types.clone());
+                    }
+                    Type::EnumVariantConstructor(_, _, _, param_types, _) => {
+                        expected_param_types = Some(param_types.clone());
+                    }
+                    Type::Class(class_name, _) => {
+                        if let Some(props) = self.classes.get(class_name) {
+                            if let Some(Type::Function(_, param_types, _)) = props.get("init") {
+                                expected_param_types = Some(param_types.clone());
+                            }
+                        }
+                        if expected_param_types.is_none() {
+                            if let Some(generic_stmt) = self.generic_registry.get_class(class_name).cloned() {
+                                if let ast::StmtKind::Class { methods, .. } = &generic_stmt.kind {
+                                    for method in methods {
+                                        if let ast::StmtKind::Func { name, params, .. } = &method.kind {
+                                            if name == "init" {
+                                                
+                                                for (_, ty) in params {
+                                                     // Dummy for now, we'd need parse_type which needs mut self
+                                                    // Let's just not do Class expected types here for now, 
+                                                    // it's not strictly necessary for Enum fixes.
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
                 let mut typed_args = Vec::new();
                 let mut arg_types = Vec::new();
-                for arg in arguments {
-                    let typed_arg = self.check_expr(arg);
+                for (i, arg) in arguments.iter().enumerate() {
+                    let expected_arg_ty = expected_param_types.as_ref().and_then(|pt| pt.get(i));
+                    let typed_arg = self.check_expr_with_expected(arg, expected_arg_ty);
                     arg_types.push(typed_arg.ty.clone());
                     typed_args.push(typed_arg);
                 }

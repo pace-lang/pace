@@ -365,12 +365,20 @@ impl MirBuilder {
                 let mut cases = Vec::new();
                 let mut default_block = None;
                 
+                let mut enum_name_opt = None;
+                match &value.ty {
+                    ast::Type::GenericInstance(name, _) => enum_name_opt = Some(name.clone()),
+                    ast::Type::Instance(name) => enum_name_opt = Some(name.clone()),
+                    _ => {}
+                }
+                let resolved_enum_name = enum_name_opt.unwrap_or_else(|| "".to_string());
+                
                 for arm in arms {
                     let arm_block = self.new_block();
                     
                     if let ast::Pattern::Variant { path, bindings } = &arm.pattern {
-                        let enum_name = &path[0];
-                        let variant_name = &path[1];
+                        let enum_name = &resolved_enum_name;
+                        let variant_name = path.last().unwrap();
                         let variant_idx = self.enums_map.get(enum_name)
                             .and_then(|variants| variants.iter().position(|v| v == variant_name))
                             .unwrap_or(0); // Fallback if enum not found
