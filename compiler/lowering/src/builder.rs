@@ -50,6 +50,24 @@ impl ProgramBuilder {
     }
 
     pub fn build(mut self, statements: &[TypedStmt]) -> Program {
+        for stmt in statements {
+            if let TypedStmtKind::Enum { name, variants, .. } = &stmt.kind {
+                let mut variant_names = Vec::new();
+                for v in variants {
+                    variant_names.push(v.name.clone());
+                }
+                self.program.enums.insert(name.clone(), mir::EnumDef {
+                    name: name.clone(),
+                    variants: variant_names,
+                });
+            }
+        }
+
+        let mut enums_map = std::collections::HashMap::new();
+        for (name, def) in &self.program.enums {
+            enums_map.insert(name.clone(), def.variants.clone());
+        }
+
         let mut main_stmts = Vec::new();
         for stmt in statements {
             if let TypedStmtKind::Class { name, type_params: _, implements: _, methods, fields } = &stmt.kind {
@@ -100,7 +118,7 @@ impl ProgramBuilder {
                         }
                         let returns_ref = return_type.as_ref().map_or(false, |ty| is_ref_type(ty));
                         let actual_name = format!("{}::{}", name, m_name);
-                        let builder = MirBuilder::new(actual_name.clone(), param_names, ref_params, returns_ref);
+                        let builder = MirBuilder::new(actual_name.clone(), param_names, ref_params, returns_ref, enums_map.clone());
                         let mir_func = match &body.kind {
                             TypedStmtKind::Block(stmts) => builder.build(stmts),
                             _ => builder.build(std::slice::from_ref(body)),
@@ -120,7 +138,7 @@ impl ProgramBuilder {
                     }
                 }
                 let returns_ref = return_type.as_ref().map_or(false, |ty| is_ref_type(ty));
-                let builder = MirBuilder::new(name.clone(), param_names, ref_params, returns_ref);
+                let builder = MirBuilder::new(name.clone(), param_names, ref_params, returns_ref, enums_map.clone());
                 let mir_func = match &body.kind {
                     TypedStmtKind::Block(stmts) => builder.build(stmts),
                     _ => builder.build(std::slice::from_ref(body)),
@@ -142,7 +160,7 @@ impl ProgramBuilder {
                 // Ignore interface declarations in MIR, as they are fully erased
                 // and used strictly for compile-time type checking.
             } else if let TypedStmtKind::Enum { .. } = &stmt.kind {
-                todo!("Phase 3: Implement Enum lowering to MIR");
+                // Already collected in pre-pass
             } else if let TypedStmtKind::Block(stmts) = &stmt.kind {
                 if !stmts.is_empty() {
                     main_stmts.push(stmt.clone());
@@ -152,7 +170,7 @@ impl ProgramBuilder {
             }
         }
         if !main_stmts.is_empty() {
-            let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false);
+            let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false, enums_map.clone());
             let main_func = builder.build(&main_stmts);
             self.program.functions.insert("main".into(), main_func);
         }
@@ -165,10 +183,11 @@ pub struct MirBuilder {
     function: Function,
     current_block: BlockId,
     temp_counter: usize,
+    enums_map: std::collections::HashMap<String, Vec<String>>,
 }
 
 impl MirBuilder {
-    pub fn new(name: String, parameters: Vec<String>, reference_parameters: std::collections::HashSet<String>, returns_reference: bool) -> Self {
+    pub fn new(name: String, parameters: Vec<String>, reference_parameters: std::collections::HashSet<String>, returns_reference: bool, enums_map: std::collections::HashMap<String, Vec<String>>) -> Self {
         let mut function = Function::new(name, parameters, reference_parameters, returns_reference);
         let start_block = BlockId(0);
         function.blocks.push(BasicBlock::new(start_block));
@@ -177,6 +196,7 @@ impl MirBuilder {
             function,
             current_block: start_block,
             temp_counter: 0,
+            enums_map,
         }
     }
 
@@ -348,8 +368,12 @@ impl MirBuilder {
                 for arm in arms {
                     let arm_block = self.new_block();
                     
-                    if let ast::Pattern::Variant { path: _path, bindings } = &arm.pattern {
-                        let variant_idx = 0; // TODO: properly resolve index from enum type
+                    if let ast::Pattern::Variant { path, bindings } = &arm.pattern {
+                        let enum_name = &path[0];
+                        let variant_name = &path[1];
+                        let variant_idx = self.enums_map.get(enum_name)
+                            .and_then(|variants| variants.iter().position(|v| v == variant_name))
+                            .unwrap_or(0); // Fallback if enum not found
                         cases.push((variant_idx, arm_block));
                         
                         self.current_block = arm_block;
@@ -382,9 +406,12 @@ impl MirBuilder {
                 self.current_block = end_block;
                 Value::Place(result_temp)
             }
-            TypedExprKind::EnumVariant { enum_name, variant_name: _ } => {
+            TypedExprKind::EnumVariant { enum_name, variant_name } => {
+                let variant_idx = self.enums_map.get(enum_name)
+                    .and_then(|variants| variants.iter().position(|v| v == variant_name))
+                    .unwrap_or(0);
                 let temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ConstructVariant(enum_name.clone(), 0, Vec::new())));
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ConstructVariant(enum_name.clone(), variant_idx, Vec::new())));
                 Value::Place(temp)
             }
             TypedExprKind::IndexGet { object, index } => {
@@ -480,16 +507,12 @@ impl MirBuilder {
                     return Value::Place(temp);
                 }
 
-                if let TypedExprKind::EnumVariant { enum_name, variant_name: _ } = &callee.kind {
+                if let TypedExprKind::EnumVariant { enum_name, variant_name } = &callee.kind {
                     let temp = self.new_temp();
-                    // We need the variant index. For now, we'll hash the variant name or do a lookup.
-                    // A proper implementation would lookup the index from the environment.
-                    // We'll just pass 0 or a dummy index, since Codegen might resolve it by name instead.
-                    // Wait, Codegen only gets usize index in MIR. Let's lookup the index from the typechecker.
-                    // Since Lowering doesn't have `self.enums`, we can change ConstructVariant to take the variant name instead of index.
-                    // Let's modify MIR ConstructVariant to take `variant_name: String` instead of `usize` index.
-                    // Actually, I'll pass 0 for now and fix MIR in a bit.
-                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ConstructVariant(enum_name.clone(), 0, arg_values)));
+                    let variant_idx = self.enums_map.get(enum_name)
+                        .and_then(|variants| variants.iter().position(|v| v == variant_name))
+                        .unwrap_or(0);
+                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ConstructVariant(enum_name.clone(), variant_idx, arg_values)));
                     return Value::Place(temp);
                 }
 
@@ -560,7 +583,7 @@ mod tests {
             ), ast::types::Type::Int, make_span())),
         }, make_span());
 
-        let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false);
+        let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false, std::collections::HashMap::new());
         let fun = builder.build(&[stmt]);
 
         assert_eq!(fun.blocks.len(), 1);
@@ -596,7 +619,7 @@ mod tests {
             else_branch: None,
         }, make_span());
 
-        let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false);
+        let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false, std::collections::HashMap::new());
         let fun = builder.build(&[stmt]);
 
         // Start block, Then Block, Merge Block

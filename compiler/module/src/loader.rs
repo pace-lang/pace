@@ -64,12 +64,50 @@ impl<'a> ModuleLoader<'a> {
             return None;
         }
 
+        let mut final_ast = ast;
+        
+        // Inject synthetic Prelude imports into every module (except std itself) to implicitly provide core types.
+        let mut is_std = false;
+        if let Some(pg) = self.package_graph {
+            for (id, pkg_path) in &pg.paths {
+                if path.starts_with(pkg_path) {
+                    if let Some(manifest) = pg.manifests.get(id) {
+                        if manifest.package.name == "std" {
+                            is_std = true;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        
+        if !is_std {
+            let prelude_imports = vec![
+                ast::Stmt::new(ast::StmtKind::Import {
+                    path: "std/core/result".to_string(),
+                    alias: None,
+                    show: vec!["Result".to_string(), "Ok".to_string(), "Err".to_string()],
+                    hide: vec![],
+                }, diagnostics::Span::new(0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))),
+                ast::Stmt::new(ast::StmtKind::Import {
+                    path: "std/core/option".to_string(),
+                    alias: None,
+                    show: vec!["Option".to_string(), "Some".to_string(), "None".to_string()],
+                    hide: vec![],
+                }, diagnostics::Span::new(0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))),
+            ];
+            
+            let mut temp = prelude_imports;
+            temp.extend(final_ast);
+            final_ast = temp;
+        }
+
         let module_id = self.graph.next_id();
         self.loaded_paths.insert(path.to_path_buf(), module_id);
 
         // Find imports and recursively load
         let mut dependencies = Vec::new();
-        for stmt in &ast {
+        for stmt in &final_ast {
             if let StmtKind::Import { path: import_path_str, .. } = &stmt.kind {
                 let clean_path = import_path_str.trim_matches('"').trim_matches('\'');
                 let is_local = clean_path.starts_with("./") || clean_path.starts_with("../");
@@ -106,11 +144,14 @@ impl<'a> ModuleLoader<'a> {
                                 break;
                             }
                         }
+                        println!("DEBUG: resolving {} for path {:?}, owner_pkg is {:?}", clean_path, path, owner_pkg);
+                        println!("DEBUG: pg.dependencies is {:?}", pg.dependencies);
                         
                         if let Some(deps) = pg.dependencies.get(&owner_pkg) {
                             if let Some(dep_pkg_id) = deps.get(pkg_name) {
                                 if let Some(dep_pkg_path) = pg.paths.get(dep_pkg_id) {
                                     let mut p = dep_pkg_path.clone();
+                                    p.push("src");
                                     for part in parts.iter().skip(1) {
                                         p.push(part);
                                     }
@@ -120,9 +161,17 @@ impl<'a> ModuleLoader<'a> {
                                     }
                                     p.set_extension("pace");
                                     resolved = Some(p.canonicalize().unwrap_or(p));
+                                } else {
+                                    println!("DEBUG: dep_pkg_path not found for id {:?}", dep_pkg_id);
                                 }
+                            } else {
+                                println!("DEBUG: dep_pkg_id not found for name {:?}", pkg_name);
                             }
+                        } else {
+                            println!("DEBUG: deps not found for owner {:?}", owner_pkg);
                         }
+                    } else {
+                        println!("DEBUG: self.package_graph is None");
                     }
                     
                     if let Some(r) = resolved {
@@ -145,8 +194,7 @@ impl<'a> ModuleLoader<'a> {
             }
         }
 
-        let module = Module::new(module_id, path.to_path_buf(), ast);
-        self.graph.add_module(module);
+        self.graph.add_module(Module::new(module_id, path.to_path_buf(), final_ast));
         
         for (import_str, dep) in dependencies {
             self.graph.add_dependency(module_id, dep);

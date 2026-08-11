@@ -15,6 +15,7 @@ pub enum Value {
     Place(Place),
     Object(usize),
     Array(Vec<Value>),
+    EnumVariant(String, usize, Vec<Value>),
     Void,
     Null,
 }

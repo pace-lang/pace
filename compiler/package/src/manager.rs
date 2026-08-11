@@ -53,7 +53,16 @@ impl PackageManager {
         let package_id = self.graph.next_id();
         self.loaded_paths.insert(dir.to_path_buf(), package_id);
         
-        let deps = manifest.dependencies.clone();
+        let mut deps = manifest.dependencies.clone();
+        
+        // Implicitly inject standard library if not currently compiling the standard library itself
+        if manifest.package.name != "std" && !deps.contains_key("std") {
+            if let Some(std_path) = Self::resolve_stdlib_path() {
+                deps.insert("std".to_string(), crate::manifest::Dependency::Path { path: std_path.to_string_lossy().to_string() });
+            } else {
+                self.error("Could not locate the standard library. Please set PACE_STDLIB or PACE_HOME.");
+            }
+        }
         
         // Register the package in the graph
         self.graph.add_package(package_id, manifest, dir.to_path_buf());
@@ -72,6 +81,25 @@ impl PackageManager {
         }
 
         Some(package_id)
+    }
+
+    fn resolve_stdlib_path() -> Option<PathBuf> {
+        if let Ok(path) = std::env::var("PACE_STDLIB") {
+            return Some(PathBuf::from(path));
+        }
+        if let Ok(home) = std::env::var("PACE_HOME") {
+            return Some(PathBuf::from(home).join("stdlib"));
+        }
+        
+        // Fallback for development: relative to the package manager crate
+        let fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../stdlib");
+            
+        if fallback.exists() {
+            Some(fallback.canonicalize().unwrap_or(fallback))
+        } else {
+            None
+        }
     }
 
     fn error(&mut self, message: &str) {

@@ -65,10 +65,24 @@ impl<'a> VirtualMachine<'a> {
                     Value::Void => out.push_str("void"),
                     Value::Null => out.push_str("null"),
                     Value::Array(_) => out.push_str("[Array]"),
+                    Value::EnumVariant(enum_name, tag, _payload) => out.push_str(&format!("<{} Variant {}>", enum_name, tag)),
                     Value::Place(_) => unreachable!(),
                 }
             }
             println!("{}", out);
+            return Some(Value::Void);
+        }
+
+        let base_name = name.split('_').next().unwrap_or(name);
+        if let Some(foreign) = self.program.foreign_functions.get(name).or_else(|| self.program.foreign_functions.get(base_name)) {
+            // Mock foreign function execution for debugging
+            if let Some(ret_ty) = &foreign.return_type {
+                return Some(match ret_ty {
+                    mir::ForeignAbiType::I8 | mir::ForeignAbiType::I16 | mir::ForeignAbiType::I32 | mir::ForeignAbiType::I64 => Value::Int(0),
+                    mir::ForeignAbiType::F32 | mir::ForeignAbiType::F64 => Value::Float(0.0),
+                    mir::ForeignAbiType::Pointer => Value::Null,
+                });
+            }
             return Some(Value::Void);
         }
 
@@ -112,7 +126,28 @@ impl<'a> VirtualMachine<'a> {
                         panic!("Branch condition must be a Boolean.");
                     }
                 }
-                Some(Terminator::Switch { .. }) => todo!("Phase 3: VM Switch"),
+                Some(Terminator::Switch { cond, cases, default }) => {
+                    let cond_val = self.resolve_value(cond);
+                    if let Value::Int(tag) = cond_val {
+                        let mut matched = false;
+                        for (case_tag, block_id) in cases {
+                            if *case_tag == tag as usize {
+                                current_block_id = *block_id;
+                                matched = true;
+                                break;
+                            }
+                        }
+                        if !matched {
+                            if let Some(def_block) = default {
+                                current_block_id = *def_block;
+                            } else {
+                                panic!("Switch matched no cases and has no default block.");
+                            }
+                        }
+                    } else {
+                        panic!("Switch condition must be an Int tag.");
+                    }
+                }
                 Some(Terminator::Return(val_opt)) => {
                     let ret = val_opt.as_ref().map(|v| self.resolve_value(v));
                     self.frames.pop();
@@ -253,8 +288,31 @@ impl<'a> VirtualMachine<'a> {
                             panic!("Cannot index non-object");
                         }
                     }
-                    RValue::ConstructVariant(..) | RValue::ExtractPayload(..) | RValue::GetVariantTag(_) => {
-                        todo!("Phase 3: VM Enum variants");
+                    RValue::ConstructVariant(enum_name, tag, payload) => {
+                        let mut resolved_payload = Vec::new();
+                        for p in payload {
+                            resolved_payload.push(self.resolve_value(p));
+                        }
+                        Value::EnumVariant(enum_name.clone(), *tag, resolved_payload)
+                    }
+                    RValue::ExtractPayload(val, expected_tag, field_idx) => {
+                        let resolved_val = self.resolve_value(val);
+                        if let Value::EnumVariant(_, tag, payload) = resolved_val {
+                            if tag != *expected_tag {
+                                panic!("Variant tag mismatch in ExtractPayload: expected {}, got {}", expected_tag, tag);
+                            }
+                            payload[*field_idx].clone()
+                        } else {
+                            panic!("Cannot ExtractPayload from non-EnumVariant");
+                        }
+                    }
+                    RValue::GetVariantTag(val) => {
+                        let resolved_val = self.resolve_value(val);
+                        if let Value::EnumVariant(_, tag, _) = resolved_val {
+                            Value::Int(tag as i64)
+                        } else {
+                            panic!("Cannot GetVariantTag from non-EnumVariant");
+                        }
                     }
                 };
                 self.store(place, val);
@@ -390,7 +448,7 @@ mod tests {
 
     #[test]
     fn test_execute_math() {
-        let mut fun = Function::new("main".into(), vec![]);
+        let mut fun = Function::new("main".into(), vec![], std::collections::HashSet::new(), false);
         let mut block0 = BasicBlock::new(BlockId(0));
         
         block0.instructions.push(Inst::Assign(Place::Temp(0), RValue::BinaryOp(BinaryOp::Add, Value::Int(10), Value::Int(5))));

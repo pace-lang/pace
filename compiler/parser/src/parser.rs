@@ -486,6 +486,8 @@ impl Parser {
             return None;
         };
 
+        let type_params = self.parse_type_params()?;
+
         if !self.match_token(&[TokenKind::LeftParen]) {
             self.error_at_current("Expected '(' after foreign function name.");
             return None;
@@ -535,7 +537,14 @@ impl Parser {
         let end_span = self.previous().span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         let is_private = name.starts_with('_');
-        Some(Stmt::new(StmtKind::ForeignFunc { name: name.clone(), params, return_type, is_private }, span))
+
+        Some(Stmt::new(StmtKind::ForeignFunc {
+            name,
+            type_params,
+            params,
+            return_type,
+            is_private,
+        }, span))
     }
 
     fn function_declaration(&mut self) -> Option<Stmt> {

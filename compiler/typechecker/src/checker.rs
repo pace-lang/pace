@@ -228,6 +228,11 @@ impl TypeChecker {
 
                 self.env.declare(name.clone(), Type::Enum(name.clone(), type_params.clone()));
                 
+                self.env.push_scope();
+                for tp in type_params {
+                    self.env.declare(tp.clone(), Type::Generic(tp.clone()));
+                }
+                
                 let mut enum_variants = HashMap::new();
                 
                 for variant in variants {
@@ -238,13 +243,26 @@ impl TypeChecker {
                         }
                     }
                     
-                    let variant_ty = if param_types.is_empty() {
-                        Type::Enum(name.clone(), type_params.clone())
+                    let ret_ty = if type_params.is_empty() {
+                        Type::Instance(name.clone())
                     } else {
-                        Type::Function(type_params.clone(), param_types, Box::new(Type::Enum(name.clone(), type_params.clone())))
+                        let mut ret_args = Vec::new();
+                        for tp in type_params {
+                            ret_args.push(Type::Generic(tp.clone()));
+                        }
+                        Type::GenericInstance(name.clone(), ret_args)
                     };
                     
+                    let variant_ty = Type::EnumVariantConstructor(name.clone(), variant.name.clone(), type_params.clone(), param_types, Box::new(ret_ty));
+                    
                     enum_variants.insert(variant.name.clone(), variant_ty);
+                }
+                
+                self.env.pop_scope();
+                
+                // Declare variants in the enclosing scope
+                for (variant_name, variant_ty) in &enum_variants {
+                    self.env.declare(variant_name.clone(), variant_ty.clone());
                 }
                 
                 self.enums.insert(name.clone(), enum_variants);
@@ -255,7 +273,12 @@ impl TypeChecker {
                     variants: variants.clone(),
                 }
             }
-            StmtKind::ForeignFunc { name, params, return_type, is_private: _ } => {
+            StmtKind::ForeignFunc { name, type_params, params, return_type, is_private: _ } => {
+                self.env.push_scope();
+                for tp in type_params {
+                    self.env.declare(tp.clone(), Type::Generic(tp.clone()));
+                }
+
                 let ret_ty = if let Some(rt) = return_type {
                     self.parse_type(rt, stmt.span)
                 } else {
@@ -267,7 +290,9 @@ impl TypeChecker {
                     param_types.push(self.parse_type(param_type_str, stmt.span));
                 }
 
-                self.env.declare(name.clone(), Type::Function(Vec::new(), param_types.clone(), Box::new(ret_ty.clone())));
+                self.env.pop_scope();
+                
+                self.env.declare(name.clone(), Type::Function(type_params.clone(), param_types.clone(), Box::new(ret_ty.clone())));
                 TypedStmtKind::ForeignFunc {
                     name: name.clone(),
                     params: params.clone(),
@@ -373,19 +398,24 @@ impl TypeChecker {
             }
             StmtKind::Return { value } => {
                 let typed_val = if let Some(val) = value {
-                    Some(self.check_expr(val))
+                    let expected_ret = self.current_return_type.clone();
+                    let mut tv = self.check_expr_with_expected(val, expected_ret.as_ref());
+                    
+                    if let Some(expected_ty) = &self.current_return_type {
+                        if !self.is_assignable(&tv.ty, expected_ty) && tv.ty != Type::Error && *expected_ty != Type::Error && *expected_ty != Type::Any {
+                            self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Expected return type '{}', found '{}'.", expected_ty, tv.ty));
+                            tv.ty = Type::Error;
+                        }
+                    } else {
+                        self.error(stmt.span, DiagnosticCode::TypeMismatch, "Cannot return from outside a function.");
+                    }
+                    Some(tv)
                 } else {
+                    if self.current_return_type.is_some() && *self.current_return_type.as_ref().unwrap() != Type::Void {
+                        self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Expected return type '{}', found 'Void'.", self.current_return_type.as_ref().unwrap()));
+                    }
                     None
                 };
-                let value_type = typed_val.as_ref().map(|t| &t.ty).unwrap_or(&Type::Void).clone();
-
-                if let Some(expected) = &self.current_return_type {
-                    if *expected != value_type && value_type != Type::Error && *expected != Type::Error {
-                        self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Cannot return value of type '{}' from function expecting '{}'.", value_type, expected))
-                    }
-                } else {
-                    self.error(stmt.span, DiagnosticCode::TypeMismatch, "Cannot return from outside a function.")
-                }
                 TypedStmtKind::Return { value: typed_val }
             }
         };
@@ -393,16 +423,17 @@ impl TypeChecker {
     }
 
     fn check_var_decl(&mut self, name: &String, type_annotation: &Option<TypeExpr>, initializer: &Option<Expr>, is_weak: bool, span: Span) -> TypedStmt {
+        let expected_ty = type_annotation.as_ref().map(|ann| self.parse_type(ann, span));
+        
         let typed_init = if let Some(init) = initializer {
-            Some(self.check_expr(init))
+            Some(self.check_expr_with_expected(init, expected_ty.as_ref()))
         } else {
             None
         };
         
         let mut init_type = typed_init.as_ref().map(|t| &t.ty).unwrap_or(&Type::Any).clone();
         
-        if let Some(ann) = type_annotation {
-            let ann_type = self.parse_type(ann, span);
+        if let Some(ann_type) = expected_ty {
             if init_type == Type::Any {
                 init_type = ann_type.clone();
             } else if !self.is_assignable(&init_type, &ann_type) && init_type != Type::Error {
@@ -440,6 +471,10 @@ impl TypeChecker {
     }
 
     fn check_expr(&mut self, expr: &Expr) -> TypedExpr {
+        self.check_expr_with_expected(expr, None)
+    }
+
+    fn check_expr_with_expected(&mut self, expr: &Expr, expected_ty: Option<&Type>) -> TypedExpr {
         let (kind, ty) = match &expr.kind {
             ExprKind::Integer(v) => (TypedExprKind::Integer(*v), Type::Int),
             ExprKind::Float(v) => (TypedExprKind::Float(*v), Type::Float),
@@ -938,6 +973,11 @@ impl TypeChecker {
                                     self.infer_generics(expected, actual, &mut inferred_map);
                                 }
                                 
+                                // Infer from expected return type (contextual bidirectional inference)
+                                if let Some(expected_result) = expected_ty {
+                                    self.infer_generics(ret_ty, expected_result, &mut inferred_map);
+                                }
+                                
                                 for tp in func_type_params {
                                     if !inferred_map.contains_key(tp) {
                                         self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot infer generic type '{}'. Please provide explicit type arguments.", tp));
@@ -1005,6 +1045,79 @@ impl TypeChecker {
                             
                             self.substitute_generics(ret_ty, &inferred_map)
                         }
+                    }
+                    Type::EnumVariantConstructor(enum_name, variant_name, func_type_params, param_types, ret_ty) => {
+                        let mut inferred_map = std::collections::HashMap::new();
+
+                        if !func_type_params.is_empty() {
+                            if type_args.is_empty() {
+                                // Infer from arguments
+                                for (expected, actual) in param_types.iter().zip(arg_types.iter()) {
+                                    self.infer_generics(expected, actual, &mut inferred_map);
+                                }
+                                
+                                // Infer from expected return type (contextual bidirectional inference)
+                                if let Some(expected_result) = expected_ty {
+                                    self.infer_generics(ret_ty, expected_result, &mut inferred_map);
+                                }
+                                
+                                for tp in func_type_params {
+                                    if !inferred_map.contains_key(tp) {
+                                        self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot infer generic type '{}'. Please provide explicit type arguments.", tp));
+                                        inferred_map.insert(tp.clone(), Type::Error);
+                                    }
+                                }
+                            } else {
+                                if type_args.len() != func_type_params.len() {
+                                    self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Expected {} generic arguments, found {}.", func_type_params.len(), type_args.len()))
+                                }
+                                for (i, arg_expr) in type_args.iter().enumerate() {
+                                    let ty = self.parse_type(arg_expr, expr.span);
+                                    if i < func_type_params.len() {
+                                        inferred_map.insert(func_type_params[i].clone(), ty);
+                                    }
+                                }
+                            }
+                        }
+
+                        if param_types.len() != arg_types.len() {
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Expected {} arguments, found {}.", param_types.len(), arg_types.len()))
+                        } else {
+                            for (i, (expected, actual)) in param_types.iter().zip(arg_types.iter()).enumerate() {
+                                let expected_sub = if func_type_params.is_empty() {
+                                    expected.clone()
+                                } else {
+                                    self.substitute_generics(expected, &inferred_map)
+                                };
+                                
+                                if !self.is_assignable(actual, &expected_sub) && expected_sub != Type::Any && *actual != Type::Error {
+                                    self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Argument {} expected type '{}', found '{}'.", i + 1, expected_sub, actual))
+                                }
+                            }
+                        }
+                        
+                        let new_ret_ty = if func_type_params.is_empty() {
+                            (**ret_ty).clone()
+                        } else {
+                            self.substitute_generics(ret_ty, &inferred_map)
+                        };
+
+                        return TypedExpr {
+                            kind: TypedExprKind::Call {
+                                callee: Box::new(TypedExpr {
+                                    kind: TypedExprKind::EnumVariant {
+                                        enum_name: enum_name.clone(),
+                                        variant_name: variant_name.clone(),
+                                    },
+                                    ty: Type::BuiltinFunc,
+                                    span: callee.span,
+                                }),
+                                type_args: Vec::new(),
+                                arguments: typed_args,
+                            },
+                            ty: new_ret_ty.clone(),
+                            span: expr.span,
+                        };
                     }
                     Type::Error => Type::Error,
                     _ => {
@@ -1088,7 +1201,7 @@ impl TypeChecker {
                     if let Some(Type::Generic(g)) = self.env.resolve(name) {
                         return Type::Generic(g.clone());
                     }
-                    if self.classes.contains_key(name) {
+                    if self.classes.contains_key(name) || self.enums.contains_key(name) {
                         Type::Instance(name.to_string())
                     } else if self.interfaces.contains_key(name) {
                         Type::Interface(name.to_string())
@@ -1103,7 +1216,7 @@ impl TypeChecker {
                 let parsed_args = args.iter().map(|a| self.parse_type(a, span)).collect::<Vec<_>>();
                 if name == "Pointer" && parsed_args.len() == 1 {
                     Type::Pointer(Box::new(parsed_args[0].clone()))
-                } else if self.classes.contains_key(name) {
+                } else if self.classes.contains_key(name) || self.enums.contains_key(name) {
                     Type::GenericInstance(name.clone(), parsed_args)
                 } else {
                     self.error(span, DiagnosticCode::UnknownType, &format!("Unknown generic class '{}'.", name));
@@ -1189,6 +1302,11 @@ impl TypeChecker {
             (Type::GenericInstance(e_name, e_args), Type::GenericInstance(a_name, a_args)) if e_name == a_name => {
                 for (e_arg, a_arg) in e_args.iter().zip(a_args.iter()) {
                     self.infer_generics(e_arg, a_arg, inferred_map);
+                }
+            }
+            (Type::Enum(e_name, e_params), Type::GenericInstance(a_name, a_args)) | (Type::Class(e_name, e_params), Type::GenericInstance(a_name, a_args)) if e_name == a_name => {
+                for (e_param, a_arg) in e_params.iter().zip(a_args.iter()) {
+                    self.infer_generics(&Type::Generic(e_param.clone()), a_arg, inferred_map);
                 }
             }
             (Type::Function(_, e_params, e_ret), Type::Function(_, a_params, a_ret)) => {

@@ -11,6 +11,7 @@ pub enum Type {
     Any,
     BuiltinFunc,
     Function(Vec<String>, Vec<Type>, Box<Type>),
+    EnumVariantConstructor(String, String, Vec<String>, Vec<Type>, Box<Type>),
     Class(String, Vec<String>),
     Enum(String, Vec<String>),
     Instance(String),
@@ -41,6 +42,23 @@ impl fmt::Display for Type {
             Type::BuiltinFunc => write!(f, "<BuiltinFunc>"),
             Type::Function(type_params, params, ret) => {
                 write!(f, "Func")?;
+                if !type_params.is_empty() {
+                    write!(f, "<")?;
+                    for (i, p) in type_params.iter().enumerate() {
+                        if i > 0 { write!(f, ", ")?; }
+                        write!(f, "{}", p)?;
+                    }
+                    write!(f, ">")?;
+                }
+                write!(f, "(")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}", p)?;
+                }
+                write!(f, ") -> {}", ret)
+            }
+            Type::EnumVariantConstructor(enum_name, variant_name, type_params, params, ret) => {
+                write!(f, "VariantConstructor({}::{})", enum_name, variant_name)?;
                 if !type_params.is_empty() {
                     write!(f, "<")?;
                     for (i, p) in type_params.iter().enumerate() {

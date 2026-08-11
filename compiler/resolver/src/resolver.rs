@@ -18,6 +18,12 @@ impl Resolver {
     pub fn new() -> Self {
         let mut scopes = ScopeStack::new();
         scopes.declare("print".into());
+        scopes.declare("Result".into());
+        scopes.declare("Ok".into());
+        scopes.declare("Err".into());
+        scopes.declare("Option".into());
+        scopes.declare("Some".into());
+        scopes.declare("None".into());
         Self {
             scopes,
             errors: Vec::new(),
@@ -139,7 +145,7 @@ impl Resolver {
                     self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Enum '{}' is already declared in this scope.", name));
                 }
             }
-            StmtKind::ForeignFunc { name, params: _, return_type: _, is_private: _ } => {
+            StmtKind::ForeignFunc { name, type_params: _, params: _, return_type: _, is_private: _ } => {
                 if !self.scopes.declare(name.clone()) {
                     self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Foreign function '{}' is already declared in this scope.", name));
                 }

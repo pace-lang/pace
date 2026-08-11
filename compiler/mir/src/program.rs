@@ -28,10 +28,17 @@ pub struct ForeignFunction {
     pub return_type: Option<ForeignAbiType>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumDef {
+    pub name: String,
+    pub variants: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub functions: HashMap<String, Function>,
     pub classes: HashMap<String, ClassDef>,
+    pub enums: HashMap<String, EnumDef>,
     pub foreign_functions: HashMap<String, ForeignFunction>,
 }
 
@@ -40,6 +47,7 @@ impl Program {
         Self {
             functions: HashMap::new(),
             classes: HashMap::new(),
+            enums: HashMap::new(),
             foreign_functions: HashMap::new(),
         }
     }

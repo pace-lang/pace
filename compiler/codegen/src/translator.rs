@@ -141,7 +141,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                 let local_data = self.module.declare_data_in_func(data_id, self.builder.func);
                 Ok(self.builder.ins().symbol_value(types::I64, local_data))
             }
-            Value::Object(_) | Value::Array(_) => Err("Value::Object and Value::Array are runtime-only variants".to_string()),
+            Value::Object(_) | Value::Array(_) | Value::EnumVariant(..) => Err("Value::Object, Value::Array, and Value::EnumVariant are runtime-only variants".to_string()),
         }
     }
 
