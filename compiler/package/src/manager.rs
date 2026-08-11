@@ -28,6 +28,29 @@ impl PackageManager {
         self.load_package(&abs_dir)
     }
 
+    pub fn load_dummy_root(&mut self) -> Option<PackageId> {
+        let package_id = self.graph.next_id();
+        self.loaded_paths.insert(PathBuf::from("<dummy>"), package_id);
+        
+        let manifest = crate::manifest::Manifest {
+            package: crate::manifest::PackageInfo { name: "dummy".to_string(), version: "0.0.0".to_string() },
+            dependencies: std::collections::HashMap::new(),
+        };
+        self.graph.add_package(package_id, manifest, PathBuf::from("<dummy>"));
+        
+        if let Some(std_path) = Self::resolve_stdlib_path() {
+            if let Some(std_id) = self.load_package(&std_path) {
+                self.graph.add_dependency(package_id, "std".to_string(), std_id);
+            } else {
+                self.error("Failed to load standard library");
+            }
+        } else {
+            self.error("Standard library not found. Please set PACE_STDLIB or PACE_HOME.");
+        }
+        
+        Some(package_id)
+    }
+
     fn load_package(&mut self, dir: &Path) -> Option<PackageId> {
         if let Some(&id) = self.loaded_paths.get(dir) {
             return Some(id);

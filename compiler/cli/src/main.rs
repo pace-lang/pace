@@ -27,8 +27,11 @@ enum Commands {
     },
     /// Initialize a new pace project in the current directory
     Init,
-    /// Compile and run the current package
-    Run,
+    /// Compile and run the current package or a specific file
+    Run {
+        /// Optional file to run
+        file: Option<String>,
+    },
     /// Compile the current package
     Build,
     /// Analyze the current package and report errors, but don't build object files
@@ -100,7 +103,14 @@ fn compile_to_mir(file: &Path) -> mir::Program {
         }
         Some(package_manager.into_graph())
     } else {
-        None
+        package_manager.load_dummy_root();
+        if !package_manager.errors.is_empty() {
+            for diag in &package_manager.errors {
+                eprintln!("Package Error: {}", diag.message);
+            }
+            exit(1);
+        }
+        Some(package_manager.into_graph())
     };
 
     let mut loader = module::loader::ModuleLoader::new(package_graph.as_ref());
@@ -210,18 +220,25 @@ fn do_check() -> Option<PathBuf> {
     Some(main_file)
 }
 
-fn do_build() -> PathBuf {
-    let root = match find_package_root() {
-        Some(r) => r,
-        None => {
-            eprintln!("Error: could not find `pace.toml` in current directory or any parent directory");
-            exit(1);
-        }
+fn do_build(override_file: Option<&str>) -> PathBuf {
+    let (root, main_file) = if let Some(file_path) = override_file {
+        let path = PathBuf::from(file_path);
+        let root = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+        (root, path)
+    } else {
+        let root = match find_package_root() {
+            Some(r) => r,
+            None => {
+                eprintln!("Error: could not find `pace.toml` in current directory or any parent directory");
+                exit(1);
+            }
+        };
+        let main_file = root.join("src").join("main.pace");
+        (root, main_file)
     };
     
-    let main_file = root.join("src").join("main.pace");
     if !main_file.exists() {
-        eprintln!("Error: `src/main.pace` not found in package");
+        eprintln!("Error: `{}` not found", main_file.display());
         exit(1);
     }
     
@@ -267,12 +284,11 @@ fn main() {
             do_check();
         }
         Commands::Build => {
-            do_build();
+            do_build(None);
         }
-        Commands::Run => {
-            let out_file = do_build();
-            let root = find_package_root().unwrap();
-            let package_name = root.file_name().and_then(|n| n.to_str()).unwrap_or("app");
+        Commands::Run { file } => {
+            let out_file = do_build(file.as_deref());
+            let package_name = out_file.file_name().and_then(|n| n.to_str()).unwrap_or("app");
             println!("     Running `target/debug/{}`", package_name);
             let status = Command::new(out_file.to_str().unwrap())
                 .status()

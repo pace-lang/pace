@@ -110,7 +110,7 @@ impl<'a> ModuleLoader<'a> {
         for stmt in &final_ast {
             if let StmtKind::Import { path: import_path_str, .. } = &stmt.kind {
                 let clean_path = import_path_str.trim_matches('"').trim_matches('\'');
-                let is_local = clean_path.starts_with("./") || clean_path.starts_with("../");
+                let is_local = clean_path.starts_with("./") || clean_path.starts_with("../") || clean_path.ends_with(".pace");
                 
                 let abs_import_path;
                 
@@ -144,9 +144,6 @@ impl<'a> ModuleLoader<'a> {
                                 break;
                             }
                         }
-                        println!("DEBUG: resolving {} for path {:?}, owner_pkg is {:?}", clean_path, path, owner_pkg);
-                        println!("DEBUG: pg.dependencies is {:?}", pg.dependencies);
-                        
                         if let Some(deps) = pg.dependencies.get(&owner_pkg) {
                             if let Some(dep_pkg_id) = deps.get(pkg_name) {
                                 if let Some(dep_pkg_path) = pg.paths.get(dep_pkg_id) {
@@ -161,17 +158,9 @@ impl<'a> ModuleLoader<'a> {
                                     }
                                     p.set_extension("pace");
                                     resolved = Some(p.canonicalize().unwrap_or(p));
-                                } else {
-                                    println!("DEBUG: dep_pkg_path not found for id {:?}", dep_pkg_id);
                                 }
-                            } else {
-                                println!("DEBUG: dep_pkg_id not found for name {:?}", pkg_name);
                             }
-                        } else {
-                            println!("DEBUG: deps not found for owner {:?}", owner_pkg);
                         }
-                    } else {
-                        println!("DEBUG: self.package_graph is None");
                     }
                     
                     if let Some(r) = resolved {
