@@ -107,14 +107,29 @@ impl PackageManager {
     }
 
     fn resolve_stdlib_path() -> Option<PathBuf> {
+        // 1. Explicit override
         if let Ok(path) = std::env::var("PACE_STDLIB") {
             return Some(PathBuf::from(path));
         }
+        // 2. Legacy development override
         if let Ok(home) = std::env::var("PACE_HOME") {
             return Some(PathBuf::from(home).join("stdlib"));
         }
         
-        // Fallback for development: relative to the package manager crate
+        // 3. Production installation relative path
+        // Expected layout: pace/bin/pace and pace/lib/pace/stdlib/
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(bin_dir) = exe_path.parent() {
+                if let Some(install_prefix) = bin_dir.parent() {
+                    let prod_stdlib = install_prefix.join("lib").join("pace").join("stdlib");
+                    if prod_stdlib.exists() {
+                        return Some(prod_stdlib.canonicalize().unwrap_or(prod_stdlib));
+                    }
+                }
+            }
+        }
+        
+        // 4. Fallback for development: relative to the package manager crate (cargo run)
         let fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../stdlib");
             

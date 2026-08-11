@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: pace
+            os_name: linux
+            arch_name: x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: pace
+            os_name: linux
+            arch_name: aarch64
+            use_cross: true
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: pace
+            os_name: macos
+            arch_name: x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: pace
+            os_name: macos
+            arch_name: aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: pace.exe
+            os_name: windows
+            arch_name: x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use_cross
+        uses: taiki-e/install-action@cross
+
+      - name: Build
+        if: ${{ !matrix.use_cross }}
+        run: cargo build --release --target ${{ matrix.target }}
+        
+      - name: Build (Cross)
+        if: matrix.use_cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Package (Unix)
+        if: matrix.os_name != 'windows'
+        run: |
+          mkdir -p package/pace/bin package/pace/lib/pace/stdlib
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} package/pace/bin/
+          cp -r stdlib/* package/pace/lib/pace/stdlib/
+          cd package
+          tar -czf ../pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.tar.gz pace
+          cd ..
+          shasum -a 256 pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.tar.gz > pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.tar.gz.sha256
+
+      - name: Package (Windows)
+        if: matrix.os_name == 'windows'
+        run: |
+          mkdir -p package/pace/bin package/pace/lib/pace/stdlib
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} package/pace/bin/
+          cp -r stdlib/* package/pace/lib/pace/stdlib/
+          Compress-Archive -Path package/pace -DestinationPath pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip
+          $hash = Get-FileHash pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip -Algorithm SHA256
+          $hash.Hash + "  pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip" | Out-File -FilePath pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip.sha256 -Encoding ASCII
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.os_name }}-${{ matrix.arch_name }}
+          path: pace-${{ github.ref_name }}-*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: artifacts-*
+          merge-multiple: true
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            pace-*.tar.gz
+            pace-*.zip
+            pace-*.sha256
+          generate_release_notes: true

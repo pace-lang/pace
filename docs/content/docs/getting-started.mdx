@@ -5,42 +5,29 @@ description: Install Pace and write your first program
 
 Ready to write your first line of Pace? Follow this guide to get the compiler running on your machine.
 
-## Prerequisites
+## Install Pace Toolchain
 
-Currently, Pace is built from source. You will need to install **Rust** to compile the Pace toolchain.
+Pace is distributed as a prebuilt native toolchain. **You do not need Rust or Cargo to use Pace.**
 
-1. Install Rust via [rustup](https://rustup.rs/):
+### Linux / macOS
 
-   ```bash title="Terminal"
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   ```
+```bash title="Terminal"
+curl -fsSL https://raw.githubusercontent.com/pace-lang/pace/main/installer/install.sh | bash
+```
 
-2. Verify you have version `1.97.1` or later:
+### Windows (PowerShell)
 
-   ```bash title="Terminal"
-   cargo --version
-   ```
+```powershell title="PowerShell"
+irm https://raw.githubusercontent.com/pace-lang/pace/main/installer/install.ps1 | iex
+```
 
-## Installing the Compiler
+### Verify Installation
 
-1. Clone the Pace repository:
+Open a new terminal and run:
 
-   ```bash title="Terminal"
-   git clone https://github.com/pace-lang/pace.git
-   cd pace
-   ```
-
-2. Build the workspace using Cargo:
-
-   ```bash title="Terminal"
-   cargo build --release
-   ```
-
-3. The Pace compiler binary will be available at `target/release/pace`. You can alias it or add it to your PATH for convenience:
-
-   ```bash title="Terminal"
-   export PATH=$PATH:$(pwd)/target/release
-   ```
+```bash title="Terminal"
+pace --version
+```
 
 ## Hello, World!
 
@@ -67,3 +54,23 @@ Hello, World!
 Congratulations! You've successfully installed Pace and executed native machine code. 
 
 While running a single file is great for small scripts, real applications require multiple files and dependencies. In the next section, we'll explore **Pace's built-in tooling and project management**.
+
+---
+
+## Building from source (Contributors)
+
+If you are a contributor working on the Pace compiler itself, you will need to build from source using Rust and Cargo.
+
+1. Install Rust via [rustup](https://rustup.rs/):
+
+   ```bash title="Terminal"
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   ```
+
+2. Clone and build the repository:
+
+   ```bash title="Terminal"
+   git clone https://github.com/pace-lang/pace.git
+   cd pace
+   cargo build --release
+   ```

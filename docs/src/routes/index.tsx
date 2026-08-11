@@ -56,7 +56,7 @@ function Home() {
                 <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-indigo-500/30 to-cyan-500/30 blur-md opacity-50 group-hover:opacity-100 transition-opacity" />
                 <code className="relative w-full sm:w-auto px-6 py-4 rounded-2xl bg-black/60 border border-white/10 font-mono text-gray-300 font-medium text-lg whitespace-nowrap backdrop-blur-xl flex items-center gap-3">
                   <Terminal className="w-5 h-5 text-indigo-400" />
-                  curl -fsSL pace.dev/install | bash
+                  curl -fsSL https://raw.githubusercontent.com/pace-lang/pace/main/installer/install.sh | bash
                 </code>
               </div>
             </div>

@@ -49,15 +49,49 @@ This repository contains the Pace compiler workspace and standard library.
 - `stdlib/`: The Pace standard library written in Pace.
 - `archive/`: Design specifications and historical design documentation.
 
-## Getting Started
+## Install Pace Toolchain
+
+Pace is distributed as a prebuilt native toolchain. **You do not need Rust or Cargo to use Pace.**
+
+### Linux / macOS
+
+```bash title="Terminal"
+curl -fsSL https://raw.githubusercontent.com/pace-lang/pace/main/installer/install.sh | bash
+```
+
+### Windows (PowerShell)
+
+```powershell title="PowerShell"
+irm https://raw.githubusercontent.com/pace-lang/pace/main/installer/install.ps1 | iex
+```
+
+### Verify Installation
+
+Open a new terminal and run:
+
+```bash title="Terminal"
+pace --version
+```
+
+### Create Your First Project
+
+```bash title="Terminal"
+pace new hello
+cd hello
+pace run
+```
+
+## Building from source (Contributors)
+
+This section is only for Pace compiler contributors. If you just want to use Pace, follow the installation steps above.
 
 ### Prerequisites
 - [Rust](https://www.rust-lang.org/tools/install) `1.97.1` or later.
 
-### Building from Source
+### Building the Workspace
 To compile the entire workspace:
 ```bash
-cargo build
+cargo build --release
 ```
 
 To run the unit tests and golden tests across all sub-crates:
@@ -65,8 +99,8 @@ To run the unit tests and golden tests across all sub-crates:
 cargo test
 ```
 
-### Running Pace Files
-Pace includes a CLI for executing programs:
+### Running Pace from Source
+Pace includes a CLI for executing programs during development:
 ```bash
 cargo run --bin pace -- run path/to/file.pace
 ```
