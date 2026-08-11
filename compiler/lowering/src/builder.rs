@@ -52,20 +52,32 @@ impl ProgramBuilder {
     pub fn build(mut self, statements: &[TypedStmt]) -> Program {
         for stmt in statements {
             if let TypedStmtKind::Enum { name, variants, .. } = &stmt.kind {
-                let mut variant_names = Vec::new();
+                let mut variant_defs = Vec::new();
                 for v in variants {
-                    variant_names.push(v.name.clone());
+                    let mut reference_payloads = std::collections::HashSet::new();
+                    if let Some(fields) = &v.fields {
+                        for (idx, field) in fields.iter().enumerate() {
+                            if is_ref_type(&field.ty) {
+                                reference_payloads.insert(idx);
+                            }
+                        }
+                    }
+                    variant_defs.push(mir::EnumVariantDef {
+                        name: v.name.clone(),
+                        reference_payloads,
+                    });
                 }
                 self.program.enums.insert(name.clone(), mir::EnumDef {
                     name: name.clone(),
-                    variants: variant_names,
+                    variants: variant_defs,
                 });
             }
         }
 
         let mut enums_map = std::collections::HashMap::new();
         for (name, def) in &self.program.enums {
-            enums_map.insert(name.clone(), def.variants.clone());
+            let names: Vec<String> = def.variants.iter().map(|v| v.name.clone()).collect();
+            enums_map.insert(name.clone(), names);
         }
 
         let mut main_stmts = Vec::new();

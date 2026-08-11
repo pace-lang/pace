@@ -29,9 +29,15 @@ pub struct ForeignFunction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumVariantDef {
+    pub name: String,
+    pub reference_payloads: std::collections::HashSet<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnumDef {
     pub name: String,
-    pub variants: Vec<String>,
+    pub variants: Vec<EnumVariantDef>,
 }
 
 #[derive(Debug, Clone, Default)]

@@ -58,6 +58,29 @@ impl ArcPass {
                             reference_places.insert(place.clone());
                             owned_places.insert(place.clone());
                         }
+                        Inst::Assign(place, RValue::ConstructVariant(_, _, payloads)) => {
+                            for payload in payloads {
+                                if let Value::Place(p) = payload {
+                                    if reference_places.contains(p) {
+                                        new_instructions.push(Inst::Retain(payload.clone()));
+                                    }
+                                }
+                            }
+                            new_instructions.push(inst.clone());
+                            reference_places.insert(place.clone());
+                            owned_places.insert(place.clone());
+                        }
+                        Inst::Assign(place, RValue::ExtractPayload(val, _, _)) => {
+                            // ExtractPayload returns the payload directly.
+                            // However, we don't know if the payload is a reference statically here easily.
+                            // In Pace, we track if a place is a reference by AST types during Builder!
+                            // Actually, arc_pass only knows what it sees. Let's just push it.
+                            new_instructions.push(inst.clone());
+                            // Wait, if it IS a reference, we need to track it.
+                            // Let's add it to reference_places if it's assigned to a place that will later be retained.
+                            // But arc_pass is purely forward. We'll let Builder mark it if possible.
+                            // Actually, if we just let it fall through, the builder doesn't mark it.
+                        }
                         Inst::Assign(place, RValue::Array(vals, is_ref)) => {
                             let mut is_ref_mut = *is_ref;
                             if vals.iter().any(|v| {

@@ -178,6 +178,36 @@ impl CraneliftGenerator {
             module.define_data(data_id, &data_ctx).unwrap();
             class_metadata_ids.insert(class_name.clone(), data_id);
         }
+        
+        let mut enum_metadata_ids = HashMap::new();
+        for (enum_name, enum_def) in &program.enums {
+            for (variant_idx, variant_def) in enum_def.variants.iter().enumerate() {
+                let mut data_ctx = DataDescription::new();
+                let mut metadata_bytes = Vec::new();
+                
+                metadata_bytes.extend_from_slice(&(variant_def.reference_payloads.len() as u64).to_le_bytes());
+                
+                let mut sorted_refs: Vec<usize> = variant_def.reference_payloads.iter().cloned().collect();
+                sorted_refs.sort();
+                
+                for idx in sorted_refs {
+                    let offset = 32 + idx * 8; // 24 bytes header + 8 bytes tag + idx * 8
+                    metadata_bytes.extend_from_slice(&(offset as u64).to_le_bytes());
+                }
+                
+                data_ctx.define(metadata_bytes.into_boxed_slice());
+                
+                let data_id = module.declare_data(
+                    &format!("_pace_metadata_{}_{}", enum_name, variant_def.name),
+                    Linkage::Local,
+                    true,
+                    false
+                ).unwrap();
+                
+                module.define_data(data_id, &data_ctx).unwrap();
+                enum_metadata_ids.insert((enum_name.clone(), variant_idx), data_id);
+            }
+        }
 
         // 2. Define all functions
         for (name, func) in &program.functions {
@@ -189,7 +219,7 @@ impl CraneliftGenerator {
             
             let mut builder = FunctionBuilder::new(&mut ctx.func, &mut builder_context);
             
-            let mut translator = crate::translator::Translator::new(&mut builder, &mut module, program, &func_ids, &class_metadata_ids);
+            let mut translator = crate::translator::Translator::new(&mut builder, &mut module, program, &func_ids, &class_metadata_ids, &enum_metadata_ids);
             translator.translate(func)?;
             
             builder.finalize(module.target_config());

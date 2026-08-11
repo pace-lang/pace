@@ -13,19 +13,21 @@ pub struct Translator<'a, 'b> {
     program: &'a mir::Program,
     func_ids: &'a HashMap<String, FuncId>,
     class_metadata_ids: &'a HashMap<String, DataId>,
+    enum_metadata_ids: &'a HashMap<(String, usize), DataId>,
     variables: HashMap<String, Variable>,
     temporaries: HashMap<usize, Variable>,
     blocks: HashMap<BlockId, Block>,
 }
 
 impl<'a, 'b> Translator<'a, 'b> {
-    pub fn new(builder: &'a mut FunctionBuilder<'b>, module: &'a mut ObjectModule, program: &'a mir::Program, func_ids: &'a HashMap<String, FuncId>, class_metadata_ids: &'a HashMap<String, DataId>) -> Self {
+    pub fn new(builder: &'a mut FunctionBuilder<'b>, module: &'a mut ObjectModule, program: &'a mir::Program, func_ids: &'a HashMap<String, FuncId>, class_metadata_ids: &'a HashMap<String, DataId>, enum_metadata_ids: &'a HashMap<(String, usize), DataId>) -> Self {
         Self {
             builder,
             module,
             program,
             func_ids,
             class_metadata_ids,
+            enum_metadata_ids,
             variables: HashMap::new(),
             temporaries: HashMap::new(),
             blocks: HashMap::new(),
@@ -338,7 +340,9 @@ impl<'a, 'b> Translator<'a, 'b> {
                             .expect("pace_alloc not declared");
                         let local_alloc = self.module.declare_func_in_func(*alloc_func, self.builder.func);
                         
-                        let metadata_ptr = self.builder.ins().iconst(types::I64, 0); // 0 for dummy metadata (prevents segfaults in pace_release)
+                        let metadata_id = *self.enum_metadata_ids.get(&(_name.clone(), *variant_idx)).unwrap();
+                        let local_metadata_id = self.module.declare_data_in_func(metadata_id, self.builder.func);
+                        let metadata_ptr = self.builder.ins().symbol_value(types::I64, local_metadata_id);
                         let size_val = self.builder.ins().iconst(types::I64, total_size);
                         
                         let call_inst = self.builder.ins().call(local_alloc, &[size_val, metadata_ptr]);
