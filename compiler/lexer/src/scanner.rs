@@ -175,6 +175,12 @@ impl<'a> Scanner<'a> {
             '?' => {
                 if self.match_char('.') {
                     TokenKind::QuestionDot
+                } else if self.match_char('?') {
+                    if self.match_char('=') {
+                        TokenKind::QuestionQuestionEqual
+                    } else {
+                        TokenKind::QuestionQuestion
+                    }
                 } else {
                     TokenKind::Question
                 }

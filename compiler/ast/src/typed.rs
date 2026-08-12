@@ -49,6 +49,14 @@ pub enum TypedExprKind {
         object: Box<TypedExpr>,
         name: String,
     },
+    NullCoalesce {
+        left: Box<TypedExpr>,
+        right: Box<TypedExpr>,
+    },
+    NullCoalesceAssign {
+        left: Box<TypedExpr>,
+        right: Box<TypedExpr>,
+    },
     Array(Vec<TypedExpr>),
     ArrayRepeat {
         value: Box<TypedExpr>,

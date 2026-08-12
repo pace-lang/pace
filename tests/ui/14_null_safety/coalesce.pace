@@ -1,0 +1,23 @@
+func main() {
+    let a: Int? = null;
+    let b: Int? = 42;
+    let c: Int = 100;
+    
+    // Test ??
+    let result1 = a ?? 10;
+    print(result1); // should be 10
+    
+    let result2 = b ?? 10;
+    print(result2); // should be 42
+    
+    let result3 = a ?? b ?? c;
+    print(result3); // should be 42
+    
+    // Test ??=
+    var x: Int? = null;
+    x ??= 5;
+    print(x); // should be 5
+    
+    x ??= 10;
+    print(x); // should still be 5
+}

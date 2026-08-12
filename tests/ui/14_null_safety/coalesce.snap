@@ -1,0 +1,11 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+Finished `dev` profile [unoptimized + debuginfo] target(s)
+     Running `target/debug/14_null_safety`
+10
+42
+42
+5
+5

@@ -626,6 +626,130 @@ impl MirBuilder {
                 self.current_block = merge_block;
                 Value::Place(temp)
             }
+            TypedExprKind::NullCoalesce { left, right } => {
+                let left_val = self.lower_expr(left);
+                let temp = self.new_temp();
+                
+                let then_block = self.new_block();
+                let else_block = self.new_block();
+                let merge_block = self.new_block();
+                
+                let is_null_temp = self.new_temp();
+                self.current().instructions.push(Inst::Assign(
+                    is_null_temp.clone(), 
+                    RValue::BinaryOp(ast::BinaryOp::Equal, left_val.clone(), Value::Null)
+                ));
+                
+                self.current().terminator = Some(Terminator::Branch {
+                    cond: Value::Place(is_null_temp),
+                    then_block,
+                    else_block,
+                });
+                
+                self.current_block = then_block;
+                let right_val = self.lower_expr(right);
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Use(right_val)));
+                self.current().terminator = Some(Terminator::Jump(merge_block));
+                
+                self.current_block = else_block;
+                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Use(left_val)));
+                self.current().terminator = Some(Terminator::Jump(merge_block));
+                
+                self.current_block = merge_block;
+                Value::Place(temp)
+            }
+            TypedExprKind::NullCoalesceAssign { left, right } => {
+                match &left.kind {
+                    TypedExprKind::Variable(name) => {
+                        let current_val = Value::Place(Place::Var(name.clone()));
+                        let then_block = self.new_block();
+                        let merge_block = self.new_block();
+                        
+                        let is_null_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(
+                            is_null_temp.clone(), 
+                            RValue::BinaryOp(ast::BinaryOp::Equal, current_val.clone(), Value::Null)
+                        ));
+                        
+                        self.current().terminator = Some(Terminator::Branch {
+                            cond: Value::Place(is_null_temp),
+                            then_block,
+                            else_block: merge_block,
+                        });
+                        
+                        self.current_block = then_block;
+                        let right_val = self.lower_expr(right);
+                        self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(right_val)));
+                        self.current().terminator = Some(Terminator::Jump(merge_block));
+                        
+                        self.current_block = merge_block;
+                        current_val
+                    },
+                    TypedExprKind::Get { object, name } => {
+                        let obj_val = self.lower_expr(object);
+                        let current_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(current_temp.clone(), RValue::GetProperty(obj_val.clone(), name.clone())));
+                        let current_val = Value::Place(current_temp.clone());
+                        
+                        let then_block = self.new_block();
+                        let merge_block = self.new_block();
+                        
+                        let is_null_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(
+                            is_null_temp.clone(), 
+                            RValue::BinaryOp(ast::BinaryOp::Equal, current_val.clone(), Value::Null)
+                        ));
+                        
+                        self.current().terminator = Some(Terminator::Branch {
+                            cond: Value::Place(is_null_temp),
+                            then_block,
+                            else_block: merge_block,
+                        });
+                        
+                        self.current_block = then_block;
+                        let right_val = self.lower_expr(right);
+                        self.current().instructions.push(Inst::SetProperty(obj_val, name.clone(), right_val.clone()));
+                        self.current().instructions.push(Inst::Assign(current_temp.clone(), RValue::Use(right_val)));
+                        self.current().terminator = Some(Terminator::Jump(merge_block));
+                        
+                        self.current_block = merge_block;
+                        current_val
+                    },
+                    TypedExprKind::IndexGet { object, index } => {
+                        let obj_val = self.lower_expr(object);
+                        let idx_val = self.lower_expr(index);
+                        
+                        let current_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(current_temp.clone(), RValue::IndexGet(obj_val.clone(), idx_val.clone())));
+                        let current_val = Value::Place(current_temp.clone());
+                        
+                        let then_block = self.new_block();
+                        let merge_block = self.new_block();
+                        
+                        let is_null_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(
+                            is_null_temp.clone(), 
+                            RValue::BinaryOp(ast::BinaryOp::Equal, current_val.clone(), Value::Null)
+                        ));
+                        
+                        self.current().terminator = Some(Terminator::Branch {
+                            cond: Value::Place(is_null_temp),
+                            then_block,
+                            else_block: merge_block,
+                        });
+                        
+                        self.current_block = then_block;
+                        let right_val = self.lower_expr(right);
+                        self.current().instructions.push(Inst::IndexSet(obj_val, idx_val, right_val.clone()));
+                        self.current().instructions.push(Inst::Assign(current_temp.clone(), RValue::Use(right_val)));
+                        self.current().terminator = Some(Terminator::Jump(merge_block));
+                        
+                        self.current_block = merge_block;
+                        current_val
+                    },
+                    _ => unreachable!("Invalid target for NullCoalesceAssign"),
+                }
+            }
             TypedExprKind::Set { object, name, value } => {
                 let obj_val = self.lower_expr(object);
                 let val_val = self.lower_expr(value);

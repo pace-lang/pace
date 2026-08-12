@@ -839,29 +839,53 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> Option<Expr> {
-        let expr = self.range()?;
+        let expr = self.null_coalesce()?;
 
-        if self.match_token(&[TokenKind::Equal]) {
-            let _equals = self.previous().clone();
+        if self.match_token(&[TokenKind::Equal, TokenKind::QuestionQuestionEqual]) {
+            let op = self.previous().clone();
             let value = self.assignment()?;
 
-            match expr.kind {
-                ExprKind::Variable(name) => {
-                    let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
-                    return Some(Expr::new(ExprKind::Assign { name, value: Box::new(value) }, span));
+            if op.kind == TokenKind::QuestionQuestionEqual {
+                match expr.kind {
+                    ExprKind::Variable(_) | ExprKind::Get { .. } | ExprKind::IndexGet { .. } => {
+                        let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
+                        return Some(Expr::new(ExprKind::NullCoalesceAssign { left: Box::new(expr), right: Box::new(value) }, span));
+                    }
+                    _ => {
+                        self.error_at_current("Invalid assignment target for ??=.");
+                    }
                 }
-                ExprKind::Get { object, name } => {
-                    let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
-                    return Some(Expr::new(ExprKind::Set { object, name, value: Box::new(value) }, span));
-                }
-                ExprKind::IndexGet { object, index } => {
-                    let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
-                    return Some(Expr::new(ExprKind::IndexSet { object, index, value: Box::new(value) }, span));
-                }
-                _ => {
-                    self.error_at_current("Invalid assignment target.");
+            } else {
+                match expr.kind {
+                    ExprKind::Variable(name) => {
+                        let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
+                        return Some(Expr::new(ExprKind::Assign { name, value: Box::new(value) }, span));
+                    }
+                    ExprKind::Get { object, name } => {
+                        let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
+                        return Some(Expr::new(ExprKind::Set { object, name, value: Box::new(value) }, span));
+                    }
+                    ExprKind::IndexGet { object, index } => {
+                        let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
+                        return Some(Expr::new(ExprKind::IndexSet { object, index, value: Box::new(value) }, span));
+                    }
+                    _ => {
+                        self.error_at_current("Invalid assignment target.");
+                    }
                 }
             }
+        }
+
+        Some(expr)
+    }
+
+    fn null_coalesce(&mut self) -> Option<Expr> {
+        let mut expr = self.range()?;
+
+        while self.match_token(&[TokenKind::QuestionQuestion]) {
+            let right = self.range()?;
+            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
+            expr = Expr::new(ExprKind::NullCoalesce { left: Box::new(expr), right: Box::new(right) }, span);
         }
 
         Some(expr)

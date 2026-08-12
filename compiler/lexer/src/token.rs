@@ -76,6 +76,8 @@ pub enum TokenKind {
     FatArrow, // =>
     Question,
     QuestionDot, // ?.
+    QuestionQuestion, // ??
+    QuestionQuestionEqual, // ??=
     Bang, // !
 
     // Special

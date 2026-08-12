@@ -497,12 +497,10 @@ impl TypeChecker {
             None
         };
         
-        let mut init_type = typed_init.as_ref().map(|t| &t.ty).unwrap_or(&Type::Any).clone();
+        let init_type = typed_init.as_ref().map(|t| &t.ty).unwrap_or(&Type::Any).clone();
         
-        if let Some(ann_type) = expected_ty {
-            if init_type == Type::Any {
-                init_type = ann_type.clone();
-            } else if !self.is_assignable(&init_type, &ann_type) && init_type != Type::Error {
+        let decl_type = if let Some(ann_type) = expected_ty {
+            if init_type != Type::Any && !self.is_assignable(&init_type, &ann_type) && init_type != Type::Error {
                 self.error(span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to variable of type '{}'.", init_type, ann_type));
             }
             
@@ -511,13 +509,17 @@ impl TypeChecker {
                     self.error(span, DiagnosticCode::TypeMismatch, "Weak variables must be of optional instance type (e.g. 'weak var x: User?').");
                 }
             }
-        } else if is_weak {
-             if !matches!(init_type, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
-                 self.error(span, DiagnosticCode::TypeMismatch, "Weak variables must be of optional instance type (e.g. 'weak var x: User?').");
-             }
-        }
+            ann_type
+        } else {
+            if is_weak {
+                 if !matches!(init_type, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
+                     self.error(span, DiagnosticCode::TypeMismatch, "Weak variables must be of optional instance type (e.g. 'weak var x: User?').");
+                 }
+            }
+            init_type
+        };
         
-        self.env.declare(name.clone(), init_type);
+        self.env.declare(name.clone(), decl_type);
         
         let kind = if is_weak || (initializer.is_none() && type_annotation.is_some()) {
             TypedStmtKind::Var {
@@ -660,6 +662,57 @@ impl TypeChecker {
                     }
                 };
                 (TypedExprKind::OptionalGet { object: Box::new(typed_obj), name: name.clone() }, ty)
+            }
+            ExprKind::NullCoalesce { left, right } => {
+                let typed_left = self.check_expr(left);
+                let typed_right = self.check_expr(right);
+                
+                match &typed_left.ty {
+                    Type::Optional(inner) => {
+                        let expected = (**inner).clone();
+                        let is_valid = typed_right.ty == expected || typed_right.ty == typed_left.ty || typed_right.ty == Type::Error || typed_left.ty == Type::Error;
+                        
+                        if !is_valid {
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot coalesce type '{}' with '{}'.", typed_left.ty, typed_right.ty));
+                        }
+                        
+                        (TypedExprKind::NullCoalesce { left: Box::new(typed_left), right: Box::new(typed_right.clone()) }, typed_right.ty)
+                    }
+                    Type::Null => {
+                        (TypedExprKind::NullCoalesce { left: Box::new(typed_left), right: Box::new(typed_right.clone()) }, typed_right.ty)
+                    }
+                    Type::Error | Type::Any => {
+                        (TypedExprKind::NullCoalesce { left: Box::new(typed_left), right: Box::new(typed_right.clone()) }, typed_right.ty)
+                    }
+                    _ => {
+                        self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Left operand of '??' must be an optional type, found '{}'.", typed_left.ty));
+                        (TypedExprKind::NullCoalesce { left: Box::new(typed_left), right: Box::new(typed_right.clone()) }, typed_right.ty)
+                    }
+                }
+            }
+            ExprKind::NullCoalesceAssign { left, right } => {
+                let typed_left = self.check_expr(left);
+                let typed_right = self.check_expr(right);
+                
+                match &typed_left.ty {
+                    Type::Optional(inner) => {
+                        let expected = (**inner).clone();
+                        let is_valid = typed_right.ty == expected || typed_right.ty == typed_left.ty || typed_right.ty == Type::Error || typed_left.ty == Type::Error;
+                        
+                        if !is_valid {
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to variable of type '{}'.", typed_right.ty, typed_left.ty));
+                        }
+                        
+                        (TypedExprKind::NullCoalesceAssign { left: Box::new(typed_left.clone()), right: Box::new(typed_right) }, typed_left.ty)
+                    }
+                    Type::Error | Type::Any => {
+                        (TypedExprKind::NullCoalesceAssign { left: Box::new(typed_left.clone()), right: Box::new(typed_right) }, typed_left.ty)
+                    }
+                    _ => {
+                        self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Left operand of '??=' must be an optional type, found '{}'.", typed_left.ty));
+                        (TypedExprKind::NullCoalesceAssign { left: Box::new(typed_left.clone()), right: Box::new(typed_right) }, typed_left.ty)
+                    }
+                }
             }
             ExprKind::Array(elements) => {
                 if elements.is_empty() {

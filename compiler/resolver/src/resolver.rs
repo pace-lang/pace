@@ -279,6 +279,14 @@ impl Resolver {
             ExprKind::OptionalGet { object, name: _ } => {
                 self.resolve_expr(object);
             }
+            ExprKind::NullCoalesce { left, right } => {
+                self.resolve_expr(left);
+                self.resolve_expr(right);
+            }
+            ExprKind::NullCoalesceAssign { left, right } => {
+                self.resolve_expr(left);
+                self.resolve_expr(right);
+            }
             ExprKind::Match { value, arms } => {
                 self.resolve_expr(value);
                 for arm in arms {

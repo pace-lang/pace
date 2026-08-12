@@ -99,6 +99,16 @@ pub enum ExprKind {
         object: Box<Expr>,
         name: String,
     },
+    /// Null Coalesce: `left ?? right`
+    NullCoalesce {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    /// Null Coalesce Assignment: `left ??= right`
+    NullCoalesceAssign {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
     /// Array literal: `[1, 2, 3]`
     Array(Vec<Expr>),
     /// Array repeat initialization: `[0; 10]`
