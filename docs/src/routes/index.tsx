@@ -26,9 +26,9 @@ function Home() {
         <section className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-40 pb-32 flex flex-col items-center text-center z-10">
           <div className="animate-in fade-in slide-in-from-bottom-12 duration-1000 w-full max-w-4xl mx-auto flex flex-col items-center">
 
-            <a href="/blog/v0-1-0-release" className="group inline-flex items-center rounded-full border border-white/10 bg-white/5 px-5 py-2 text-sm font-medium text-white mb-10 hover:bg-white/10 transition-all backdrop-blur-xl hover:scale-105 hover:shadow-[0_0_30px_-5px_rgba(52,211,153,0.3)]">
+            <a href="/blog/v0-2-0-release" className="group inline-flex items-center rounded-full border border-white/10 bg-white/5 px-5 py-2 text-sm font-medium text-white mb-10 hover:bg-white/10 transition-all backdrop-blur-xl hover:scale-105 hover:shadow-[0_0_30px_-5px_rgba(52,211,153,0.3)]">
               <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 mr-3 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]" />
-              Pace v0.1.0 is now available
+              Pace v0.2.0-rc.1 is now available
               <ArrowRight className="ml-2 w-4 h-4 text-emerald-400 group-hover:translate-x-1 transition-transform" />
             </a>
 

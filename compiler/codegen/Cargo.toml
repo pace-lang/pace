@@ -7,11 +7,11 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-ast = { version = "0.1.0", path = "../ast" }
+ast = { version = "0.2.0-rc.1", path = "../ast" }
 cranelift-codegen = "0.134.3"
 cranelift-frontend = "0.134.3"
 cranelift-module = "0.134.3"
 cranelift-native = "0.134.3"
 cranelift-object = "0.134.3"
-mir = { version = "0.1.0", path = "../mir" }
+mir = { version = "0.2.0-rc.1", path = "../mir" }
 diagnostics = { path = "../diagnostics" }

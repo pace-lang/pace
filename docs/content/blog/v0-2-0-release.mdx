@@ -1,0 +1,89 @@
+---
+title: "Pace v0.2.0-rc.1 - The 'Useful Application Language' Release Candidate"
+description: We are incredibly excited to announce Pace v0.2.0-rc.1. This massive release candidate brings powerful generics, pattern matching, list comprehensions, null-safety operators, and an entirely new standard library architecture.
+date: 2026-08-12
+draft: false
+---
+
+We are incredibly excited to announce **Pace v0.2.0-rc.1**! 🎉
+
+> [!NOTE]
+> **What is a Release Candidate (RC)?**
+> Because we have shipped a massive number of architectural changes in just a few days, this release is marked as an RC. This means the features are fully implemented, but we are letting them "bake" in the real world to find any edge cases, memory leaks, or ergonomic flaws before officially tagging the final `v0.2.0` release. We encourage you to test it and report bugs!
+
+With our v0.1.0 release, we introduced Pace to the world as a fast, safe, and intuitive language. In v0.2.0, we focused intensely on turning Pace into a **"Useful Application Language"**. We've dramatically expanded the type system, added highly requested syntactical sugar, and completely re-architected the standard library.
+
+Here is a deep dive into the biggest features and improvements in Pace v0.2.0.
+
+---
+
+## 🚀 Major Features
+
+### Generics & Algebraic Data Types
+Pace now features a robust generics system, powering full monomorphization for functions, classes, and enums. This allows developers to write highly reusable, type-safe code without sacrificing native runtime performance. 
+
+Building on generics, we have officially introduced **Standard Generic Algebraic Data Types**, including `Option<T>`, `Result<T, E>`, `List<T>`, and `Map<K, V>`.
+
+### Pattern Matching (`match`)
+To compliment the new Algebraic Data Types, Pace now supports comprehensive pattern matching via the `match` expression! You can now safely unwrap variants and extract payloads with compile-time exhaustiveness checking.
+
+```pace
+let result = fetch_data();
+match result {
+    Ok(data) => print("Success: \{data}"),
+    Err(e) => print("Failed with error: \{e}")
+}
+```
+
+### List Comprehensions
+Transforming data just got a lot cleaner. You can now map iterables in a single, elegant line of code using list comprehensions (`[expr for item in iterator]`). 
+
+Under the hood, the Pace compiler natively lowers these comprehensions into highly-optimized, pre-allocated array loops. You get beautiful Python-like syntax with zero hidden runtime reallocation overhead!
+
+```pace
+let arr = [1, 2, 3, 4];
+let doubled = [x * 2 for x in arr]; // [2, 4, 6, 8]
+```
+
+### Null-Safety Operators
+Dealing with optional data is now frictionless. We've introduced full support for the null-coalescing operator (`??`) and the null-coalesce assignment operator (`??=`). This allows you to easily provide default fallbacks for `T?` types.
+
+### String Interpolation
+Pace now supports string interpolation using both `\{expr}` and `${expr}` syntax. Expressions are directly evaluated and safely concatenated inside string literals—no manual type conversions necessary!
+
+```pace
+let name = "Pace Developer";
+print("Welcome to v0.2.0, \{name}!");
+```
+
+---
+
+## 🏗️ Architecture & Tooling
+
+### Dynamic Standard Library
+We have successfully decoupled standard types from the core compiler. The compiler now recursively crawls and globally injects the `stdlib/src/` folder during compilation. Types like `Map`, `File`, and `print` are now completely standard library components powered by `foreign func` definitions. 
+
+### Local Module Resolution
+We've overhauled the module loader! Imports like `import "math_utils"` now successfully resolve if `math_utils.pace` exists in your local directory. No more fighting with explicit relative paths or package configurations for simple sibling modules.
+
+### Function Overloading
+The compiler now supports function overloading via a custom name mangling system. Developers can declare multiple functions with the same name, so long as their parameter signatures differ!
+
+### Upgraded Diagnostics
+CLI-level project errors (e.g., missing `main` function, linker issues, missing `pace.toml`) are now beautifully styled global diagnostics (like `[E001]`). If a required system C compiler is missing, the linker now detects your OS and prints the exact terminal commands needed to install it.
+
+---
+
+## 🔒 Safety Enhancements
+
+- **Constructor Initialization Checks**: The typechecker now rigorously tracks uninitialized properties inside class constructors, producing robust compile-time errors if you attempt to use a partially initialized object.
+- **Access Modifiers**: We've introduced explicit `public` and `private` keywords, dropping the legacy underscore (`_`) convention for visibility control. 
+- **ARC Memory Leaks Fixed**: We've resolved lingering memory leaks in the Automatic Reference Counting (ARC) implementation, making long-running Pace applications significantly more stable.
+
+---
+
+## Get Started
+
+Pace v0.2.0 is available right now. Update your CLI, try out the new features, and let us know what you build! 
+
+Up next: **v0.3.0**, where we'll be diving into `struct` value types, `type` aliases, Async programming, and Networking!

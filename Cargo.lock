@@ -72,7 +72,7 @@ checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 
 [[package]]
 name = "arc"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "diagnostics",
  "mir",
@@ -90,7 +90,7 @@ dependencies = [
 
 [[package]]
 name = "ast"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "diagnostics",
 ]
@@ -158,7 +158,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "cli"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "arc",
  "ast",
@@ -183,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "codegen"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ast",
  "cranelift-codegen",
@@ -387,7 +387,7 @@ dependencies = [
 
 [[package]]
 name = "diagnostics"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ariadne",
 ]
@@ -434,7 +434,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "generics"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ast",
 ]
@@ -516,7 +516,7 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "lexer"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ast",
  "diagnostics",
@@ -536,7 +536,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "linker"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "diagnostics",
 ]
@@ -555,7 +555,7 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
 name = "lowering"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ast",
  "diagnostics",
@@ -570,7 +570,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "mir"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ast",
  "diagnostics",
@@ -578,7 +578,7 @@ dependencies = [
 
 [[package]]
 name = "module"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ast",
  "diagnostics",
@@ -613,7 +613,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "package"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "diagnostics",
  "serde",
@@ -622,7 +622,7 @@ dependencies = [
 
 [[package]]
 name = "parser"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ast",
  "diagnostics",
@@ -711,7 +711,7 @@ dependencies = [
 
 [[package]]
 name = "resolver"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ast",
  "diagnostics",
@@ -721,7 +721,7 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "libc",
 ]
@@ -890,7 +890,7 @@ checksum = "7d56353a2a665ad0f41a421187180aab746c8c325620617ad883a99a1cbe66d2"
 
 [[package]]
 name = "typechecker"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ast",
  "diagnostics",
@@ -924,7 +924,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "vm"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ast",
  "diagnostics",
