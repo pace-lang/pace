@@ -2,5 +2,4 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-DEBUG: print fallback type is Int
 [31m[E001] Error:[0m Codegen failed: Function User::init not found
