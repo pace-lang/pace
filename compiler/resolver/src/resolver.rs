@@ -160,9 +160,7 @@ impl Resolver {
                 }
             }
             StmtKind::Func { name, type_params: _, params, return_type: _, body, is_private: _ } => {
-                if !self.scopes.declare(name.clone()) {
-                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Function '{}' is already declared in this scope.", name));
-                }
+                self.scopes.declare(name.clone());
 
                 self.scopes.push_scope();
                 for (param_name, _) in params {

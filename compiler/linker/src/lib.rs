@@ -68,6 +68,7 @@ impl Linker {
         // We will use the system `cc` to link the object file with our Rust staticlib
         // The Rust staticlib might require linking against standard system libraries (like pthread, dl, m)
         // but cc usually handles this natively.
+
         let output = Command::new("cc")
             .arg(object_file)
             .arg(&runtime_lib)

@@ -25,6 +25,7 @@ pub extern "C" fn pace_print(value: i64) -> i64 {
 pub extern "C" fn pace_print_str(str_ptr: *const c_char) -> i64 {
     if str_ptr.is_null() {
         println!("(null)");
+        return 0;
     }
     let c_str = unsafe { CStr::from_ptr(str_ptr.add(24)) };
     match c_str.to_str() {
@@ -143,7 +144,7 @@ pub extern "C" fn pace_release(obj: *mut u8) {
             for i in 0..field_count {
                 let offset = unsafe { *(*metadata).field_offsets.as_ptr().add(i as usize) };
                 let field_ptr = unsafe { *(obj.add(offset as usize) as *const *mut u8) };
-                if !field_ptr.is_null() {
+                if !field_ptr.is_null() && (field_ptr as usize) % 8 == 0 && (field_ptr as usize) > 0x10000 {
                     pace_release(field_ptr);
                 }
             }
@@ -291,4 +292,27 @@ pub extern "C" fn stringContains(s_ptr: *const c_char, sub_ptr: *const c_char) -
     } else {
         0
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn fileIsValid(_ptr: *mut u8) -> u8 {
+    0 // false
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn fileReadAll(_ptr: *mut u8) -> *mut u8 {
+    std::ptr::null_mut()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn fileClose(_ptr: *mut u8) {
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn fileWrite(_ptr: *mut u8, _data: *mut u8) {
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn fileOpen(_path: *mut u8) -> *mut u8 {
+    std::ptr::null_mut()
 }

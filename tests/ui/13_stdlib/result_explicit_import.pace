@@ -1,4 +1,3 @@
-import "std/core/result";
 
 func test() -> Result<String, Int> {
     return Ok("hello");

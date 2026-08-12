@@ -88,19 +88,7 @@ impl CraneliftGenerator {
         }
         
         // Declare runtime functions
-        let mut print_sig = module.make_signature();
-        print_sig.params.push(AbiParam::new(types::I64));
-        print_sig.returns.push(AbiParam::new(types::I64));
-        let print_id = module.declare_function("pace_print", Linkage::Import, &print_sig)
-            .map_err(|e| format!("Failed to declare pace_print: {}", e))?;
-        func_ids.insert("pace_print".to_string(), print_id);
 
-        let mut print_str_sig = module.make_signature();
-        print_str_sig.params.push(AbiParam::new(types::I64));
-        print_str_sig.returns.push(AbiParam::new(types::I64));
-        let print_str_id = module.declare_function("pace_print_str", Linkage::Import, &print_str_sig)
-            .map_err(|e| format!("Failed to declare pace_print_str: {}", e))?;
-        func_ids.insert("pace_print_str".to_string(), print_str_id);
 
         let mut alloc_sig = module.make_signature();
         alloc_sig.params.push(AbiParam::new(types::I64));
@@ -240,8 +228,10 @@ impl CraneliftGenerator {
             builder.finalize(module.target_config());
             
             let func_id = *func_ids.get(name).unwrap();
-            module.define_function(func_id, &mut ctx)
-                .map_err(|e| format!("Failed to define {}: {}", name, e))?;
+                if let Err(e) = module.define_function(func_id, &mut ctx) {
+                    println!("Cranelift IR for {}:\n{}", name, ctx.func.display());
+                    return Err(format!("Failed to define {}: {}", name, e));
+                }
                 
             module.clear_context(&mut ctx);
         }

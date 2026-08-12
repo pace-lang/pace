@@ -10,6 +10,7 @@ pub enum Type {
     Error,
     Any,
     BuiltinFunc,
+    OverloadedFunction(Vec<(String, Type)>),
     Function(Vec<String>, Vec<Type>, Box<Type>),
     EnumVariantConstructor(String, String, Vec<String>, Vec<Type>, Box<Type>),
     Class(String, Vec<String>),
@@ -40,6 +41,7 @@ impl fmt::Display for Type {
             Type::Error => write!(f, "<ErrorType>"),
             Type::Any => write!(f, "Any"),
             Type::BuiltinFunc => write!(f, "<BuiltinFunc>"),
+            Type::OverloadedFunction(funcs) => write!(f, "<OverloadedFunction({} variants)>", funcs.len()),
             Type::Function(type_params, params, ret) => {
                 write!(f, "Func")?;
                 if !type_params.is_empty() {

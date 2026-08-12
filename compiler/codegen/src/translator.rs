@@ -121,7 +121,7 @@ impl<'a, 'b> Translator<'a, 'b> {
         match value {
             Value::Int(i) => Ok(self.builder.ins().iconst(types::I64, *i)),
             Value::Float(f) => Ok(self.builder.ins().f64const(*f)),
-            Value::Boolean(b) => Ok(self.builder.ins().iconst(types::I8, if *b { 1 } else { 0 })),
+            Value::Boolean(b) => Ok(self.builder.ins().iconst(types::I64, if *b { 1 } else { 0 })),
             Value::Place(place) => {
                 let var = self.get_place_var(place);
                 Ok(self.builder.use_var(var))
@@ -210,13 +210,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                         }
                     }
                     RValue::Call(func_name, args) => {
-                        let target_func_name = if func_name == "print" {
-                            "pace_print"
-                        } else if func_name == "print_str" {
-                            "pace_print_str"
-                        } else {
-                            func_name.as_str()
-                        };
+                        let target_func_name = func_name.as_str();
                         let func_id = self.func_ids.get(target_func_name)
                             .ok_or_else(|| format!("Function {} not found", target_func_name))?;
                         let local_callee = self.module.declare_func_in_func(*func_id, self.builder.func);
@@ -244,7 +238,11 @@ impl<'a, 'b> Translator<'a, 'b> {
                         
                         let call_inst = self.builder.ins().call(local_callee, &arg_vals);
                         let results = self.builder.inst_results(call_inst);
-                        let mut result_val = results[0];
+                        let mut result_val = if results.is_empty() {
+                            self.builder.ins().iconst(types::I64, 0)
+                        } else {
+                            results[0]
+                        };
                         
                         if let Some(foreign_func) = self.program.foreign_functions.get(func_name) {
                             if let Some(abi_ty) = &foreign_func.return_type {

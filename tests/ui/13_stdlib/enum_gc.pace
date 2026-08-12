@@ -1,5 +1,3 @@
-import "std/core/result";
-import "std/core/array";
 
 func test() {
     let arr = [10, 20, 30];

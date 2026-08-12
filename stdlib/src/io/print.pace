@@ -1,0 +1,10 @@
+foreign func pace_print(val: Int);
+foreign func pace_print_str(val: String);
+
+func print(val: Int) {
+    pace_print(val);
+}
+
+func print(val: String) {
+    pace_print_str(val);
+}

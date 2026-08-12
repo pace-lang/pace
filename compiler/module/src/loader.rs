@@ -72,34 +72,62 @@ impl<'a> ModuleLoader<'a> {
         
         // Inject synthetic Prelude imports into every module (except std itself) to implicitly provide core types.
         let mut is_std = false;
+        let mut std_root_path = None;
         if let Some(pg) = self.package_graph {
             for (id, pkg_path) in &pg.paths {
+                if let Some(manifest) = pg.manifests.get(id) {
+                    if manifest.package.name == "std" {
+                        std_root_path = Some(pkg_path.clone());
+                    }
+                }
                 if path.starts_with(pkg_path) {
                     if let Some(manifest) = pg.manifests.get(id) {
                         if manifest.package.name == "std" {
                             is_std = true;
                         }
                     }
-                    break;
                 }
             }
         }
         
         if !is_std {
-            let prelude_imports = vec![
-                ast::Stmt::new(ast::StmtKind::Import {
-                    path: "std/core/result".to_string(),
-                    alias: None,
-                    show: vec!["Result".to_string(), "Ok".to_string(), "Err".to_string()],
-                    hide: vec![],
-                }, diagnostics::Span::new(0, 0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))),
-                ast::Stmt::new(ast::StmtKind::Import {
-                    path: "std/core/option".to_string(),
-                    alias: None,
-                    show: vec!["Option".to_string(), "Some".to_string(), "None".to_string()],
-                    hide: vec![],
-                }, diagnostics::Span::new(0, 0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))),
-            ];
+            let mut prelude_imports = Vec::new();
+            if let Some(std_root) = std_root_path {
+                let std_src = std_root.join("src");
+                let mut stack = vec![std_src.clone()];
+                while let Some(dir) = stack.pop() {
+                    if let Ok(entries) = std::fs::read_dir(&dir) {
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            if path.is_dir() {
+                                stack.push(path);
+                            } else if path.extension().map_or(false, |ext| ext == "pace") {
+                                if let Ok(rel_path) = path.strip_prefix(&std_src) {
+                                    let mut import_path = "std".to_string();
+                                    for comp in rel_path.components() {
+                                        if let std::path::Component::Normal(name) = comp {
+                                            let name_str = name.to_string_lossy();
+                                            if name_str.ends_with(".pace") {
+                                                import_path.push_str("/");
+                                                import_path.push_str(&name_str[..name_str.len() - 5]);
+                                            } else {
+                                                import_path.push_str("/");
+                                                import_path.push_str(&name_str);
+                                            }
+                                        }
+                                    }
+                                    prelude_imports.push(ast::Stmt::new(ast::StmtKind::Import {
+                                        path: import_path,
+                                        alias: None,
+                                        show: vec![],
+                                        hide: vec![],
+                                    }, diagnostics::Span::new(0, 0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             
             let mut temp = prelude_imports;
             temp.extend(final_ast);

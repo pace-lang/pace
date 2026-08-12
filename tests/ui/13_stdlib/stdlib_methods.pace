@@ -1,7 +1,3 @@
-import "std/core/string";
-import "std/core/array";
-import "std/collections/map";
-import "std/io/file";
 
 func main() {
     let s = "hello";

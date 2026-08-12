@@ -1,0 +1,6 @@
+func main(){
+    let x = 10;
+    print("Value: \{x}");
+    var name:String = "abc";
+    print("Hello ${name}");
+}

@@ -1,5 +1,3 @@
-import "std/core/result";
-import "std/core/option";
 
 func test_ok() -> Result<String, Int> {
     return Ok("hello");

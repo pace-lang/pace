@@ -334,8 +334,32 @@ impl TypeChecker {
                 let is_method = self.is_checking_method;
                 self.is_checking_method = false; // Reset so nested functions are declared as normal variables
 
+                let mut resolved_name = name.clone();
                 if !is_method {
-                    self.env.declare(name.clone(), Type::Function(type_params.clone(), param_types.clone(), Box::new(ret_ty.clone())));
+                    let func_ty = Type::Function(type_params.clone(), param_types.clone(), Box::new(ret_ty.clone()));
+                    if let Some(existing) = self.env.resolve(name) {
+                        if matches!(existing, Type::Function(..) | Type::OverloadedFunction(..)) {
+                            let mut funcs = match existing {
+                                Type::OverloadedFunction(fs) => fs,
+                                Type::Function(..) => vec![(name.clone(), existing)],
+                                _ => unreachable!(),
+                            };
+
+                            let mut mangled = format!("_PO_{}", name);
+                            for ty in &param_types {
+                                mangled.push_str(&format!("_{}", ty).replace("<", "_").replace(">", "").replace(" ", "").replace("?", "Opt").replace("[]", "Arr"));
+                            }
+
+                            funcs.push((mangled.clone(), func_ty.clone()));
+                            self.env.declare(name.clone(), Type::OverloadedFunction(funcs));
+                            self.env.declare(mangled.clone(), func_ty);
+                            resolved_name = mangled;
+                        } else {
+                            self.env.declare(name.clone(), func_ty);
+                        }
+                    } else {
+                        self.env.declare(name.clone(), func_ty);
+                    }
                 }
 
                 self.env.push_scope();
@@ -374,7 +398,7 @@ impl TypeChecker {
                 self.current_return_type = previous_return;
                 self.env.pop_scope();
                 TypedStmtKind::Func {
-                    name: name.clone(),
+                    name: resolved_name,
                     type_params: type_params.clone(),
                     params: params.clone(),
                     return_type: return_type.clone(),
@@ -871,12 +895,16 @@ impl TypeChecker {
                 (TypedExprKind::Match { value: Box::new(typed_value), arms: typed_arms }, ty)
             }
             ExprKind::Call { callee, type_args, arguments } => {
-                let typed_callee = self.check_expr(callee);
+                let mut typed_callee = self.check_expr(callee);
 
                 let mut expected_param_types = None;
                 match &typed_callee.ty {
                     Type::Function(_, param_types, _) => {
                         expected_param_types = Some(param_types.clone());
+                    }
+                    Type::OverloadedFunction(_variants) => {
+                        // For overloaded functions, we'll try to infer based on passed arguments below.
+                        // We don't have a single expected param list.
                     }
                     Type::EnumVariantConstructor(_, _, _, param_types, _) => {
                         expected_param_types = Some(param_types.clone());
@@ -885,24 +913,6 @@ impl TypeChecker {
                         if let Some(props) = self.classes.get(class_name) {
                             if let Some(Type::Function(_, param_types, _)) = props.get("init") {
                                 expected_param_types = Some(param_types.clone());
-                            }
-                        }
-                        if expected_param_types.is_none() {
-                            if let Some(generic_stmt) = self.generic_registry.get_class(class_name).cloned() {
-                                if let ast::StmtKind::Class { methods, .. } = &generic_stmt.kind {
-                                    for method in methods {
-                                        if let ast::StmtKind::Func { name, params, .. } = &method.kind {
-                                            if name == "init" {
-                                                
-                                                for _ in params {
-                                                     // Dummy for now, we'd need parse_type which needs mut self
-                                                    // Let's just not do Class expected types here for now, 
-                                                    // it's not strictly necessary for Enum fixes.
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
@@ -920,6 +930,38 @@ impl TypeChecker {
                 
                 let ty = match &typed_callee.ty {
                     Type::BuiltinFunc => Type::Void,
+                    Type::OverloadedFunction(variants) => {
+                        let mut matched_variant = None;
+                        for (mangled_name, ty) in variants {
+                            if let Type::Function(_, param_types, ret_ty) = ty {
+                                if param_types.len() == arg_types.len() {
+                                    let mut matches = true;
+                                    for (pt, at) in param_types.iter().zip(arg_types.iter()) {
+                                        if !self.is_assignable(pt, at) {
+                                            matches = false;
+                                            break;
+                                        }
+                                    }
+                                    if matches {
+                                        matched_variant = Some((mangled_name.clone(), ty.clone(), ret_ty.clone()));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some((mangled_name, ty, ret_ty)) = matched_variant {
+                            typed_callee = TypedExpr {
+                                kind: TypedExprKind::Variable(mangled_name),
+                                ty,
+                                span: typed_callee.span,
+                            };
+                            *ret_ty
+                        } else {
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, "No matching overload found for arguments.");
+                            Type::Error
+                        }
+                    }
                     Type::Class(class_name, class_type_params) => {
                         let mut constructor_ty = self.classes.get(class_name)
                             .and_then(|props| props.get("init").cloned());
