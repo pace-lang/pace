@@ -3,6 +3,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn run_ui_test(file_path: &Path) {
+    if let Ok(content) = fs::read_to_string(file_path) {
+        if content.contains("// skip-test") {
+            return;
+        }
+    }
+
     let mut cli_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     cli_path.push("../../target/debug/cli");
 

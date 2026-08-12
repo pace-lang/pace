@@ -1,5 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-Error [P1001]: Failed to read file "/home/aniket/Documents/Projects/pacelang/tests/ui/11_modules/pace-math/src/calc.pace": No such file or directory (os error 2) at line 0

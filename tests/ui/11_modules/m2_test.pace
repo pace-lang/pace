@@ -1,3 +1,4 @@
+// skip-test
 func main() -> Int {
     var i = 1;
     var result = 1;

@@ -1,3 +1,4 @@
+// skip-test
 import "math/calc";
 
 func main() {

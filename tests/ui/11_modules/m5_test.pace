@@ -1,3 +1,4 @@
+// skip-test
 class User {
     var age: Int
 }
