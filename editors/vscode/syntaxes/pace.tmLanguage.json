@@ -3,7 +3,7 @@
   "scopeName": "source.pace",
   "patterns": [
     {
-      "match": "\\b(func|let|var|if|else|while|for|in|return|class|interface|implements|enum|match|break|continue|weak|foreign|init|public|private)\\b",
+      "match": "\\b(func|let|var|if|else|while|for|in|return|class|interface|implements|enum|match|break|continue|weak|foreign|init|public|private|import|package|export|as|show|hide|async|await|switch|type|self)\\b",
       "name": "keyword.control.pace"
     },
     {
@@ -38,6 +38,10 @@
     {
       "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
       "name": "entity.name.function.pace"
+    },
+    {
+      "match": "(\\?\\?=|\\?\\?|\\?\\.|\\+|-|\\*|/|%|==|!=|<=|>=|<|>|=|!|\\|\\||&&|\\.\\.)",
+      "name": "keyword.operator.pace"
     }
   ]
 }
