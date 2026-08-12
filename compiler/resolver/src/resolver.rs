@@ -313,7 +313,7 @@ mod tests {
     use ast::{ExprKind, StmtKind, Location};
 
     fn make_span() -> Span {
-        Span::new(0, 0, Location::new(1, 1), Location::new(1, 1))
+        Span::new(0, 0, 0, Location::new(1, 1), Location::new(1, 1))
     }
 
     #[test]

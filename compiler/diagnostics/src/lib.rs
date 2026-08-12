@@ -1,6 +1,10 @@
 pub mod span;
+pub mod source_map;
+pub mod formatter;
 
 pub use span::{Location, Span};
+pub use source_map::SourceMap;
+pub use formatter::print_diagnostics;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Severity {
@@ -87,6 +91,11 @@ impl DiagnosticBuilder {
 
     pub fn error(code: DiagnosticCode, message: impl Into<String>, primary_span: Span) -> Self {
         Self::new(Severity::Error, code, message.into(), primary_span)
+    }
+    
+    pub fn global_error(code: DiagnosticCode, message: impl Into<String>) -> Self {
+        let span = Span::new(u32::MAX, 0, 0, Location::new(0, 0), Location::new(0, 0));
+        Self::new(Severity::Error, code, message.into(), span)
     }
     
     pub fn warning(code: DiagnosticCode, message: impl Into<String>, primary_span: Span) -> Self {

@@ -21,6 +21,7 @@ pub struct TypeChecker {
     pub spec_registry: generics::SpecializationRegistry,
     pub pending_instantiations: Vec<TypedStmt>,
     pub uninitialized_class_properties: HashMap<String, Vec<String>>,
+    pub is_checking_method: bool,
 }
 
 impl TypeChecker {
@@ -38,6 +39,7 @@ impl TypeChecker {
             spec_registry: generics::SpecializationRegistry::new(),
             pending_instantiations: Vec::new(),
             uninitialized_class_properties: HashMap::new(),
+            is_checking_method: false,
         }
     }
 
@@ -186,7 +188,10 @@ impl TypeChecker {
                 
                 let mut typed_methods = Vec::new();
                 for method in methods {
+                    let prev = self.is_checking_method;
+                    self.is_checking_method = true;
                     typed_methods.push(self.check_stmt(method));
+                    self.is_checking_method = prev;
                 }
                 
                 let mut typed_fields = Vec::new();
@@ -326,7 +331,12 @@ impl TypeChecker {
                     param_types.push(self.parse_type(param_type_str, stmt.span));
                 }
 
-                self.env.declare(name.clone(), Type::Function(type_params.clone(), param_types.clone(), Box::new(ret_ty.clone())));
+                let is_method = self.is_checking_method;
+                self.is_checking_method = false; // Reset so nested functions are declared as normal variables
+
+                if !is_method {
+                    self.env.declare(name.clone(), Type::Function(type_params.clone(), param_types.clone(), Box::new(ret_ty.clone())));
+                }
 
                 self.env.push_scope();
                 for tp in type_params {
@@ -1415,8 +1425,7 @@ impl TypeChecker {
         }
     }
 
-    fn error(&mut self, span: Span, code: DiagnosticCode, message: &str) {
-        eprintln!("TYPECHECKER ERROR: {} at {:?}", message, span);
+    pub fn error(&mut self, span: Span, code: DiagnosticCode, message: &str) {
         self.errors.push(DiagnosticBuilder::error(code, message, span).build());
     }
 
@@ -1555,7 +1564,7 @@ mod tests {
     use ast::Location;
 
     fn make_span() -> Span {
-        Span::new(0, 0, Location::new(1, 1), Location::new(1, 1))
+        Span::new(0, 0, 0, Location::new(1, 1), Location::new(1, 1))
     }
 
     #[test]

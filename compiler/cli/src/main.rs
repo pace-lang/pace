@@ -9,6 +9,12 @@ use lowering::ProgramBuilder;
 use vm::VirtualMachine;
 use codegen::CraneliftGenerator;
 use linker::Linker;
+use diagnostics::{Severity, print_diagnostics, DiagnosticBuilder, DiagnosticCode, SourceMap};
+
+fn print_global_error(message: &str) {
+    let diag = DiagnosticBuilder::global_error(DiagnosticCode::Custom("E001".into()), message).build();
+    print_diagnostics(&[diag], &SourceMap::new());
+}
 
 #[derive(Parser)]
 #[command(name = "pace")]
@@ -81,7 +87,7 @@ enum Commands {
 
 fn compile_to_mir(file: &Path) -> mir::Program {
     if file.extension().and_then(|e| e.to_str()) != Some("pace") {
-        eprintln!("Error: File must have a .pace extension");
+        print_global_error("File must have a .pace extension");
         exit(1);
     }
     
@@ -101,7 +107,7 @@ fn compile_to_mir(file: &Path) -> mir::Program {
         package_manager.load_root(&root);
         if !package_manager.errors.is_empty() {
             for diag in &package_manager.errors {
-                eprintln!("Package Error: {}", diag.message);
+                print_global_error(&format!("Package Error: {}", diag.message));
             }
             exit(1);
         }
@@ -110,7 +116,7 @@ fn compile_to_mir(file: &Path) -> mir::Program {
         package_manager.load_dummy_root();
         if !package_manager.errors.is_empty() {
             for diag in &package_manager.errors {
-                eprintln!("Package Error: {}", diag.message);
+                print_global_error(&format!("Package Error: {}", diag.message));
             }
             exit(1);
         }
@@ -119,34 +125,44 @@ fn compile_to_mir(file: &Path) -> mir::Program {
 
     let mut loader = module::loader::ModuleLoader::new(package_graph.as_ref());
     loader.load_root(file);
-    if !loader.errors.is_empty() {
-        for diag in &loader.errors {
-            eprintln!("Error [{}]: {} at line {}", diag.code.as_str(), diag.message, diag.primary_span.start_loc.line);
+    
+    let loader_errors = std::mem::take(&mut loader.errors);
+    let (graph, source_map) = loader.into_graph();
+    
+    let mut has_errors = false;
+
+    if !loader_errors.is_empty() {
+        print_diagnostics(&loader_errors, &source_map);
+        if loader_errors.iter().any(|d| d.severity == Severity::Error) {
+            has_errors = true;
         }
-        exit(1);
     }
 
-    let graph = loader.into_graph();
+    if has_errors { exit(1); }
 
     // 3. Name Resolution
     let mut resolver = Resolver::new();
     resolver.resolve_graph(&graph);
     if !resolver.errors.is_empty() {
-        for diag in &resolver.errors {
-            eprintln!("Error [{}]: {} at line {}", diag.code.as_str(), diag.message, diag.primary_span.start_loc.line);
+        print_diagnostics(&resolver.errors, &source_map);
+        if resolver.errors.iter().any(|d| d.severity == Severity::Error) {
+            has_errors = true;
         }
-        exit(1);
     }
+
+    if has_errors { exit(1); }
 
     // 4. Type Checking
     let mut typechecker = TypeChecker::new();
     let typed_ast = typechecker.check_graph(&graph);
     if !typechecker.errors.is_empty() {
-        for diag in &typechecker.errors {
-            eprintln!("Error [{}]: {} at line {}", diag.code.as_str(), diag.message, diag.primary_span.start_loc.line);
+        print_diagnostics(&typechecker.errors, &source_map);
+        if typechecker.errors.iter().any(|d| d.severity == Severity::Error) {
+            has_errors = true;
         }
-        exit(1);
     }
+
+    if has_errors { exit(1); }
 
     // 5. Lowering (AST -> MIR)
     let builder = ProgramBuilder::new();
@@ -176,7 +192,7 @@ fn find_package_root() -> Option<PathBuf> {
 fn create_project(path: &Path, name: &str) {
     if path.exists() {
         if path.read_dir().map(|mut i| i.next().is_some()).unwrap_or(false) && path.join("pace.toml").exists() {
-            eprintln!("Error: Directory {:?} already contains a pace.toml", path);
+            print_global_error(&format!("Directory {:?} already contains a pace.toml", path));
             exit(1);
         }
     } else {
@@ -206,14 +222,14 @@ fn do_check() -> Option<PathBuf> {
     let root = match find_package_root() {
         Some(r) => r,
         None => {
-            eprintln!("Error: could not find `pace.toml` in current directory or any parent directory");
+            print_global_error("Could not find `pace.toml` in current directory or any parent directory");
             exit(1);
         }
     };
     
     let main_file = root.join("src").join("main.pace");
     if !main_file.exists() {
-        eprintln!("Error: `src/main.pace` not found in package");
+        print_global_error("`src/main.pace` not found in package");
         exit(1);
     }
     
@@ -233,7 +249,7 @@ fn do_build(override_file: Option<&str>) -> PathBuf {
         let root = match find_package_root() {
             Some(r) => r,
             None => {
-                eprintln!("Error: could not find `pace.toml` in current directory or any parent directory");
+                print_global_error("Could not find `pace.toml` in current directory or any parent directory");
                 exit(1);
             }
         };
@@ -242,11 +258,16 @@ fn do_build(override_file: Option<&str>) -> PathBuf {
     };
     
     if !main_file.exists() {
-        eprintln!("Error: `{}` not found", main_file.display());
+        print_global_error(&format!("`{}` not found", main_file.display()));
         exit(1);
     }
     
     let ast_program = compile_to_mir(&main_file);
+
+    if !ast_program.functions.contains_key("main") {
+        print_global_error("Entry point `main` not found. Executables require a `main` function or top-level statements.");
+        exit(1);
+    }
 
     let generator = CraneliftGenerator::new();
     
@@ -256,14 +277,14 @@ fn do_build(override_file: Option<&str>) -> PathBuf {
     
     let obj_file = target_dir.join("out.o");
     if let Err(e) = generator.compile_program(&ast_program, &obj_file) {
-        eprintln!("Codegen error: {}", e);
+        print_global_error(&format!("Codegen failed: {}", e));
         exit(1);
     }
 
     let package_name = root.file_name().and_then(|n| n.to_str()).unwrap_or("app");
     let out_file = target_dir.join(package_name);
     if let Err(e) = Linker::link(&obj_file, &out_file) {
-        eprintln!("Linker error: {}", e);
+        print_global_error(&format!("Linker failed: {}", e));
         exit(1);
     }
     
@@ -302,6 +323,11 @@ fn main() {
         }
         Commands::DebugRun { file } => {
             let ast_program = compile_to_mir(file);
+
+            if !ast_program.functions.contains_key("main") {
+                print_global_error("Entry point `main` not found. Executables require a `main` function or top-level statements.");
+                exit(1);
+            }
 
             let mut vm = VirtualMachine::new(&ast_program);
             let result = vm.execute();
@@ -351,7 +377,7 @@ fn main() {
                     println!("Nothing to clean.");
                 }
             } else {
-                eprintln!("Error: could not find `pace.toml` in current directory or any parent directory");
+                print_global_error("Could not find `pace.toml` in current directory or any parent directory");
             }
         }
     }

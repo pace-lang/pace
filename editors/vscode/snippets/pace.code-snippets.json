@@ -12,7 +12,7 @@
     "prefix": "class",
     "body": [
       "class ${1:Name} {",
-      "\tinit(${2:args}) {",
+      "\tfunc init(${2:args}) {",
       "\t\t$0",
       "\t}",
       "}"

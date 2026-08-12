@@ -144,7 +144,7 @@ impl PackageManager {
         self.errors.push(DiagnosticBuilder::error(
             DiagnosticCode::InvalidToken, 
             message, 
-            Span::new(0, 0, Location::new(0, 0), Location::new(0, 0))
+            Span::new(0, 0, 0, Location::new(0, 0), Location::new(0, 0))
         ).build());
     }
 

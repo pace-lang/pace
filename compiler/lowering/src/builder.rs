@@ -594,7 +594,7 @@ mod tests {
     use ast::{BinaryOp, Location, Span};
 
     fn make_span() -> Span {
-        Span::new(0, 0, Location::new(1, 1), Location::new(1, 1))
+        Span::new(0, 0, 0, Location::new(1, 1), Location::new(1, 1))
     }
 
     #[test]

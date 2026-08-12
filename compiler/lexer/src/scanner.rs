@@ -4,6 +4,7 @@ use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
 use crate::token::{Token, TokenKind};
 
 pub struct Scanner<'a> {
+    pub file_id: u32,
     source: &'a str,
     chars: Chars<'a>,
     current_idx: usize,
@@ -14,8 +15,9 @@ pub struct Scanner<'a> {
 }
 
 impl<'a> Scanner<'a> {
-    pub fn new(source: &'a str) -> Self {
+    pub fn new(file_id: u32, source: &'a str) -> Self {
         Self {
+            file_id,
             source,
             chars: source.chars(),
             current_idx: 0,
@@ -38,7 +40,7 @@ impl<'a> Scanner<'a> {
         
         tokens.push(Token::new(
             TokenKind::Eof,
-            Span::new(self.current_idx, self.current_idx, self.current_loc, self.current_loc)
+            Span::new(self.file_id, self.current_idx, self.current_idx, self.current_loc, self.current_loc)
         ));
         
         tokens
@@ -164,7 +166,7 @@ impl<'a> Scanner<'a> {
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() => self.identifier(),
             _ => {
-                let span = Span::new(self.start_idx, self.current_idx, self.start_loc, self.current_loc);
+                let span = Span::new(self.file_id, self.start_idx, self.current_idx, self.start_loc, self.current_loc);
                 self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::UnexpectedToken, format!("Unexpected character '{}'", c), span).build());
                 TokenKind::Error(format!("Unexpected character '{}'", c))
             }
@@ -182,7 +184,7 @@ impl<'a> Scanner<'a> {
         }
 
         if self.is_at_end() {
-            let span = Span::new(self.start_idx, self.current_idx, self.start_loc, self.current_loc);
+            let span = Span::new(self.file_id, self.start_idx, self.current_idx, self.start_loc, self.current_loc);
             self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::InvalidToken, "Unterminated string.", span).build());
             return TokenKind::Error("Unterminated string.".into());
         }
@@ -233,7 +235,7 @@ impl<'a> Scanner<'a> {
             match text.parse::<f64>() {
                 Ok(f) => TokenKind::Float(f),
                 Err(_) => {
-                    let span = Span::new(self.start_idx, self.current_idx, self.start_loc, self.current_loc);
+                    let span = Span::new(self.file_id, self.start_idx, self.current_idx, self.start_loc, self.current_loc);
                     self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::InvalidToken, "Invalid float literal", span).build());
                     TokenKind::Error("Invalid float literal".into())
                 }
@@ -242,7 +244,7 @@ impl<'a> Scanner<'a> {
             match text.parse::<i64>() {
                 Ok(i) => TokenKind::Integer(i),
                 Err(_) => {
-                    let span = Span::new(self.start_idx, self.current_idx, self.start_loc, self.current_loc);
+                    let span = Span::new(self.file_id, self.start_idx, self.current_idx, self.start_loc, self.current_loc);
                     self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::InvalidToken, "Invalid integer literal", span).build());
                     TokenKind::Error("Invalid integer literal".into())
                 }
@@ -300,7 +302,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn make_token(&self, kind: TokenKind) -> Token {
-        let span = Span::new(
+        let span = Span::new(self.file_id, 
             self.start_idx,
             self.current_idx,
             self.start_loc,
@@ -317,7 +319,7 @@ mod tests {
     #[test]
     fn test_basic_tokens() {
         let source = "let count = 10;";
-        let mut scanner = Scanner::new(source);
+        let mut scanner = Scanner::new(0, source);
         let tokens = scanner.scan_tokens();
         
         assert_eq!(tokens.len(), 6); // let, count, =, 10, ;, EOF
@@ -332,7 +334,7 @@ mod tests {
     #[test]
     fn test_error_token() {
         let source = "let x = @;";
-        let mut scanner = Scanner::new(source);
+        let mut scanner = Scanner::new(0, source);
         let tokens = scanner.scan_tokens();
         
         assert_eq!(tokens[3].kind, TokenKind::Error("Unexpected character '@'".into()));

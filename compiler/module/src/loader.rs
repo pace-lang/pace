@@ -14,6 +14,7 @@ pub struct ModuleLoader<'a> {
     loaded_paths: std::collections::HashMap<PathBuf, ModuleId>,
     pub errors: Vec<Diagnostic>,
     package_graph: Option<&'a PackageGraph>,
+    pub source_map: diagnostics::SourceMap,
 }
 
 impl<'a> ModuleLoader<'a> {
@@ -23,6 +24,7 @@ impl<'a> ModuleLoader<'a> {
             loaded_paths: std::collections::HashMap::new(),
             errors: Vec::new(),
             package_graph,
+            source_map: diagnostics::SourceMap::new(),
         }
     }
 
@@ -44,13 +46,15 @@ impl<'a> ModuleLoader<'a> {
                 self.errors.push(diagnostics::DiagnosticBuilder::error(
                     diagnostics::DiagnosticCode::InvalidToken, 
                     &format!("Failed to read file {:?}: {}", path, e), 
-                    diagnostics::Span::new(0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))
+                    diagnostics::Span::new(0, 0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))
                 ).build());
                 return None;
             }
         };
 
-        let mut scanner = lexer::Scanner::new(&source);
+        let file_id = self.source_map.add_file(path.to_path_buf(), source.clone());
+
+        let mut scanner = lexer::Scanner::new(file_id, &source);
         let tokens = scanner.scan_tokens();
         if !scanner.diagnostics.is_empty() {
             self.errors.extend(scanner.diagnostics);
@@ -88,13 +92,13 @@ impl<'a> ModuleLoader<'a> {
                     alias: None,
                     show: vec!["Result".to_string(), "Ok".to_string(), "Err".to_string()],
                     hide: vec![],
-                }, diagnostics::Span::new(0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))),
+                }, diagnostics::Span::new(0, 0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))),
                 ast::Stmt::new(ast::StmtKind::Import {
                     path: "std/core/option".to_string(),
                     alias: None,
                     show: vec!["Option".to_string(), "Some".to_string(), "None".to_string()],
                     hide: vec![],
-                }, diagnostics::Span::new(0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))),
+                }, diagnostics::Span::new(0, 0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))),
             ];
             
             let mut temp = prelude_imports;
@@ -193,7 +197,7 @@ impl<'a> ModuleLoader<'a> {
         Some(module_id)
     }
 
-    pub fn into_graph(self) -> ModuleGraph {
-        self.graph
+    pub fn into_graph(self) -> (ModuleGraph, diagnostics::SourceMap) {
+        (self.graph, self.source_map)
     }
 }

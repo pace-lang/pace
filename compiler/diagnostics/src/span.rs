@@ -14,6 +14,7 @@ impl Location {
 /// Represents a contiguous span of characters in a source file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Span {
+    pub file_id: u32,
     pub start: usize,
     pub end: usize,
     pub start_loc: Location,
@@ -21,8 +22,9 @@ pub struct Span {
 }
 
 impl Span {
-    pub fn new(start: usize, end: usize, start_loc: Location, end_loc: Location) -> Self {
+    pub fn new(file_id: u32, start: usize, end: usize, start_loc: Location, end_loc: Location) -> Self {
         Self {
+            file_id,
             start,
             end,
             start_loc,

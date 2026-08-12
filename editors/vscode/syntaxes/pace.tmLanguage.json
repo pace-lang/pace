@@ -3,7 +3,7 @@
   "scopeName": "source.pace",
   "patterns": [
     {
-      "match": "\\b(func|let|var|if|else|while|for|in|return|class|interface|implements|enum|match|break|continue|weak|foreign|init)\\b",
+      "match": "\\b(func|let|var|if|else|while|for|in|return|class|interface|implements|enum|match|break|continue|weak|foreign|init|public|private)\\b",
       "name": "keyword.control.pace"
     },
     {

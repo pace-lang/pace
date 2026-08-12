@@ -2,5 +2,17 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-Error [P2001]: Cannot find variable 'fn' in this scope. at line 1
-Error [P2001]: Cannot find variable 'main' in this scope. at line 1
+[31m[P2001] Error:[0m Cannot find variable 'fn' in this scope.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m /home/aniket/Documents/Projects/pacelang/tests/ui/03_operators/arithmetic.pace:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m [31mf[0m[31mn[0m[38;5;249m [0m[38;5;249mm[0m[38;5;249ma[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m  │[0m [31m─[0m[31m┬[0m  
+ [38;5;240m  │[0m  [31m╰[0m[31m─[0m[31m─[0m Cannot find variable 'fn' in this scope.
+[38;5;246m───╯[0m
+[31m[P2001] Error:[0m Cannot find variable 'main' in this scope.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m /home/aniket/Documents/Projects/pacelang/tests/ui/03_operators/arithmetic.pace:1:4 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m [38;5;249mf[0m[38;5;249mn[0m[38;5;249m [0m[31mm[0m[31ma[0m[31mi[0m[31mn[0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m  │[0m    [31m─[0m[31m─[0m[31m┬[0m[31m─[0m  
+ [38;5;240m  │[0m      [31m╰[0m[31m─[0m[31m─[0m[31m─[0m Cannot find variable 'main' in this scope.
+[38;5;246m───╯[0m

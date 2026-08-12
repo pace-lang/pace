@@ -93,12 +93,19 @@ pub extern "C" fn pace_retain(obj: *mut u8) {
         return;
     }
     let strong_count = unsafe { &*(obj as *const AtomicU64) };
+    if strong_count.load(Ordering::Relaxed) == 0x7FFFFFFF_FFFFFFFF {
+        return;
+    }
     strong_count.fetch_add(1, Ordering::SeqCst);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_weak_release(obj: *mut u8) {
     if obj.is_null() {
+        return;
+    }
+    let strong_count = unsafe { &*(obj as *const AtomicU64) };
+    if strong_count.load(Ordering::Relaxed) == 0x7FFFFFFF_FFFFFFFF {
         return;
     }
     let weak_count = unsafe { &*(obj.add(8) as *const AtomicU64) };
@@ -114,6 +121,9 @@ pub extern "C" fn pace_release(obj: *mut u8) {
         return;
     }
     let strong_count = unsafe { &*(obj as *const AtomicU64) };
+    if strong_count.load(Ordering::Relaxed) == 0x7FFFFFFF_FFFFFFFF {
+        return;
+    }
     let old_count = strong_count.fetch_sub(1, Ordering::SeqCst);
     if old_count == 1 {
         let metadata_val = unsafe { *(obj.add(16) as *const u64) };
@@ -148,6 +158,10 @@ pub extern "C" fn pace_weak_retain(obj: *mut u8) {
     if obj.is_null() {
         return;
     }
+    let strong_count = unsafe { &*(obj as *const AtomicU64) };
+    if strong_count.load(Ordering::Relaxed) == 0x7FFFFFFF_FFFFFFFF {
+        return;
+    }
     let weak_count = unsafe { &*(obj.add(8) as *const AtomicU64) };
     weak_count.fetch_add(1, Ordering::SeqCst);
 }
@@ -158,6 +172,9 @@ pub extern "C" fn pace_weak_upgrade(obj: *mut u8) -> *mut u8 {
         return std::ptr::null_mut();
     }
     let strong_count = unsafe { &*(obj as *const AtomicU64) };
+    if strong_count.load(Ordering::Relaxed) == 0x7FFFFFFF_FFFFFFFF {
+        return obj;
+    }
 
     let mut count = strong_count.load(Ordering::SeqCst);
     while count > 0 {

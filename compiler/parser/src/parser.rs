@@ -246,7 +246,7 @@ impl Parser {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
         Some(Stmt::new(StmtKind::Enum {
             name,
@@ -340,7 +340,7 @@ impl Parser {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         Some(Stmt::new(StmtKind::Class { name: name.clone(), type_params, implements, methods, fields, is_private }, span))
     }
 
@@ -381,7 +381,7 @@ impl Parser {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         Some(Stmt::new(StmtKind::Interface { name: name.clone(), methods, is_private }, span))
     }
 
@@ -438,7 +438,7 @@ impl Parser {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
         // We use StmtKind::Func but with an empty block for the body.
         let empty_body = Box::new(Stmt::new(StmtKind::Block(Vec::new()), span.clone()));
@@ -494,7 +494,7 @@ impl Parser {
 
         let body = self.block()?;
         let end_span = body.span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params: Vec::new(), params, return_type, body: Box::new(body), is_private }, span))
     }
 
@@ -563,7 +563,7 @@ impl Parser {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
         Some(Stmt::new(StmtKind::ForeignFunc {
             name,
@@ -635,7 +635,7 @@ impl Parser {
 
         let body = self.block()?;
         let end_span = body.span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params, params, return_type, body: Box::new(body), is_private }, span))
     }
 
@@ -665,7 +665,7 @@ impl Parser {
         self.match_token(&[TokenKind::Semicolon]);
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         
         let kind = if is_var {
             StmtKind::Var { name: name.clone(), type_annotation, initializer, is_weak, is_private }
@@ -722,7 +722,7 @@ impl Parser {
             }
         }
 
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         Some(Stmt::new(StmtKind::If { condition, then_branch: Box::new(then_branch), else_branch }, span))
     }
 
@@ -739,7 +739,7 @@ impl Parser {
         let body = self.block()?;
         let end_span = body.span;
 
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         Some(Stmt::new(StmtKind::While { condition, body: Box::new(body) }, span))
     }
 
@@ -777,7 +777,7 @@ impl Parser {
         let body = self.block()?;
         let end_span = body.span;
 
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         Some(Stmt::new(StmtKind::For { item_name, iterator, body: Box::new(body) }, span))
     }
 
@@ -796,7 +796,7 @@ impl Parser {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         Some(Stmt::new(StmtKind::Return { value }, span))
     }
 
@@ -816,7 +816,7 @@ impl Parser {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         Some(Stmt::new(StmtKind::Block(statements), span))
     }
 
@@ -842,15 +842,15 @@ impl Parser {
 
             match expr.kind {
                 ExprKind::Variable(name) => {
-                    let span = Span::new(expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
+                    let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
                     return Some(Expr::new(ExprKind::Assign { name, value: Box::new(value) }, span));
                 }
                 ExprKind::Get { object, name } => {
-                    let span = Span::new(expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
+                    let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
                     return Some(Expr::new(ExprKind::Set { object, name, value: Box::new(value) }, span));
                 }
                 ExprKind::IndexGet { object, index } => {
-                    let span = Span::new(expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
+                    let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
                     return Some(Expr::new(ExprKind::IndexSet { object, index, value: Box::new(value) }, span));
                 }
                 _ => {
@@ -872,7 +872,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let right = self.comparison()?;
-            let span = Span::new(expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
+            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
             expr = Expr::new(ExprKind::Binary(Box::new(expr), operator, Box::new(right)), span);
         }
 
@@ -891,7 +891,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let right = self.term()?;
-            let span = Span::new(expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
+            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
             expr = Expr::new(ExprKind::Binary(Box::new(expr), operator, Box::new(right)), span);
         }
 
@@ -908,7 +908,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let right = self.factor()?;
-            let span = Span::new(expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
+            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
             expr = Expr::new(ExprKind::Binary(Box::new(expr), operator, Box::new(right)), span);
         }
 
@@ -925,7 +925,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let right = self.unary()?;
-            let span = Span::new(expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
+            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
             expr = Expr::new(ExprKind::Binary(Box::new(expr), operator, Box::new(right)), span);
         }
 
@@ -936,7 +936,7 @@ impl Parser {
         if self.match_token(&[TokenKind::Minus]) {
             let start_span = self.previous().span;
             let right = self.unary()?;
-            let span = Span::new(start_span.start, right.span.end, start_span.start_loc, right.span.end_loc);
+            let span = Span::new(start_span.file_id, start_span.start, right.span.end, start_span.start_loc, right.span.end_loc);
             return Some(Expr::new(ExprKind::Unary(UnaryOp::Negate, Box::new(right)), span));
         }
 
@@ -982,7 +982,7 @@ impl Parser {
                     return None;
                 };
 
-                let span = Span::new(expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
+                let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
                 expr = Expr::new(ExprKind::Get { object: Box::new(expr), name }, span);
             } else if self.match_token(&[TokenKind::QuestionDot]) {
                 let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -993,10 +993,10 @@ impl Parser {
                     return None;
                 };
 
-                let span = Span::new(expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
+                let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
                 expr = Expr::new(ExprKind::OptionalGet { object: Box::new(expr), name }, span);
             } else if self.match_token(&[TokenKind::Bang]) {
-                let span = Span::new(expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
+                let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
                 expr = Expr::new(ExprKind::ForceUnwrap(Box::new(expr)), span);
             } else if self.match_token(&[TokenKind::LeftBracket]) {
                 let index = self.expression()?;
@@ -1004,7 +1004,7 @@ impl Parser {
                     self.error_at_current("Expected ']' after index.");
                     return None;
                 }
-                let span = Span::new(expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
+                let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
                 expr = Expr::new(ExprKind::IndexGet { object: Box::new(expr), index: Box::new(index) }, span);
             } else {
                 break;
@@ -1027,7 +1027,7 @@ impl Parser {
             self.error_at_current("Expected ')' after arguments.");
             return None;
         }
-        let span = Span::new(callee.span.start, self.previous().span.end, callee.span.start_loc, self.previous().span.end_loc);
+        let span = Span::new(callee.span.file_id, callee.span.start, self.previous().span.end, callee.span.start_loc, self.previous().span.end_loc);
         Some(Expr::new(ExprKind::Call { callee: Box::new(callee), type_args, arguments }, span))
     }
 
@@ -1106,7 +1106,7 @@ impl Parser {
                         return None;
                     }
                     let end_span = self.previous().span;
-                    let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+                    let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
                     return Some(Expr::new(ExprKind::Grouping(Box::new(expr)), span));
                 }
                 TokenKind::LeftBracket => {
@@ -1114,7 +1114,7 @@ impl Parser {
                     let start_span = token.span;
                     if self.match_token(&[TokenKind::RightBracket]) {
                         let end_span = self.previous().span;
-                        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+                        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
                         return Some(Expr::new(ExprKind::Array(Vec::new()), span));
                     }
                     
@@ -1126,7 +1126,7 @@ impl Parser {
                             return None;
                         }
                         let end_span = self.previous().span;
-                        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+                        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
                         return Some(Expr::new(ExprKind::ArrayRepeat { value: Box::new(first_expr), count: Box::new(count) }, span));
                     } else {
                         let mut elements = vec![first_expr];
@@ -1141,7 +1141,7 @@ impl Parser {
                             return None;
                         }
                         let end_span = self.previous().span;
-                        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+                        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
                         return Some(Expr::new(ExprKind::Array(elements), span));
                     }
                 }
@@ -1234,7 +1234,7 @@ impl Parser {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         
         Some(Expr::new(ExprKind::Match { value: Box::new(value), arms }, span))
     }
@@ -1363,7 +1363,7 @@ impl Parser {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
         Some(Stmt::new(StmtKind::Import { path, alias, show, hide }, span))
     }
@@ -1385,7 +1385,7 @@ impl Parser {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
         Some(Stmt::new(StmtKind::Export { path }, span))
     }
@@ -1400,7 +1400,7 @@ mod tests {
     #[test]
     fn test_func_declaration() {
         let source = "func add(a: Int, b: Int) -> Int { return a + b; }";
-        let mut scanner = Scanner::new(source);
+        let mut scanner = Scanner::new(0, source);
         let mut parser = Parser::new(scanner.scan_tokens());
         let (stmts, errors) = parser.parse();
         
@@ -1420,7 +1420,7 @@ mod tests {
     #[test]
     fn test_visibility_modifiers() {
         let source = "private func hidden() {} public class Visible {} var unadorned = 1;";
-        let mut scanner = Scanner::new(source);
+        let mut scanner = Scanner::new(0, source);
         let mut parser = Parser::new(scanner.scan_tokens());
         let (stmts, errors) = parser.parse();
         
@@ -1446,7 +1446,7 @@ mod tests {
     #[test]
     fn test_if_statement() {
         let source = "if count > 0 { let x = 1; } else { let x = 0; }";
-        let mut scanner = Scanner::new(source);
+        let mut scanner = Scanner::new(0, source);
         let mut parser = Parser::new(scanner.scan_tokens());
         let (stmts, errors) = parser.parse();
         
