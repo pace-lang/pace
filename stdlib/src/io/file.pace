@@ -10,7 +10,7 @@ foreign func fileIsValid(ptr: Pointer<CChar>) -> Boolean;
 class File {
     var ptr: Pointer<CChar>;
 
-    init(ptr: Pointer<CChar>) {
+    func init(ptr: Pointer<CChar>) {
         self.ptr = ptr;
     }
 

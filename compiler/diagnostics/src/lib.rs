@@ -22,6 +22,7 @@ pub enum DiagnosticCode {
     // Type System (P3xxx)
     TypeMismatch, // P3001
     UnknownType, // P3002
+    UninitializedVariable, // P3003
     
     // Ownership & ARC (P4xxx)
     InvalidWeakReference, // P4001
@@ -40,6 +41,7 @@ impl DiagnosticCode {
             DiagnosticCode::DuplicateDeclaration => "P2002",
             DiagnosticCode::TypeMismatch => "P3001",
             DiagnosticCode::UnknownType => "P3002",
+            DiagnosticCode::UninitializedVariable => "P3003",
             DiagnosticCode::InvalidWeakReference => "P4001",
             DiagnosticCode::OwnershipViolation => "P4002",
             DiagnosticCode::Custom(code) => code,

@@ -136,12 +136,28 @@ impl<'a, 'b> Translator<'a, 'b> {
                     false,
                 ).unwrap();
                 let mut data_desc = DataDescription::new();
-                let mut bytes = s.clone().into_bytes();
+                data_desc.set_align(8);
+                let mut bytes = Vec::new();
+                
+                // ARC Header for static string literal
+                // strong_count: high value so it never hits 0 and triggers free() on .rodata
+                bytes.extend_from_slice(&(0x7FFFFFFF_FFFFFFFF_u64.to_le_bytes())); 
+                // weak_count
+                bytes.extend_from_slice(&(1_u64.to_le_bytes())); 
+                // metadata = !1 (-2: primitive array)
+                bytes.extend_from_slice(&((!1_u64).to_le_bytes())); 
+                
+                // Payload
+                bytes.extend_from_slice(s.as_bytes());
                 bytes.push(0); // Null terminator
+                
                 data_desc.define(bytes.into_boxed_slice());
                 self.module.define_data(data_id, &data_desc).unwrap();
                 let local_data = self.module.declare_data_in_func(data_id, self.builder.func);
-                Ok(self.builder.ins().symbol_value(types::I64, local_data))
+                let base_ptr = self.builder.ins().symbol_value(types::I64, local_data);
+                
+                // Return pointer to the header (ARC requirement)
+                Ok(base_ptr)
             }
             Value::Object(_) | Value::Array(_) | Value::EnumVariant(..) => Err("Value::Object, Value::Array, and Value::EnumVariant are runtime-only variants".to_string()),
         }

@@ -64,6 +64,7 @@ jobs:
         run: |
           mkdir -p package/pace/bin package/pace/lib/pace/stdlib
           cp target/${{ matrix.target }}/release/cli package/pace/bin/${{ matrix.artifact_name }}
+          cp target/${{ matrix.target }}/release/libpace_runtime.a package/pace/lib/
           cp -r stdlib/* package/pace/lib/pace/stdlib/
           cd package
           tar -czf ../pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.tar.gz pace
@@ -76,6 +77,7 @@ jobs:
         run: |
           mkdir -p package/pace/bin package/pace/lib/pace/stdlib
           cp target/${{ matrix.target }}/release/cli.exe package/pace/bin/${{ matrix.artifact_name }}
+          cp target/${{ matrix.target }}/release/pace_runtime.lib package/pace/lib/
           cp -r stdlib/* package/pace/lib/pace/stdlib/
           cd package
           7z a ../pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip pace

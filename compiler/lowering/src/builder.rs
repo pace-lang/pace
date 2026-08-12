@@ -26,7 +26,7 @@ fn type_expr_to_abi(type_expr: &TypeExpr) -> ForeignAbiType {
 fn is_ref_type_opt(te: &Option<ast::TypeExpr>) -> bool {
     match te {
         Some(ast::TypeExpr::Named(name)) => {
-            !["Int", "Float", "String", "Boolean"].contains(&name.as_str())
+            !["Int", "Float", "Boolean"].contains(&name.as_str())
         }
         Some(ast::TypeExpr::Optional(inner)) => {
             is_ref_type_opt(&Some((**inner).clone()))
@@ -571,10 +571,17 @@ impl MirBuilder {
                 Value::Place(temp)
             }
             TypedExprKind::Binary(left, op, right) => {
+                let left_ty = left.ty.clone();
+                let right_ty = right.ty.clone();
                 let left_val = self.lower_expr(left);
                 let right_val = self.lower_expr(right);
                 let temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::BinaryOp(op.clone(), left_val, right_val)));
+                
+                if op == &ast::BinaryOp::Add && left_ty == ast::types::Type::String && right_ty == ast::types::Type::String {
+                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call("stringConcat".to_string(), vec![left_val, right_val])));
+                } else {
+                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::BinaryOp(op.clone(), left_val, right_val)));
+                }
                 Value::Place(temp)
             }
         }

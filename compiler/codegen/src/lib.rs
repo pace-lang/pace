@@ -152,10 +152,18 @@ impl CraneliftGenerator {
         let panic_id = module.declare_function("pace_panic", Linkage::Import, &panic_sig).unwrap();
         func_ids.insert("pace_panic".to_string(), panic_id);
 
+        let mut str_concat_sig = module.make_signature();
+        str_concat_sig.params.push(AbiParam::new(types::I64));
+        str_concat_sig.params.push(AbiParam::new(types::I64));
+        str_concat_sig.returns.push(AbiParam::new(types::I64));
+        let str_concat_id = module.declare_function("stringConcat", Linkage::Import, &str_concat_sig).unwrap();
+        func_ids.insert("stringConcat".to_string(), str_concat_id);
+
         let mut class_metadata_ids = HashMap::new();
         
         for (class_name, class_def) in &program.classes {
             let mut data_ctx = DataDescription::new();
+            data_ctx.set_align(8);
             let mut metadata_bytes = Vec::new();
             
             // field_count (uint64_t)
@@ -186,6 +194,7 @@ impl CraneliftGenerator {
         for (enum_name, enum_def) in &program.enums {
             for (variant_idx, variant_def) in enum_def.variants.iter().enumerate() {
                 let mut data_ctx = DataDescription::new();
+                data_ctx.set_align(8);
                 let mut metadata_bytes = Vec::new();
                 
                 metadata_bytes.extend_from_slice(&(variant_def.reference_payloads.len() as u64).to_le_bytes());

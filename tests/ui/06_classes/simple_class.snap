@@ -2,9 +2,4 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-Finished `dev` profile [unoptimized + debuginfo] target(s)
-     Running `target/debug/06_classes`
-10
-12
-Pace Runtime: Strong count is 0, releasing weak representation
-Pace Runtime: Freeing object memory
+Error [P1002]: Constructors must be declared with 'func init'. at line 4

@@ -1,5 +1,6 @@
 ---
 source: compiler/cli/tests/golden_tests.rs
+assertion_line: 50
 expression: normalized_stderr
 ---
 Eagerly typechecking Box_Int
@@ -11,9 +12,3 @@ Finished eagerly typechecking ArrayWrapper_Int
      Running `target/debug/09_generics`
 100
 10
-Pace Runtime: Strong count is 0, releasing weak representation
-Pace Runtime: Freeing object memory
-Pace Runtime: Strong count is 0, releasing weak representation
-Pace Runtime: Strong count is 0, releasing weak representation
-Pace Runtime: Freeing object memory
-Pace Runtime: Freeing object memory

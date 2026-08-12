@@ -291,10 +291,17 @@ impl Parser {
                     self.error_at_current("Expected 'var' after 'weak'.");
                 }
             } else if self.match_token(&[TokenKind::Func]) {
-                if let Some(method) = self.function_declaration() {
-                    methods.push(method);
+                if self.match_token(&[TokenKind::Init]) {
+                    if let Some(init_method) = self.init_declaration() {
+                        methods.push(init_method);
+                    }
+                } else {
+                    if let Some(method) = self.function_declaration() {
+                        methods.push(method);
+                    }
                 }
             } else if self.match_token(&[TokenKind::Init]) {
+                self.error_at_current("Constructors must be declared with 'func init'.");
                 if let Some(init_method) = self.init_declaration() {
                     methods.push(init_method);
                 }

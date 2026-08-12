@@ -1,0 +1,14 @@
+[package]
+name = "runtime"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+libc = "0.2.189"
+
+[lib]
+name = "pace_runtime"
+crate-type = ["staticlib"]

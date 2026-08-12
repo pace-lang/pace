@@ -1,7 +1,7 @@
 class Box<T> {
     var value: T;
     
-    init(val: T) {
+    func init(val: T) {
         self.value = val;
     }
     
@@ -13,7 +13,7 @@ class Box<T> {
 class ArrayWrapper<T> {
     var items: [T];
     
-    init(arr: [T]) {
+    func init(arr: [T]) {
         self.items = arr;
     }
     

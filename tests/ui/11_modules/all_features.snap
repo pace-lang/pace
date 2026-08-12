@@ -2,8 +2,7 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-Eagerly typechecking Box_Int
-Finished eagerly typechecking Box_Int
-Eagerly typechecking Box_String
-Finished eagerly typechecking Box_String
-Codegen error: Failed to define BankAccount::deposit: Compilation error: Verifier errors
+Error [P1002]: Constructors must be declared with 'func init'. at line 42
+Error [P1002]: Constructors must be declared with 'func init'. at line 72
+Error [P1002]: Constructors must be declared with 'func init'. at line 101
+Error [P1002]: Constructors must be declared with 'func init'. at line 113

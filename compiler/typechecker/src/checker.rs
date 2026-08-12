@@ -20,6 +20,7 @@ pub struct TypeChecker {
     pub generic_registry: generics::GenericDefinitionRegistry,
     pub spec_registry: generics::SpecializationRegistry,
     pub pending_instantiations: Vec<TypedStmt>,
+    pub uninitialized_class_properties: HashMap<String, Vec<String>>,
 }
 
 impl TypeChecker {
@@ -36,6 +37,7 @@ impl TypeChecker {
             generic_registry: generics::GenericDefinitionRegistry::new(),
             spec_registry: generics::SpecializationRegistry::new(),
             pending_instantiations: Vec::new(),
+            uninitialized_class_properties: HashMap::new(),
         }
     }
 
@@ -104,6 +106,7 @@ impl TypeChecker {
                 }
 
                 let mut class_members = HashMap::new();
+                let mut uninit_props = Vec::new();
                 
                 for field in fields {
                     let (f_name, type_annotation, initializer, is_weak) = match &field.kind {
@@ -111,6 +114,10 @@ impl TypeChecker {
                         StmtKind::Let { name, type_annotation, initializer, is_private: _ } => (name, type_annotation, initializer, false),
                         _ => continue,
                     };
+                    
+                    if initializer.is_none() {
+                        uninit_props.push(f_name.clone());
+                    }
                     
                     let ty = if let Some(ann) = type_annotation {
                         let parsed = self.parse_type(ann, field.span);
@@ -136,6 +143,8 @@ impl TypeChecker {
                     };
                     class_members.insert(f_name.clone(), ty);
                 }
+
+                self.uninitialized_class_properties.insert(name.clone(), uninit_props);
 
                 for method in methods {
                     if let StmtKind::Func { name: m_name, params, return_type, .. } = &method.kind {
@@ -337,6 +346,20 @@ impl TypeChecker {
                 self.current_return_type = Some(ret_ty.clone());
 
                 let typed_body = self.check_stmt(body);
+
+                if name == "init" {
+                    if let Some(ref class_name) = self.current_class {
+                        if let Some(uninit_props_ref) = self.uninitialized_class_properties.get(class_name) {
+                            let uninit_props = uninit_props_ref.clone();
+                            let assigned_props = Self::get_assigned_properties_in_init(&typed_body);
+                            for prop in uninit_props {
+                                if !assigned_props.contains(&prop) {
+                                    self.error(stmt.span, DiagnosticCode::UninitializedVariable, &format!("Property '{}' is not initialized by the constructor.", prop));
+                                }
+                            }
+                        }
+                    }
+                }
 
                 self.current_return_type = previous_return;
                 self.env.pop_scope();
@@ -1489,6 +1512,40 @@ impl TypeChecker {
         }
         
         mangled_name
+    }
+    fn get_assigned_properties_in_init(stmt: &TypedStmt) -> std::collections::HashSet<String> {
+        let mut assigned = std::collections::HashSet::new();
+        match &stmt.kind {
+            TypedStmtKind::Block(stmts) => {
+                for s in stmts {
+                    assigned.extend(Self::get_assigned_properties_in_init(s));
+                }
+            }
+            TypedStmtKind::Expression(expr) => {
+                if let TypedExprKind::Set { object, name, value: _ } = &expr.kind {
+                    if let TypedExprKind::SelfRef = &object.kind {
+                        assigned.insert(name.clone());
+                    }
+                }
+            }
+            TypedStmtKind::If { then_branch, else_branch, .. } => {
+                let then_assigned = Self::get_assigned_properties_in_init(then_branch);
+                if let Some(else_b) = else_branch {
+                    let else_assigned = Self::get_assigned_properties_in_init(else_b);
+                    // Only count if assigned in BOTH branches
+                    for prop in then_assigned {
+                        if else_assigned.contains(&prop) {
+                            assigned.insert(prop);
+                        }
+                    }
+                }
+            }
+            TypedStmtKind::While { body: _, .. } | TypedStmtKind::For { body: _, .. } => {
+                // Loop bodies might not execute, so we don't count assignments inside them as definite!
+            }
+            _ => {}
+        }
+        assigned
     }
 }
 

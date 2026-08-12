@@ -2,4 +2,5 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-Error [P1002]: Expected function name. at line 4
+Error [P2001]: Cannot find variable 'fn' in this scope. at line 9
+Error [P2001]: Cannot find variable 'main' in this scope. at line 9

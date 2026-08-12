@@ -9,7 +9,7 @@ foreign func mapContains<K, V>(ptr: Pointer<CChar>, key: K) -> Boolean;
 class Map<K, V> {
     var ptr: Pointer<CChar>;
 
-    init() {
+    func init() {
         self.ptr = mapInit<K, V>();
     }
 

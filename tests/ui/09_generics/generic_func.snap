@@ -1,5 +1,6 @@
 ---
 source: compiler/cli/tests/golden_tests.rs
+assertion_line: 50
 expression: normalized_stderr
 ---
 Finished `dev` profile [unoptimized + debuginfo] target(s)
@@ -7,5 +8,3 @@ Finished `dev` profile [unoptimized + debuginfo] target(s)
 10
 100
 42
-Pace Runtime: Strong count is 0, releasing weak representation
-Pace Runtime: Freeing object memory
