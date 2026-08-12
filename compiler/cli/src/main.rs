@@ -331,11 +331,10 @@ fn main() {
 
             let mut vm = VirtualMachine::new(&ast_program);
             let result = vm.execute();
-            if let Some(val) = result {
-                if val != mir::Value::Void {
+            if let Some(val) = result
+                && val != mir::Value::Void {
                     println!("Result: {:?}", val);
                 }
-            }
         }
         Commands::Test => {
             println!("Not implemented yet");

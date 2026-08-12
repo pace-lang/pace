@@ -26,6 +26,12 @@ pub struct ScopeStack {
     scopes: Vec<Scope>,
 }
 
+impl Default for ScopeStack {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScopeStack {
     pub fn new() -> Self {
         // Start with a global scope

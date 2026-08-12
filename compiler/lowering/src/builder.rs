@@ -41,6 +41,12 @@ fn is_ref_type(te: &ast::TypeExpr) -> bool {
     is_ref_type_opt(&Some(te.clone()))
 }
 
+impl Default for ProgramBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProgramBuilder {
     pub fn new() -> Self {
         Self {
@@ -128,7 +134,7 @@ impl ProgramBuilder {
                                 ref_params.insert(p.clone());
                             }
                         }
-                        let returns_ref = return_type.as_ref().map_or(false, |ty| is_ref_type(ty));
+                        let returns_ref = return_type.as_ref().is_some_and(is_ref_type);
                         let actual_name = format!("{}::{}", name, m_name);
                         let builder = MirBuilder::new(actual_name.clone(), param_names, ref_params, returns_ref, enums_map.clone());
                         let mir_func = match &body.kind {
@@ -149,7 +155,7 @@ impl ProgramBuilder {
                         ref_params.insert(p.clone());
                     }
                 }
-                let returns_ref = return_type.as_ref().map_or(false, |ty| is_ref_type(ty));
+                let returns_ref = return_type.as_ref().is_some_and(is_ref_type);
                 let builder = MirBuilder::new(name.clone(), param_names, ref_params, returns_ref, enums_map.clone());
                 let mir_func = match &body.kind {
                     TypedStmtKind::Block(stmts) => builder.build(stmts),

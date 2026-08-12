@@ -39,6 +39,12 @@ pub struct DependencyResolver {
     sources: Vec<Box<dyn DependencySource>>,
 }
 
+impl Default for DependencyResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DependencyResolver {
     pub fn new() -> Self {
         Self {

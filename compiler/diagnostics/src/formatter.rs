@@ -63,7 +63,7 @@ pub fn print_diagnostics(diagnostics: &[Diagnostic], source_map: &SourceMap) {
         }
 
         let mut sources = Vec::new();
-        for (_id, (path, source)) in source_map.get_all_files() {
+        for (path, source) in source_map.get_all_files().values() {
             sources.push((path.to_string_lossy().into_owned(), source.as_str()));
         }
         

@@ -3,11 +3,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn run_ui_test(file_path: &Path) {
-    if let Ok(content) = fs::read_to_string(file_path) {
-        if content.contains("// skip-test") {
+    if let Ok(content) = fs::read_to_string(file_path)
+        && content.contains("// skip-test") {
             return;
         }
-    }
 
     let mut cli_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     cli_path.push("../../target/debug/cli");
@@ -25,7 +24,7 @@ fn run_ui_test(file_path: &Path) {
     let mut combined_output = String::from_utf8(output.stderr).unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     if !stdout.is_empty() {
-        combined_output.push_str("\n");
+        combined_output.push('\n');
         combined_output.push_str(&stdout);
     }
     
@@ -41,11 +40,10 @@ fn run_ui_test(file_path: &Path) {
     let normalized_stderr = combined_output
         .lines()
         .map(|line| {
-            if line.starts_with("thread '") && line.contains("panicked at") {
-                if let Some(idx) = line.find("panicked at") {
+            if line.starts_with("thread '") && line.contains("panicked at")
+                && let Some(idx) = line.find("panicked at") {
                     return format!("thread 'main' {}", &line[idx..]);
                 }
-            }
             line.replace(&workspace_root, "$WORKSPACE").to_string()
         })
         .collect::<Vec<_>>()

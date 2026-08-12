@@ -45,7 +45,7 @@ impl<'a> ModuleLoader<'a> {
                 // In reality, we'd log this better.
                 self.errors.push(diagnostics::DiagnosticBuilder::error(
                     diagnostics::DiagnosticCode::InvalidToken, 
-                    &format!("Failed to read file {:?}: {}", path, e), 
+                    format!("Failed to read file {:?}: {}", path, e), 
                     diagnostics::Span::new(0, 0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))
                 ).build());
                 return None;
@@ -75,18 +75,15 @@ impl<'a> ModuleLoader<'a> {
         let mut std_root_path = None;
         if let Some(pg) = self.package_graph {
             for (id, pkg_path) in &pg.paths {
-                if let Some(manifest) = pg.manifests.get(id) {
-                    if manifest.package.name == "std" {
+                if let Some(manifest) = pg.manifests.get(id)
+                    && manifest.package.name == "std" {
                         std_root_path = Some(pkg_path.clone());
                     }
-                }
-                if path.starts_with(pkg_path) {
-                    if let Some(manifest) = pg.manifests.get(id) {
-                        if manifest.package.name == "std" {
+                if path.starts_with(pkg_path)
+                    && let Some(manifest) = pg.manifests.get(id)
+                        && manifest.package.name == "std" {
                             is_std = true;
                         }
-                    }
-                }
             }
         }
         
@@ -101,17 +98,17 @@ impl<'a> ModuleLoader<'a> {
                             let path = entry.path();
                             if path.is_dir() {
                                 stack.push(path);
-                            } else if path.extension().map_or(false, |ext| ext == "pace") {
-                                if let Ok(rel_path) = path.strip_prefix(&std_src) {
+                            } else if path.extension().is_some_and(|ext| ext == "pace")
+                                && let Ok(rel_path) = path.strip_prefix(&std_src) {
                                     let mut import_path = "std".to_string();
                                     for comp in rel_path.components() {
                                         if let std::path::Component::Normal(name) = comp {
                                             let name_str = name.to_string_lossy();
                                             if name_str.ends_with(".pace") {
-                                                import_path.push_str("/");
+                                                import_path.push('/');
                                                 import_path.push_str(&name_str[..name_str.len() - 5]);
                                             } else {
-                                                import_path.push_str("/");
+                                                import_path.push('/');
                                                 import_path.push_str(&name_str);
                                             }
                                         }
@@ -123,7 +120,6 @@ impl<'a> ModuleLoader<'a> {
                                         hide: vec![],
                                     }, diagnostics::Span::new(0, 0, 0, diagnostics::Location::new(0, 0), diagnostics::Location::new(0, 0))));
                                 }
-                            }
                         }
                     }
                 }
@@ -155,8 +151,8 @@ impl<'a> ModuleLoader<'a> {
                 } else if clean_path.starts_with("./") || clean_path.starts_with("../") {
                     self.errors.push(diagnostics::DiagnosticBuilder::error(
                         diagnostics::DiagnosticCode::InvalidToken,
-                        &format!("Could not find local file '{}'.", local_resolved.display()),
-                        stmt.span.clone()
+                        format!("Could not find local file '{}'.", local_resolved.display()),
+                        stmt.span
                     ).build());
                     continue;
                 } else {
@@ -177,9 +173,9 @@ impl<'a> ModuleLoader<'a> {
                                 break;
                             }
                         }
-                        if let Some(deps) = pg.dependencies.get(&owner_pkg) {
-                            if let Some(dep_pkg_id) = deps.get(pkg_name) {
-                                if let Some(dep_pkg_path) = pg.paths.get(dep_pkg_id) {
+                        if let Some(deps) = pg.dependencies.get(&owner_pkg)
+                            && let Some(dep_pkg_id) = deps.get(pkg_name)
+                                && let Some(dep_pkg_path) = pg.paths.get(dep_pkg_id) {
                                     let mut p = dep_pkg_path.clone();
                                     p.push("src");
                                     for part in parts.iter().skip(1) {
@@ -191,8 +187,6 @@ impl<'a> ModuleLoader<'a> {
                                     p.set_extension("pace");
                                     resolved = Some(p.canonicalize().unwrap_or(p));
                                 }
-                            }
-                        }
                     }
                     
                     if let Some(r) = resolved {
@@ -200,18 +194,17 @@ impl<'a> ModuleLoader<'a> {
                     } else {
                         self.errors.push(diagnostics::DiagnosticBuilder::error(
                             diagnostics::DiagnosticCode::InvalidToken, 
-                            &format!("Could not resolve package import '{}'.", clean_path), 
-                            stmt.span.clone()
+                            format!("Could not resolve package import '{}'.", clean_path), 
+                            stmt.span
                         ).build());
                         continue;
                     }
                 }
                 
-                if let Some(abs_path) = resolved_import_path {
-                    if let Some(dep_id) = self.load_file(&abs_path) {
+                if let Some(abs_path) = resolved_import_path
+                    && let Some(dep_id) = self.load_file(&abs_path) {
                         dependencies.push((clean_path.to_string(), dep_id));
                     }
-                }
             }
         }
 

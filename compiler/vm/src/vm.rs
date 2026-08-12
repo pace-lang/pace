@@ -111,30 +111,27 @@ impl<'a> VirtualMachine<'a> {
                 }
                 // Array methods (Arrays are represented as Objects with stringified integer keys and a "length" property)
                 "arrayLen" => {
-                    if let Value::Object(id) = &args[0] {
-                        if let Some(obj) = self.heap.get(*id) {
-                            if let Some(Value::Int(len)) = obj.fields.get("length") {
+                    if let Value::Object(id) = &args[0]
+                        && let Some(obj) = self.heap.get(*id)
+                            && let Some(Value::Int(len)) = obj.fields.get("length") {
                                 return Some(Value::Int(*len));
                             }
-                        }
-                    }
                 }
                 "arrayPush" => {
                     if let Value::Object(id) = &args[0] {
                         let item = args[1].clone();
-                        if let Some(obj) = self.heap.get_mut(*id) {
-                            if let Some(Value::Int(len)) = obj.fields.get("length").cloned() {
+                        if let Some(obj) = self.heap.get_mut(*id)
+                            && let Some(Value::Int(len)) = obj.fields.get("length").cloned() {
                                 obj.fields.insert(len.to_string(), item);
                                 obj.fields.insert("length".to_string(), Value::Int(len + 1));
                                 return Some(Value::Void);
                             }
-                        }
                     }
                 }
                 "arrayPop" => {
-                    if let Value::Object(id) = &args[0] {
-                        if let Some(obj) = self.heap.get_mut(*id) {
-                            if let Some(Value::Int(len)) = obj.fields.get("length").cloned() {
+                    if let Value::Object(id) = &args[0]
+                        && let Some(obj) = self.heap.get_mut(*id)
+                            && let Some(Value::Int(len)) = obj.fields.get("length").cloned() {
                                 if len > 0 {
                                     let item = obj.fields.remove(&(len - 1).to_string()).unwrap_or(Value::Void);
                                     obj.fields.insert("length".to_string(), Value::Int(len - 1));
@@ -143,32 +140,26 @@ impl<'a> VirtualMachine<'a> {
                                     return Some(Value::EnumVariant("Option".to_string(), 1, vec![])); // None
                                 }
                             }
-                        }
-                    }
                 }
                 "arrayGet" => {
-                    if let (Value::Object(id), Value::Int(idx)) = (&args[0], &args[1]) {
-                        if let Some(obj) = self.heap.get(*id) {
-                            if let Some(Value::Int(len)) = obj.fields.get("length") {
-                                if *idx >= 0 && *idx < *len {
+                    if let (Value::Object(id), Value::Int(idx)) = (&args[0], &args[1])
+                        && let Some(obj) = self.heap.get(*id) {
+                            if let Some(Value::Int(len)) = obj.fields.get("length")
+                                && *idx >= 0 && *idx < *len {
                                     let item = obj.fields.get(&idx.to_string()).cloned().unwrap_or(Value::Void);
                                     return Some(Value::EnumVariant("Option".to_string(), 0, vec![item])); // Some
                                 }
-                            }
                             return Some(Value::EnumVariant("Option".to_string(), 1, vec![])); // None
                         }
-                    }
                 }
                 "arraySet" => {
                     if let (Value::Object(id), Value::Int(idx)) = (&args[0], &args[1]) {
                         let item = args[2].clone();
-                        if let Some(obj) = self.heap.get_mut(*id) {
-                            if let Some(Value::Int(len)) = obj.fields.get("length") {
-                                if *idx >= 0 && *idx < *len {
+                        if let Some(obj) = self.heap.get_mut(*id)
+                            && let Some(Value::Int(len)) = obj.fields.get("length")
+                                && *idx >= 0 && *idx < *len {
                                     obj.fields.insert(idx.to_string(), item);
                                 }
-                            }
-                        }
                         return Some(Value::Void);
                     }
                 }
@@ -196,22 +187,20 @@ impl<'a> VirtualMachine<'a> {
                 "mapGet" => {
                     if let Value::Int(id) = &args[0] {
                         let key = args[1].clone();
-                        if let Some(map) = self.maps.get(&(*id as usize)) {
-                            if let Some((_, value)) = map.iter().find(|(k, _)| *k == key) {
+                        if let Some(map) = self.maps.get(&(*id as usize))
+                            && let Some((_, value)) = map.iter().find(|(k, _)| *k == key) {
                                 return Some(Value::EnumVariant("Option".to_string(), 0, vec![value.clone()])); // Some
                             }
-                        }
                         return Some(Value::EnumVariant("Option".to_string(), 1, vec![])); // None
                     }
                 }
                 "mapRemove" => {
                     if let Value::Int(id) = &args[0] {
                         let key = args[1].clone();
-                        if let Some(map) = self.maps.get_mut(&(*id as usize)) {
-                            if let Some(pos) = map.iter().position(|(k, _)| *k == key) {
+                        if let Some(map) = self.maps.get_mut(&(*id as usize))
+                            && let Some(pos) = map.iter().position(|(k, _)| *k == key) {
                                 map.remove(pos);
                             }
-                        }
                         return Some(Value::Void);
                     }
                 }
@@ -257,11 +246,10 @@ impl<'a> VirtualMachine<'a> {
                 "fileWrite" => {
                     if let (Value::Int(id), Value::String(data)) = (&args[0], &args[1]) {
                         use std::io::Write;
-                        if let Some(file) = self.files.get_mut(&(*id as usize)) {
-                            if file.write_all(data.as_bytes()).is_ok() {
+                        if let Some(file) = self.files.get_mut(&(*id as usize))
+                            && file.write_all(data.as_bytes()).is_ok() {
                                 return Some(Value::Int(data.len() as i64));
                             }
-                        }
                     }
                     return Some(Value::Int(0));
                 }
@@ -549,8 +537,8 @@ impl<'a> VirtualMachine<'a> {
                 let idx_val = self.resolve_value(index);
                 let set_val = self.resolve_value(val);
                 let idx_int = if let Value::Int(i) = idx_val { i } else { panic!("Index must be int") };
-                if let Value::Object(id) = obj_val {
-                    if let Some(obj) = self.heap.get_mut(id) {
+                if let Value::Object(id) = obj_val
+                    && let Some(obj) = self.heap.get_mut(id) {
                         let len_val = obj.fields.get("length").unwrap();
                         let len_int = if let Value::Int(l) = len_val { *l } else { panic!("Length must be int") };
                         if idx_int < 0 || idx_int >= len_int {
@@ -558,7 +546,6 @@ impl<'a> VirtualMachine<'a> {
                         }
                         obj.fields.insert(idx_int.to_string(), set_val);
                     }
-                }
             }
             Inst::Retain(_) => {}
             Inst::Release(_) => {}

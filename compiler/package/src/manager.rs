@@ -13,6 +13,12 @@ pub struct PackageManager {
     loaded_paths: std::collections::HashMap<PathBuf, PackageId>,
 }
 
+impl Default for PackageManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PackageManager {
     pub fn new() -> Self {
         Self {
@@ -118,16 +124,14 @@ impl PackageManager {
         
         // 3. Production installation relative path
         // Expected layout: pace/bin/pace and pace/lib/pace/stdlib/
-        if let Ok(exe_path) = std::env::current_exe() {
-            if let Some(bin_dir) = exe_path.parent() {
-                if let Some(install_prefix) = bin_dir.parent() {
+        if let Ok(exe_path) = std::env::current_exe()
+            && let Some(bin_dir) = exe_path.parent()
+                && let Some(install_prefix) = bin_dir.parent() {
                     let prod_stdlib = install_prefix.join("lib").join("pace").join("stdlib");
                     if prod_stdlib.exists() {
                         return Some(prod_stdlib.canonicalize().unwrap_or(prod_stdlib));
                     }
                 }
-            }
-        }
         
         // 4. Fallback for development: relative to the package manager crate (cargo run)
         let fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

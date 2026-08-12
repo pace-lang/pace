@@ -12,10 +12,15 @@ use cranelift_codegen::{
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_module::{Linkage, Module, default_libcall_names, DataDescription};
 use cranelift_object::{ObjectBuilder, ObjectModule};
-use cranelift_native;
 use mir::ForeignAbiType;
 
 pub struct CraneliftGenerator;
+
+impl Default for CraneliftGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl CraneliftGenerator {
     pub fn new() -> Self {

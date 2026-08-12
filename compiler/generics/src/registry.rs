@@ -14,7 +14,7 @@ impl SpecializationKey {
     pub fn mangled_name(&self) -> String {
         let mut name = self.definition_name.clone();
         for arg in &self.type_args {
-            name.push_str("_");
+            name.push('_');
             name.push_str(&arg.replace("<", "_").replace(">", "_").replace(",", "_").replace(" ", ""));
         }
         name

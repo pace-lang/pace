@@ -250,8 +250,8 @@ impl<'a, 'b> Translator<'a, 'b> {
                             results[0]
                         };
                         
-                        if let Some(foreign_func) = self.program.foreign_functions.get(func_name) {
-                            if let Some(abi_ty) = &foreign_func.return_type {
+                        if let Some(foreign_func) = self.program.foreign_functions.get(func_name)
+                            && let Some(abi_ty) = &foreign_func.return_type {
                                 match abi_ty {
                                     mir::ForeignAbiType::I8 | mir::ForeignAbiType::I16 | mir::ForeignAbiType::I32 => {
                                         // Assume sign extension for now, a proper implementation would differentiate uextend/sextend
@@ -260,7 +260,6 @@ impl<'a, 'b> Translator<'a, 'b> {
                                     _ => {}
                                 }
                             }
-                        }
                         
                         result_val
                     }

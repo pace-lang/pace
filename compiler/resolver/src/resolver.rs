@@ -14,6 +14,12 @@ pub struct Resolver {
     module_exports: HashMap<ModuleId, HashMap<String, Vec<String>>>,
 }
 
+impl Default for Resolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Resolver {
     pub fn new() -> Self {
         let mut scopes = ScopeStack::new();
@@ -95,7 +101,7 @@ impl Resolver {
                         }
                     }
                 } else {
-                    self.error(stmt.span.clone(), DiagnosticCode::UnknownIdentifier, &format!("Cannot resolve import '{}'", path));
+                    self.error(stmt.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot resolve import '{}'", path));
                 }
             }
         }
@@ -267,7 +273,7 @@ impl Resolver {
                 self.resolve_expr(value);
             }
             ExprKind::SelfRef => {
-                if !self.scopes.resolve(&"self".to_string()) {
+                if !self.scopes.resolve("self") {
                     self.error(expr.span, DiagnosticCode::UnknownIdentifier, "Cannot use 'self' outside of a class method.");
                 }
             }
@@ -295,11 +301,10 @@ impl Resolver {
                     match &arm.pattern {
                         ast::Pattern::Wildcard => {}
                         ast::Pattern::Variant { path, bindings } => {
-                            if !path.is_empty() {
-                                if !self.scopes.resolve(&path[0]) {
+                            if !path.is_empty()
+                                && !self.scopes.resolve(&path[0]) {
                                     self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot find '{}' in this scope.", path[0]));
                                 }
-                            }
                             if let Some(binds) = bindings {
                                 for bind in binds {
                                     if bind != "_" {

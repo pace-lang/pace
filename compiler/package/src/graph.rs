@@ -12,6 +12,12 @@ pub struct PackageGraph {
     pub dependencies: HashMap<PackageId, HashMap<String, PackageId>>,
 }
 
+impl Default for PackageGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PackageGraph {
     pub fn new() -> Self {
         Self {

@@ -131,10 +131,9 @@ impl Parser {
                 let mut type_args = Vec::new();
                 if !self.check(&TokenKind::Greater) {
                     loop {
-                        if let Some(ty) = self.parse_type_expr() {
+                        {
+                            let ty = self.parse_type_expr()?;
                             type_args.push(ty);
-                        } else {
-                            return None;
                         }
                         if !self.match_token(&[TokenKind::Comma]) {
                             break;
@@ -158,7 +157,7 @@ impl Parser {
             if self.match_token(&[TokenKind::Question]) {
                 ty = TypeExpr::Optional(Box::new(ty));
             }
-            return Some(ty);
+            Some(ty)
         } else {
             self.error_at_current("Expected type name.");
             None
@@ -209,10 +208,9 @@ impl Parser {
                                 None
                             };
 
-                            if let Some(ty) = self.parse_type_expr() {
+                            {
+                                let ty = self.parse_type_expr()?;
                                 variant_fields.push(ast::EnumField { name: field_name, ty });
-                            } else {
-                                return None;
                             }
 
                             if !self.match_token(&[TokenKind::Comma]) {
@@ -446,7 +444,7 @@ impl Parser {
         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
         // We use StmtKind::Func but with an empty block for the body.
-        let empty_body = Box::new(Stmt::new(StmtKind::Block(Vec::new()), span.clone()));
+        let empty_body = Box::new(Stmt::new(StmtKind::Block(Vec::new()), span));
         Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params: Vec::new(), params, return_type, body: empty_body, is_private }, span))
     }
 
@@ -996,10 +994,9 @@ impl Parser {
                 let mut type_args = Vec::new();
                 if !self.check(&TokenKind::Greater) {
                     loop {
-                        if let Some(ty) = self.parse_type_expr() {
+                        {
+                            let ty = self.parse_type_expr()?;
                             type_args.push(ty);
-                        } else {
-                            return None;
                         }
                         if !self.match_token(&[TokenKind::Comma]) {
                             break;
@@ -1086,11 +1083,7 @@ impl Parser {
                     depth -= 1;
                     if depth == 0 {
                         // Check if the next token is '('
-                        if i + 1 < self.tokens.len() && self.tokens[i + 1].kind == TokenKind::LeftParen {
-                            return true;
-                        } else {
-                            return false;
-                        }
+                        return i + 1 < self.tokens.len() && self.tokens[i + 1].kind == TokenKind::LeftParen
                     }
                 },
                 TokenKind::LeftParen | TokenKind::LeftBrace | TokenKind::Semicolon | TokenKind::Equal => {
@@ -1536,17 +1529,17 @@ mod tests {
         assert_eq!(stmts.len(), 3);
         
         match &stmts[0].kind {
-            StmtKind::Func { is_private, .. } => assert_eq!(*is_private, true),
+            StmtKind::Func { is_private, .. } => assert!(*is_private),
             _ => panic!("Expected Func statement"),
         }
         
         match &stmts[1].kind {
-            StmtKind::Class { is_private, .. } => assert_eq!(*is_private, false),
+            StmtKind::Class { is_private, .. } => assert!(!(*is_private)),
             _ => panic!("Expected Class statement"),
         }
         
         match &stmts[2].kind {
-            StmtKind::Var { is_private, .. } => assert_eq!(*is_private, false),
+            StmtKind::Var { is_private, .. } => assert!(!(*is_private)),
             _ => panic!("Expected Var statement"),
         }
     }

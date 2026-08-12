@@ -6,6 +6,12 @@ pub struct Scope {
     types: HashMap<String, Type>,
 }
 
+impl Default for Scope {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Scope {
     pub fn new() -> Self {
         Self {
@@ -25,6 +31,12 @@ impl Scope {
 #[derive(Debug)]
 pub struct TypeEnvironment {
     scopes: Vec<Scope>,
+}
+
+impl Default for TypeEnvironment {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TypeEnvironment {

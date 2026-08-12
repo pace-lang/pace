@@ -49,13 +49,12 @@ impl Linker {
                 if let Ok(entries) = std::fs::read_dir(dir) {
                     for entry in entries.flatten() {
                         let path = entry.path();
-                        if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                            if (file_name.starts_with("libpace_runtime-") && file_name.ends_with(".a")) ||
-                               (file_name.starts_with("pace_runtime-") && file_name.ends_with(".lib")) {
+                        if let Some(file_name) = path.file_name().and_then(|n| n.to_str())
+                            && ((file_name.starts_with("libpace_runtime-") && file_name.ends_with(".a")) ||
+                               (file_name.starts_with("pace_runtime-") && file_name.ends_with(".lib"))) {
                                 runtime_lib = Some(path);
                                 break;
                             }
-                        }
                     }
                 }
                 if runtime_lib.is_some() { break; }

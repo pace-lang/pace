@@ -24,6 +24,12 @@ pub struct TypeChecker {
     pub is_checking_method: bool,
 }
 
+impl Default for TypeChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TypeChecker {
     pub fn new() -> Self {
         Self {
@@ -123,19 +129,17 @@ impl TypeChecker {
                     
                     let ty = if let Some(ann) = type_annotation {
                         let parsed = self.parse_type(ann, field.span);
-                        if is_weak {
-                            if !matches!(parsed, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
+                        if is_weak
+                            && !matches!(parsed, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
                                 self.error(field.span, DiagnosticCode::TypeMismatch, "Weak properties must be of optional instance type (e.g. 'weak var x: User?').");
                             }
-                        }
                         parsed
                     } else if let Some(init) = initializer {
                         let parsed = self.check_expr(init);
-                        if is_weak {
-                            if !matches!(parsed.ty, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
+                        if is_weak
+                            && !matches!(parsed.ty, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
                                 self.error(field.span, DiagnosticCode::TypeMismatch, "Weak properties must be of optional instance type (e.g. 'weak var x: User?').");
                             }
-                        }
                         parsed.ty.clone()
                     } else {
                         if is_weak {
@@ -372,7 +376,7 @@ impl TypeChecker {
                     self.env.declare("self".to_string(), Type::Instance(class_name.clone()));
                 }
 
-                for ((param_name, _), param_ty) in params.iter().zip(param_types.into_iter()) {
+                for ((param_name, _), param_ty) in params.iter().zip(param_types) {
                     self.env.declare(param_name.clone(), param_ty);
                 }
 
@@ -381,9 +385,9 @@ impl TypeChecker {
 
                 let typed_body = self.check_stmt(body);
 
-                if name == "init" {
-                    if let Some(ref class_name) = self.current_class {
-                        if let Some(uninit_props_ref) = self.uninitialized_class_properties.get(class_name) {
+                if name == "init"
+                    && let Some(ref class_name) = self.current_class
+                        && let Some(uninit_props_ref) = self.uninitialized_class_properties.get(class_name) {
                             let uninit_props = uninit_props_ref.clone();
                             let assigned_props = Self::get_assigned_properties_in_init(&typed_body);
                             for prop in uninit_props {
@@ -392,8 +396,6 @@ impl TypeChecker {
                                 }
                             }
                         }
-                    }
-                }
 
                 self.current_return_type = previous_return;
                 self.env.pop_scope();
@@ -412,11 +414,7 @@ impl TypeChecker {
                 }
 
                 let typed_then = self.check_stmt(then_branch);
-                let typed_else = if let Some(e_branch) = else_branch {
-                    Some(Box::new(self.check_stmt(e_branch)))
-                } else {
-                    None
-                };
+                let typed_else = else_branch.as_ref().map(|e_branch| Box::new(self.check_stmt(e_branch)));
                 TypedStmtKind::If {
                     condition: typed_condition,
                     then_branch: Box::new(typed_then),
@@ -491,11 +489,7 @@ impl TypeChecker {
     fn check_var_decl(&mut self, name: &String, type_annotation: &Option<TypeExpr>, initializer: &Option<Expr>, is_weak: bool, span: Span) -> TypedStmt {
         let expected_ty = type_annotation.as_ref().map(|ann| self.parse_type(ann, span));
         
-        let typed_init = if let Some(init) = initializer {
-            Some(self.check_expr_with_expected(init, expected_ty.as_ref()))
-        } else {
-            None
-        };
+        let typed_init = initializer.as_ref().map(|init| self.check_expr_with_expected(init, expected_ty.as_ref()));
         
         let init_type = typed_init.as_ref().map(|t| &t.ty).unwrap_or(&Type::Any).clone();
         
@@ -504,18 +498,16 @@ impl TypeChecker {
                 self.error(span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to variable of type '{}'.", init_type, ann_type));
             }
             
-            if is_weak {
-                if !matches!(ann_type, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
+            if is_weak
+                && !matches!(ann_type, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
                     self.error(span, DiagnosticCode::TypeMismatch, "Weak variables must be of optional instance type (e.g. 'weak var x: User?').");
                 }
-            }
             ann_type
         } else {
-            if is_weak {
-                 if !matches!(init_type, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
+            if is_weak
+                 && !matches!(init_type, Type::Optional(ref inner) if matches!(**inner, Type::Instance(_) | Type::Interface(_))) {
                      self.error(span, DiagnosticCode::TypeMismatch, "Weak variables must be of optional instance type (e.g. 'weak var x: User?').");
                  }
-            }
             init_type
         };
         
@@ -612,7 +604,7 @@ impl TypeChecker {
                 (TypedExprKind::Assign { name: name.clone(), value: Box::new(typed_val.clone()) }, typed_val.ty)
             }
             ExprKind::SelfRef => {
-                if let Some(ty) = self.env.resolve(&"self".to_string()) {
+                if let Some(ty) = self.env.resolve("self") {
                     (TypedExprKind::SelfRef, ty)
                 } else {
                     self.error(expr.span, DiagnosticCode::TypeMismatch, "Cannot use 'self' outside a class.");
@@ -770,7 +762,7 @@ impl TypeChecker {
                 
                 match &typed_obj.ty {
                     Type::Array(inner) => {
-                        if !self.is_assignable(&typed_val.ty, &inner) && typed_val.ty != Type::Error && **inner != Type::Error && **inner != Type::Any {
+                        if !self.is_assignable(&typed_val.ty, inner) && typed_val.ty != Type::Error && **inner != Type::Error && **inner != Type::Any {
                             self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to array element of type '{}'.", typed_val.ty, inner));
                         }
                     }
@@ -832,15 +824,14 @@ impl TypeChecker {
                                     inferred_map.insert(p.clone(), instance_args[i].clone());
                                 }
                             }
-                            resolved_ty = self.substitute_generics(&variant_ty, &inferred_map);
+                            resolved_ty = self.substitute_generics(variant_ty, &inferred_map);
                         }
 
                         // If it's a unit variant (no params), it evaluates to the enum type directly
-                        if let Type::EnumVariantConstructor(_, _, _, params, ret_ty) = &resolved_ty {
-                            if params.is_empty() {
+                        if let Type::EnumVariantConstructor(_, _, _, params, ret_ty) = &resolved_ty
+                            && params.is_empty() {
                                 resolved_ty = *ret_ty.clone();
                             }
-                        }
 
                         return TypedExpr::new(TypedExprKind::EnumVariant {
                             enum_name: class_name.clone(),
@@ -928,8 +919,8 @@ impl TypeChecker {
                                     _ => {}
                                 }
                                 
-                                if let Some(enum_name) = enum_name_opt {
-                                    if let Some(variants) = self.enums.get(&enum_name) {
+                                if let Some(enum_name) = enum_name_opt
+                                    && let Some(variants) = self.enums.get(&enum_name) {
                                         let variant_name = path.last().unwrap_or(&"".to_string()).clone();
                                         if let Some(Type::EnumVariantConstructor(_, _, func_type_params, param_types, _)) = variants.get(&variant_name) {
                                             // Substitute generics
@@ -942,7 +933,6 @@ impl TypeChecker {
                                             }
                                         }
                                     }
-                                }
                                 
                                 for (i, bind) in binds.iter().enumerate() {
                                     if bind != "_" {
@@ -994,11 +984,10 @@ impl TypeChecker {
                         expected_param_types = Some(param_types.clone());
                     }
                     Type::Class(class_name, _) => {
-                        if let Some(props) = self.classes.get(class_name) {
-                            if let Some(Type::Function(_, param_types, _)) = props.get("init") {
+                        if let Some(props) = self.classes.get(class_name)
+                            && let Some(Type::Function(_, param_types, _)) = props.get("init") {
                                 expected_param_types = Some(param_types.clone());
                             }
-                        }
                     }
                     _ => {}
                 }
@@ -1017,8 +1006,8 @@ impl TypeChecker {
                     Type::OverloadedFunction(variants) => {
                         let mut matched_variant = None;
                         for (mangled_name, ty) in variants {
-                            if let Type::Function(_, param_types, ret_ty) = ty {
-                                if param_types.len() == arg_types.len() {
+                            if let Type::Function(_, param_types, ret_ty) = ty
+                                && param_types.len() == arg_types.len() {
                                     let mut matches = true;
                                     for (pt, at) in param_types.iter().zip(arg_types.iter()) {
                                         if !self.is_assignable(at, pt) {
@@ -1031,7 +1020,6 @@ impl TypeChecker {
                                         break;
                                     }
                                 }
-                            }
                         }
 
                         if let Some((mangled_name, ty, ret_ty)) = matched_variant {
@@ -1050,16 +1038,16 @@ impl TypeChecker {
                         let mut constructor_ty = self.classes.get(class_name)
                             .and_then(|props| props.get("init").cloned());
                             
-                        if constructor_ty.is_none() {
-                            if let Some(generic_stmt) = self.generic_registry.get_class(class_name).cloned() {
-                                if let ast::StmtKind::Class { type_params, methods, .. } = &generic_stmt.kind {
+                        if constructor_ty.is_none()
+                            && let Some(generic_stmt) = self.generic_registry.get_class(class_name).cloned()
+                                && let ast::StmtKind::Class { type_params, methods, .. } = &generic_stmt.kind {
                                     self.env.push_scope();
                                     for tp in type_params {
                                         self.env.declare(tp.clone(), Type::Generic(tp.clone()));
                                     }
                                     for method in methods {
-                                        if let ast::StmtKind::Func { name, params, .. } = &method.kind {
-                                            if name == "init" {
+                                        if let ast::StmtKind::Func { name, params, .. } = &method.kind
+                                            && name == "init" {
                                                 let mut param_types = Vec::new();
                                                 for (_, ty) in params {
                                                     param_types.push(self.parse_type(ty, expr.span));
@@ -1067,12 +1055,9 @@ impl TypeChecker {
 
                                                 constructor_ty = Some(Type::Function(Vec::new(), param_types, Box::new(Type::Void)));
                                             }
-                                        }
                                     }
                                     self.env.pop_scope();
                                 }
-                            }
-                        }
                             
                         let mut resolved_type_args = Vec::new();
 
@@ -1485,26 +1470,22 @@ impl TypeChecker {
         if is_source_int && is_target_int {
             return true;
         }
-        if *source == Type::Null {
-            if matches!(target, Type::Optional(_)) {
+        if *source == Type::Null
+            && matches!(target, Type::Optional(_)) {
                 return true;
             }
-        }
-        if let Type::Optional(inner) = target {
-            if self.is_assignable(source, inner) {
+        if let Type::Optional(inner) = target
+            && self.is_assignable(source, inner) {
                 return true;
             }
-        }
         if *target == Type::Any {
             return true;
         }
-        if let (Type::Instance(class_name), Type::Interface(interface_name)) = (source, target) {
-            if let Some(implements) = self.class_implements.get(class_name) {
-                if implements.contains(interface_name) {
+        if let (Type::Instance(class_name), Type::Interface(interface_name)) = (source, target)
+            && let Some(implements) = self.class_implements.get(class_name)
+                && implements.contains(interface_name) {
                     return true;
                 }
-            }
-        }
         false
     }
 
@@ -1667,11 +1648,10 @@ impl TypeChecker {
                 }
             }
             TypedStmtKind::Expression(expr) => {
-                if let TypedExprKind::Set { object, name, value: _ } = &expr.kind {
-                    if let TypedExprKind::SelfRef = &object.kind {
+                if let TypedExprKind::Set { object, name, value: _ } = &expr.kind
+                    && let TypedExprKind::SelfRef = &object.kind {
                         assigned.insert(name.clone());
                     }
-                }
             }
             TypedStmtKind::If { then_branch, else_branch, .. } => {
                 let then_assigned = Self::get_assigned_properties_in_init(then_branch);
@@ -1685,7 +1665,7 @@ impl TypeChecker {
                     }
                 }
             }
-            TypedStmtKind::While { body: _, .. } | TypedStmtKind::For { body: _, .. } => {
+            TypedStmtKind::While { .. } | TypedStmtKind::For { .. } => {
                 // Loop bodies might not execute, so we don't count assignments inside them as definite!
             }
             _ => {}

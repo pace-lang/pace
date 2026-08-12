@@ -10,6 +10,12 @@ pub struct ModuleGraph {
     next_id: u32,
 }
 
+impl Default for ModuleGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModuleGraph {
     pub fn new() -> Self {
         Self {
@@ -23,8 +29,8 @@ impl ModuleGraph {
     pub fn add_module(&mut self, module: Module) {
         let id = module.id;
         self.modules.insert(id, module);
-        self.edges.entry(id).or_insert_with(Vec::new);
-        self.import_map.entry(id).or_insert_with(HashMap::new);
+        self.edges.entry(id).or_default();
+        self.import_map.entry(id).or_default();
         if id.0 >= self.next_id {
             self.next_id = id.0 + 1;
         }
@@ -37,11 +43,11 @@ impl ModuleGraph {
     }
 
     pub fn add_dependency(&mut self, from: ModuleId, to: ModuleId) {
-        self.edges.entry(from).or_insert_with(Vec::new).push(to);
+        self.edges.entry(from).or_default().push(to);
     }
 
     pub fn add_import_mapping(&mut self, from: ModuleId, import_str: String, to: ModuleId) {
-        self.import_map.entry(from).or_insert_with(HashMap::new).insert(import_str, to);
+        self.import_map.entry(from).or_default().insert(import_str, to);
     }
 
     pub fn resolve_import(&self, from: ModuleId, import_str: &str) -> Option<ModuleId> {

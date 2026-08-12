@@ -1,5 +1,5 @@
 #![allow(clippy::missing_safety_doc)]
-
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -160,7 +160,7 @@ pub extern "C" fn pace_release(obj: *mut u8) {
             for i in 0..field_count {
                 let offset = unsafe { *(*metadata).field_offsets.as_ptr().add(i as usize) };
                 let field_ptr = unsafe { *(obj.add(offset as usize) as *const *mut u8) };
-                if !field_ptr.is_null() && (field_ptr as usize) % 8 == 0 && (field_ptr as usize) > 0x10000 {
+                if !field_ptr.is_null() && (field_ptr as usize).is_multiple_of(8) && (field_ptr as usize) > 0x10000 {
                     pace_release(field_ptr);
                 }
             }

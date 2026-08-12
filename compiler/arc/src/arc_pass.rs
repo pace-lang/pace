@@ -3,6 +3,12 @@ use std::collections::HashSet;
 
 pub struct ArcPass;
 
+impl Default for ArcPass {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ArcPass {
     pub fn new() -> Self {
         Self
@@ -14,7 +20,7 @@ impl ArcPass {
             function_returns_reference.insert(name.clone(), func.returns_reference);
         }
 
-        for (_, func) in &mut program.functions {
+        for func in program.functions.values_mut() {
             let mut reference_places = HashSet::new();
             let mut owned_places = HashSet::new();
             
@@ -32,12 +38,8 @@ impl ArcPass {
             let mut max_temp = 0;
             for block in &func.blocks {
                 for inst in &block.instructions {
-                    match inst {
-                        Inst::Assign(Place::Temp(id), _) => {
-                            if *id > max_temp { max_temp = *id; }
-                        }
-                        _ => {}
-                    }
+                    if let Inst::Assign(Place::Temp(id), _) = inst
+                        && *id > max_temp { max_temp = *id; }
                 }
             }
             let mut temp_counter = max_temp + 1;
@@ -60,11 +62,10 @@ impl ArcPass {
                         }
                         Inst::Assign(place, RValue::ConstructVariant(_, _, payloads)) => {
                             for payload in payloads {
-                                if let Value::Place(p) = payload {
-                                    if reference_places.contains(p) {
+                                if let Value::Place(p) = payload
+                                    && reference_places.contains(p) {
                                         new_instructions.push(Inst::Retain(payload.clone()));
                                     }
-                                }
                             }
                             new_instructions.push(inst.clone());
                             reference_places.insert(place.clone());
@@ -94,9 +95,8 @@ impl ArcPass {
                         }
                         Inst::Assign(place, RValue::ArrayRepeat(val, count, is_ref)) => {
                             let mut is_ref_mut = *is_ref;
-                            if let Value::Place(p) = val {
-                                if reference_places.contains(p) { is_ref_mut = true; }
-                            }
+                            if let Value::Place(p) = val
+                                && reference_places.contains(p) { is_ref_mut = true; }
                             new_instructions.push(Inst::Assign(place.clone(), RValue::ArrayRepeat(val.clone(), count.clone(), is_ref_mut)));
                             reference_places.insert(place.clone());
                             owned_places.insert(place.clone());
@@ -139,12 +139,11 @@ impl ArcPass {
                 block.instructions = new_instructions;
                 
                 if let Some(Terminator::Return(ret_val)) = &block.terminator {
-                    if let Some(Value::Place(ret_place)) = ret_val {
-                        if reference_places.contains(ret_place) && !owned_places.contains(ret_place) {
+                    if let Some(Value::Place(ret_place)) = ret_val
+                        && reference_places.contains(ret_place) && !owned_places.contains(ret_place) {
                             // Returning a borrowed reference! We must retain it so the caller gets a +1 object!
                             block.instructions.push(Inst::Retain(Value::Place(ret_place.clone())));
                         }
-                    }
                     
                     let mut sorted_owned_places: Vec<_> = owned_places.iter().collect();
                     sorted_owned_places.sort();
