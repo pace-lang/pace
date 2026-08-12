@@ -258,6 +258,14 @@ impl Resolver {
                 self.resolve_expr(value);
                 self.resolve_expr(count);
             }
+            ExprKind::ListComprehension { expr: mapped_expr, item_name, iterator } => {
+                self.resolve_expr(iterator);
+
+                self.scopes.push_scope();
+                self.scopes.declare(item_name.clone());
+                self.resolve_expr(mapped_expr);
+                self.scopes.pop_scope();
+            }
             ExprKind::InterpolatedString(pieces) => {
                 for piece in pieces {
                     self.resolve_expr(piece);

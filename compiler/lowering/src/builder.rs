@@ -505,6 +505,96 @@ impl MirBuilder {
                 self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ArrayRepeat(val, count_val, false)));
                 Value::Place(temp)
             }
+            TypedExprKind::ListComprehension { expr: mapped_expr, item_name, iterator } => {
+                match &iterator.kind {
+                    TypedExprKind::Range { start, end } => {
+                        let start_val = self.lower_expr(start);
+                        let end_val = self.lower_expr(end);
+                        
+                        let len_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(len_var.clone(), RValue::BinaryOp(ast::BinaryOp::Subtract, end_val.clone(), start_val.clone())));
+                        
+                        let arr_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(arr_var.clone(), RValue::ArrayRepeat(Value::Int(0), Value::Place(len_var.clone()), false)));
+                        
+                        let current_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(current_var.clone(), RValue::Use(start_val)));
+                        
+                        let idx_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(idx_var.clone(), RValue::Use(Value::Int(0))));
+                        
+                        let cond_block = self.new_block();
+                        let body_block = self.new_block();
+                        let merge_block = self.new_block();
+                        
+                        self.current().terminator = Some(Terminator::Jump(cond_block));
+                        
+                        self.current_block = cond_block;
+                        let cond_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(cond_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Less, Value::Place(current_var.clone()), end_val)));
+                        self.current().terminator = Some(Terminator::Branch { cond: Value::Place(cond_temp), then_block: body_block, else_block: merge_block });
+                        
+                        self.current_block = body_block;
+                        self.current().instructions.push(Inst::Assign(Place::Var(item_name.clone()), RValue::Use(Value::Place(current_var.clone()))));
+                        
+                        let mapped_val = self.lower_expr(mapped_expr);
+                        self.current().instructions.push(Inst::IndexSet(Value::Place(arr_var.clone()), Value::Place(idx_var.clone()), mapped_val));
+                        
+                        let inc_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(inc_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(current_var.clone()), Value::Int(1))));
+                        self.current().instructions.push(Inst::Assign(current_var.clone(), RValue::Use(Value::Place(inc_temp))));
+                        
+                        let inc_idx_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(inc_idx_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(idx_var.clone()), Value::Int(1))));
+                        self.current().instructions.push(Inst::Assign(idx_var.clone(), RValue::Use(Value::Place(inc_idx_temp))));
+                        
+                        self.current().terminator = Some(Terminator::Jump(cond_block));
+                        
+                        self.current_block = merge_block;
+                        Value::Place(arr_var)
+                    }
+                    _ => {
+                        let iter_val = self.lower_expr(iterator);
+                        
+                        let len_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(len_var.clone(), RValue::ArrayLength(iter_val.clone())));
+                        
+                        let arr_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(arr_var.clone(), RValue::ArrayRepeat(Value::Int(0), Value::Place(len_var.clone()), false)));
+                        
+                        let idx_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(idx_var.clone(), RValue::Use(Value::Int(0))));
+                        
+                        let cond_block = self.new_block();
+                        let body_block = self.new_block();
+                        let merge_block = self.new_block();
+                        
+                        self.current().terminator = Some(Terminator::Jump(cond_block));
+                        
+                        self.current_block = cond_block;
+                        let cond_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(cond_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Less, Value::Place(idx_var.clone()), Value::Place(len_var.clone()))));
+                        self.current().terminator = Some(Terminator::Branch { cond: Value::Place(cond_temp), then_block: body_block, else_block: merge_block });
+                        
+                        self.current_block = body_block;
+                        let item_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(item_var.clone(), RValue::IndexGet(iter_val.clone(), Value::Place(idx_var.clone()))));
+                        self.current().instructions.push(Inst::Assign(Place::Var(item_name.clone()), RValue::Use(Value::Place(item_var))));
+                        
+                        let mapped_val = self.lower_expr(mapped_expr);
+                        self.current().instructions.push(Inst::IndexSet(Value::Place(arr_var.clone()), Value::Place(idx_var.clone()), mapped_val));
+                        
+                        let inc_idx_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(inc_idx_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(idx_var.clone()), Value::Int(1))));
+                        self.current().instructions.push(Inst::Assign(idx_var.clone(), RValue::Use(Value::Place(inc_idx_temp))));
+                        
+                        self.current().terminator = Some(Terminator::Jump(cond_block));
+                        
+                        self.current_block = merge_block;
+                        Value::Place(arr_var)
+                    }
+                }
+            }
             TypedExprKind::Match { value, arms } => {
                 let match_val = self.lower_expr(value);
                 let tag_temp = self.new_temp();

@@ -54,5 +54,12 @@
       "}"
     ],
     "description": "Create a Pace enum"
+  },
+  "List Comprehension": {
+    "prefix": "comp",
+    "body": [
+      "[${1:expression} for ${2:item} in ${3:iterable}]"
+    ],
+    "description": "Create a list comprehension"
   }
 }

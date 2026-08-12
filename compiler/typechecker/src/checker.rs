@@ -735,6 +735,27 @@ impl TypeChecker {
                 let ty = Type::Array(Box::new(typed_value.ty.clone()));
                 (TypedExprKind::ArrayRepeat { value: Box::new(typed_value), count: Box::new(typed_count) }, ty)
             }
+            ExprKind::ListComprehension { expr: mapped_expr, item_name, iterator } => {
+                let typed_iterator = self.check_expr(iterator);
+                
+                let item_type = match &typed_iterator.ty {
+                    Type::Range => Type::Int,
+                    Type::Array(inner) => *inner.clone(),
+                    Type::Error => Type::Error,
+                    _ => {
+                        self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot iterate over non-iterable type '{}'.", typed_iterator.ty));
+                        Type::Error
+                    }
+                };
+
+                self.env.push_scope();
+                self.env.declare(item_name.clone(), item_type);
+                let typed_expr = self.check_expr(mapped_expr);
+                self.env.pop_scope();
+
+                let ty = Type::Array(Box::new(typed_expr.ty.clone()));
+                (TypedExprKind::ListComprehension { expr: Box::new(typed_expr), item_name: item_name.clone(), iterator: Box::new(typed_iterator) }, ty)
+            }
             ExprKind::IndexGet { object, index } => {
                 let typed_obj = self.check_expr(object);
                 let typed_idx = self.check_expr(index);

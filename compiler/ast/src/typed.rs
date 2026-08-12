@@ -58,6 +58,11 @@ pub enum TypedExprKind {
         right: Box<TypedExpr>,
     },
     Array(Vec<TypedExpr>),
+    ListComprehension {
+        expr: Box<TypedExpr>,
+        item_name: String,
+        iterator: Box<TypedExpr>,
+    },
     ArrayRepeat {
         value: Box<TypedExpr>,
         count: Box<TypedExpr>,

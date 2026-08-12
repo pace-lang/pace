@@ -111,6 +111,12 @@ pub enum ExprKind {
     },
     /// Array literal: `[1, 2, 3]`
     Array(Vec<Expr>),
+    /// List comprehension: `[expr for item in iterator]`
+    ListComprehension {
+        expr: Box<Expr>,
+        item_name: String,
+        iterator: Box<Expr>,
+    },
     /// Array repeat initialization: `[0; 10]`
     ArrayRepeat {
         value: Box<Expr>,

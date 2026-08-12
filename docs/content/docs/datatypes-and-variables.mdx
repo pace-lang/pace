@@ -89,6 +89,18 @@ items[1] = "Blueberry"
 
 > **Safety First:** Array bounds are checked strictly at runtime. If you attempt to access `items[5]`, Pace will safely panic and halt the program instead of reading garbage memory (buffer overflow), protecting you from severe security vulnerabilities.
 
+### List Comprehensions
+List comprehensions provide a concise and highly-optimized way to transform arrays or ranges into new arrays.
+
+```pace
+let arr = [1, 2, 3, 4];
+let doubled = [x * 2 for x in arr]; // [2, 4, 6, 8]
+
+// You can also iterate over ranges!
+let rangeArray = [i + 1 for i in 0..5]; // [1, 2, 3, 4, 5]
+```
+Instead of manually initializing an array and pushing elements in a `for` loop, list comprehensions are natively lowered into pre-allocated loops, avoiding memory re-allocations.
+
 ---
 
 ## Maps (Dictionaries)
