@@ -16,13 +16,29 @@ pub struct PaceClassMetadata {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pace_print(value: i64) -> i64 {
+pub extern "C" fn print_int(value: i64) -> i64 {
     println!("{}", value);
     0
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pace_print_str(str_ptr: *const c_char) -> i64 {
+pub extern "C" fn print_float(value: f64) -> i64 {
+    println!("{}", value);
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn print_bool(value: i64) -> i64 {
+    if value == 0 {
+        println!("false");
+    } else {
+        println!("true");
+    }
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn print_str(str_ptr: *const c_char) -> i64 {
     if str_ptr.is_null() {
         println!("(null)");
         return 0;
@@ -374,4 +390,22 @@ pub extern "C" fn pace_bool_to_string(value: i64) -> *const c_char {
         *payload.add(s.len()) = 0;
     }
     ptr as *const c_char
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn print_enum(val: *const u8) {
+    if val.is_null() {
+        println!("null");
+        return;
+    }
+    unsafe {
+        let metadata_ptr = *(val.add(16) as *const *const std::os::raw::c_char);
+        let tag = *(val.add(24) as *const i64);
+        let enum_name = if metadata_ptr.is_null() {
+            "Enum"
+        } else {
+            std::ffi::CStr::from_ptr(metadata_ptr).to_str().unwrap_or("Enum")
+        };
+        println!("<{} Variant {}>", enum_name, tag);
+    }
 }

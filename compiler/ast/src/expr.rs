@@ -58,6 +58,10 @@ pub enum ExprKind {
     Null,
     /// A variable reference like `count`
     Variable(String),
+    Range {
+        start: Box<Expr>,
+        end: Box<Expr>,
+    },
     /// A binary operation like `a + b`
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     /// A unary operation like `-a`

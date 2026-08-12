@@ -329,9 +329,103 @@ impl MirBuilder {
                 // Nested functions/classes/interfaces are not fully supported in MIR yet,
                 // or are handled at the top level.
             }
-            TypedStmtKind::For { .. } => {
-                // Lowering 'for' loops requires desugaring into an iterator while loop.
-                // Skipped for this simplified pass.
+            TypedStmtKind::For { item_name, iterator, body } => {
+                match &iterator.kind {
+                    TypedExprKind::Range { start, end } => {
+                        let start_val = self.lower_expr(start);
+                        let end_val = self.lower_expr(end);
+
+                        let current_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(current_var.clone(), RValue::Use(start_val)));
+
+                        let cond_block = self.new_block();
+                        let body_block = self.new_block();
+                        let merge_block = self.new_block();
+
+                        self.current().terminator = Some(Terminator::Jump(cond_block));
+
+                        // Condition Block
+                        self.current_block = cond_block;
+                        let cond_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(
+                            cond_temp.clone(),
+                            RValue::BinaryOp(ast::BinaryOp::Less, Value::Place(current_var.clone()), end_val),
+                        ));
+                        self.current().terminator = Some(Terminator::Branch { cond: Value::Place(cond_temp), then_block: body_block, else_block: merge_block });
+
+                        // Body Block
+                        self.current_block = body_block;
+                        self.current().instructions.push(Inst::Assign(Place::Var(item_name.clone()), RValue::Use(Value::Place(current_var.clone()))));
+                        self.lower_stmt(body);
+                        
+                        // Increment
+                        let inc_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(
+                            inc_temp.clone(),
+                            RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(current_var.clone()), Value::Int(1)),
+                        ));
+                        self.current().instructions.push(Inst::Assign(
+                            current_var.clone(),
+                            RValue::Use(Value::Place(inc_temp)),
+                        ));
+                        
+                        self.current().terminator = Some(Terminator::Jump(cond_block));
+
+                        // Merge Block
+                        self.current_block = merge_block;
+                    }
+                    _ => {
+                        // Array Iteration
+                        let arr_val = self.lower_expr(iterator);
+                        
+                        let len_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(len_var.clone(), RValue::ArrayLength(arr_val.clone())));
+                        
+                        let idx_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(idx_var.clone(), RValue::Use(Value::Int(0))));
+                        
+                        let cond_block = self.new_block();
+                        let body_block = self.new_block();
+                        let merge_block = self.new_block();
+                        
+                        self.current().terminator = Some(Terminator::Jump(cond_block));
+                        
+                        // Condition Block
+                        self.current_block = cond_block;
+                        let cond_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(
+                            cond_temp.clone(),
+                            RValue::BinaryOp(ast::BinaryOp::Less, Value::Place(idx_var.clone()), Value::Place(len_var.clone())),
+                        ));
+                        self.current().terminator = Some(Terminator::Branch { cond: Value::Place(cond_temp), then_block: body_block, else_block: merge_block });
+                        
+                        // Body Block
+                        self.current_block = body_block;
+                        let item_var = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(
+                            item_var.clone(),
+                            RValue::IndexGet(arr_val.clone(), Value::Place(idx_var.clone())),
+                        ));
+                        self.current().instructions.push(Inst::Assign(Place::Var(item_name.clone()), RValue::Use(Value::Place(item_var.clone()))));
+                        self.lower_stmt(body);
+                        
+                        // Increment
+                        let inc_temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(
+                            inc_temp.clone(),
+                            RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(idx_var.clone()), Value::Int(1)),
+                        ));
+                        self.current().instructions.push(Inst::Assign(
+                            idx_var.clone(),
+                            RValue::Use(Value::Place(inc_temp)),
+                        ));
+                        
+                        self.current().terminator = Some(Terminator::Jump(cond_block));
+                        
+                        // Merge Block
+                        self.current_block = merge_block;
+                    }
+                }
             }
             TypedStmtKind::Return { value } => {
                 let val = value.as_ref().map(|v| self.lower_expr(v));
@@ -595,8 +689,12 @@ impl MirBuilder {
                 };
                 
                 if func_name == "print" && arguments.len() == 1 {
-                    if let ast::Type::String = arguments[0].ty {
-                        func_name = "print_str".to_string();
+                    match &arguments[0].ty {
+                        ast::types::Type::String => func_name = "print_str".to_string(),
+                        ast::types::Type::Float => func_name = "print_float".to_string(),
+                        ast::types::Type::Boolean => func_name = "print_bool".to_string(),
+                        ast::types::Type::Enum(_, _) | ast::types::Type::Instance(_) => func_name = "print_enum".to_string(),
+                        _ => func_name = "print_int".to_string(),
                     }
                 }
 
@@ -624,6 +722,7 @@ impl MirBuilder {
                 }
                 Value::Place(temp)
             }
+            TypedExprKind::Range { .. } => unreachable!("Range expressions should only be evaluated as iterators in for loops"),
         }
     }
 }

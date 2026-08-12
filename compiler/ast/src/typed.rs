@@ -18,6 +18,10 @@ pub enum TypedExprKind {
     Boolean(bool),
     Null,
     Variable(String),
+    Range {
+        start: Box<TypedExpr>,
+        end: Box<TypedExpr>,
+    },
     Binary(Box<TypedExpr>, BinaryOp, Box<TypedExpr>),
     Unary(UnaryOp, Box<TypedExpr>),
     Grouping(Box<TypedExpr>),

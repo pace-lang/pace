@@ -210,6 +210,10 @@ impl Resolver {
                     self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot find variable '{}' in this scope.", name));
                 }
             }
+            ExprKind::Range { start, end } => {
+                self.resolve_expr(start);
+                self.resolve_expr(end);
+            }
             ExprKind::Binary(left, _, right) => {
                 self.resolve_expr(left);
                 self.resolve_expr(right);

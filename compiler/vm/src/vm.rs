@@ -51,7 +51,7 @@ impl<'a> VirtualMachine<'a> {
     }
 
     pub fn call_function(&mut self, name: &str, args: &[Value]) -> Option<Value> {
-        if name == "print" {
+        if name == "print" || name == "print_str" || name == "print_int" || name == "print_float" || name == "print_bool" {
             let mut out = String::new();
             for (i, arg) in args.iter().enumerate() {
                 if i > 0 {
@@ -476,6 +476,15 @@ impl<'a> VirtualMachine<'a> {
                         }
                         self.heap[id].fields.insert("length".to_string(), Value::Int(count_int));
                         Value::Object(id)
+                    }
+                    RValue::ArrayLength(array) => {
+                        let obj_val = self.resolve_value(array);
+                        if let Value::Object(id) = obj_val {
+                            let obj = &self.heap[id];
+                            obj.fields.get("length").unwrap().clone()
+                        } else {
+                            panic!("Not an array");
+                        }
                     }
                     RValue::IndexGet(array, index) => {
                         let obj_val = self.resolve_value(array);

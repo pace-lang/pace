@@ -1,9 +1,14 @@
 ---
 source: compiler/cli/tests/golden_tests.rs
-assertion_line: 50
 expression: normalized_stderr
 ---
-Finished `dev` profile [unoptimized + debuginfo] target(s)
+DEBUG: print fallback type is Int
+DEBUG: print fallback type is Int
+DEBUG: print fallback type is Int
+DEBUG: print fallback type is Int
+DEBUG: print fallback type is Int
+DEBUG: print fallback type is Int
+    Finished `dev` profile [unoptimized + debuginfo] target(s)
      Running `target/debug/02_types`
 1
 2

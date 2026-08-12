@@ -21,6 +21,7 @@ pub enum Type {
     Interface(String),
     Optional(Box<Type>),
     Array(Box<Type>),
+    Range,
     Null,
     // FFI Types
     CInt,
@@ -40,6 +41,7 @@ impl fmt::Display for Type {
             Type::Void => write!(f, "Void"),
             Type::Error => write!(f, "<ErrorType>"),
             Type::Any => write!(f, "Any"),
+            Type::Range => write!(f, "Range"),
             Type::BuiltinFunc => write!(f, "<BuiltinFunc>"),
             Type::OverloadedFunction(funcs) => write!(f, "<OverloadedFunction({} variants)>", funcs.len()),
             Type::Function(type_params, params, ret) => {

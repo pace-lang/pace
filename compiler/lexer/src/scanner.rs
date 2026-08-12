@@ -119,7 +119,7 @@ impl<'a> Scanner<'a> {
             '[' => TokenKind::LeftBracket,
             ']' => TokenKind::RightBracket,
             ',' => TokenKind::Comma,
-            '.' => TokenKind::Dot,
+            '.' => if self.match_char('.') { TokenKind::DotDot } else { TokenKind::Dot },
             ':' => TokenKind::Colon,
             ';' => TokenKind::Semicolon,
             '+' => TokenKind::Plus,

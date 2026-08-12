@@ -1,10 +1,5 @@
-foreign func pace_print(val: Int);
-foreign func pace_print_str(val: String);
-
-func print(val: Int) {
-    pace_print(val);
-}
-
-func print(val: String) {
-    pace_print_str(val);
-}
+foreign func print_int(val: Int);
+foreign func print_float(val: Float);
+foreign func print_bool(val: Boolean);
+foreign func print_str(val: String);
+foreign func print_enum(val: Int);

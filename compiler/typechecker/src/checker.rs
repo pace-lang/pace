@@ -437,10 +437,19 @@ impl TypeChecker {
             }
             StmtKind::For { item_name, iterator, body } => {
                 let typed_iterator = self.check_expr(iterator);
-                // Basic implementation: we don't know what type is inside the iterator yet without generics/arrays.
-                // We will default the item to Error so it ignores subsequent type errors inside the loop.
+                
+                let item_type = match &typed_iterator.ty {
+                    Type::Range => Type::Int,
+                    Type::Array(inner) => *inner.clone(),
+                    Type::Error => Type::Error,
+                    _ => {
+                        self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Cannot iterate over non-iterable type '{}'.", typed_iterator.ty));
+                        Type::Error
+                    }
+                };
+
                 self.env.push_scope();
-                self.env.declare(item_name.clone(), Type::Error);
+                self.env.declare(item_name.clone(), item_type);
                 let typed_body = self.check_stmt(body);
                 self.env.pop_scope();
                 TypedStmtKind::For {
@@ -770,8 +779,16 @@ impl TypeChecker {
                                     inferred_map.insert(p.clone(), instance_args[i].clone());
                                 }
                             }
-                            resolved_ty = self.substitute_generics(variant_ty, &inferred_map);
+                            resolved_ty = self.substitute_generics(&variant_ty, &inferred_map);
                         }
+
+                        // If it's a unit variant (no params), it evaluates to the enum type directly
+                        if let Type::EnumVariantConstructor(_, _, _, params, ret_ty) = &resolved_ty {
+                            if params.is_empty() {
+                                resolved_ty = *ret_ty.clone();
+                            }
+                        }
+
                         return TypedExpr::new(TypedExprKind::EnumVariant {
                             enum_name: class_name.clone(),
                             variant_name: name.clone(),
@@ -1306,6 +1323,16 @@ impl TypeChecker {
                     }
                 };
                 (TypedExprKind::Unary(op.clone(), Box::new(typed_right)), ty)
+            }
+            ExprKind::Range { start, end } => {
+                let typed_start = self.check_expr_with_expected(start, Some(&Type::Int));
+                let typed_end = self.check_expr_with_expected(end, Some(&Type::Int));
+                
+                if typed_start.ty != Type::Int || typed_end.ty != Type::Int {
+                    self.error(expr.span, DiagnosticCode::TypeMismatch, "Range bounds must be integers.");
+                }
+                
+                (TypedExprKind::Range { start: Box::new(typed_start), end: Box::new(typed_end) }, Type::Range)
             }
             ExprKind::Binary(left, op, right) => {
                 let typed_left = self.check_expr(left);

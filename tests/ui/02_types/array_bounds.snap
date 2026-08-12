@@ -2,6 +2,7 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-Finished `dev` profile [unoptimized + debuginfo] target(s)
+DEBUG: print fallback type is Int
+    Finished `dev` profile [unoptimized + debuginfo] target(s)
      Running `target/debug/02_types`
 Pace Runtime Error: Array index out of bounds

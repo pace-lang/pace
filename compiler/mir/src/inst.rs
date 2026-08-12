@@ -33,6 +33,7 @@ pub enum RValue {
     ForceUnwrap(Value),
     Array(Vec<Value>, bool),
     ArrayRepeat(Value, Value, bool),
+    ArrayLength(Value),
     IndexGet(Value, Value),
     ConstructVariant(String, usize, Vec<Value>),
     ExtractPayload(Value, usize, usize),

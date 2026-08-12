@@ -142,22 +142,23 @@ impl<'a> ModuleLoader<'a> {
         for stmt in &final_ast {
             if let StmtKind::Import { path: import_path_str, .. } = &stmt.kind {
                 let clean_path = import_path_str.trim_matches('"').trim_matches('\'');
-                let is_local = clean_path.starts_with("./") || clean_path.starts_with("../") || clean_path.ends_with(".pace");
-                
-                let abs_import_path;
-                
-                if is_local {
-                    if !clean_path.ends_with(".pace") {
-                        self.errors.push(diagnostics::DiagnosticBuilder::error(
-                            diagnostics::DiagnosticCode::InvalidToken, 
-                            "Local file imports must end with '.pace'.", 
-                            stmt.span.clone()
-                        ).build());
-                        continue;
-                    }
-                    let mut resolved = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
-                    resolved.push(clean_path);
-                    abs_import_path = Some(resolved.canonicalize().unwrap_or(resolved));
+                let resolved_import_path;
+
+                let mut local_resolved = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
+                local_resolved.push(clean_path);
+                if !clean_path.ends_with(".pace") {
+                    local_resolved.set_extension("pace");
+                }
+
+                if local_resolved.exists() {
+                    resolved_import_path = Some(local_resolved.canonicalize().unwrap_or(local_resolved));
+                } else if clean_path.starts_with("./") || clean_path.starts_with("../") {
+                    self.errors.push(diagnostics::DiagnosticBuilder::error(
+                        diagnostics::DiagnosticCode::InvalidToken,
+                        &format!("Could not find local file '{}'.", local_resolved.display()),
+                        stmt.span.clone()
+                    ).build());
+                    continue;
                 } else {
                     // Package import
                     let parts: Vec<&str> = clean_path.split('/').collect();
@@ -185,8 +186,7 @@ impl<'a> ModuleLoader<'a> {
                                         p.push(part);
                                     }
                                     if parts.len() == 1 {
-                                        // e.g. import "http" -> resolves to http's main file? 
-                                        // Let's assume the name is the file name for now if len == 1? No, just add .pace.
+                                        // default to lib.pace or main.pace if only package name is provided
                                     }
                                     p.set_extension("pace");
                                     resolved = Some(p.canonicalize().unwrap_or(p));
@@ -196,7 +196,7 @@ impl<'a> ModuleLoader<'a> {
                     }
                     
                     if let Some(r) = resolved {
-                        abs_import_path = Some(r);
+                        resolved_import_path = Some(r);
                     } else {
                         self.errors.push(diagnostics::DiagnosticBuilder::error(
                             diagnostics::DiagnosticCode::InvalidToken, 
@@ -207,8 +207,8 @@ impl<'a> ModuleLoader<'a> {
                     }
                 }
                 
-                if let Some(p) = abs_import_path {
-                    if let Some(dep_id) = self.load_file(&p) {
+                if let Some(abs_path) = resolved_import_path {
+                    if let Some(dep_id) = self.load_file(&abs_path) {
                         dependencies.push((clean_path.to_string(), dep_id));
                     }
                 }

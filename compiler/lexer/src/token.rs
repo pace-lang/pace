@@ -68,6 +68,7 @@ pub enum TokenKind {
     RightBracket,
     Comma,
     Dot,
+    DotDot,
     Colon,
     Semicolon,
     Underscore,

@@ -437,6 +437,11 @@ impl Parser {
             return_type = Some(self.parse_type_expr()?);
         }
 
+        if !self.match_token(&[TokenKind::Semicolon]) {
+            self.error_at_current("Expected ';' after interface method declaration.");
+            return None;
+        }
+
         let end_span = self.previous().span;
         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
@@ -834,7 +839,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> Option<Expr> {
-        let expr = self.equality()?;
+        let expr = self.range()?;
 
         if self.match_token(&[TokenKind::Equal]) {
             let _equals = self.previous().clone();
@@ -861,6 +866,19 @@ impl Parser {
 
         Some(expr)
     }
+
+    fn range(&mut self) -> Option<Expr> {
+        let mut expr = self.equality()?;
+
+        while self.match_token(&[TokenKind::DotDot]) {
+            let right = self.equality()?;
+            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
+            expr = Expr::new(ExprKind::Range { start: Box::new(expr), end: Box::new(right) }, span);
+        }
+
+        Some(expr)
+    }
+
 
     fn equality(&mut self) -> Option<Expr> {
         let mut expr = self.comparison()?;

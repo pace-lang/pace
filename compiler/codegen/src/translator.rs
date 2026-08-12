@@ -120,7 +120,10 @@ impl<'a, 'b> Translator<'a, 'b> {
     fn translate_value(&mut self, value: &Value) -> Result<CraneliftValue, String> {
         match value {
             Value::Int(i) => Ok(self.builder.ins().iconst(types::I64, *i)),
-            Value::Float(f) => Ok(self.builder.ins().f64const(*f)),
+            Value::Float(f) => {
+                let f_val = self.builder.ins().f64const(*f);
+                Ok(self.builder.ins().bitcast(types::I64, cranelift_codegen::ir::MemFlagsData::new(), f_val))
+            }
             Value::Boolean(b) => Ok(self.builder.ins().iconst(types::I64, if *b { 1 } else { 0 })),
             Value::Place(place) => {
                 let var = self.get_place_var(place);
@@ -225,6 +228,9 @@ impl<'a, 'b> Translator<'a, 'b> {
                                         mir::ForeignAbiType::I8 => val = self.builder.ins().ireduce(types::I8, val),
                                         mir::ForeignAbiType::I16 => val = self.builder.ins().ireduce(types::I16, val),
                                         mir::ForeignAbiType::I32 => val = self.builder.ins().ireduce(types::I32, val),
+                                        mir::ForeignAbiType::F64 => {
+                                            val = self.builder.ins().bitcast(types::F64, cranelift_codegen::ir::MemFlagsData::new(), val);
+                                        },
                                         _ => {}
                                     }
                                 }
@@ -329,6 +335,10 @@ impl<'a, 'b> Translator<'a, 'b> {
                         
                         let call_inst = self.builder.ins().call(local_alloc_repeat, &[cl_count, cl_val, metadata_ptr]);
                         self.builder.inst_results(call_inst)[0]
+                    }
+                    RValue::ArrayLength(array) => {
+                        let cl_array = self.translate_value(array)?;
+                        self.builder.ins().load(types::I64, ir::MemFlagsData::new(), cl_array, 24)
                     }
                     RValue::IndexGet(array, index) => {
                         let cl_array = self.translate_value(array)?;

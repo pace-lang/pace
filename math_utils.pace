@@ -1,0 +1,9 @@
+// math_utils.pace
+
+public func add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+private func subtract(a: Int, b: Int) -> Int { // Private by default
+    return a - b;
+}
