@@ -87,8 +87,24 @@ print(items[1]) // Prints: Banana
 items[1] = "Blueberry"
 ```
 
-> [!NOTE]
 > **Safety First:** Array bounds are checked strictly at runtime. If you attempt to access `items[5]`, Pace will safely panic and halt the program instead of reading garbage memory (buffer overflow), protecting you from severe security vulnerabilities.
+
+---
+
+## Maps (Dictionaries)
+
+Pace natively supports Hash Maps for key-value storage. Like Arrays, Maps are strictly typed.
+
+```pace
+let ages = {
+    "Alice": 30,
+    "Bob": 25
+}
+
+// Accessing map values returns an Optional (e.g. Int?)
+// because the key might not exist!
+let aliceAge = ages["Alice"]
+```
 
 ---
 
@@ -133,6 +149,27 @@ class Profile {
 let user = User()
 // Returns an Int? which is null if profile is null
 let userAge = user.profile?.age 
+```
+
+### Null Coalescing (`??`)
+Often, you want to provide a default fallback value if an optional turns out to be `null`. You can use the `??` operator to achieve this concisely.
+
+```pace
+let configSpeed: Int? = null
+// result is 100 because configSpeed is null
+let defaultSpeed = configSpeed ?? 100 
+
+// You can chain them safely:
+let finalSpeed = userSpeed ?? configSpeed ?? 100
+```
+
+### Null Coalesce Assignment (`??=`)
+If you only want to assign a value to a variable if its current value is `null`, you can use the `??=` operator.
+
+```pace
+var maxRetries: Int? = null
+maxRetries ??= 5 // maxRetries is now 5
+maxRetries ??= 10 // maxRetries remains 5, because it's no longer null
 ```
 
 ---

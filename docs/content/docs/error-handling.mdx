@@ -36,7 +36,19 @@ let items = [1, 2, 3]
 let missing = items[5] 
 ```
 
-*(Note: Advanced algebraic error handling using a `Result<T, E>` Enum is currently being designed for future iterations of the compiler.)*
+### 3. `Result<T, E>` for Complex Error Handling
+For advanced error handling where operations might fail with specific, meaningful errors (like File I/O or Network Requests), Pace provides a generic algebraic `Result<T, E>` type.
+
+A `Result` can either be `Ok(T)` containing the successful value, or `Err(E)` containing the error details. You use Pace's powerful `match` statement to handle both possibilities safely.
+
+```pace
+let result: Result<String, Int> = readFile("config.json")
+
+match result {
+    Ok(data) => print(data),
+    Err(code) => print("Failed with error code")
+}
+```
 
 ---
 
