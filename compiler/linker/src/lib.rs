@@ -13,8 +13,12 @@ impl Linker {
         
         let mut search_paths = vec![
             exe_dir.join("libpace_runtime.a"),
+            exe_dir.join("../libpace_runtime.a"), // For tests in target/debug/deps
+            exe_dir.join("../../libpace_runtime.a"),
             exe_dir.join("../lib/libpace_runtime.a"),
             exe_dir.join("pace_runtime.lib"),
+            exe_dir.join("../pace_runtime.lib"),
+            exe_dir.join("../../pace_runtime.lib"),
             exe_dir.join("../lib/pace_runtime.lib"),
         ];
 
@@ -27,7 +31,38 @@ impl Linker {
             search_paths.push(cwd.join("compiler/runtime/target/debug/pace_runtime.lib"));
         }
         
-        let runtime_lib = search_paths.into_iter().find(|p| p.exists())
+        let mut runtime_lib = search_paths.into_iter().find(|p| p.exists());
+
+        if runtime_lib.is_none() {
+            let mut fallback_dirs = vec![
+                exe_dir.to_path_buf(),
+                exe_dir.join("deps"),
+                exe_dir.join("../deps"),
+            ];
+            
+            if let Ok(cwd) = env::current_dir() {
+                fallback_dirs.push(cwd.join("target/debug/deps"));
+                fallback_dirs.push(cwd.join("target/release/deps"));
+            }
+
+            for dir in fallback_dirs {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                            if (file_name.starts_with("libpace_runtime-") && file_name.ends_with(".a")) ||
+                               (file_name.starts_with("pace_runtime-") && file_name.ends_with(".lib")) {
+                                runtime_lib = Some(path);
+                                break;
+                            }
+                        }
+                    }
+                }
+                if runtime_lib.is_some() { break; }
+            }
+        }
+
+        let runtime_lib = runtime_lib
             .ok_or_else(|| "Runtime library (libpace_runtime.a) not found. Please ensure it is built and located alongside the pace executable or in the target directory.".to_string())?;
 
         // We will use the system `cc` to link the object file with our Rust staticlib

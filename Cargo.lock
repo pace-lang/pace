@@ -164,6 +164,7 @@ dependencies = [
  "package",
  "parser",
  "resolver",
+ "runtime",
  "serde",
  "toml",
  "typechecker",

@@ -24,6 +24,7 @@ toml = "1.1.4"
 serde = { version = "1.0.229", features = ["derive"] }
 package = { version = "0.1.0", path = "../package" }
 module = { version = "0.1.0", path = "../module" }
+runtime = { version = "0.1.0", path = "../runtime" }
 
 [dev-dependencies]
 insta = { version = "1.41.0", features = ["redactions"] }

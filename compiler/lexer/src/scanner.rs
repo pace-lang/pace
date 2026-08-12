@@ -283,6 +283,8 @@ impl<'a> Scanner<'a> {
             "import" => TokenKind::Import,
             "package" => TokenKind::Package,
             "export" => TokenKind::Export,
+            "public" => TokenKind::Public,
+            "private" => TokenKind::Private,
             "as" => TokenKind::As,
             "show" => TokenKind::Show,
             "hide" => TokenKind::Hide,

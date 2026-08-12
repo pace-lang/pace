@@ -1,6 +1,6 @@
 import "utils.pace";
 
-class _Helper {}
+private class Helper {}
 
 func test() {
     let x = get_value();

@@ -23,6 +23,8 @@ pub enum TokenKind {
     Import,
     Package,
     Export,
+    Public,
+    Private,
     Enum,
     Match,
     As,

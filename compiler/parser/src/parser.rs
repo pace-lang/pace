@@ -27,33 +27,54 @@ impl Parser {
         (statements, self.errors.clone())
     }
 
+    fn parse_visibility(&mut self) -> bool {
+        if self.match_token(&[TokenKind::Private]) {
+            true
+        } else if self.match_token(&[TokenKind::Public]) {
+            false
+        } else {
+            false
+        }
+    }
+
     fn declaration(&mut self) -> Option<Stmt> {
+        let is_private = self.parse_visibility();
+
         let res = if self.match_token(&[TokenKind::Interface]) {
-            self.interface_declaration()
+            self.interface_declaration(is_private)
         } else if self.match_token(&[TokenKind::Class]) {
-            self.class_declaration()
+            self.class_declaration(is_private)
         } else if self.match_token(&[TokenKind::Enum]) {
-            self.enum_declaration()
+            self.enum_declaration(is_private)
         } else if self.match_token(&[TokenKind::Func]) {
-            self.function_declaration()
+            self.function_declaration(is_private)
         } else if self.match_token(&[TokenKind::Let]) {
-            self.variable_declaration(false, false)
+            self.variable_declaration(false, false, is_private)
         } else if self.match_token(&[TokenKind::Var]) {
-            self.variable_declaration(true, false)
+            self.variable_declaration(true, false, is_private)
         } else if self.match_token(&[TokenKind::Weak]) {
             if self.match_token(&[TokenKind::Var]) {
-                self.variable_declaration(true, true)
+                self.variable_declaration(true, true, is_private)
             } else {
                 self.error_at_current("Expected 'var' after 'weak'.");
                 None
             }
         } else if self.match_token(&[TokenKind::Foreign]) {
-            self.foreign_declaration()
+            self.foreign_declaration(is_private)
         } else if self.match_token(&[TokenKind::Import]) {
+            if is_private {
+                self.error_at_current("Visibility modifiers are not allowed on imports.");
+            }
             self.import_declaration()
         } else if self.match_token(&[TokenKind::Export]) {
+            if is_private {
+                self.error_at_current("Visibility modifiers are not allowed on exports.");
+            }
             self.export_declaration()
         } else {
+            if is_private {
+                self.error_at_current("Visibility modifiers are only allowed on declarations.");
+            }
             self.statement()
         };
 
@@ -144,7 +165,7 @@ impl Parser {
         }
     }
 
-    fn enum_declaration(&mut self) -> Option<Stmt> {
+    fn enum_declaration(&mut self, is_private: bool) -> Option<Stmt> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -231,11 +252,11 @@ impl Parser {
             name,
             type_params,
             variants,
-            is_private: false, // Handle is_private later if needed
+            is_private,
         }, span))
     }
 
-    fn class_declaration(&mut self) -> Option<Stmt> {
+    fn class_declaration(&mut self, is_private: bool) -> Option<Stmt> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -274,17 +295,19 @@ impl Parser {
         let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+            let item_is_private = self.parse_visibility();
+
             if self.match_token(&[TokenKind::Let]) {
-                if let Some(field) = self.variable_declaration(false, false) {
+                if let Some(field) = self.variable_declaration(false, false, item_is_private) {
                     fields.push(field);
                 }
             } else if self.match_token(&[TokenKind::Var]) {
-                if let Some(field) = self.variable_declaration(true, false) {
+                if let Some(field) = self.variable_declaration(true, false, item_is_private) {
                     fields.push(field);
                 }
             } else if self.match_token(&[TokenKind::Weak]) {
                 if self.match_token(&[TokenKind::Var]) {
-                    if let Some(field) = self.variable_declaration(true, true) {
+                    if let Some(field) = self.variable_declaration(true, true, item_is_private) {
                         fields.push(field);
                     }
                 } else {
@@ -292,17 +315,17 @@ impl Parser {
                 }
             } else if self.match_token(&[TokenKind::Func]) {
                 if self.match_token(&[TokenKind::Init]) {
-                    if let Some(init_method) = self.init_declaration() {
+                    if let Some(init_method) = self.init_declaration(item_is_private) {
                         methods.push(init_method);
                     }
                 } else {
-                    if let Some(method) = self.function_declaration() {
+                    if let Some(method) = self.function_declaration(item_is_private) {
                         methods.push(method);
                     }
                 }
             } else if self.match_token(&[TokenKind::Init]) {
                 self.error_at_current("Constructors must be declared with 'func init'.");
-                if let Some(init_method) = self.init_declaration() {
+                if let Some(init_method) = self.init_declaration(false) {
                     methods.push(init_method);
                 }
             } else {
@@ -318,11 +341,10 @@ impl Parser {
 
         let end_span = self.previous().span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        let is_private = name.starts_with('_');
         Some(Stmt::new(StmtKind::Class { name: name.clone(), type_params, implements, methods, fields, is_private }, span))
     }
 
-    fn interface_declaration(&mut self) -> Option<Stmt> {
+    fn interface_declaration(&mut self, is_private: bool) -> Option<Stmt> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -341,8 +363,10 @@ impl Parser {
         let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+            let item_is_private = self.parse_visibility();
+
             if self.match_token(&[TokenKind::Func]) {
-                if let Some(method) = self.interface_method_declaration() {
+                if let Some(method) = self.interface_method_declaration(item_is_private) {
                     methods.push(method);
                 }
             } else {
@@ -358,11 +382,10 @@ impl Parser {
 
         let end_span = self.previous().span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        let is_private = name.starts_with('_');
         Some(Stmt::new(StmtKind::Interface { name: name.clone(), methods, is_private }, span))
     }
 
-    fn interface_method_declaration(&mut self) -> Option<Stmt> {
+    fn interface_method_declaration(&mut self, is_private: bool) -> Option<Stmt> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -419,11 +442,10 @@ impl Parser {
 
         // We use StmtKind::Func but with an empty block for the body.
         let empty_body = Box::new(Stmt::new(StmtKind::Block(Vec::new()), span.clone()));
-        let is_private = name.starts_with('_');
         Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params: Vec::new(), params, return_type, body: empty_body, is_private }, span))
     }
 
-    fn init_declaration(&mut self) -> Option<Stmt> {
+    fn init_declaration(&mut self, is_private: bool) -> Option<Stmt> {
         let start_span = self.previous().span;
         let name = "init".to_string();
 
@@ -473,11 +495,10 @@ impl Parser {
         let body = self.block()?;
         let end_span = body.span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        let is_private = name.starts_with('_');
         Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params: Vec::new(), params, return_type, body: Box::new(body), is_private }, span))
     }
 
-    fn foreign_declaration(&mut self) -> Option<Stmt> {
+    fn foreign_declaration(&mut self, is_private: bool) -> Option<Stmt> {
         let start_span = self.previous().span;
 
         if !self.match_token(&[TokenKind::Func]) {
@@ -543,7 +564,6 @@ impl Parser {
 
         let end_span = self.previous().span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        let is_private = name.starts_with('_');
 
         Some(Stmt::new(StmtKind::ForeignFunc {
             name,
@@ -554,7 +574,7 @@ impl Parser {
         }, span))
     }
 
-    fn function_declaration(&mut self) -> Option<Stmt> {
+    fn function_declaration(&mut self, is_private: bool) -> Option<Stmt> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -616,11 +636,10 @@ impl Parser {
         let body = self.block()?;
         let end_span = body.span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        let is_private = name.starts_with('_');
         Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params, params, return_type, body: Box::new(body), is_private }, span))
     }
 
-    fn variable_declaration(&mut self, is_var: bool, is_weak: bool) -> Option<Stmt> {
+    fn variable_declaration(&mut self, is_var: bool, is_weak: bool, is_private: bool) -> Option<Stmt> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -647,7 +666,6 @@ impl Parser {
 
         let end_span = self.previous().span;
         let span = Span::new(start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        let is_private = name.starts_with('_');
         
         let kind = if is_var {
             StmtKind::Var { name: name.clone(), type_annotation, initializer, is_weak, is_private }
@@ -1396,6 +1414,32 @@ mod tests {
                 assert_eq!(return_type.as_ref().unwrap(), &ast::TypeExpr::Named("Int".to_string()));
             }
             _ => panic!("Expected Func statement"),
+        }
+    }
+
+    #[test]
+    fn test_visibility_modifiers() {
+        let source = "private func hidden() {} public class Visible {} var unadorned = 1;";
+        let mut scanner = Scanner::new(source);
+        let mut parser = Parser::new(scanner.scan_tokens());
+        let (stmts, errors) = parser.parse();
+        
+        assert!(errors.is_empty(), "Parse errors: {:?}", errors);
+        assert_eq!(stmts.len(), 3);
+        
+        match &stmts[0].kind {
+            StmtKind::Func { is_private, .. } => assert_eq!(*is_private, true),
+            _ => panic!("Expected Func statement"),
+        }
+        
+        match &stmts[1].kind {
+            StmtKind::Class { is_private, .. } => assert_eq!(*is_private, false),
+            _ => panic!("Expected Class statement"),
+        }
+        
+        match &stmts[2].kind {
+            StmtKind::Var { is_private, .. } => assert_eq!(*is_private, false),
+            _ => panic!("Expected Var statement"),
         }
     }
 
