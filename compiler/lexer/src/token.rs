@@ -42,7 +42,11 @@ pub enum TokenKind {
     Identifier(String),
     Integer(i64),
     Float(f64),
-    String(String),
+    StringStart,
+    StringPart(String),
+    StringEnd,
+    InterpolationStart,
+    InterpolationEnd,
 
     // Punctuation
     Plus,

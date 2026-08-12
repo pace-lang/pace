@@ -144,8 +144,26 @@ impl CraneliftGenerator {
         str_concat_sig.params.push(AbiParam::new(types::I64));
         str_concat_sig.params.push(AbiParam::new(types::I64));
         str_concat_sig.returns.push(AbiParam::new(types::I64));
-        let str_concat_id = module.declare_function("stringConcat", Linkage::Import, &str_concat_sig).unwrap();
-        func_ids.insert("stringConcat".to_string(), str_concat_id);
+        let str_concat_id = module.declare_function("pace_string_concat", Linkage::Import, &str_concat_sig).unwrap();
+        func_ids.insert("pace_string_concat".to_string(), str_concat_id);
+
+        let mut int_to_string_sig = module.make_signature();
+        int_to_string_sig.params.push(AbiParam::new(types::I64));
+        int_to_string_sig.returns.push(AbiParam::new(types::I64));
+        let int_to_string_id = module.declare_function("pace_int_to_string", Linkage::Import, &int_to_string_sig).unwrap();
+        func_ids.insert("pace_int_to_string".to_string(), int_to_string_id);
+
+        let mut float_to_string_sig = module.make_signature();
+        float_to_string_sig.params.push(AbiParam::new(types::F64));
+        float_to_string_sig.returns.push(AbiParam::new(types::I64));
+        let float_to_string_id = module.declare_function("pace_float_to_string", Linkage::Import, &float_to_string_sig).unwrap();
+        func_ids.insert("pace_float_to_string".to_string(), float_to_string_id);
+
+        let mut bool_to_string_sig = module.make_signature();
+        bool_to_string_sig.params.push(AbiParam::new(types::I64));
+        bool_to_string_sig.returns.push(AbiParam::new(types::I64));
+        let bool_to_string_id = module.declare_function("pace_bool_to_string", Linkage::Import, &bool_to_string_sig).unwrap();
+        func_ids.insert("pace_bool_to_string".to_string(), bool_to_string_id);
 
         let mut class_metadata_ids = HashMap::new();
         

@@ -1089,9 +1089,61 @@ impl Parser {
                     self.advance();
                     return Some(Expr::new(ExprKind::Float(f), token.span));
                 }
-                TokenKind::String(ref s) => {
+                TokenKind::StringStart => {
+                    let start_span = token.span;
                     self.advance();
-                    return Some(Expr::new(ExprKind::String(s.clone()), token.span));
+                    let mut pieces = Vec::new();
+                    loop {
+                        if let Some(tok) = self.peek().cloned() {
+                            match &tok.kind {
+                                TokenKind::StringPart(s) => {
+                                    pieces.push(Expr::new(ExprKind::String(s.clone()), tok.span));
+                                    self.advance();
+                                }
+                                TokenKind::InterpolationStart => {
+                                    self.advance();
+                                    if let Some(expr) = self.expression() {
+                                        pieces.push(expr);
+                                    }
+                                    if !self.match_token(&[TokenKind::InterpolationEnd]) {
+                                        self.error_at_current("Expected '}' after string interpolation expression.");
+                                    }
+                                }
+                                TokenKind::StringEnd => {
+                                    self.advance();
+                                    break;
+                                }
+                                TokenKind::Error(e) => {
+                                    self.error_at_current(e);
+                                    self.advance();
+                                    break;
+                                }
+                                TokenKind::Eof => {
+                                    self.error_at_current("Unterminated string.");
+                                    break;
+                                }
+                                _ => {
+                                    self.error_at_current("Unexpected token in string.");
+                                    self.advance();
+                                    break;
+                                }
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    let end_span = self.previous().span;
+                    let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+                    
+                    if pieces.len() == 1 {
+                        if let ExprKind::String(s) = &pieces[0].kind {
+                            return Some(Expr::new(ExprKind::String(s.clone()), span));
+                        }
+                    } else if pieces.is_empty() {
+                        return Some(Expr::new(ExprKind::String(String::new()), span));
+                    }
+                    
+                    return Some(Expr::new(ExprKind::InterpolatedString(pieces), span));
                 }
                 TokenKind::Identifier(ref i) => {
                     self.advance();
@@ -1307,13 +1359,20 @@ impl Parser {
     fn import_declaration(&mut self) -> Option<Stmt> {
         let start_span = self.previous().span;
         
-        let path = if let Some(Token { kind: TokenKind::String(p), .. }) = self.peek().cloned() {
-            self.advance();
-            p
+        let mut path = String::new();
+        if self.match_token(&[TokenKind::StringStart]) {
+            if let Some(Token { kind: TokenKind::StringPart(p), .. }) = self.peek().cloned() {
+                self.advance();
+                path = p;
+            }
+            if !self.match_token(&[TokenKind::StringEnd]) {
+                self.error_at_current("Expected '\"' after string.");
+                return None;
+            }
         } else {
             self.error_at_current("Expected string after 'import'.");
             return None;
-        };
+        }
 
         let mut alias = None;
         if self.match_token(&[TokenKind::As]) {
@@ -1371,13 +1430,20 @@ impl Parser {
     fn export_declaration(&mut self) -> Option<Stmt> {
         let start_span = self.previous().span;
         
-        let path = if let Some(Token { kind: TokenKind::String(p), .. }) = self.peek().cloned() {
-            self.advance();
-            p
+        let mut path = String::new();
+        if self.match_token(&[TokenKind::StringStart]) {
+            if let Some(Token { kind: TokenKind::StringPart(p), .. }) = self.peek().cloned() {
+                self.advance();
+                path = p;
+            }
+            if !self.match_token(&[TokenKind::StringEnd]) {
+                self.error_at_current("Expected '\"' after string.");
+                return None;
+            }
         } else {
             self.error_at_current("Expected string after 'export'.");
             return None;
-        };
+        }
 
         if !self.match_token(&[TokenKind::Semicolon]) {
             self.error_at_current("Expected ';' after export declaration.");

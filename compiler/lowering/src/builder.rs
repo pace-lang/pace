@@ -346,6 +346,46 @@ impl MirBuilder {
             TypedExprKind::Integer(i) => Value::Int(*i),
             TypedExprKind::Float(f) => Value::Float(*f),
             TypedExprKind::String(s) => Value::String(s.clone()),
+            TypedExprKind::InterpolatedString(pieces) => {
+                if pieces.is_empty() {
+                    return Value::String("".to_string());
+                }
+
+                let mut current_str_val = None;
+
+                for piece in pieces {
+                    let mut piece_val = self.lower_expr(piece);
+
+                    match &piece.ty {
+                        ast::Type::Int => {
+                            let temp = self.new_temp();
+                            self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call("pace_int_to_string".to_string(), vec![piece_val])));
+                            piece_val = Value::Place(temp);
+                        }
+                        ast::Type::Float => {
+                            let temp = self.new_temp();
+                            self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call("pace_float_to_string".to_string(), vec![piece_val])));
+                            piece_val = Value::Place(temp);
+                        }
+                        ast::Type::Boolean => {
+                            let temp = self.new_temp();
+                            self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call("pace_bool_to_string".to_string(), vec![piece_val])));
+                            piece_val = Value::Place(temp);
+                        }
+                        _ => {}
+                    }
+
+                    if let Some(current) = current_str_val {
+                        let temp = self.new_temp();
+                        self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call("pace_string_concat".to_string(), vec![current, piece_val])));
+                        current_str_val = Some(Value::Place(temp));
+                    } else {
+                        current_str_val = Some(piece_val);
+                    }
+                }
+
+                current_str_val.unwrap()
+            }
             TypedExprKind::Boolean(b) => Value::Boolean(*b),
             TypedExprKind::Null => Value::Null,
             TypedExprKind::Variable(name) => Value::Place(Place::Var(name.clone())),

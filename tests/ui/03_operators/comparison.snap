@@ -3,56 +3,56 @@ source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
 [31m[P2001] Error:[0m Cannot find variable 'fn' in this scope.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m /home/aniket/Documents/Projects/pacelang/tests/ui/03_operators/comparison.pace:1:1 [38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/03_operators/comparison.pace:1:1 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m1 │[0m [31mf[0m[31mn[0m[38;5;249m [0m[38;5;249mm[0m[38;5;249ma[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
  [38;5;240m  │[0m [31m─[0m[31m┬[0m  
  [38;5;240m  │[0m  [31m╰[0m[31m─[0m[31m─[0m Cannot find variable 'fn' in this scope.
 [38;5;246m───╯[0m
 [31m[P2001] Error:[0m Cannot find variable 'main' in this scope.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m /home/aniket/Documents/Projects/pacelang/tests/ui/03_operators/comparison.pace:1:4 [38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/03_operators/comparison.pace:1:4 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m1 │[0m [38;5;249mf[0m[38;5;249mn[0m[38;5;249m [0m[31mm[0m[31ma[0m[31mi[0m[31mn[0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
  [38;5;240m  │[0m    [31m─[0m[31m─[0m[31m┬[0m[31m─[0m  
  [38;5;240m  │[0m      [31m╰[0m[31m─[0m[31m─[0m[31m─[0m Cannot find variable 'main' in this scope.
 [38;5;246m───╯[0m
 [31m[P2001] Error:[0m Cannot find variable 'print_str' in this scope.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m /home/aniket/Documents/Projects/pacelang/tests/ui/03_operators/comparison.pace:5:18 [38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/03_operators/comparison.pace:5:18 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m5 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m1[0m[38;5;249m0[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[31mp[0m[31mr[0m[31mi[0m[31mn[0m[31mt[0m[31m_[0m[31ms[0m[31mt[0m[31mr[0m[38;5;249m([0m[38;5;249m"[0m[38;5;249ma[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249m [0m[38;5;249m1[0m[38;5;249m0[0m[38;5;249m"[0m[38;5;249m)[0m[38;5;249m;[0m[38;5;249m [0m[38;5;249m}[0m
  [38;5;240m  │[0m                  [31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m┬[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m  
  [38;5;240m  │[0m                      [31m╰[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m Cannot find variable 'print_str' in this scope.
 [38;5;246m───╯[0m
 [31m[P2001] Error:[0m Cannot find variable 'print_str' in this scope.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m /home/aniket/Documents/Projects/pacelang/tests/ui/03_operators/comparison.pace:6:17 [38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/03_operators/comparison.pace:6:17 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m6 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m![0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[31mp[0m[31mr[0m[31mi[0m[31mn[0m[31mt[0m[31m_[0m[31ms[0m[31mt[0m[31mr[0m[38;5;249m([0m[38;5;249m"[0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m![0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249m"[0m[38;5;249m)[0m[38;5;249m;[0m[38;5;249m [0m[38;5;249m}[0m
  [38;5;240m  │[0m                 [31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m┬[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m  
  [38;5;240m  │[0m                     [31m╰[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m Cannot find variable 'print_str' in this scope.
 [38;5;246m───╯[0m
 [31m[P2001] Error:[0m Cannot find variable 'print_str' in this scope.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m /home/aniket/Documents/Projects/pacelang/tests/ui/03_operators/comparison.pace:7:16 [38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/03_operators/comparison.pace:7:16 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m7 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[31mp[0m[31mr[0m[31mi[0m[31mn[0m[31mt[0m[31m_[0m[31ms[0m[31mt[0m[31mr[0m[38;5;249m([0m[38;5;249m"[0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249m"[0m[38;5;249m)[0m[38;5;249m;[0m[38;5;249m [0m[38;5;249m}[0m
  [38;5;240m  │[0m                [31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m┬[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m  
  [38;5;240m  │[0m                    [31m╰[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m Cannot find variable 'print_str' in this scope.
 [38;5;246m───╯[0m
 [31m[P2001] Error:[0m Cannot find variable 'print_str' in this scope.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m /home/aniket/Documents/Projects/pacelang/tests/ui/03_operators/comparison.pace:8:18 [38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/03_operators/comparison.pace:8:18 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m8 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m1[0m[38;5;249m0[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[31mp[0m[31mr[0m[31mi[0m[31mn[0m[31mt[0m[31m_[0m[31ms[0m[31mt[0m[31mr[0m[38;5;249m([0m[38;5;249m"[0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m1[0m[38;5;249m0[0m[38;5;249m"[0m[38;5;249m)[0m[38;5;249m;[0m[38;5;249m [0m[38;5;249m}[0m
  [38;5;240m  │[0m                  [31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m┬[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m  
  [38;5;240m  │[0m                      [31m╰[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m Cannot find variable 'print_str' in this scope.
 [38;5;246m───╯[0m
 [31m[P2001] Error:[0m Cannot find variable 'print_str' in this scope.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m /home/aniket/Documents/Projects/pacelang/tests/ui/03_operators/comparison.pace:9:16 [38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/03_operators/comparison.pace:9:16 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m9 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249m [0m[38;5;249m>[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[31mp[0m[31mr[0m[31mi[0m[31mn[0m[31mt[0m[31m_[0m[31ms[0m[31mt[0m[31mr[0m[38;5;249m([0m[38;5;249m"[0m[38;5;249mb[0m[38;5;249m [0m[38;5;249m>[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m"[0m[38;5;249m)[0m[38;5;249m;[0m[38;5;249m [0m[38;5;249m}[0m
  [38;5;240m  │[0m                [31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m┬[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m  
  [38;5;240m  │[0m                    [31m╰[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m Cannot find variable 'print_str' in this scope.
 [38;5;246m───╯[0m
 [31m[P2001] Error:[0m Cannot find variable 'print_str' in this scope.
-    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m /home/aniket/Documents/Projects/pacelang/tests/ui/03_operators/comparison.pace:10:18 [38;5;246m][0m
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/03_operators/comparison.pace:10:18 [38;5;246m][0m
     [38;5;246m│[0m
  [38;5;246m10 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249m [0m[38;5;249m>[0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m2[0m[38;5;249m0[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[31mp[0m[31mr[0m[31mi[0m[31mn[0m[31mt[0m[31m_[0m[31ms[0m[31mt[0m[31mr[0m[38;5;249m([0m[38;5;249m"[0m[38;5;249mb[0m[38;5;249m [0m[38;5;249m>[0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m2[0m[38;5;249m0[0m[38;5;249m"[0m[38;5;249m)[0m[38;5;249m;[0m[38;5;249m [0m[38;5;249m}[0m
  [38;5;240m   │[0m                  [31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m┬[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m  

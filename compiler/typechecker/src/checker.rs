@@ -536,6 +536,20 @@ impl TypeChecker {
             ExprKind::Integer(v) => (TypedExprKind::Integer(*v), Type::Int),
             ExprKind::Float(v) => (TypedExprKind::Float(*v), Type::Float),
             ExprKind::String(v) => (TypedExprKind::String(v.clone()), Type::String),
+            ExprKind::InterpolatedString(pieces) => {
+                let mut typed_pieces = Vec::new();
+                for piece in pieces {
+                    let typed_piece = self.check_expr(piece);
+                    match typed_piece.ty {
+                        Type::Int | Type::Float | Type::String | Type::Boolean | Type::Error => {}
+                        _ => {
+                            self.error(piece.span, DiagnosticCode::TypeMismatch, &format!("Cannot interpolate type '{}'. Only Int, Float, String, and Boolean are supported.", typed_piece.ty));
+                        }
+                    }
+                    typed_pieces.push(typed_piece);
+                }
+                (TypedExprKind::InterpolatedString(typed_pieces), Type::String)
+            }
             ExprKind::Boolean(v) => (TypedExprKind::Boolean(*v), Type::Boolean),
             ExprKind::Null => (TypedExprKind::Null, Type::Null),
             ExprKind::Variable(name) => {
@@ -937,7 +951,7 @@ impl TypeChecker {
                                 if param_types.len() == arg_types.len() {
                                     let mut matches = true;
                                     for (pt, at) in param_types.iter().zip(arg_types.iter()) {
-                                        if !self.is_assignable(pt, at) {
+                                        if !self.is_assignable(at, pt) {
                                             matches = false;
                                             break;
                                         }
@@ -1382,7 +1396,7 @@ impl TypeChecker {
     }
 
     fn is_assignable(&self, source: &Type, target: &Type) -> bool {
-        if source == target {
+        if source == target || *source == Type::Error || *target == Type::Error {
             return true;
         }
         

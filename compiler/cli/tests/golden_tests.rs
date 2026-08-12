@@ -29,6 +29,14 @@ fn run_ui_test(file_path: &Path) {
         combined_output.push_str(&stdout);
     }
     
+    // Determine the workspace root dynamically
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../")
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+
     // Normalize paths, variable memory addresses, and thread IDs in panics
     let normalized_stderr = combined_output
         .lines()
@@ -38,7 +46,7 @@ fn run_ui_test(file_path: &Path) {
                     return format!("thread 'main' {}", &line[idx..]);
                 }
             }
-            line.to_string()
+            line.replace(&workspace_root, "$WORKSPACE").to_string()
         })
         .collect::<Vec<_>>()
         .join("\n")

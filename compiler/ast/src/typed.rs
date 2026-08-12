@@ -14,6 +14,7 @@ pub enum TypedExprKind {
     Integer(i64),
     Float(f64),
     String(String),
+    InterpolatedString(Vec<TypedExpr>),
     Boolean(bool),
     Null,
     Variable(String),

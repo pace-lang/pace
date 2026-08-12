@@ -51,6 +51,7 @@ pub enum ExprKind {
     Float(f64),
     /// A literal string like `"hello"`
     String(String),
+    InterpolatedString(Vec<Expr>),
     /// A boolean literal like `true` or `false`
     Boolean(bool),
     /// A null literal `null`

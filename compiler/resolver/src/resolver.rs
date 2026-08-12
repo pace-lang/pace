@@ -248,6 +248,11 @@ impl Resolver {
                 self.resolve_expr(value);
                 self.resolve_expr(count);
             }
+            ExprKind::InterpolatedString(pieces) => {
+                for piece in pieces {
+                    self.resolve_expr(piece);
+                }
+            }
             ExprKind::IndexGet { object, index } => {
                 self.resolve_expr(object);
                 self.resolve_expr(index);

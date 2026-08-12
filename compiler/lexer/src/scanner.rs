@@ -3,6 +3,12 @@ use ast::{Location, Span};
 use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
 use crate::token::{Token, TokenKind};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LexerMode {
+    Normal,
+    String,
+}
+
 pub struct Scanner<'a> {
     pub file_id: u32,
     source: &'a str,
@@ -12,6 +18,8 @@ pub struct Scanner<'a> {
     start_idx: usize,
     start_loc: Location,
     pub diagnostics: Vec<Diagnostic>,
+    pub mode_stack: Vec<LexerMode>,
+    pub brace_depths: Vec<usize>,
 }
 
 impl<'a> Scanner<'a> {
@@ -25,6 +33,8 @@ impl<'a> Scanner<'a> {
             start_idx: 0,
             start_loc: Location::new(1, 1),
             diagnostics: Vec::new(),
+            mode_stack: vec![LexerMode::Normal],
+            brace_depths: vec![],
         }
     }
 
@@ -79,13 +89,33 @@ impl<'a> Scanner<'a> {
     }
 
     fn scan_token(&mut self) -> Option<Token> {
+        if self.mode_stack.last() == Some(&LexerMode::String) {
+            return self.scan_string_mode();
+        }
+
         let c = self.advance()?;
 
         let kind = match c {
             '(' => TokenKind::LeftParen,
             ')' => TokenKind::RightParen,
-            '{' => TokenKind::LeftBrace,
-            '}' => TokenKind::RightBrace,
+            '{' => {
+                if let Some(depth) = self.brace_depths.last_mut() {
+                    *depth += 1;
+                }
+                TokenKind::LeftBrace
+            }
+            '}' => {
+                if let Some(depth) = self.brace_depths.last_mut() {
+                    if *depth == 0 {
+                        self.brace_depths.pop();
+                        self.mode_stack.pop();
+                        return Some(self.make_token(TokenKind::InterpolationEnd));
+                    } else {
+                        *depth -= 1;
+                    }
+                }
+                TokenKind::RightBrace
+            }
             '[' => TokenKind::LeftBracket,
             ']' => TokenKind::RightBracket,
             ',' => TokenKind::Comma,
@@ -162,7 +192,10 @@ impl<'a> Scanner<'a> {
                 // Ignore whitespace.
                 return None;
             }
-            '"' => self.string(),
+            '"' => {
+                self.mode_stack.push(LexerMode::String);
+                TokenKind::StringStart
+            },
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() => self.identifier(),
             _ => {
@@ -175,23 +208,72 @@ impl<'a> Scanner<'a> {
         Some(self.make_token(kind))
     }
 
-    fn string(&mut self) -> TokenKind {
+    fn scan_string_mode(&mut self) -> Option<Token> {
         let mut value = String::new();
-        while self.peek() != Some('"') && !self.is_at_end() {
+        while !self.is_at_end() {
+            let peek = self.peek();
+            if peek == Some('"') {
+                if value.is_empty() {
+                    self.advance();
+                    self.mode_stack.pop();
+                    return Some(self.make_token(TokenKind::StringEnd));
+                }
+                break;
+            } else if peek == Some('\\') {
+                let mut chars_clone = self.chars.clone();
+                chars_clone.next(); // Consume \
+                if chars_clone.next() == Some('{') {
+                    if value.is_empty() {
+                        self.advance(); // Consume \
+                        self.advance(); // Consume {
+                        self.mode_stack.push(LexerMode::Normal);
+                        self.brace_depths.push(0);
+                        return Some(self.make_token(TokenKind::InterpolationStart));
+                    }
+                    break;
+                }
+            } else if peek == Some('$') {
+                let mut chars_clone = self.chars.clone();
+                chars_clone.next(); // Consume $
+                if chars_clone.next() == Some('{') {
+                    if value.is_empty() {
+                        self.advance(); // Consume $
+                        self.advance(); // Consume {
+                        self.mode_stack.push(LexerMode::Normal);
+                        self.brace_depths.push(0);
+                        return Some(self.make_token(TokenKind::InterpolationStart));
+                    }
+                    break;
+                }
+            }
+
             if let Some(c) = self.advance() {
-                value.push(c);
+                if c == '\\' && self.peek().is_some() {
+                    let escaped = self.advance().unwrap();
+                    match escaped {
+                        'n' => value.push('\n'),
+                        't' => value.push('\t'),
+                        'r' => value.push('\r'),
+                        '"' => value.push('"'),
+                        '\\' => value.push('\\'),
+                        _ => {
+                            value.push('\\');
+                            value.push(escaped);
+                        }
+                    }
+                } else {
+                    value.push(c);
+                }
             }
         }
 
-        if self.is_at_end() {
+        if self.is_at_end() && value.is_empty() {
             let span = Span::new(self.file_id, self.start_idx, self.current_idx, self.start_loc, self.current_loc);
             self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::InvalidToken, "Unterminated string.", span).build());
-            return TokenKind::Error("Unterminated string.".into());
+            return Some(self.make_token(TokenKind::Error("Unterminated string.".into())));
         }
 
-        // The closing ".
-        self.advance();
-        TokenKind::String(value)
+        Some(self.make_token(TokenKind::StringPart(value)))
     }
 
     fn number(&mut self) -> TokenKind {

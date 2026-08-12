@@ -3,4 +3,8 @@ func main(){
     print("Value: \{x}");
     var name:String = "abc";
     print("Hello ${name}");
+
+    for i in 0.10{
+        print(i);
+    }
 }
