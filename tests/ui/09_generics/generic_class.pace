@@ -17,16 +17,16 @@ class ArrayWrapper<T> {
         self.items = arr;
     }
     
-    func get_first() -> T {
+    func getFirst() -> T {
         return self.items[0];
     }
 }
 
 func main() {
-    let int_box = Box(100);
-    print(int_box.get());
+    let intBox = Box(100);
+    print(intBox.get());
     
     let arr = [10, 20, 30];
     let wrapper = ArrayWrapper(arr);
-    print(wrapper.get_first());
+    print(wrapper.getFirst());
 }

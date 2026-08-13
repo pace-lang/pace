@@ -2,6 +2,17 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-Finished `dev` profile [unoptimized + debuginfo] target(s)
+[33m[P5001] Warning:[0m Function `get_value` does not follow Pace naming convention
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/11_modules/utils.pace:2:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m2 │[0m [33m╭[0m[33m─[0m[33m▶[0m[33m [0m[33mf[0m[33mu[0m[33mn[0m[33mc[0m[33m [0m[33mg[0m[33me[0m[33mt[0m[33m_[0m[33mv[0m[33ma[0m[33ml[0m[33mu[0m[33me[0m[33m([0m[33m)[0m[33m [0m[33m-[0m[33m>[0m[33m [0m[33mI[0m[33mn[0m[33mt[0m[33m [0m[33m{[0m
+ [38;5;240m  ┆[0m [33m┆[0m   
+ [38;5;246m4 │[0m [33m├[0m[33m─[0m[33m▶[0m[33m [0m[33m}[0m
+ [38;5;240m  │[0m [33m│[0m       
+ [38;5;240m  │[0m [33m╰[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m Function `get_value` does not follow Pace naming convention
+ [38;5;240m  │[0m [33m│[0m   
+ [38;5;240m  │[0m [33m│[0m   [38;5;115mHelp[0m: use camelCase (e.g. `getValue`)
+[38;5;246m───╯[0m
+    Finished `dev` profile [unoptimized + debuginfo] target(s)
      Running `target/debug/11_modules`
 42

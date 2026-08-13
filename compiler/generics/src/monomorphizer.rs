@@ -45,6 +45,17 @@ impl<'a> Monomorphizer<'a> {
                  is_private: *is_private,
                 }
             }
+            StmtKind::ForeignFunc { name: _name, type_params: _, params, return_type, is_private } => {
+                let new_params = params.iter().map(|(n, t)| (n.clone(), self.subst.substitute(t))).collect();
+                let new_return = return_type.as_ref().map(|t| self.subst.substitute(t));
+                StmtKind::ForeignFunc {
+                    name: self.mangled_name.clone(), // Ensure foreign functions get mangled names too!
+                    type_params: Vec::new(),
+                    params: new_params,
+                    return_type: new_return,
+                    is_private: *is_private,
+                }
+            }
             StmtKind::Let { name, type_annotation, initializer, is_private } => {
                 StmtKind::Let {
                     name: name.clone(),

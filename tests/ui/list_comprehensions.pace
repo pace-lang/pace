@@ -4,7 +4,7 @@ func main() {
     print(doubled[0]);
     print(doubled[4]);
 
-    let from_range = [i + 1 for i in 0..5];
-    print(from_range[0]);
-    print(from_range[4]);
+    let fromRange = [i + 1 for i in 0..5];
+    print(fromRange[0]);
+    print(fromRange[4]);
 }

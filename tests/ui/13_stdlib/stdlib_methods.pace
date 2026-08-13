@@ -20,14 +20,14 @@ func main() {
     m.remove("key");
     print("map contains after remove:", m.contains("key"));
     
-    let f_res = open("test.txt", "w");
-    match f_res {
+    let fRes = open("test.txt", "w");
+    match fRes {
         Ok(f) => print("file write:", f.write("Hello from Pace!")),
         Err(e) => print("Failed to open file for writing:", e)
     };
     
-    let f2_res = open("test.txt", "r");
-    match f2_res {
+    let f2Res = open("test.txt", "r");
+    match f2Res {
         Ok(f2) => print("file read:", f2.readAll()),
         Err(e) => print("Failed to open file for reading:", e)
     };

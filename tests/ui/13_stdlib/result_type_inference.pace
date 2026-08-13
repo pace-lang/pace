@@ -1,17 +1,17 @@
 
-func test_ok() -> Result<String, Int> {
-    return Ok("hello");
+func testOk() -> Result<String, Int> {
+    return Ok("success");
 }
 
-func test_err() -> Result<String, Int> {
+func testErr() -> Result<String, Int> {
     return Err(404);
 }
 
-func test_some() -> Option<String> {
-    return Some("hello");
+func testSome() -> Option<String> {
+    return Some("value");
 }
 
-func test_none() -> Option<String> {
+func testNone() -> Option<String> {
     return None();
 }
-func main() { test_ok(); test_err(); test_some(); test_none(); }
+func main() { testOk(); testErr(); testSome(); testNone(); }
