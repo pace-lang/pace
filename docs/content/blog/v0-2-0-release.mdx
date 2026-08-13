@@ -70,7 +70,16 @@ We've overhauled the module loader! Imports like `import "math_utils"` now succe
 The compiler now supports function overloading via a custom name mangling system. Developers can declare multiple functions with the same name, so long as their parameter signatures differ!
 
 ### Upgraded Diagnostics
-CLI-level project errors (e.g., missing `main` function, linker issues, missing `pace.toml`) are now beautifully styled global diagnostics (like `[E001]`). If a required system C compiler is missing, the linker now detects your OS and prints the exact terminal commands needed to install it.
+CLI-level project errors (e.g., missing `main` function, linker issues, missing `pace.toml`) are now beautifully styled global diagnostics (like `[E001]`). If a required system C compiler is missing, the linker now detects your OS and prints the exact terminal commands needed to install it. We've also added these robust compiler checks directly into the installation scripts, so you're alerted during setup rather than halfway through building your first project!
+
+### Optimized Release Builds
+The `pace build` and `pace run` commands now officially support the `--release` flag! Running in release mode automatically leverages Cranelift optimizations (`speed_and_size`) and strips debug symbols during the linking phase, radically shrinking the size of your compiled binaries and producing a lightning-fast executable.
+
+### Seamless CLI Upgrades
+You can now update your Pace installation directly from the terminal by simply running `pace upgrade`. It handles fetching and executing the latest toolchain installer natively for both UNIX and Windows environments.
+
+### Ergonomic Project Creation
+The `pace new <name>` command has been revamped. In addition to a cleaner Cargo-like console output, it now provides helpful step-by-step instructions (e.g., `cd my-app` and `pace run`) so you can jump into coding immediately.
 
 ---
 

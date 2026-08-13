@@ -39,10 +39,15 @@ impl CraneliftGenerator {
         }
     }
 
-    pub fn compile_program(&self, program: &mir::Program, output_file: &Path) -> Result<(), String> {
+    pub fn compile_program(&self, program: &mir::Program, output_file: &Path, release: bool) -> Result<(), String> {
         let mut flag_builder = settings::builder();
         flag_builder.set("is_pic", "true").unwrap();
-        flag_builder.set("opt_level", "speed_and_size").unwrap();
+        
+        if release {
+            flag_builder.set("opt_level", "speed_and_size").unwrap();
+        } else {
+            flag_builder.set("opt_level", "none").unwrap();
+        }
         let isa_builder = cranelift_native::builder().map_err(|e| format!("Failed to create native ISA builder: {}", e))?;
         let isa = isa_builder.finish(settings::Flags::new(flag_builder)).map_err(|e| format!("Failed to finish ISA: {}", e))?;
         

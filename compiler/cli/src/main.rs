@@ -38,40 +38,58 @@ enum Commands {
     Run {
         /// Optional file to run
         file: Option<String>,
+        #[arg(long)]
+        /// Build artifacts in release mode, with optimizations
+        release: bool,
     },
     /// Compile the current package or a specific file
     Build {
         /// Optional file to build
         file: Option<String>,
+        #[arg(long)]
+        /// Build artifacts in release mode, with optimizations
+        release: bool,
     },
     /// Analyze the current package and report errors, but don't build object files
     Check,
+    #[command(hide = true)]
     /// Run the tests
     Test,
+    #[command(hide = true)]
     /// Format all pace files
     Fmt,
+    #[command(hide = true)]
     /// Lint the current package
     Lint,
     
+    #[command(hide = true)]
     /// Add dependencies to pace.toml
     Add {
         /// Name of the dependency to add
         dep: String,
     },
+    #[command(hide = true)]
     /// Remove dependencies from pace.toml
     Remove {
         /// Name of the dependency to remove
         dep: String,
     },
+    #[command(hide = true)]
     /// Download all dependencies locally
     Install,
-    /// Update dependencies
+    #[command(hide = true)]
+    /// Update project package dependencies
     Update,
+    /// Upgrade the Pace language SDK itself
+    Upgrade,
+    #[command(hide = true)]
     /// Display the dependency tree
     Tree,
     
+    #[command(hide = true)]
     /// Package the project into a distributable format
     Package,
+    #[command(hide = true)]
     /// Publish the package to the registry
     Publish,
     /// Remove the target directory and built artifacts
@@ -215,7 +233,10 @@ r#"func main() {
 }
 "#;
     fs::write(path.join("src").join("main.pace"), main_pace).unwrap();
-    println!("Created new package `{}`", name);
+    println!("     Created binary (application) `{}` package", name);
+    println!("\nTo get started:");
+    println!("    cd {}", name);
+    println!("    pace run");
 }
 
 fn do_check() -> Option<PathBuf> {
@@ -240,7 +261,7 @@ fn do_check() -> Option<PathBuf> {
     Some(main_file)
 }
 
-fn do_build(override_file: Option<&str>) -> PathBuf {
+fn do_build(override_file: Option<&str>, release: bool) -> PathBuf {
     let (root, main_file) = if let Some(file_path) = override_file {
         let path = PathBuf::from(file_path);
         let root = path.parent().unwrap_or(Path::new(".")).to_path_buf();
@@ -271,24 +292,29 @@ fn do_build(override_file: Option<&str>) -> PathBuf {
 
     let generator = CraneliftGenerator::new();
     
-    // Ensure target/debug exists
-    let target_dir = root.join("target").join("debug");
+    // Ensure target output directory exists
+    let profile_dir = if release { "release" } else { "debug" };
+    let target_dir = root.join("target").join(profile_dir);
     fs::create_dir_all(&target_dir).unwrap();
     
     let obj_file = target_dir.join("out.o");
-    if let Err(e) = generator.compile_program(&ast_program, &obj_file) {
+    if let Err(e) = generator.compile_program(&ast_program, &obj_file, release) {
         print_global_error(&format!("Codegen failed: {}", e));
         exit(1);
     }
 
     let package_name = root.file_name().and_then(|n| n.to_str()).unwrap_or("app");
     let out_file = target_dir.join(package_name);
-    if let Err(e) = Linker::link(&obj_file, &out_file) {
+    if let Err(e) = Linker::link(&obj_file, &out_file, release) {
         print_global_error(&format!("Linker failed: {}", e));
         exit(1);
     }
     
-    println!("    Finished `dev` profile [unoptimized + debuginfo] target(s)");
+    if release {
+        println!("    Finished `release` profile [optimized] target(s)");
+    } else {
+        println!("    Finished `dev` profile [unoptimized + debuginfo] target(s)");
+    }
     out_file
 }
 
@@ -302,19 +328,26 @@ fn main() {
         }
         Commands::Init => {
             let current_dir = std::env::current_dir().unwrap();
-            let name = current_dir.file_name().unwrap().to_str().unwrap();
+            let name = match current_dir.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n,
+                None => {
+                    eprintln!("[E002] Error: Cannot determine package name from current directory. Please use `pace new <name>` instead.");
+                    std::process::exit(1);
+                }
+            };
             create_project(&current_dir, name);
         }
         Commands::Check => {
             do_check();
         }
-        Commands::Build { file } => {
-            do_build(file.as_deref());
+        Commands::Build { file, release } => {
+            do_build(file.as_deref(), *release);
         }
-        Commands::Run { file } => {
-            let out_file = do_build(file.as_deref());
+        Commands::Run { file, release } => {
+            let out_file = do_build(file.as_deref(), *release);
             let package_name = out_file.file_name().and_then(|n| n.to_str()).unwrap_or("app");
-            println!("     Running `target/debug/{}`", package_name);
+            let profile_dir = if *release { "release" } else { "debug" };
+            println!("     Running `target/{}/{}`", profile_dir, package_name);
             let status = Command::new(out_file.to_str().unwrap())
                 .status()
                 .expect("Failed to execute process");
@@ -356,6 +389,29 @@ fn main() {
         }
         Commands::Update => {
             println!("Not implemented yet");
+        }
+        Commands::Upgrade => {
+            println!("Upgrading Pace language SDK...");
+            
+            #[cfg(unix)]
+            let status = Command::new("sh")
+                .arg("-c")
+                .arg("curl -sSfL https://raw.githubusercontent.com/pace-lang/pace/main/installer/install.sh | sh")
+                .status();
+
+            #[cfg(windows)]
+            let status = Command::new("powershell")
+                .arg("-Command")
+                .arg("irm https://raw.githubusercontent.com/pace-lang/pace/main/installer/install.ps1 | iex")
+                .status();
+
+            match status {
+                Ok(s) if s.success() => println!("Upgrade completed successfully!"),
+                _ => {
+                    print_global_error("Failed to upgrade Pace. Please check your internet connection or try reinstalling manually.");
+                    exit(1);
+                }
+            }
         }
         Commands::Tree => {
             println!("Not implemented yet");

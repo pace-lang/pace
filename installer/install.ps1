@@ -78,6 +78,22 @@ if ($UserPath -notmatch "(^|;)$BinDirPattern($|;)") {
     Write-Host "PATH is already configured." -ForegroundColor Gray
 }
 
+# Check for C compiler
+$compilerFound = $false
+foreach ($cmd in @("cc", "gcc", "clang", "cl.exe")) {
+    if (Get-Command $cmd -ErrorAction SilentlyContinue) {
+        $compilerFound = $true
+        break
+    }
+}
+
+if (-not $compilerFound) {
+    Write-Host ""
+    Write-Host "⚠️  WARNING: A C compiler (cl.exe, gcc, or clang) was not found in your PATH." -ForegroundColor Yellow
+    Write-Host "Pace requires a C compiler to link executables." -ForegroundColor Yellow
+    Write-Host "Please install Visual Studio Build Tools, MSYS2, or MinGW before running Pace projects." -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "Try running:"
 Write-Host "    pace --version" -ForegroundColor Cyan

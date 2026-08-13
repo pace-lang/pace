@@ -88,6 +88,14 @@ else
     echo "PATH is already configured."
 fi
 
+# Check for C compiler
+if ! command -v cc >/dev/null 2>&1 && ! command -v gcc >/dev/null 2>&1 && ! command -v clang >/dev/null 2>&1; then
+    echo ""
+    echo "⚠️  WARNING: A C compiler (cc, gcc, or clang) was not found in your PATH."
+    echo "Pace requires a C compiler to link executables."
+    echo "Please install build-essential (Linux) or Xcode Command Line Tools (macOS) before running Pace projects."
+fi
+
 echo ""
 echo "Try running:"
 echo "    pace --version"

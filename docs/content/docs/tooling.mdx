@@ -9,14 +9,14 @@ While running a single file is great for small scripts, real applications requir
 
 ## Creating a Project
 
-To create a new Pace project, use the `pace new` command.
+To create a new Pace project, use the `pace new` or `pace init` command.
 
 ```bash title="Terminal"
-# Create a new project in the current directory
-pace new
-
 # Create a new project in a specific directory
 pace new my-app
+
+# Initialize a new project in the current directory
+pace init
 ```
 
 This will generate the standard directory structure required by the compiler:
@@ -79,9 +79,20 @@ pace build
 ```
 
 ### Useful Flags
-- `--release`: Build the project with aggressive compiler optimizations enabled. This will take longer to compile but produce a significantly faster executable.
+- `--release`: Build the project with aggressive compiler optimizations enabled. This will take longer to compile but produce a significantly faster executable (e.g., stripping debug symbols and enabling `speed_and_size` opts).
 - `--verbose`: Enable detailed logging during compilation.
 
 ```bash title="Terminal"
 pace build --release
+```
+
+---
+
+## Toolchain Management
+
+### `pace upgrade`
+Automatically fetch and install the latest version of the Pace language SDK directly from the terminal. This command updates your global CLI and runtime library across UNIX and Windows environments.
+
+```bash title="Terminal"
+pace upgrade
 ```

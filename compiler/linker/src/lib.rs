@@ -5,7 +5,7 @@ use std::env;
 pub struct Linker;
 
 impl Linker {
-    pub fn link(object_file: &Path, output_file: &Path) -> Result<(), String> {
+    pub fn link(object_file: &Path, output_file: &Path, release: bool) -> Result<(), String> {
         // Find the Rust runtime staticlib (libpace_runtime.a)
         // It should be in the same directory as the compiler executable (e.g., target/debug)
         let exe_path = env::current_exe().map_err(|e| format!("Failed to get current executable path: {}", e))?;
@@ -68,15 +68,17 @@ impl Linker {
         // The Rust staticlib might require linking against standard system libraries (like pthread, dl, m)
         // but cc usually handles this natively.
 
-        let output = Command::new("cc")
-            .arg(object_file)
+        let mut command = Command::new("cc");
+        command.arg(object_file)
             .arg(&runtime_lib)
             .arg("-o")
-            .arg(output_file)
-            // .arg("-lpthread") // might be needed on some Linux setups for Rust std
-            // .arg("-ldl")
-            // .arg("-lm")
-            .output()
+            .arg(output_file);
+            
+        if release {
+            command.arg("-O3").arg("-s"); // Optimize and strip symbols
+        }
+
+        let output = command.output()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     let os = std::env::consts::OS;

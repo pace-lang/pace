@@ -19,3 +19,6 @@ target/
 node_modules/
 editors/vscode/out/
 *.vsix
+
+# Local examples and test projects
+examples/
