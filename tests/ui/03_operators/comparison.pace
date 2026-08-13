@@ -2,10 +2,10 @@ fn main() {
     let a = 10;
     let b = 20;
     
-    if a == 10 { print_str("a is 10"); }
-    if a != b { print_str("a != b"); }
-    if a < b { print_str("a < b"); }
-    if a <= 10 { print_str("a <= 10"); }
-    if b > a { print_str("b > a"); }
-    if b >= 20 { print_str("b >= 20"); }
+    if a == 10 { printStr("a is 10"); }
+    if a != b { printStr("a != b"); }
+    if a < b { printStr("a < b"); }
+    if a <= 10 { printStr("a <= 10"); }
+    if b > a { printStr("b > a"); }
+    if b >= 20 { printStr("b >= 20"); }
 }

@@ -910,11 +910,11 @@ impl MirBuilder {
                 
                 if func_name == "print" && arguments.len() == 1 {
                     match &arguments[0].ty {
-                        ast::types::Type::String => func_name = "print_str".to_string(),
-                        ast::types::Type::Float => func_name = "print_float".to_string(),
-                        ast::types::Type::Boolean => func_name = "print_bool".to_string(),
-                        ast::types::Type::Enum(_, _) | ast::types::Type::Instance(_) => func_name = "print_enum".to_string(),
-                        _ => func_name = "print_int".to_string(),
+                        ast::types::Type::String => func_name = "printStr".to_string(),
+                        ast::types::Type::Float => func_name = "printFloat".to_string(),
+                        ast::types::Type::Boolean => func_name = "printBool".to_string(),
+                        ast::types::Type::Enum(_, _) | ast::types::Type::Instance(_) => func_name = "printEnum".to_string(),
+                        _ => func_name = "printInt".to_string(),
                     }
                 }
 

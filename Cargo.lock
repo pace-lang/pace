@@ -168,6 +168,7 @@ dependencies = [
  "insta",
  "lexer",
  "linker",
+ "linter",
  "lowering",
  "mir",
  "module",
@@ -538,6 +539,14 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 name = "linker"
 version = "0.2.0-rc.1"
 dependencies = [
+ "diagnostics",
+]
+
+[[package]]
+name = "linter"
+version = "0.2.0-rc.1"
+dependencies = [
+ "ast",
  "diagnostics",
 ]
 

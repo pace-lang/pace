@@ -4,5 +4,5 @@ fn main() {
         i = i + 1;
     }
     print(i);
-    print_str("Done with heavy loop");
+    printStr("Done with heavy loop");
 }

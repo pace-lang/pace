@@ -31,6 +31,9 @@ pub enum DiagnosticCode {
     // Ownership & ARC (P4xxx)
     InvalidWeakReference, // P4001
     OwnershipViolation, // P4002
+
+    // Style & Linter (P5xxx)
+    NamingConventionViolation, // P5001
     
     // General
     Custom(String),
@@ -48,6 +51,7 @@ impl DiagnosticCode {
             DiagnosticCode::UninitializedVariable => "P3003",
             DiagnosticCode::InvalidWeakReference => "P4001",
             DiagnosticCode::OwnershipViolation => "P4002",
+            DiagnosticCode::NamingConventionViolation => "P5001",
             DiagnosticCode::Custom(code) => code,
         }
     }

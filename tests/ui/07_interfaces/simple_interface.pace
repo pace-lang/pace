@@ -4,13 +4,13 @@ interface Animal {
 
 class Dog implements Animal {
     func speak() {
-        print_str("Woof");
+        printStr("Woof");
     }
 }
 
 class Cat implements Animal {
     func speak() {
-        print_str("Meow");
+        printStr("Meow");
     }
 }
 

@@ -60,6 +60,12 @@ print("Welcome to v0.2.0, \{name}!");
 
 ## 🏗️ Architecture & Tooling
 
+### Built-in Style Linter & CLI Checks
+Pace v0.2.0 introduces a brand new, highly opinionated style linter built directly into the compiler pipeline. It intelligently enforces the Pace design philosophy (`camelCase` for functions and variables, `PascalCase` for types and constants) without failing compilation for perfectly valid code. You can run the dedicated `pace lint` command to strictly enforce these checks (great for CI/CD pipelines!), and warnings will naturally print alongside type errors during a standard `pace build`.
+
+### Strict Project Naming
+We've locked down package naming conventions to enforce ecosystem consistency. `pace new` and `pace init` now strictly require project names to use `kebab-case`, start with a lowercase letter, and contain only `[a-z0-9-]`. This ensures seamless integration with future package registries and cross-platform paths.
+
 ### Dynamic Standard Library
 We have successfully decoupled standard types from the core compiler. The compiler now recursively crawls and globally injects the `stdlib/src/` folder during compilation. Types like `Map`, `File`, and `print` are now completely standard library components powered by `foreign func` definitions. 
 

@@ -2,12 +2,12 @@ fn main() {
     let a = 5;
     
     if a < 10 {
-        print_str("a is less than 10");
+        printStr("a is less than 10");
     } else {
-        print_str("a is >= 10");
+        printStr("a is >= 10");
     }
     
     if a == 5 {
-        print_str("a is 5");
+        printStr("a is 5");
     }
 }

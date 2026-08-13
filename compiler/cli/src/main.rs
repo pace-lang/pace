@@ -157,6 +157,16 @@ fn compile_to_mir(file: &Path) -> mir::Program {
     }
 
     if has_errors { exit(1); }
+    
+    // Lint Pass
+    let mut linter = linter::Linter::new();
+    for module in graph.modules() {
+        linter.lint(&module.ast);
+    }
+    let linter_warnings = linter.into_diagnostics();
+    if !linter_warnings.is_empty() {
+        print_diagnostics(&linter_warnings, &source_map);
+    }
 
     // 3. Name Resolution
     let mut resolver = Resolver::new();
@@ -207,7 +217,44 @@ fn find_package_root() -> Option<PathBuf> {
     None
 }
 
+fn is_kebab_case(s: &str) -> bool {
+    if s.is_empty() { return false; }
+    
+    let chars: Vec<char> = s.chars().collect();
+    
+    if !chars[0].is_ascii_lowercase() {
+        return false;
+    }
+    
+    if chars.last() == Some(&'-') {
+        return false;
+    }
+    
+    let mut last_was_hyphen = false;
+    for &c in &chars {
+        if !c.is_ascii_lowercase() && !c.is_ascii_digit() && c != '-' {
+            return false;
+        }
+        if c == '-' {
+            if last_was_hyphen {
+                return false;
+            }
+            last_was_hyphen = true;
+        } else {
+            last_was_hyphen = false;
+        }
+    }
+    
+    true
+}
+
 fn create_project(path: &Path, name: &str) {
+    if !is_kebab_case(name) {
+        eprintln!("error: invalid project name `{}`", name);
+        eprintln!("help: project names must contain only lowercase letters, numbers, and `-`");
+        eprintln!("help: example: `my-app`");
+        exit(1);
+    }
     if path.exists() {
         if path.read_dir().map(|mut i| i.next().is_some()).unwrap_or(false) && path.join("pace.toml").exists() {
             print_global_error(&format!("Directory {:?} already contains a pace.toml", path));
@@ -237,6 +284,58 @@ r#"func main() {
     println!("\nTo get started:");
     println!("    cd {}", name);
     println!("    pace run");
+}
+
+fn do_lint() {
+    let root = match find_package_root() {
+        Some(r) => r,
+        None => {
+            print_global_error("Could not find `pace.toml` in current directory or any parent directory");
+            exit(1);
+        }
+    };
+    
+    let main_file = root.join("src").join("main.pace");
+    if !main_file.exists() {
+        print_global_error("`src/main.pace` not found in package");
+        exit(1);
+    }
+    
+    let mut package_manager = package::manager::PackageManager::new();
+    package_manager.load_root(&root);
+    if !package_manager.errors.is_empty() {
+        for diag in &package_manager.errors {
+            print_global_error(&format!("Package Error: {}", diag.message));
+        }
+        exit(1);
+    }
+    let package_graph = package_manager.into_graph();
+
+    let mut loader = module::loader::ModuleLoader::new(Some(&package_graph));
+    loader.load_root(&main_file);
+    
+    let loader_errors = std::mem::take(&mut loader.errors);
+    let (graph, source_map) = loader.into_graph();
+    
+    if !loader_errors.is_empty() {
+        print_diagnostics(&loader_errors, &source_map);
+        if loader_errors.iter().any(|d| d.severity == Severity::Error) {
+            exit(1);
+        }
+    }
+
+    let mut linter = linter::Linter::new();
+    for module in graph.modules() {
+        linter.lint(&module.ast);
+    }
+    let linter_warnings = linter.into_diagnostics();
+    
+    if !linter_warnings.is_empty() {
+        print_diagnostics(&linter_warnings, &source_map);
+        exit(1);
+    } else {
+        println!("No style violations found.");
+    }
 }
 
 fn do_check() -> Option<PathBuf> {
@@ -376,7 +475,7 @@ fn main() {
             println!("Not implemented yet");
         }
         Commands::Lint => {
-            println!("Not implemented yet");
+            do_lint();
         }
         Commands::Add { .. } => {
             println!("Not implemented yet");

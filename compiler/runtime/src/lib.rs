@@ -16,19 +16,19 @@ pub struct PaceClassMetadata {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn print_int(value: i64) -> i64 {
+pub extern "C" fn printInt(value: i64) -> i64 {
     println!("{}", value);
     0
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn print_float(value: f64) -> i64 {
+pub extern "C" fn printFloat(value: f64) -> i64 {
     println!("{}", value);
     0
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn print_bool(value: i64) -> i64 {
+pub extern "C" fn printBool(value: i64) -> i64 {
     if value == 0 {
         println!("false");
     } else {
@@ -38,7 +38,7 @@ pub extern "C" fn print_bool(value: i64) -> i64 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn print_str(str_ptr: *const c_char) -> i64 {
+pub extern "C" fn printStr(str_ptr: *const c_char) -> i64 {
     if str_ptr.is_null() {
         println!("(null)");
         return 0;
@@ -393,7 +393,7 @@ pub extern "C" fn pace_bool_to_string(value: i64) -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn print_enum(val: *const u8) {
+pub extern "C" fn printEnum(val: *const u8) {
     if val.is_null() {
         println!("null");
         return;

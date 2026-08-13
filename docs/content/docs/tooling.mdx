@@ -11,6 +11,9 @@ While running a single file is great for small scripts, real applications requir
 
 To create a new Pace project, use the `pace new` or `pace init` command.
 
+> [!IMPORTANT]
+> Pace project names are strictly enforced to use `kebab-case` (e.g., `my-app`). They must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens (`[a-z0-9-]`).
+
 ```bash title="Terminal"
 # Create a new project in a specific directory
 pace new my-app
@@ -46,7 +49,7 @@ Every Pace project is governed by a `pace.toml` file located in the root of the 
 
 ```toml title="pace.toml"
 [package]
-name = "my_project"
+name = "my-project"
 version = "0.1.0"
 authors = ["Your Name <you@example.com>"]
 
@@ -76,6 +79,13 @@ Compiles the project into a native executable and places it in the `target/relea
 
 ```bash title="Terminal"
 pace build
+```
+
+### `pace lint`
+Runs the built-in style linter across your project without fully compiling it. It checks for Pace naming conventions (e.g., `camelCase` for functions/variables, `PascalCase` for types) and exits with a status code of `1` if any style violations are found. Perfect for CI/CD pipelines!
+
+```bash title="Terminal"
+pace lint
 ```
 
 ### Useful Flags

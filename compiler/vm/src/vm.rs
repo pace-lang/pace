@@ -51,7 +51,7 @@ impl<'a> VirtualMachine<'a> {
     }
 
     pub fn call_function(&mut self, name: &str, args: &[Value]) -> Option<Value> {
-        if name == "print" || name == "print_str" || name == "print_int" || name == "print_float" || name == "print_bool" {
+        if name == "print" || name == "printStr" || name == "printInt" || name == "printFloat" || name == "printBool" || name == "printEnum" {
             let mut out = String::new();
             for (i, arg) in args.iter().enumerate() {
                 if i > 0 {
