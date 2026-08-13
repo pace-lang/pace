@@ -5,6 +5,12 @@ pub struct Linter {
     diagnostics: Vec<Diagnostic>,
 }
 
+impl Default for Linter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Linter {
     pub fn new() -> Self {
         Self {

@@ -486,7 +486,7 @@ impl TypeChecker {
         TypedStmt::new(kind, stmt.span)
     }
 
-    fn check_var_decl(&mut self, name: &String, type_annotation: &Option<TypeExpr>, initializer: &Option<Expr>, is_weak: bool, span: Span) -> TypedStmt {
+    fn check_var_decl(&mut self, name: &str, type_annotation: &Option<TypeExpr>, initializer: &Option<Expr>, is_weak: bool, span: Span) -> TypedStmt {
         let expected_ty = type_annotation.as_ref().map(|ann| self.parse_type(ann, span));
         
         let typed_init = initializer.as_ref().map(|init| self.check_expr_with_expected(init, expected_ty.as_ref()));
@@ -511,18 +511,18 @@ impl TypeChecker {
             init_type
         };
         
-        self.env.declare(name.clone(), decl_type);
+        self.env.declare(name.to_owned(), decl_type);
         
         let kind = if is_weak || (initializer.is_none() && type_annotation.is_some()) {
             TypedStmtKind::Var {
-                name: name.clone(),
+                name: name.to_owned(),
                 type_annotation: type_annotation.clone(),
                 initializer: typed_init,
                 is_weak,
             }
         } else {
             TypedStmtKind::Let {
-                name: name.clone(),
+                name: name.to_owned(),
                 type_annotation: type_annotation.clone(),
                 initializer: typed_init,
             }

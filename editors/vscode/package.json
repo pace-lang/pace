@@ -2,7 +2,7 @@
   "name": "pace",
   "displayName": "Pace Language",
   "description": "Language support for the Pace programming language.",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "publisher": "pace-lang",
   "license": "MIT",
   "repository": {

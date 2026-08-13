@@ -30,9 +30,8 @@ impl Parser {
     fn parse_visibility(&mut self) -> bool {
         if self.match_token(&[TokenKind::Private]) {
             true
-        } else if self.match_token(&[TokenKind::Public]) {
-            false
         } else {
+            let _ = self.match_token(&[TokenKind::Public]);
             false
         }
     }
@@ -1128,43 +1127,39 @@ impl Parser {
                     let start_span = token.span;
                     self.advance();
                     let mut pieces = Vec::new();
-                    loop {
-                        if let Some(tok) = self.peek().cloned() {
-                            match &tok.kind {
-                                TokenKind::StringPart(s) => {
-                                    pieces.push(Expr::new(ExprKind::String(s.clone()), tok.span));
-                                    self.advance();
+                    while let Some(tok) = self.peek().cloned() {
+                        match &tok.kind {
+                            TokenKind::StringPart(s) => {
+                                pieces.push(Expr::new(ExprKind::String(s.clone()), tok.span));
+                                self.advance();
+                            }
+                            TokenKind::InterpolationStart => {
+                                self.advance();
+                                if let Some(expr) = self.expression() {
+                                    pieces.push(expr);
                                 }
-                                TokenKind::InterpolationStart => {
-                                    self.advance();
-                                    if let Some(expr) = self.expression() {
-                                        pieces.push(expr);
-                                    }
-                                    if !self.match_token(&[TokenKind::InterpolationEnd]) {
-                                        self.error_at_current("Expected '}' after string interpolation expression.");
-                                    }
-                                }
-                                TokenKind::StringEnd => {
-                                    self.advance();
-                                    break;
-                                }
-                                TokenKind::Error(e) => {
-                                    self.error_at_current(e);
-                                    self.advance();
-                                    break;
-                                }
-                                TokenKind::Eof => {
-                                    self.error_at_current("Unterminated string.");
-                                    break;
-                                }
-                                _ => {
-                                    self.error_at_current("Unexpected token in string.");
-                                    self.advance();
-                                    break;
+                                if !self.match_token(&[TokenKind::InterpolationEnd]) {
+                                    self.error_at_current("Expected '}' after string interpolation expression.");
                                 }
                             }
-                        } else {
-                            break;
+                            TokenKind::StringEnd => {
+                                self.advance();
+                                break;
+                            }
+                            TokenKind::Error(e) => {
+                                self.error_at_current(e);
+                                self.advance();
+                                break;
+                            }
+                            TokenKind::Eof => {
+                                self.error_at_current("Unterminated string.");
+                                break;
+                            }
+                            _ => {
+                                self.error_at_current("Unexpected token in string.");
+                                self.advance();
+                                break;
+                            }
                         }
                     }
                     let end_span = self.previous().span;

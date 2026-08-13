@@ -104,9 +104,9 @@ impl<'a> ModuleLoader<'a> {
                                     for comp in rel_path.components() {
                                         if let std::path::Component::Normal(name) = comp {
                                             let name_str = name.to_string_lossy();
-                                            if name_str.ends_with(".pace") {
+                                            if let Some(stripped) = name_str.strip_suffix(".pace") {
                                                 import_path.push('/');
-                                                import_path.push_str(&name_str[..name_str.len() - 5]);
+                                                import_path.push_str(stripped);
                                             } else {
                                                 import_path.push('/');
                                                 import_path.push_str(&name_str);
