@@ -38,7 +38,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn scan_tokens(&mut self, session: &mut session::CompilerSession) -> Vec<Token> {
+    pub fn scan_tokens(&mut self, session: &session::CompilerSession) -> Vec<Token> {
         let mut tokens = Vec::new();
         while !self.is_at_end() {
             self.start_idx = self.current_idx;
@@ -88,7 +88,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn scan_token(&mut self, session: &mut session::CompilerSession) -> Option<Token> {
+    fn scan_token(&mut self, session: &session::CompilerSession) -> Option<Token> {
         if self.mode_stack.last() == Some(&LexerMode::String) {
             return self.scan_string_mode(session);
         }
@@ -214,7 +214,7 @@ impl<'a> Scanner<'a> {
         Some(self.make_token(kind))
     }
 
-    fn scan_string_mode(&mut self, session: &mut session::CompilerSession) -> Option<Token> {
+    fn scan_string_mode(&mut self, session: &session::CompilerSession) -> Option<Token> {
         let mut value = String::new();
         while !self.is_at_end() {
             let peek = self.peek();
@@ -279,7 +279,7 @@ impl<'a> Scanner<'a> {
             return Some(self.make_token(TokenKind::Error("Unterminated string.".into())));
         }
 
-        let symbol = session.interner.intern(&value);
+        let symbol = session.interner.borrow_mut().intern(&value);
         Some(self.make_token(TokenKind::StringPart(symbol)))
     }
 
@@ -341,7 +341,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn identifier(&mut self, session: &mut session::CompilerSession) -> TokenKind {
+    fn identifier(&mut self, session: &session::CompilerSession) -> TokenKind {
         while let Some(c) = self.peek() {
             if c.is_ascii_alphanumeric() || c == '_' {
                 self.advance();
@@ -386,7 +386,7 @@ impl<'a> Scanner<'a> {
             "weak" => TokenKind::Weak,
             "null" => TokenKind::Null,
             "foreign" => TokenKind::Foreign,
-            _ => TokenKind::Identifier(session.interner.intern(text)),
+            _ => TokenKind::Identifier(session.interner.borrow_mut().intern(text)),
         }
     }
 
@@ -414,7 +414,7 @@ mod tests {
         
         assert_eq!(tokens.len(), 6); // let, count, =, 10, ;, EOF
         assert_eq!(tokens[0].kind, TokenKind::Let);
-        assert_eq!(tokens[1].kind, TokenKind::Identifier(session.interner.intern("count")));
+        assert_eq!(tokens[1].kind, TokenKind::Identifier(session.interner.borrow_mut().intern("count")));
         assert_eq!(tokens[2].kind, TokenKind::Equal);
         assert_eq!(tokens[3].kind, TokenKind::Integer(10));
         assert_eq!(tokens[4].kind, TokenKind::Semicolon);

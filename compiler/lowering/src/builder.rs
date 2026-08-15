@@ -3,14 +3,14 @@ use ast::{TypedExpr, TypedExprKind, TypedStmt, TypedStmtKind, TypeExpr};
 use mir::{BasicBlock, BlockId, ForeignAbiType, ForeignFunction, Function, Inst, Place, Program, RValue, Terminator, Value};
 
 pub struct ProgramBuilder<'a> {
-    session: &'a mut session::CompilerSession,
+    session: &'a session::CompilerSession,
     program: Program,
     current_class: Option<String>,
 }
 
 fn type_expr_to_abi(type_expr: &TypeExpr, session: &session::CompilerSession) -> ForeignAbiType {
     match type_expr {
-        TypeExpr::Named(name) => match session.interner.lookup(*name) {
+        TypeExpr::Named(name) => match session.interner.borrow().lookup(*name) {
             "CInt" => ForeignAbiType::I32,
             "CUInt" => ForeignAbiType::I32,
             "CChar" => ForeignAbiType::I8,
@@ -20,7 +20,7 @@ fn type_expr_to_abi(type_expr: &TypeExpr, session: &session::CompilerSession) ->
             "Void" => ForeignAbiType::I64, // Not really used for params
             _ => ForeignAbiType::I64,
         },
-        TypeExpr::GenericInstance(name, _) if session.interner.lookup(*name) == "Pointer" => ForeignAbiType::Pointer,
+        TypeExpr::GenericInstance(name, _) if session.interner.borrow().lookup(*name) == "Pointer" => ForeignAbiType::Pointer,
         _ => ForeignAbiType::I64,
     }
 }
@@ -28,7 +28,7 @@ fn type_expr_to_abi(type_expr: &TypeExpr, session: &session::CompilerSession) ->
 fn is_ref_type_opt(te: &Option<ast::TypeExpr>, session: &session::CompilerSession) -> bool {
     match te {
         Some(ast::TypeExpr::Named(name)) => {
-            !["Int", "Float", "Boolean"].contains(&session.interner.lookup(*name))
+            !["Int", "Float", "Boolean"].contains(&session.interner.borrow().lookup(*name))
         }
         Some(ast::TypeExpr::Optional(inner)) => {
             is_ref_type_opt(&Some((**inner).clone()), session)
@@ -44,7 +44,7 @@ fn is_ref_type(te: &ast::TypeExpr, session: &session::CompilerSession) -> bool {
 }
 
 impl<'a> ProgramBuilder<'a> {
-    pub fn new(session: &'a mut session::CompilerSession) -> Self {
+    pub fn new(session: &'a session::CompilerSession) -> Self {
         Self {
             session,
             program: Program::new(),
@@ -66,12 +66,12 @@ impl<'a> ProgramBuilder<'a> {
                         }
                     }
                     variant_defs.push(mir::EnumVariantDef {
-                        name: self.session.interner.lookup(v.name).to_string(),
+                        name: self.session.interner.borrow().lookup(v.name).to_string(),
                         reference_payloads,
                     });
                 }
-                self.program.enums.insert(self.session.interner.lookup(*name).to_string(), mir::EnumDef {
-                    name: self.session.interner.lookup(*name).to_string(),
+                self.program.enums.insert(self.session.interner.borrow().lookup(*name).to_string(), mir::EnumDef {
+                    name: self.session.interner.borrow().lookup(*name).to_string(),
                     variants: variant_defs,
                 });
             }
@@ -93,32 +93,32 @@ impl<'a> ProgramBuilder<'a> {
                 for field in fields {
                     match &field.kind {
                         TypedStmtKind::Var { name: f_name, is_weak, type_annotation, .. } => {
-                            field_names.push(self.session.interner.lookup(*f_name).to_string());
+                            field_names.push(self.session.interner.borrow().lookup(*f_name).to_string());
                             if *is_weak {
-                                weak_fields.insert(self.session.interner.lookup(*f_name).to_string());
+                                weak_fields.insert(self.session.interner.borrow().lookup(*f_name).to_string());
                             } else if is_ref_type_opt(type_annotation, self.session) {
-                                reference_fields.insert(self.session.interner.lookup(*f_name).to_string());
+                                reference_fields.insert(self.session.interner.borrow().lookup(*f_name).to_string());
                             }
                         }
                         TypedStmtKind::Let { name: f_name, type_annotation, .. } => {
-                            field_names.push(self.session.interner.lookup(*f_name).to_string());
+                            field_names.push(self.session.interner.borrow().lookup(*f_name).to_string());
                             if is_ref_type_opt(type_annotation, self.session) {
-                                reference_fields.insert(self.session.interner.lookup(*f_name).to_string());
+                                reference_fields.insert(self.session.interner.borrow().lookup(*f_name).to_string());
                             }
                         }
                         _ => {}
                     }
                 }
                 let class_def = mir::ClassDef {
-                    name: self.session.interner.lookup(*name).to_string(),
+                    name: self.session.interner.borrow().lookup(*name).to_string(),
                     fields: field_names,
                     weak_fields,
                     reference_fields,
                 };
-                self.program.classes.insert(self.session.interner.lookup(*name).to_string(), class_def);
+                self.program.classes.insert(self.session.interner.borrow().lookup(*name).to_string(), class_def);
 
                 let prev_class = self.current_class.clone();
-                self.current_class = Some(self.session.interner.lookup(*name).to_string());
+                self.current_class = Some(self.session.interner.borrow().lookup(*name).to_string());
 
                 for method in methods {
                     if let TypedStmtKind::Func { name: m_name, params, return_type, body, .. } = &method.kind {
@@ -126,13 +126,13 @@ impl<'a> ProgramBuilder<'a> {
                         let mut ref_params = std::collections::HashSet::new();
                         ref_params.insert("self".to_string());
                         for (p, ty) in params {
-                            param_names.push(self.session.interner.lookup(*p).to_string());
+                            param_names.push(self.session.interner.borrow().lookup(*p).to_string());
                             if is_ref_type(ty, self.session) {
-                                ref_params.insert(self.session.interner.lookup(*p).to_string());
+                                ref_params.insert(self.session.interner.borrow().lookup(*p).to_string());
                             }
                         }
                         let returns_ref = return_type.as_ref().is_some_and(|t| is_ref_type(t, self.session));
-                        let actual_name = format!("{}::{}", self.session.interner.lookup(*name), self.session.interner.lookup(*m_name));
+                        let actual_name = format!("{}::{}", self.session.interner.borrow().lookup(*name), self.session.interner.borrow().lookup(*m_name));
                         let builder = MirBuilder::new(actual_name.clone(), param_names, ref_params, returns_ref, enums_map.clone(), self.session);
                         let mir_func = match &body.kind {
                             TypedStmtKind::Block(stmts) => builder.build(stmts),
@@ -147,27 +147,27 @@ impl<'a> ProgramBuilder<'a> {
                 let mut param_names = Vec::new();
                 let mut ref_params = std::collections::HashSet::new();
                 for (p, ty) in params {
-                    param_names.push(self.session.interner.lookup(*p).to_string());
+                    param_names.push(self.session.interner.borrow().lookup(*p).to_string());
                     if is_ref_type(ty, self.session) {
-                        ref_params.insert(self.session.interner.lookup(*p).to_string());
+                        ref_params.insert(self.session.interner.borrow().lookup(*p).to_string());
                     }
                 }
                 let returns_ref = return_type.as_ref().is_some_and(|t| is_ref_type(t, self.session));
-                let builder = MirBuilder::new(self.session.interner.lookup(*name).to_string(), param_names, ref_params, returns_ref, enums_map.clone(), self.session);
+                let builder = MirBuilder::new(self.session.interner.borrow().lookup(*name).to_string(), param_names, ref_params, returns_ref, enums_map.clone(), self.session);
                 let mir_func = match &body.kind {
                     TypedStmtKind::Block(stmts) => builder.build(stmts),
                     _ => builder.build(std::slice::from_ref(body)),
                 };
-                self.program.functions.insert(self.session.interner.lookup(*name).to_string(), mir_func);
+                self.program.functions.insert(self.session.interner.borrow().lookup(*name).to_string(), mir_func);
             } else if let TypedStmtKind::ForeignFunc { name, params, return_type } = &stmt.kind {
                 let mut param_types = Vec::new();
                 for (_, ty) in params {
                     param_types.push(type_expr_to_abi(ty, self.session));
                 }
                 let ret_ty = return_type.as_ref().map(|t| type_expr_to_abi(t, self.session));
-                self.program.foreign_functions.insert(self.session.interner.lookup(*name).to_string(), ForeignFunction {
-                    name: self.session.interner.lookup(*name).to_string(),
-                    symbol: self.session.interner.lookup(*name).to_string(),
+                self.program.foreign_functions.insert(self.session.interner.borrow().lookup(*name).to_string(), ForeignFunction {
+                    name: self.session.interner.borrow().lookup(*name).to_string(),
+                    symbol: self.session.interner.borrow().lookup(*name).to_string(),
                     param_types,
                     return_type: ret_ty,
                 });
@@ -195,7 +195,7 @@ impl<'a> ProgramBuilder<'a> {
 }
 
 pub struct MirBuilder<'a> {
-    session: &'a mut session::CompilerSession,
+    session: &'a session::CompilerSession,
     function: Function,
     current_block: BlockId,
     temp_counter: usize,
@@ -203,7 +203,7 @@ pub struct MirBuilder<'a> {
 }
 
 impl<'a> MirBuilder<'a> {
-    pub fn new(name: String, parameters: Vec<String>, reference_parameters: std::collections::HashSet<String>, returns_reference: bool, enums_map: std::collections::HashMap<String, Vec<String>>, session: &'a mut session::CompilerSession) -> Self {
+    pub fn new(name: String, parameters: Vec<String>, reference_parameters: std::collections::HashSet<String>, returns_reference: bool, enums_map: std::collections::HashMap<String, Vec<String>>, session: &'a session::CompilerSession) -> Self {
         let mut function = Function::new(name, parameters, reference_parameters, returns_reference);
         let start_block = BlockId(0);
         function.blocks.push(BasicBlock::new(start_block));
@@ -255,29 +255,29 @@ impl<'a> MirBuilder<'a> {
                 if let Some(init) = initializer {
                     let val = self.lower_expr(init);
                     {
-let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(val));
+let __inst = Inst::Assign(Place::Var(self.session.interner.borrow().lookup(*name).to_string()), RValue::Use(val));
 self.current().instructions.push(__inst)
 };
                 } else {
                     {
-let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(Value::Void));
+let __inst = Inst::Assign(Place::Var(self.session.interner.borrow().lookup(*name).to_string()), RValue::Use(Value::Void));
 self.current().instructions.push(__inst)
 };
                 }
             }
             TypedStmtKind::Var { name, initializer, is_weak, .. } => {
                 if *is_weak {
-                    self.function.weak_vars.insert(self.session.interner.lookup(*name).to_string());
+                    self.function.weak_vars.insert(self.session.interner.borrow().lookup(*name).to_string());
                 }
                 if let Some(init) = initializer {
                     let val = self.lower_expr(init);
                     {
-let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(val));
+let __inst = Inst::Assign(Place::Var(self.session.interner.borrow().lookup(*name).to_string()), RValue::Use(val));
 self.current().instructions.push(__inst)
 };
                 } else {
                     {
-let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(Value::Void));
+let __inst = Inst::Assign(Place::Var(self.session.interner.borrow().lookup(*name).to_string()), RValue::Use(Value::Void));
 self.current().instructions.push(__inst)
 };
                 }
@@ -379,7 +379,7 @@ self.current().instructions.push(__inst)
                         // Body Block
                         self.current_block = body_block;
                         {
-let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*item_name).to_string()), RValue::Use(Value::Place(current_var.clone())));
+let __inst = Inst::Assign(Place::Var(self.session.interner.borrow().lookup(*item_name).to_string()), RValue::Use(Value::Place(current_var.clone())));
 self.current().instructions.push(__inst)
 };
                         self.lower_stmt(body);
@@ -451,7 +451,7 @@ let __inst = Inst::Assign(
 self.current().instructions.push(__inst)
 };
                         {
-let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*item_name).to_string()), RValue::Use(Value::Place(item_var.clone())));
+let __inst = Inst::Assign(Place::Var(self.session.interner.borrow().lookup(*item_name).to_string()), RValue::Use(Value::Place(item_var.clone())));
 self.current().instructions.push(__inst)
 };
                         self.lower_stmt(body);
@@ -492,7 +492,7 @@ self.current().instructions.push(__inst)
         match &expr.kind {
             TypedExprKind::Integer(i) => Value::Int(*i),
             TypedExprKind::Float(f) => Value::Float(*f),
-            TypedExprKind::String(s) => Value::String(self.session.interner.lookup(*s).to_string()),
+            TypedExprKind::String(s) => Value::String(self.session.interner.borrow().lookup(*s).to_string()),
             TypedExprKind::InterpolatedString(pieces) => {
                 if pieces.is_empty() {
                     return Value::String("".to_string());
@@ -503,7 +503,7 @@ self.current().instructions.push(__inst)
                 for piece in pieces {
                     let mut piece_val = self.lower_expr(piece);
 
-                    match self.session.types.get(piece.ty) {
+                    match self.session.types.borrow().get(piece.ty) {
                         session::types::Type::Int => {
                             let temp = self.new_temp();
                             {
@@ -547,7 +547,7 @@ self.current().instructions.push(__inst)
             }
             TypedExprKind::Boolean(b) => Value::Boolean(*b),
             TypedExprKind::Null => Value::Null,
-            TypedExprKind::Variable(name) => Value::Place(Place::Var(self.session.interner.lookup(*name).to_string())),
+            TypedExprKind::Variable(name) => Value::Place(Place::Var(self.session.interner.borrow().lookup(*name).to_string())),
             TypedExprKind::Array(elements) => {
                 let mut vals = Vec::new();
                 for el in elements {
@@ -616,7 +616,7 @@ self.current().instructions.push(__inst)
                         
                         self.current_block = body_block;
                         {
-let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*item_name).to_string()), RValue::Use(Value::Place(current_var.clone())));
+let __inst = Inst::Assign(Place::Var(self.session.interner.borrow().lookup(*item_name).to_string()), RValue::Use(Value::Place(current_var.clone())));
 self.current().instructions.push(__inst)
 };
                         
@@ -693,7 +693,7 @@ let __inst = Inst::Assign(item_var.clone(), RValue::IndexGet(iter_val.clone(), V
 self.current().instructions.push(__inst)
 };
                         {
-let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*item_name).to_string()), RValue::Use(Value::Place(item_var)));
+let __inst = Inst::Assign(Place::Var(self.session.interner.borrow().lookup(*item_name).to_string()), RValue::Use(Value::Place(item_var)));
 self.current().instructions.push(__inst)
 };
                         
@@ -736,12 +736,12 @@ self.current().instructions.push(__inst)
                 let mut default_block = None;
                 
                 let mut enum_name_opt = None;
-                match self.session.types.get(value.ty) {
+                match self.session.types.borrow().get(value.ty) {
                     session::types::Type::GenericInstance(name, _) => enum_name_opt = Some(name.clone()),
                     session::types::Type::Instance(name) => enum_name_opt = Some(name.clone()),
                     _ => {}
                 }
-                let resolved_enum_name = enum_name_opt.unwrap_or(self.session.interner.intern(""));
+                let resolved_enum_name = enum_name_opt.unwrap_or(self.session.interner.borrow_mut().intern(""));
                 
                 for arm in arms {
                     let arm_block = self.new_block();
@@ -749,22 +749,22 @@ self.current().instructions.push(__inst)
                     if let ast::Pattern::Variant { path, bindings } = &arm.pattern {
                         let enum_name = &resolved_enum_name;
                         let variant_name = path.last().unwrap();
-                        let variant_idx = self.enums_map.get(self.session.interner.lookup(*enum_name))
-                            .and_then(|variants| variants.iter().position(|v| v == self.session.interner.lookup(*variant_name)))
+                        let variant_idx = self.enums_map.get(self.session.interner.borrow().lookup(*enum_name))
+                            .and_then(|variants| variants.iter().position(|v| v == self.session.interner.borrow().lookup(*variant_name)))
                             .unwrap_or(0); // Fallback if enum not found
                         cases.push((variant_idx, arm_block));
                         
                         self.current_block = arm_block;
                         if let Some(binds) = bindings {
                             for (field_idx, bind) in binds.iter().enumerate() {
-                                if self.session.interner.lookup(*bind) != "_" {
+                                if self.session.interner.borrow().lookup(*bind) != "_" {
                                     let field_temp = self.new_temp();
                                     {
 let __inst = Inst::Assign(field_temp.clone(), RValue::ExtractPayload(match_val.clone(), variant_idx, field_idx));
 self.current().instructions.push(__inst)
 };
                                     {
-let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*bind).to_string()), RValue::Use(Value::Place(field_temp)));
+let __inst = Inst::Assign(Place::Var(self.session.interner.borrow().lookup(*bind).to_string()), RValue::Use(Value::Place(field_temp)));
 self.current().instructions.push(__inst)
 };
                                 }
@@ -794,12 +794,12 @@ self.current().instructions.push(__inst)
                 Value::Place(result_temp)
             }
             TypedExprKind::EnumVariant { enum_name, variant_name } => {
-                let variant_idx = self.enums_map.get(self.session.interner.lookup(*enum_name))
-                    .and_then(|variants| variants.iter().position(|v| v == self.session.interner.lookup(*variant_name)))
+                let variant_idx = self.enums_map.get(self.session.interner.borrow().lookup(*enum_name))
+                    .and_then(|variants| variants.iter().position(|v| v == self.session.interner.borrow().lookup(*variant_name)))
                     .unwrap_or(0);
                 let temp = self.new_temp();
                 {
-let __inst = Inst::Assign(temp.clone(), RValue::ConstructVariant(self.session.interner.lookup(*enum_name).to_string(), variant_idx, Vec::new()));
+let __inst = Inst::Assign(temp.clone(), RValue::ConstructVariant(self.session.interner.borrow().lookup(*enum_name).to_string(), variant_idx, Vec::new()));
 self.current().instructions.push(__inst)
 };
                 Value::Place(temp)
@@ -829,7 +829,7 @@ self.current().instructions.push(__inst)
                 let obj_val = self.lower_expr(object);
                 let temp = self.new_temp();
                 {
-let __inst = Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, self.session.interner.lookup(*name).to_string()));
+let __inst = Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, self.session.interner.borrow().lookup(*name).to_string()));
 self.current().instructions.push(__inst)
 };
                 Value::Place(temp)
@@ -875,7 +875,7 @@ self.current().instructions.push(__inst)
                 
                 self.current_block = else_block;
                 {
-let __inst = Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, self.session.interner.lookup(*name).to_string()));
+let __inst = Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, self.session.interner.borrow().lookup(*name).to_string()));
 self.current().instructions.push(__inst)
 };
                 self.current().terminator = Some(Terminator::Jump(merge_block));
@@ -927,7 +927,7 @@ self.current().instructions.push(__inst)
             TypedExprKind::NullCoalesceAssign { left, right } => {
                 match &left.kind {
                     TypedExprKind::Variable(name) => {
-                        let current_val = Value::Place(Place::Var(self.session.interner.lookup(*name).to_string()));
+                        let current_val = Value::Place(Place::Var(self.session.interner.borrow().lookup(*name).to_string()));
                         let then_block = self.new_block();
                         let merge_block = self.new_block();
                         
@@ -949,7 +949,7 @@ self.current().instructions.push(__inst)
                         self.current_block = then_block;
                         let right_val = self.lower_expr(right);
                         {
-let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(right_val));
+let __inst = Inst::Assign(Place::Var(self.session.interner.borrow().lookup(*name).to_string()), RValue::Use(right_val));
 self.current().instructions.push(__inst)
 };
                         self.current().terminator = Some(Terminator::Jump(merge_block));
@@ -961,7 +961,7 @@ self.current().instructions.push(__inst)
                         let obj_val = self.lower_expr(object);
                         let current_temp = self.new_temp();
                         {
-let __inst = Inst::Assign(current_temp.clone(), RValue::GetProperty(obj_val.clone(), self.session.interner.lookup(*name).to_string()));
+let __inst = Inst::Assign(current_temp.clone(), RValue::GetProperty(obj_val.clone(), self.session.interner.borrow().lookup(*name).to_string()));
 self.current().instructions.push(__inst)
 };
                         let current_val = Value::Place(current_temp.clone());
@@ -987,7 +987,7 @@ self.current().instructions.push(__inst)
                         self.current_block = then_block;
                         let right_val = self.lower_expr(right);
                         {
-let __inst = Inst::SetProperty(obj_val, self.session.interner.lookup(*name).to_string(), right_val.clone());
+let __inst = Inst::SetProperty(obj_val, self.session.interner.borrow().lookup(*name).to_string(), right_val.clone());
 self.current().instructions.push(__inst)
 };
                         {
@@ -1050,7 +1050,7 @@ self.current().instructions.push(__inst)
                 let obj_val = self.lower_expr(object);
                 let val_val = self.lower_expr(value);
                 {
-let __inst = Inst::SetProperty(obj_val, self.session.interner.lookup(*name).to_string(), val_val.clone());
+let __inst = Inst::SetProperty(obj_val, self.session.interner.borrow().lookup(*name).to_string(), val_val.clone());
 self.current().instructions.push(__inst)
 };
                 val_val
@@ -1058,7 +1058,7 @@ self.current().instructions.push(__inst)
             TypedExprKind::Assign { name, value } => {
                 let val = self.lower_expr(value);
                 {
-let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(val.clone()));
+let __inst = Inst::Assign(Place::Var(self.session.interner.borrow().lookup(*name).to_string()), RValue::Use(val.clone()));
 self.current().instructions.push(__inst)
 };
                 val
@@ -1076,8 +1076,8 @@ self.current().instructions.push(__inst)
                     let obj_val = self.lower_expr(object);
                     let temp = self.new_temp();
                     
-                    if let Type::Instance(class_name) | Type::GenericInstance(class_name, _) = self.session.types.get(object.ty) {
-                        let actual_name = format!("{}::{}", self.session.interner.lookup(*class_name), self.session.interner.lookup(*name));
+                    if let Type::Instance(class_name) | Type::GenericInstance(class_name, _) = self.session.types.borrow().get(object.ty) {
+                        let actual_name = format!("{}::{}", self.session.interner.borrow().lookup(*class_name), self.session.interner.borrow().lookup(*name));
                         arg_values.insert(0, obj_val);
                         {
 let __inst = Inst::Assign(temp.clone(), RValue::Call(actual_name, arg_values));
@@ -1087,7 +1087,7 @@ self.current().instructions.push(__inst)
                     }
                     
                     {
-let __inst = Inst::Assign(temp.clone(), RValue::MethodCall(obj_val.clone(), self.session.interner.lookup(*name).to_string(), arg_values));
+let __inst = Inst::Assign(temp.clone(), RValue::MethodCall(obj_val.clone(), self.session.interner.borrow().lookup(*name).to_string(), arg_values));
 self.current().instructions.push(__inst)
 };
                     return Value::Place(temp);
@@ -1095,24 +1095,24 @@ self.current().instructions.push(__inst)
 
                 if let TypedExprKind::EnumVariant { enum_name, variant_name } = &callee.kind {
                     let temp = self.new_temp();
-                    let variant_idx = self.enums_map.get(self.session.interner.lookup(*enum_name))
-                        .and_then(|variants| variants.iter().position(|v| v == self.session.interner.lookup(*variant_name)))
+                    let variant_idx = self.enums_map.get(self.session.interner.borrow().lookup(*enum_name))
+                        .and_then(|variants| variants.iter().position(|v| v == self.session.interner.borrow().lookup(*variant_name)))
                         .unwrap_or(0);
                     {
-let __inst = Inst::Assign(temp.clone(), RValue::ConstructVariant(self.session.interner.lookup(*enum_name).to_string(), variant_idx, arg_values));
+let __inst = Inst::Assign(temp.clone(), RValue::ConstructVariant(self.session.interner.borrow().lookup(*enum_name).to_string(), variant_idx, arg_values));
 self.current().instructions.push(__inst)
 };
                     return Value::Place(temp);
                 }
 
-                if let Type::Class(class_name, _) = self.session.types.get(callee.ty).clone() {
+                if let Type::Class(class_name, _) = self.session.types.borrow().get(callee.ty).clone() {
                     let obj_temp = self.new_temp();
                     {
-let __inst = Inst::Assign(obj_temp.clone(), RValue::AllocateObject(self.session.interner.lookup(class_name).to_string()));
+let __inst = Inst::Assign(obj_temp.clone(), RValue::AllocateObject(self.session.interner.borrow().lookup(class_name).to_string()));
 self.current().instructions.push(__inst)
 };
                     
-                    let actual_name = format!("{}::init", self.session.interner.lookup(class_name));
+                    let actual_name = format!("{}::init", self.session.interner.borrow().lookup(class_name));
                     arg_values.insert(0, Value::Place(obj_temp.clone()));
                     let init_temp = self.new_temp();
                     {
@@ -1129,19 +1129,19 @@ self.current().instructions.push(__inst)
                     panic!("Only direct function calls by name are currently supported.");
                 };
                 
-                if self.session.interner.lookup(func_name) == "print" && arguments.len() == 1 {
-                    match self.session.types.get(arguments[0].ty) {
-                session::types::Type::String => func_name = self.session.interner.intern("printStr"),
-                        session::types::Type::Float => func_name = self.session.interner.intern("printFloat"),
-                        session::types::Type::Boolean => func_name = self.session.interner.intern("printBool"),
-                        session::types::Type::Enum(_, _) | session::types::Type::Instance(_) => func_name = self.session.interner.intern("printEnum"),
-                        _ => func_name = self.session.interner.intern("printInt"),
+                if self.session.interner.borrow().lookup(func_name) == "print" && arguments.len() == 1 {
+                    match self.session.types.borrow().get(arguments[0].ty) {
+                session::types::Type::String => func_name = self.session.interner.borrow_mut().intern("printStr"),
+                        session::types::Type::Float => func_name = self.session.interner.borrow_mut().intern("printFloat"),
+                        session::types::Type::Boolean => func_name = self.session.interner.borrow_mut().intern("printBool"),
+                        session::types::Type::Enum(_, _) | session::types::Type::Instance(_) => func_name = self.session.interner.borrow_mut().intern("printEnum"),
+                        _ => func_name = self.session.interner.borrow_mut().intern("printInt"),
                     }
                 }
 
                 let temp = self.new_temp();
                 {
-let __inst = Inst::Assign(temp.clone(), RValue::Call(self.session.interner.lookup(func_name).to_string(), arg_values));
+let __inst = Inst::Assign(temp.clone(), RValue::Call(self.session.interner.borrow().lookup(func_name).to_string(), arg_values));
 self.current().instructions.push(__inst)
 };
                 Value::Place(temp)
@@ -1162,7 +1162,7 @@ self.current().instructions.push(__inst)
                 let right_val = self.lower_expr(right);
                 let temp = self.new_temp();
                 
-                if op == &ast::BinaryOp::Add && left_ty == self.session.types.intern(session::types::Type::String) && right_ty == self.session.types.intern(session::types::Type::String) {
+                if op == &ast::BinaryOp::Add && left_ty == self.session.types.borrow_mut().intern(session::types::Type::String) && right_ty == self.session.types.borrow_mut().intern(session::types::Type::String) {
                     {
 let __inst = Inst::Assign(temp.clone(), RValue::Call("stringConcat".to_string(), vec![left_val, right_val]));
 self.current().instructions.push(__inst)
@@ -1195,7 +1195,7 @@ use ast::{BinaryOp, Location, Span};
         let mut session = session::CompilerSession::new();
         // let x = 10 + 5;
         let stmt = TypedStmt::new(TypedStmtKind::Let {
-            name: session.interner.intern("x"),
+            name: session.interner.borrow_mut().intern("x"),
             type_annotation: None,
             initializer: Some(TypedExpr::new(TypedExprKind::Binary(
                 Box::new(TypedExpr::new(TypedExprKind::Integer(10), session::types::Type::Int, make_span())),
@@ -1233,7 +1233,7 @@ use ast::{BinaryOp, Location, Span};
             condition: TypedExpr::new(TypedExprKind::Boolean(true), session::types::Type::Boolean, make_span()),
             then_branch: Box::new(TypedStmt::new(TypedStmtKind::Block(vec![
                 TypedStmt::new(TypedStmtKind::Let {
-                    name: session.interner.intern("x"),
+                    name: session.interner.borrow_mut().intern("x"),
                     type_annotation: None,
                     initializer: Some(TypedExpr::new(TypedExprKind::Integer(1), session::types::Type::Int, make_span())),
                 }, make_span())

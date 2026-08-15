@@ -4,81 +4,81 @@ use crate::stmt::{TypeExpr, EnumVariant};
 
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TypedMatchArm {
+pub struct TypedMatchArm<'a> {
     pub pattern: Pattern,
-    pub body: Box<TypedExpr>,
+    pub body: &'a TypedExpr<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum TypedExprKind {
+pub enum TypedExprKind<'a> {
     Integer(i64),
     Float(f64),
     String(session::Symbol),
-    InterpolatedString(Vec<TypedExpr>),
+    InterpolatedString(Vec<TypedExpr<'a>>),
     Boolean(bool),
     Null,
     Variable(session::Symbol),
     Range {
-        start: Box<TypedExpr>,
-        end: Box<TypedExpr>,
+        start: &'a TypedExpr<'a>,
+        end: &'a TypedExpr<'a>,
     },
-    Binary(Box<TypedExpr>, BinaryOp, Box<TypedExpr>),
-    Unary(UnaryOp, Box<TypedExpr>),
-    Grouping(Box<TypedExpr>),
+    Binary(&'a TypedExpr<'a>, BinaryOp, &'a TypedExpr<'a>),
+    Unary(UnaryOp, &'a TypedExpr<'a>),
+    Grouping(&'a TypedExpr<'a>),
     Call {
-        callee: Box<TypedExpr>,
-        type_args: Vec<TypeExpr>,
-        arguments: Vec<TypedExpr>,
+        callee: &'a TypedExpr<'a>,
+        type_args: Vec<TypeExpr<'a>>,
+        arguments: Vec<TypedExpr<'a>>,
     },
     Get {
-        object: Box<TypedExpr>,
+        object: &'a TypedExpr<'a>,
         name: session::Symbol,
     },
     Set {
-        object: Box<TypedExpr>,
+        object: &'a TypedExpr<'a>,
         name: session::Symbol,
-        value: Box<TypedExpr>,
+        value: &'a TypedExpr<'a>,
     },
     Assign {
         name: session::Symbol,
-        value: Box<TypedExpr>,
+        value: &'a TypedExpr<'a>,
     },
     SelfRef,
-    ForceUnwrap(Box<TypedExpr>),
+    ForceUnwrap(&'a TypedExpr<'a>),
     OptionalGet {
-        object: Box<TypedExpr>,
+        object: &'a TypedExpr<'a>,
         name: session::Symbol,
     },
     NullCoalesce {
-        left: Box<TypedExpr>,
-        right: Box<TypedExpr>,
+        left: &'a TypedExpr<'a>,
+        right: &'a TypedExpr<'a>,
     },
     NullCoalesceAssign {
-        left: Box<TypedExpr>,
-        right: Box<TypedExpr>,
+        left: &'a TypedExpr<'a>,
+        right: &'a TypedExpr<'a>,
     },
-    Array(Vec<TypedExpr>),
+    Array(Vec<TypedExpr<'a>>),
     ListComprehension {
-        expr: Box<TypedExpr>,
+        expr: &'a TypedExpr<'a>,
         item_name: session::Symbol,
-        iterator: Box<TypedExpr>,
+        iterator: &'a TypedExpr<'a>,
     },
     ArrayRepeat {
-        value: Box<TypedExpr>,
-        count: Box<TypedExpr>,
+        value: &'a TypedExpr<'a>,
+        count: &'a TypedExpr<'a>,
     },
     IndexGet {
-        object: Box<TypedExpr>,
-        index: Box<TypedExpr>,
+        object: &'a TypedExpr<'a>,
+        index: &'a TypedExpr<'a>,
     },
     IndexSet {
-        object: Box<TypedExpr>,
-        index: Box<TypedExpr>,
-        value: Box<TypedExpr>,
+        object: &'a TypedExpr<'a>,
+        index: &'a TypedExpr<'a>,
+        value: &'a TypedExpr<'a>,
     },
     Match {
-        value: Box<TypedExpr>,
-        arms: Vec<TypedMatchArm>,
+        value: &'a TypedExpr<'a>,
+        arms: Vec<TypedMatchArm<'a>>,
     },
     EnumVariant {
         enum_name: session::Symbol,
@@ -87,88 +87,88 @@ pub enum TypedExprKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TypedExpr {
-    pub kind: TypedExprKind,
+pub struct TypedExpr<'a> {
+    pub kind: TypedExprKind<'a>,
     pub ty: session::TypeId,
     pub span: Span,
 }
 
-impl TypedExpr {
-    pub fn new(kind: TypedExprKind, ty: session::TypeId, span: Span) -> Self {
+impl<'a> TypedExpr<'a> {
+    pub fn new(kind: TypedExprKind<'a>, ty: session::TypeId, span: Span) -> Self {
         Self { kind, ty, span }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum TypedStmtKind {
+pub enum TypedStmtKind<'a> {
     Let {
         name: session::Symbol,
-        type_annotation: Option<TypeExpr>,
-        initializer: Option<TypedExpr>,
+        type_annotation: Option<TypeExpr<'a>>,
+        initializer: Option<&'a TypedExpr<'a>>,
     },
     Var {
         name: session::Symbol,
-        type_annotation: Option<TypeExpr>,
-        initializer: Option<TypedExpr>,
+        type_annotation: Option<TypeExpr<'a>>,
+        initializer: Option<&'a TypedExpr<'a>>,
         is_weak: bool,
     },
-    Expression(TypedExpr),
-    Block(Vec<TypedStmt>),
+    Expression(&'a TypedExpr<'a>),
+    Block(Vec<TypedStmt<'a>>),
     If {
-        condition: TypedExpr,
-        then_branch: Box<TypedStmt>,
-        else_branch: Option<Box<TypedStmt>>,
+        condition: &'a TypedExpr<'a>,
+        then_branch: &'a TypedStmt<'a>,
+        else_branch: Option<&'a TypedStmt<'a>>,
     },
     While {
-        condition: TypedExpr,
-        body: Box<TypedStmt>,
+        condition: &'a TypedExpr<'a>,
+        body: &'a TypedStmt<'a>,
     },
     For {
         item_name: session::Symbol,
-        iterator: TypedExpr,
-        body: Box<TypedStmt>,
+        iterator: &'a TypedExpr<'a>,
+        body: &'a TypedStmt<'a>,
     },
     Func {
         name: session::Symbol,
         type_params: Vec<session::Symbol>,
-        params: Vec<(session::Symbol, TypeExpr)>,
-        return_type: Option<TypeExpr>,
-        body: Box<TypedStmt>,
+        params: Vec<(session::Symbol, TypeExpr<'a>)>,
+        return_type: Option<TypeExpr<'a>>,
+        body: &'a TypedStmt<'a>,
     },
     ForeignFunc {
         name: session::Symbol,
-        params: Vec<(session::Symbol, TypeExpr)>,
-        return_type: Option<TypeExpr>,
+        params: Vec<(session::Symbol, TypeExpr<'a>)>,
+        return_type: Option<TypeExpr<'a>>,
     },
     Return {
-        value: Option<TypedExpr>,
+        value: Option<&'a TypedExpr<'a>>,
     },
     Class {
         name: session::Symbol,
         type_params: Vec<session::Symbol>,
         implements: Vec<session::Symbol>,
-        methods: Vec<TypedStmt>,
-        fields: Vec<TypedStmt>,
+        methods: Vec<TypedStmt<'a>>,
+        fields: Vec<TypedStmt<'a>>,
     },
     Interface {
         name: session::Symbol,
-        methods: Vec<TypedStmt>,
+        methods: Vec<TypedStmt<'a>>,
     },
     Enum {
         name: session::Symbol,
         type_params: Vec<session::Symbol>,
-        variants: Vec<EnumVariant>,
+        variants: Vec<EnumVariant<'a>>,
     },
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TypedStmt {
-    pub kind: TypedStmtKind,
+pub struct TypedStmt<'a> {
+    pub kind: TypedStmtKind<'a>,
     pub span: Span,
 }
 
-impl TypedStmt {
-    pub fn new(kind: TypedStmtKind, span: Span) -> Self {
+impl<'a> TypedStmt<'a> {
+    pub fn new(kind: TypedStmtKind<'a>, span: Span) -> Self {
         Self { kind, span }
     }
 }

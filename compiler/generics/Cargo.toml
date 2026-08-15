@@ -7,5 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+bumpalo = { workspace = true }
 ast = { path = "../ast" }
 session = { path = "../session" }
+diagnostics = { path = "../diagnostics" }

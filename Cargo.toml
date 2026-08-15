@@ -22,3 +22,6 @@ edition = "2024"
 authors = ["Pace Contributors"]
 rust-version = "1.97.1"
 license = "MIT"
+
+[workspace.dependencies]
+bumpalo = "3.16"

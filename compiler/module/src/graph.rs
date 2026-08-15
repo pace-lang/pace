@@ -3,20 +3,20 @@ use crate::module_id::ModuleId;
 use crate::module::Module;
 
 #[derive(Debug)]
-pub struct ModuleGraph {
-    modules: HashMap<ModuleId, Module>,
+pub struct ModuleGraph<'a> {
+    modules: HashMap<ModuleId, Module<'a>>,
     edges: HashMap<ModuleId, Vec<ModuleId>>, // from -> to (dependencies)
     import_map: HashMap<ModuleId, HashMap<String, ModuleId>>, // module -> import string -> resolved module id
     next_id: u32,
 }
 
-impl Default for ModuleGraph {
+impl<'a> Default for ModuleGraph<'a> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ModuleGraph {
+impl<'a> ModuleGraph<'a> {
     pub fn new() -> Self {
         Self {
             modules: HashMap::new(),
@@ -26,7 +26,7 @@ impl ModuleGraph {
         }
     }
 
-    pub fn add_module(&mut self, module: Module) {
+    pub fn add_module(&mut self, module: Module<'a>) {
         let id = module.id;
         self.modules.insert(id, module);
         self.edges.entry(id).or_default();
@@ -54,15 +54,15 @@ impl ModuleGraph {
         self.import_map.get(&from).and_then(|map| map.get(import_str)).copied()
     }
 
-    pub fn get_module(&self, id: ModuleId) -> Option<&Module> {
+    pub fn get_module(&self, id: ModuleId) -> Option<&Module<'_>> {
         self.modules.get(&id)
     }
 
-    pub fn modules(&self) -> impl Iterator<Item = &Module> {
+    pub fn modules(&self) -> impl Iterator<Item = &Module<'_>> {
         self.modules.values()
     }
 
-    pub fn topological_sort(&self) -> Vec<&Module> {
+    pub fn topological_sort(&self) -> Vec<&Module<'a>> {
         let mut visited = std::collections::HashSet::new();
         let mut sorted = Vec::new();
 
@@ -73,7 +73,7 @@ impl ModuleGraph {
         sorted
     }
 
-    fn visit<'a>(&'a self, id: ModuleId, visited: &mut std::collections::HashSet<ModuleId>, sorted: &mut Vec<&'a Module>) {
+    fn visit<'b>(&'b self, id: ModuleId, visited: &mut std::collections::HashSet<ModuleId>, sorted: &mut Vec<&'b Module<'a>>) {
         if visited.contains(&id) { return; }
         visited.insert(id);
 

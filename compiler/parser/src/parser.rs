@@ -6,11 +6,11 @@ pub struct Parser<'a> {
     tokens: Vec<Token>,
     current: usize,
     pub errors: Vec<Diagnostic>,
-    pub session: &'a mut session::CompilerSession,
+    pub session: &'a session::CompilerSession,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(tokens: Vec<Token>, session: &'a mut session::CompilerSession) -> Self {
+    pub fn new(tokens: Vec<Token>, session: &'a session::CompilerSession) -> Self {
         Self {
             tokens,
             current: 0,
@@ -19,7 +19,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> (Vec<Stmt>, Vec<Diagnostic>) {
+    pub fn parse(&mut self) -> (Vec<Stmt<'a>>, Vec<Diagnostic>) {
         let mut statements = Vec::new();
         while !self.is_at_end() {
             if let Some(stmt) = self.declaration() {
@@ -38,7 +38,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn declaration(&mut self) -> Option<Stmt> {
+    fn declaration(&mut self) -> Option<Stmt<'a>> {
         let is_private = self.parse_visibility();
 
         let res = if self.match_token(&[TokenKind::Interface]) {
@@ -110,16 +110,16 @@ impl<'a> Parser<'a> {
         Some(type_params)
     }
 
-    fn parse_type_expr(&mut self) -> Option<TypeExpr> {
+    fn parse_type_expr(&mut self) -> Option<TypeExpr<'a>> {
         if self.match_token(&[TokenKind::LeftBracket]) {
             let inner = self.parse_type_expr()?;
             if !self.match_token(&[TokenKind::RightBracket]) {
                 self.error_at_current("Expected ']' after array element type.");
                 return None;
             }
-            let mut ty = TypeExpr::Array(Box::new(inner));
+            let mut ty = TypeExpr::Array(self.session.ast_arena.alloc(inner));
             if self.match_token(&[TokenKind::Question]) {
-                ty = TypeExpr::Optional(Box::new(ty));
+                ty = TypeExpr::Optional(self.session.ast_arena.alloc(ty));
             }
             return Some(ty);
         }
@@ -149,14 +149,14 @@ impl<'a> Parser<'a> {
                 
                 let mut ty = TypeExpr::GenericInstance(base_type, type_args);
                 if self.match_token(&[TokenKind::Question]) {
-                    ty = TypeExpr::Optional(Box::new(ty));
+                    ty = TypeExpr::Optional(self.session.ast_arena.alloc(ty));
                 }
                 return Some(ty);
             }
             
             let mut ty = TypeExpr::Named(base_type);
             if self.match_token(&[TokenKind::Question]) {
-                ty = TypeExpr::Optional(Box::new(ty));
+                ty = TypeExpr::Optional(self.session.ast_arena.alloc(ty));
             }
             Some(ty)
         } else {
@@ -165,7 +165,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn enum_declaration(&mut self, is_private: bool) -> Option<Stmt> {
+    fn enum_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -255,7 +255,7 @@ impl<'a> Parser<'a> {
         }, span))
     }
 
-    fn class_declaration(&mut self, is_private: bool) -> Option<Stmt> {
+    fn class_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -343,7 +343,7 @@ impl<'a> Parser<'a> {
         Some(Stmt::new(StmtKind::Class { name: name.clone(), type_params, implements, methods, fields, is_private }, span))
     }
 
-    fn interface_declaration(&mut self, is_private: bool) -> Option<Stmt> {
+    fn interface_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -384,7 +384,7 @@ impl<'a> Parser<'a> {
         Some(Stmt::new(StmtKind::Interface { name: name.clone(), methods, is_private }, span))
     }
 
-    fn interface_method_declaration(&mut self, is_private: bool) -> Option<Stmt> {
+    fn interface_method_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -445,13 +445,13 @@ impl<'a> Parser<'a> {
         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
 
         // We use StmtKind::Func but with an empty block for the body.
-        let empty_body = Box::new(Stmt::new(StmtKind::Block(Vec::new()), span));
+        let empty_body = self.session.ast_arena.alloc(Stmt::new(StmtKind::Block(Vec::new()), span));
         Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params: Vec::new(), params, return_type, body: empty_body, is_private }, span))
     }
 
-    fn init_declaration(&mut self, is_private: bool) -> Option<Stmt> {
+    fn init_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
-        let name = self.session.interner.intern("init");
+        let name = self.session.interner.borrow_mut().intern("init");
 
         if !self.match_token(&[TokenKind::LeftParen]) {
             self.error_at_current("Expected '(' after init.");
@@ -489,7 +489,7 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        let return_type = Some(TypeExpr::Named(self.session.interner.intern("Void")));
+        let return_type = Some(TypeExpr::Named(self.session.interner.borrow_mut().intern("Void")));
 
         if !self.match_token(&[TokenKind::LeftBrace]) {
             self.error_at_current("Expected '{' before init body.");
@@ -499,10 +499,10 @@ impl<'a> Parser<'a> {
         let body = self.block()?;
         let end_span = body.span;
         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params: Vec::new(), params, return_type, body: Box::new(body), is_private }, span))
+        Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params: Vec::new(), params, return_type, body: self.session.ast_arena.alloc(body), is_private }, span))
     }
 
-    fn foreign_declaration(&mut self, is_private: bool) -> Option<Stmt> {
+    fn foreign_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         if !self.match_token(&[TokenKind::Func]) {
@@ -578,7 +578,7 @@ impl<'a> Parser<'a> {
         }, span))
     }
 
-    fn function_declaration(&mut self, is_private: bool) -> Option<Stmt> {
+    fn function_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -640,10 +640,10 @@ impl<'a> Parser<'a> {
         let body = self.block()?;
         let end_span = body.span;
         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params, params, return_type, body: Box::new(body), is_private }, span))
+        Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params, params, return_type, body: self.session.ast_arena.alloc(body), is_private }, span))
     }
 
-    fn variable_declaration(&mut self, is_var: bool, is_weak: bool, is_private: bool) -> Option<Stmt> {
+    fn variable_declaration(&mut self, is_var: bool, is_weak: bool, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -672,15 +672,15 @@ impl<'a> Parser<'a> {
         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         
         let kind = if is_var {
-            StmtKind::Var { name: name.clone(), type_annotation, initializer, is_weak, is_private }
+            StmtKind::Var { name: name.clone(), type_annotation, initializer: initializer.map(|e| &*self.session.ast_arena.alloc(e)), is_weak, is_private }
         } else {
-            StmtKind::Let { name: name.clone(), type_annotation, initializer, is_private }
+            StmtKind::Let { name: name.clone(), type_annotation, initializer: initializer.map(|e| &*self.session.ast_arena.alloc(e)), is_private }
         };
 
         Some(Stmt::new(kind, span))
     }
 
-    fn statement(&mut self) -> Option<Stmt> {
+    fn statement(&mut self) -> Option<Stmt<'a>> {
         if self.match_token(&[TokenKind::If]) {
             self.if_statement()
         } else if self.match_token(&[TokenKind::While]) {
@@ -696,7 +696,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn if_statement(&mut self) -> Option<Stmt> {
+    fn if_statement(&mut self) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let condition = self.expression()?;
@@ -715,11 +715,11 @@ impl<'a> Parser<'a> {
             if self.match_token(&[TokenKind::If]) {
                 let e_branch = self.if_statement()?;
                 end_span = e_branch.span;
-                else_branch = Some(Box::new(e_branch));
+                else_branch = Some(self.session.ast_arena.alloc(e_branch));
             } else if self.match_token(&[TokenKind::LeftBrace]) {
                 let e_branch = self.block()?;
                 end_span = e_branch.span;
-                else_branch = Some(Box::new(e_branch));
+                else_branch = Some(self.session.ast_arena.alloc(e_branch));
             } else {
                 self.error_at_current("Expected '{' or 'if' after else.");
                 return None;
@@ -727,10 +727,10 @@ impl<'a> Parser<'a> {
         }
 
         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::If { condition, then_branch: Box::new(then_branch), else_branch }, span))
+        Some(Stmt::new(StmtKind::If { condition: self.session.ast_arena.alloc(condition), then_branch: self.session.ast_arena.alloc(then_branch), else_branch: else_branch.map(|e| &*e) }, span))
     }
 
-    fn while_statement(&mut self) -> Option<Stmt> {
+    fn while_statement(&mut self) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let condition = self.expression()?;
@@ -744,10 +744,10 @@ impl<'a> Parser<'a> {
         let end_span = body.span;
 
         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::While { condition, body: Box::new(body) }, span))
+        Some(Stmt::new(StmtKind::While { condition: self.session.ast_arena.alloc(condition), body: self.session.ast_arena.alloc(body) }, span))
     }
 
-    fn for_statement(&mut self) -> Option<Stmt> {
+    fn for_statement(&mut self) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let item_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
@@ -759,7 +759,7 @@ impl<'a> Parser<'a> {
         };
 
         let is_in = if let Some(Token { kind: TokenKind::Identifier(s), .. }) = self.peek() {
-            self.session.interner.lookup(s.clone()) == "in"
+            self.session.interner.borrow().lookup(s.clone()) == "in"
         } else {
             false
         };
@@ -782,10 +782,10 @@ impl<'a> Parser<'a> {
         let end_span = body.span;
 
         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::For { item_name, iterator, body: Box::new(body) }, span))
+        Some(Stmt::new(StmtKind::For { item_name, iterator: self.session.ast_arena.alloc(iterator), body: self.session.ast_arena.alloc(body) }, span))
     }
 
-    fn return_statement(&mut self) -> Option<Stmt> {
+    fn return_statement(&mut self) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let value = if !self.check(&TokenKind::Semicolon) {
@@ -801,10 +801,10 @@ impl<'a> Parser<'a> {
 
         let end_span = self.previous().span;
         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::Return { value }, span))
+        Some(Stmt::new(StmtKind::Return { value: value.map(|e| &*self.session.ast_arena.alloc(e)) }, span))
     }
 
-    fn block(&mut self) -> Option<Stmt> {
+    fn block(&mut self) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
         let mut statements = Vec::new();
 
@@ -824,20 +824,20 @@ impl<'a> Parser<'a> {
         Some(Stmt::new(StmtKind::Block(statements), span))
     }
 
-    fn expression_statement(&mut self) -> Option<Stmt> {
+    fn expression_statement(&mut self) -> Option<Stmt<'a>> {
         let expr = self.expression()?;
 
         self.match_token(&[TokenKind::Semicolon]);
 
         let span = expr.span;
-        Some(Stmt::new(StmtKind::Expression(expr), span))
+        Some(Stmt::new(StmtKind::Expression(self.session.ast_arena.alloc(expr)), span))
     }
 
-    fn expression(&mut self) -> Option<Expr> {
+    fn expression(&mut self) -> Option<Expr<'a>> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Option<Expr> {
+    fn assignment(&mut self) -> Option<Expr<'a>> {
         let expr = self.null_coalesce()?;
 
         if self.match_token(&[TokenKind::Equal, TokenKind::QuestionQuestionEqual]) {
@@ -848,7 +848,7 @@ impl<'a> Parser<'a> {
                 match expr.kind {
                     ExprKind::Variable(_) | ExprKind::Get { .. } | ExprKind::IndexGet { .. } => {
                         let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
-                        return Some(Expr::new(ExprKind::NullCoalesceAssign { left: Box::new(expr), right: Box::new(value) }, span));
+                        return Some(Expr::new(ExprKind::NullCoalesceAssign { left: self.session.ast_arena.alloc(expr), right: self.session.ast_arena.alloc(value) }, span));
                     }
                     _ => {
                         self.error_at_current("Invalid assignment target for ??=.");
@@ -858,15 +858,15 @@ impl<'a> Parser<'a> {
                 match expr.kind {
                     ExprKind::Variable(name) => {
                         let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
-                        return Some(Expr::new(ExprKind::Assign { name, value: Box::new(value) }, span));
+                        return Some(Expr::new(ExprKind::Assign { name, value: self.session.ast_arena.alloc(value) }, span));
                     }
                     ExprKind::Get { object, name } => {
                         let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
-                        return Some(Expr::new(ExprKind::Set { object, name, value: Box::new(value) }, span));
+                        return Some(Expr::new(ExprKind::Set { object, name, value: self.session.ast_arena.alloc(value) }, span));
                     }
                     ExprKind::IndexGet { object, index } => {
                         let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
-                        return Some(Expr::new(ExprKind::IndexSet { object, index, value: Box::new(value) }, span));
+                        return Some(Expr::new(ExprKind::IndexSet { object, index, value: self.session.ast_arena.alloc(value) }, span));
                     }
                     _ => {
                         self.error_at_current("Invalid assignment target.");
@@ -878,32 +878,32 @@ impl<'a> Parser<'a> {
         Some(expr)
     }
 
-    fn null_coalesce(&mut self) -> Option<Expr> {
+    fn null_coalesce(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.range()?;
 
         while self.match_token(&[TokenKind::QuestionQuestion]) {
             let right = self.range()?;
             let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::NullCoalesce { left: Box::new(expr), right: Box::new(right) }, span);
+            expr = Expr::new(ExprKind::NullCoalesce { left: self.session.ast_arena.alloc(expr), right: self.session.ast_arena.alloc(right) }, span);
         }
 
         Some(expr)
     }
 
-    fn range(&mut self) -> Option<Expr> {
+    fn range(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.equality()?;
 
         while self.match_token(&[TokenKind::DotDot]) {
             let right = self.equality()?;
             let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::Range { start: Box::new(expr), end: Box::new(right) }, span);
+            expr = Expr::new(ExprKind::Range { start: self.session.ast_arena.alloc(expr), end: self.session.ast_arena.alloc(right) }, span);
         }
 
         Some(expr)
     }
 
 
-    fn equality(&mut self) -> Option<Expr> {
+    fn equality(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.comparison()?;
 
         while self.match_token(&[TokenKind::EqualEqual, TokenKind::BangEqual]) {
@@ -914,13 +914,13 @@ impl<'a> Parser<'a> {
             };
             let right = self.comparison()?;
             let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::Binary(Box::new(expr), operator, Box::new(right)), span);
+            expr = Expr::new(ExprKind::Binary(self.session.ast_arena.alloc(expr), operator, self.session.ast_arena.alloc(right)), span);
         }
 
         Some(expr)
     }
 
-    fn comparison(&mut self) -> Option<Expr> {
+    fn comparison(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.term()?;
 
         while self.match_token(&[TokenKind::Greater, TokenKind::GreaterEqual, TokenKind::Less, TokenKind::LessEqual]) {
@@ -933,13 +933,13 @@ impl<'a> Parser<'a> {
             };
             let right = self.term()?;
             let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::Binary(Box::new(expr), operator, Box::new(right)), span);
+            expr = Expr::new(ExprKind::Binary(self.session.ast_arena.alloc(expr), operator, self.session.ast_arena.alloc(right)), span);
         }
 
         Some(expr)
     }
 
-    fn term(&mut self) -> Option<Expr> {
+    fn term(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.factor()?;
 
         while self.match_token(&[TokenKind::Plus, TokenKind::Minus]) {
@@ -950,13 +950,13 @@ impl<'a> Parser<'a> {
             };
             let right = self.factor()?;
             let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::Binary(Box::new(expr), operator, Box::new(right)), span);
+            expr = Expr::new(ExprKind::Binary(self.session.ast_arena.alloc(expr), operator, self.session.ast_arena.alloc(right)), span);
         }
 
         Some(expr)
     }
 
-    fn factor(&mut self) -> Option<Expr> {
+    fn factor(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.unary()?;
 
         while self.match_token(&[TokenKind::Star, TokenKind::Slash]) {
@@ -967,24 +967,24 @@ impl<'a> Parser<'a> {
             };
             let right = self.unary()?;
             let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::Binary(Box::new(expr), operator, Box::new(right)), span);
+            expr = Expr::new(ExprKind::Binary(self.session.ast_arena.alloc(expr), operator, self.session.ast_arena.alloc(right)), span);
         }
 
         Some(expr)
     }
 
-    fn unary(&mut self) -> Option<Expr> {
+    fn unary(&mut self) -> Option<Expr<'a>> {
         if self.match_token(&[TokenKind::Minus]) {
             let start_span = self.previous().span;
             let right = self.unary()?;
             let span = Span::new(start_span.file_id, start_span.start, right.span.end, start_span.start_loc, right.span.end_loc);
-            return Some(Expr::new(ExprKind::Unary(UnaryOp::Negate, Box::new(right)), span));
+            return Some(Expr::new(ExprKind::Unary(UnaryOp::Negate, self.session.ast_arena.alloc(right)), span));
         }
 
         self.call()
     }
 
-    fn call(&mut self) -> Option<Expr> {
+    fn call(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.primary()?;
 
         loop {
@@ -1023,7 +1023,7 @@ impl<'a> Parser<'a> {
                 };
 
                 let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
-                expr = Expr::new(ExprKind::Get { object: Box::new(expr), name }, span);
+                expr = Expr::new(ExprKind::Get { object: self.session.ast_arena.alloc(expr), name }, span);
             } else if self.match_token(&[TokenKind::QuestionDot]) {
                 let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
                     self.advance();
@@ -1034,10 +1034,10 @@ impl<'a> Parser<'a> {
                 };
 
                 let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
-                expr = Expr::new(ExprKind::OptionalGet { object: Box::new(expr), name }, span);
+                expr = Expr::new(ExprKind::OptionalGet { object: self.session.ast_arena.alloc(expr), name }, span);
             } else if self.match_token(&[TokenKind::Bang]) {
                 let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
-                expr = Expr::new(ExprKind::ForceUnwrap(Box::new(expr)), span);
+                expr = Expr::new(ExprKind::ForceUnwrap(self.session.ast_arena.alloc(expr)), span);
             } else if self.match_token(&[TokenKind::LeftBracket]) {
                 let index = self.expression()?;
                 if !self.match_token(&[TokenKind::RightBracket]) {
@@ -1045,7 +1045,7 @@ impl<'a> Parser<'a> {
                     return None;
                 }
                 let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
-                expr = Expr::new(ExprKind::IndexGet { object: Box::new(expr), index: Box::new(index) }, span);
+                expr = Expr::new(ExprKind::IndexGet { object: self.session.ast_arena.alloc(expr), index: self.session.ast_arena.alloc(index) }, span);
             } else {
                 break;
             }
@@ -1053,7 +1053,7 @@ impl<'a> Parser<'a> {
         Some(expr)
     }
 
-    fn finish_call(&mut self, callee: Expr, type_args: Vec<TypeExpr>) -> Option<Expr> {
+    fn finish_call(&mut self, callee: Expr<'a>, type_args: Vec<TypeExpr<'a>>) -> Option<Expr<'a>> {
         let mut arguments = Vec::new();
         if !self.check(&TokenKind::RightParen) {
             loop {
@@ -1068,7 +1068,7 @@ impl<'a> Parser<'a> {
             return None;
         }
         let span = Span::new(callee.span.file_id, callee.span.start, self.previous().span.end, callee.span.start_loc, self.previous().span.end_loc);
-        Some(Expr::new(ExprKind::Call { callee: Box::new(callee), type_args, arguments }, span))
+        Some(Expr::new(ExprKind::Call { callee: self.session.ast_arena.alloc(callee), type_args, arguments }, span))
     }
 
     fn check_generic_call(&self) -> bool {
@@ -1097,7 +1097,7 @@ impl<'a> Parser<'a> {
         false
     }
 
-    fn primary(&mut self) -> Option<Expr> {
+    fn primary(&mut self) -> Option<Expr<'a>> {
         if self.match_token(&[TokenKind::False]) {
             return Some(Expr::new(ExprKind::Boolean(false), self.previous().span));
         }
@@ -1172,7 +1172,7 @@ impl<'a> Parser<'a> {
                             return Some(Expr::new(ExprKind::String(s.clone()), span));
                         }
                     } else if pieces.is_empty() {
-                        return Some(Expr::new(ExprKind::String(self.session.interner.intern("")), span));
+                        return Some(Expr::new(ExprKind::String(self.session.interner.borrow_mut().intern("")), span));
                     }
                     
                     return Some(Expr::new(ExprKind::InterpolatedString(pieces), span));
@@ -1191,7 +1191,7 @@ impl<'a> Parser<'a> {
                     }
                     let end_span = self.previous().span;
                     let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-                    return Some(Expr::new(ExprKind::Grouping(Box::new(expr)), span));
+                    return Some(Expr::new(ExprKind::Grouping(self.session.ast_arena.alloc(expr)), span));
                 }
                 TokenKind::LeftBracket => {
                     self.advance();
@@ -1211,7 +1211,7 @@ impl<'a> Parser<'a> {
                         }
                         let end_span = self.previous().span;
                         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-                        return Some(Expr::new(ExprKind::ArrayRepeat { value: Box::new(first_expr), count: Box::new(count) }, span));
+                        return Some(Expr::new(ExprKind::ArrayRepeat { value: self.session.ast_arena.alloc(first_expr), count: self.session.ast_arena.alloc(count) }, span));
                     } else if self.match_token(&[TokenKind::For]) {
                         let item_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
                             self.advance();
@@ -1222,7 +1222,7 @@ impl<'a> Parser<'a> {
                         };
 
                         let is_in = if let Some(Token { kind: TokenKind::Identifier(s), .. }) = self.peek() {
-                            self.session.interner.lookup(s.clone()) == "in"
+                            self.session.interner.borrow().lookup(s.clone()) == "in"
                         } else {
                             false
                         };
@@ -1241,7 +1241,7 @@ impl<'a> Parser<'a> {
                         }
                         let end_span = self.previous().span;
                         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-                        return Some(Expr::new(ExprKind::ListComprehension { expr: Box::new(first_expr), item_name, iterator: Box::new(iterator) }, span));
+                        return Some(Expr::new(ExprKind::ListComprehension { expr: self.session.ast_arena.alloc(first_expr), item_name, iterator: self.session.ast_arena.alloc(iterator) }, span));
                     } else {
                         let mut elements = vec![first_expr];
                         while self.match_token(&[TokenKind::Comma]) {
@@ -1267,7 +1267,7 @@ impl<'a> Parser<'a> {
         None
     }
 
-    fn match_expression(&mut self, start_span: Span) -> Option<Expr> {
+    fn match_expression(&mut self, start_span: Span) -> Option<Expr<'a>> {
         let value = self.expression()?;
         
         if !self.match_token(&[TokenKind::LeftBrace]) {
@@ -1304,7 +1304,7 @@ impl<'a> Parser<'a> {
                     if !self.check(&TokenKind::RightParen) {
                         loop {
                             if self.match_token(&[TokenKind::Underscore]) {
-                                let b_symbol = self.session.interner.intern("_");
+                                let b_symbol = self.session.interner.borrow_mut().intern("_");
                     b.push(b_symbol);
                             } else if let Some(Token { kind: TokenKind::Identifier(id), .. }) = self.peek().cloned() {
                                 self.advance();
@@ -1340,7 +1340,7 @@ impl<'a> Parser<'a> {
             // Optional comma after arm
             self.match_token(&[TokenKind::Comma]);
 
-            arms.push(ast::MatchArm { pattern, body: Box::new(body) });
+            arms.push(ast::MatchArm { pattern, body: self.session.ast_arena.alloc(body) });
         }
 
         if !self.match_token(&[TokenKind::RightBrace]) {
@@ -1351,7 +1351,7 @@ impl<'a> Parser<'a> {
         let end_span = self.previous().span;
         let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
         
-        Some(Expr::new(ExprKind::Match { value: Box::new(value), arms }, span))
+        Some(Expr::new(ExprKind::Match { value: self.session.ast_arena.alloc(value), arms }, span))
     }
 
     fn match_token(&mut self, types: &[TokenKind]) -> bool {
@@ -1419,7 +1419,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn import_declaration(&mut self) -> Option<Stmt> {
+    fn import_declaration(&mut self) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
         
         let mut path = session::Symbol(0);
@@ -1490,7 +1490,7 @@ impl<'a> Parser<'a> {
         Some(Stmt::new(StmtKind::Import { path, alias, show, hide }, span))
     }
 
-    fn export_declaration(&mut self) -> Option<Stmt> {
+    fn export_declaration(&mut self) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
         
         let mut path = session::Symbol(0);

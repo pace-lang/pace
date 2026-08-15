@@ -8,7 +8,7 @@ use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
 use crate::scope::ScopeStack;
 
 pub struct Resolver<'a> {
-    pub session: &'a mut session::CompilerSession,
+    pub session: &'a session::CompilerSession,
     scopes: ScopeStack,
     pub errors: Vec<Diagnostic>,
     module_exports: HashMap<ModuleId, HashMap<session::Symbol, Vec<session::Symbol>>>,
@@ -17,15 +17,15 @@ pub struct Resolver<'a> {
 
 
 impl<'a> Resolver<'a> {
-    pub fn new(session: &'a mut session::CompilerSession) -> Self {
+    pub fn new(session: &'a session::CompilerSession) -> Self {
         let mut scopes = ScopeStack::new();
-        scopes.declare(session.interner.intern("print"));
-        scopes.declare(session.interner.intern("Result"));
-        scopes.declare(session.interner.intern("Ok"));
-        scopes.declare(session.interner.intern("Err"));
-        scopes.declare(session.interner.intern("Option"));
-        scopes.declare(session.interner.intern("Some"));
-        scopes.declare(session.interner.intern("None"));
+        scopes.declare(session.interner.borrow_mut().intern("print"));
+        scopes.declare(session.interner.borrow_mut().intern("Result"));
+        scopes.declare(session.interner.borrow_mut().intern("Ok"));
+        scopes.declare(session.interner.borrow_mut().intern("Err"));
+        scopes.declare(session.interner.borrow_mut().intern("Option"));
+        scopes.declare(session.interner.borrow_mut().intern("Some"));
+        scopes.declare(session.interner.borrow_mut().intern("None"));
         Self {
             session,
             scopes,
@@ -76,8 +76,8 @@ impl<'a> Resolver<'a> {
         for stmt in &module.ast {
             if let StmtKind::Import { path, alias, show, hide } = &stmt.kind {
                 // Find the imported module
-                let clean_path = self.session.interner.lookup(*path).trim_matches('"').trim_matches('\'');
-                let imported_id = graph.resolve_import(module.id, clean_path);
+                let clean_path = self.session.interner.borrow().lookup(*path).trim_matches('"').trim_matches('\'').to_string();
+                let imported_id = graph.resolve_import(module.id, &clean_path);
 
                 if let Some(id) = imported_id {
                     if let Some(exports) = self.module_exports.get(&id) {
@@ -98,7 +98,7 @@ impl<'a> Resolver<'a> {
                         }
                     }
                 } else {
-                    self.error(stmt.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot resolve import '{}'", self.session.interner.lookup(*path)));
+                    self.error(stmt.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot resolve import '{}'", self.session.interner.borrow().lookup(*path)));
                 }
             }
         }
@@ -127,16 +127,16 @@ impl<'a> Resolver<'a> {
                 }
                 
                 if !self.scopes.declare(*name) {
-                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Variable '{}' is already declared in this scope.", self.session.interner.lookup(*name)));
+                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Variable '{}' is already declared in this scope.", self.session.interner.borrow().lookup(*name)));
                 }
             }
             StmtKind::Class { name, type_params: _, implements: _, methods, fields, is_private: _ } => {
                 if !self.scopes.declare(*name) {
-                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Class '{}' is already declared in this scope.", self.session.interner.lookup(*name)));
+                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Class '{}' is already declared in this scope.", self.session.interner.borrow().lookup(*name)));
                 }
 
                 self.scopes.push_scope();
-                self.scopes.declare(self.session.interner.intern("self"));
+                self.scopes.declare(self.session.interner.borrow_mut().intern("self"));
                 
                 for field in fields {
                     self.resolve_stmt(field);
@@ -149,17 +149,17 @@ impl<'a> Resolver<'a> {
             }
             StmtKind::Interface { name, methods: _methods, is_private: _ } => {
                 if !self.scopes.declare(*name) {
-                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Interface '{}' is already declared in this scope.", self.session.interner.lookup(*name)));
+                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Interface '{}' is already declared in this scope.", self.session.interner.borrow().lookup(*name)));
                 }
             }
             StmtKind::Enum { name, type_params: _, variants: _, is_private: _ } => {
                 if !self.scopes.declare(*name) {
-                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Enum '{}' is already declared in this scope.", self.session.interner.lookup(*name)));
+                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Enum '{}' is already declared in this scope.", self.session.interner.borrow().lookup(*name)));
                 }
             }
             StmtKind::ForeignFunc { name, type_params: _, params: _, return_type: _, is_private: _ } => {
                 if !self.scopes.declare(*name) {
-                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Foreign function '{}' is already declared in this scope.", self.session.interner.lookup(*name)));
+                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Foreign function '{}' is already declared in this scope.", self.session.interner.borrow().lookup(*name)));
                 }
             }
             StmtKind::Func { name, type_params: _, params, return_type: _, body, is_private: _ } => {
@@ -168,7 +168,7 @@ impl<'a> Resolver<'a> {
                 self.scopes.push_scope();
                 for (param_name, _) in params {
                     if !self.scopes.declare(*param_name) {
-                        self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Parameter '{}' is declared multiple times.", self.session.interner.lookup(*param_name)));
+                        self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Parameter '{}' is declared multiple times.", self.session.interner.borrow().lookup(*param_name)));
                     }
                 }
                 
@@ -210,7 +210,7 @@ impl<'a> Resolver<'a> {
         match &expr.kind {
             ExprKind::Variable(name) => {
                 if !self.scopes.resolve(*name) {
-                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot find variable '{}' in this scope.", self.session.interner.lookup(*name)));
+                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot find variable '{}' in this scope.", self.session.interner.borrow().lookup(*name)));
                 }
             }
             ExprKind::Range { start, end } => {
@@ -242,7 +242,7 @@ impl<'a> Resolver<'a> {
             }
             ExprKind::Assign { name, value } => {
                 if !self.scopes.resolve(*name) {
-                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot assign to undefined variable '{}'.", self.session.interner.lookup(*name)));
+                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot assign to undefined variable '{}'.", self.session.interner.borrow().lookup(*name)));
                 }
                 self.resolve_expr(value);
             }
@@ -278,7 +278,7 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(value);
             }
             ExprKind::SelfRef => {
-                if !self.scopes.resolve(self.session.interner.intern("self")) {
+                if !self.scopes.resolve(self.session.interner.borrow_mut().intern("self")) {
                     self.error(expr.span, DiagnosticCode::UnknownIdentifier, "Cannot use 'self' outside of a class method.");
                 }
             }
@@ -308,11 +308,11 @@ impl<'a> Resolver<'a> {
                         ast::Pattern::Variant { path, bindings } => {
                             if !path.is_empty()
                                 && !self.scopes.resolve(path[0]) {
-                                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot find '{}' in this scope.", self.session.interner.lookup(path[0])));
+                                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot find '{}' in this scope.", self.session.interner.borrow().lookup(path[0])));
                                 }
                             if let Some(binds) = bindings {
                                 for bind in binds {
-                                    if *bind != self.session.interner.intern("_") {
+                                    if *bind != self.session.interner.borrow_mut().intern("_") {
                                         self.scopes.declare(*bind);
                                     }
                                 }
@@ -345,20 +345,20 @@ mod tests {
     fn test_valid_shadowing() {
         // let x = 1; { let x = 2; print(x); }
         let outer_let = Stmt::new(StmtKind::Let {
-            name: session.interner.intern("x"),
+            name: session.interner.borrow_mut().intern("x"),
             is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
         }, make_span());
 
         let inner_let = Stmt::new(StmtKind::Let {
-            name: session.interner.intern("x"),
+            name: session.interner.borrow_mut().intern("x"),
             is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Integer(2), make_span())),
         }, make_span());
 
-        let inner_usage = Stmt::new(StmtKind::Expression(Expr::new(ExprKind::Variable(session.interner.intern("x")), make_span())), make_span());
+        let inner_usage = Stmt::new(StmtKind::Expression(Expr::new(ExprKind::Variable(session.interner.borrow_mut().intern("x")), make_span())), make_span());
 
         let block = Stmt::new(StmtKind::Block(vec![inner_let, inner_usage]), make_span());
 
@@ -373,14 +373,14 @@ mod tests {
     fn test_invalid_redeclaration() {
         // let x = 1; let x = 2;
         let let1 = Stmt::new(StmtKind::Let {
-            name: session.interner.intern("x"),
+            name: session.interner.borrow_mut().intern("x"),
             is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
         }, make_span());
 
         let let2 = Stmt::new(StmtKind::Let {
-            name: session.interner.intern("x"),
+            name: session.interner.borrow_mut().intern("x"),
             is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Integer(2), make_span())),
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn test_undefined_variable() {
         // print(y);
-        let usage = Stmt::new(StmtKind::Expression(Expr::new(ExprKind::Variable(session.interner.intern("y")), make_span())), make_span());
+        let usage = Stmt::new(StmtKind::Expression(Expr::new(ExprKind::Variable(session.interner.borrow_mut().intern("y")), make_span())), make_span());
 
         let mut session = session::CompilerSession::new();
         let mut resolver = Resolver::new(&mut session);

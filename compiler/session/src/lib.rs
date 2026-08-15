@@ -4,16 +4,21 @@ pub mod types;
 pub use interner::{Interner, Symbol};
 pub use types::{TypeId, TypeArena};
 
+use std::cell::RefCell;
+
 pub struct CompilerSession {
-    pub interner: Interner,
-    pub types: TypeArena,
+    pub interner: RefCell<Interner>,
+    pub types: RefCell<TypeArena>,
+
+    pub ast_arena: bumpalo::Bump,
 }
 
 impl CompilerSession {
     pub fn new() -> Self {
         Self {
-            interner: Interner::new(),
-            types: TypeArena::new(),
+            interner: RefCell::new(Interner::new()),
+            types: RefCell::new(TypeArena::new()),
+            ast_arena: bumpalo::Bump::new(),
         }
     }
 
@@ -23,7 +28,7 @@ impl CompilerSession {
 
     fn format_type_internal(&self, id: TypeId) -> String {
         use types::Type;
-        match self.types.get(id) {
+        match self.types.borrow().get(id) {
             Type::Int => "Int".to_string(),
             Type::Float => "Float".to_string(),
             Type::String => "String".to_string(),
@@ -38,7 +43,7 @@ impl CompilerSession {
                 let mut s = "Func".to_string();
                 if !type_params.is_empty() {
                     s.push('<');
-                    s.push_str(&type_params.iter().map(|p| self.interner.lookup(*p)).collect::<Vec<_>>().join(", "));
+                    s.push_str(&type_params.iter().map(|p| self.interner.borrow().lookup(*p).to_string()).collect::<Vec<String>>().join(", "));
                     s.push('>');
                 }
                 s.push('(');
@@ -48,10 +53,10 @@ impl CompilerSession {
                 s
             }
             Type::EnumVariantConstructor(enum_name, variant_name, type_params, params, ret) => {
-                let mut s = format!("VariantConstructor({}::{})", self.interner.lookup(*enum_name), self.interner.lookup(*variant_name));
+                let mut s = format!("VariantConstructor({}::{})", self.interner.borrow().lookup(*enum_name), self.interner.borrow().lookup(*variant_name));
                 if !type_params.is_empty() {
                     s.push('<');
-                    s.push_str(&type_params.iter().map(|p| self.interner.lookup(*p)).collect::<Vec<_>>().join(", "));
+                    s.push_str(&type_params.iter().map(|p| self.interner.borrow().lookup(*p).to_string()).collect::<Vec<String>>().join(", "));
                     s.push('>');
                 }
                 s.push('(');
@@ -61,32 +66,32 @@ impl CompilerSession {
                 s
             }
             Type::Class(name, type_params) => {
-                let mut s = format!("Class({})", self.interner.lookup(*name));
+                let mut s = format!("Class({})", self.interner.borrow().lookup(*name));
                 if !type_params.is_empty() {
                     s.push('<');
-                    s.push_str(&type_params.iter().map(|p| self.interner.lookup(*p)).collect::<Vec<_>>().join(", "));
+                    s.push_str(&type_params.iter().map(|p| self.interner.borrow().lookup(*p).to_string()).collect::<Vec<String>>().join(", "));
                     s.push('>');
                 }
                 s
             }
             Type::Enum(name, type_params) => {
-                let mut s = format!("Enum({})", self.interner.lookup(*name));
+                let mut s = format!("Enum({})", self.interner.borrow().lookup(*name));
                 if !type_params.is_empty() {
                     s.push('<');
-                    s.push_str(&type_params.iter().map(|p| self.interner.lookup(*p)).collect::<Vec<_>>().join(", "));
+                    s.push_str(&type_params.iter().map(|p| self.interner.borrow().lookup(*p).to_string()).collect::<Vec<String>>().join(", "));
                     s.push('>');
                 }
                 s
             }
-            Type::Instance(name) => self.interner.lookup(*name).to_string(),
-            Type::Generic(name) => self.interner.lookup(*name).to_string(),
+            Type::Instance(name) => self.interner.borrow().lookup(*name).to_string(),
+            Type::Generic(name) => self.interner.borrow().lookup(*name).to_string(),
             Type::GenericInstance(name, args) => {
-                let mut s = format!("{}<", self.interner.lookup(*name));
+                let mut s = format!("{}<", self.interner.borrow().lookup(*name));
                 s.push_str(&args.iter().map(|a| self.format_type_internal(*a)).collect::<Vec<_>>().join(", "));
                 s.push('>');
                 s
             }
-            Type::Interface(name) => format!("Interface({})", self.interner.lookup(*name)),
+            Type::Interface(name) => format!("Interface({})", self.interner.borrow().lookup(*name)),
             Type::Optional(inner) => format!("{}?", self.format_type_internal(*inner)),
             Type::Array(inner) => format!("[{}]", self.format_type_internal(*inner)),
             Type::Null => "Null".to_string(),

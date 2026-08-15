@@ -2,16 +2,19 @@ use ast::{Stmt, StmtKind, Expr, ExprKind};
 use crate::substitution::TypeSubstitution;
 
 pub struct Monomorphizer<'a> {
-    subst: &'a TypeSubstitution,
+    pub arena: &'a bumpalo::Bump,
+    pub subst: &'a TypeSubstitution<'a>,
     mangled_name: session::Symbol,
 }
 
 impl<'a> Monomorphizer<'a> {
-    pub fn new(subst: &'a TypeSubstitution, mangled_name: session::Symbol) -> Self {
-        Self { subst, mangled_name }
+    pub fn new(arena: &'a bumpalo::Bump, subst: &'a TypeSubstitution<'a>, mangled_name: session::Symbol) -> Self {
+        Self {
+            arena, subst, mangled_name
+        }
     }
 
-    pub fn monomorphize_stmt(&self, stmt: &Stmt) -> Stmt {
+    pub fn monomorphize_stmt(&self, stmt: &Stmt<'a>) -> Stmt<'a> {
         let kind = match &stmt.kind {
             StmtKind::Class { name: _, type_params: _, implements, methods, fields, is_private } => {
                 let new_methods = methods.iter().map(|m| self.monomorphize_stmt(m)).collect();
@@ -34,7 +37,7 @@ impl<'a> Monomorphizer<'a> {
                 
                 let new_params = params.iter().map(|(n, t)| (n.clone(), self.subst.substitute(t))).collect();
                 let new_return = return_type.as_ref().map(|t| self.subst.substitute(t));
-                let new_body = Box::new(self.monomorphize_stmt(body));
+                let new_body = self.subst.arena.alloc(self.monomorphize_stmt(body));
                 
                 StmtKind::Func {
                     name: name.clone(), // We might need to override the name outside
@@ -60,7 +63,7 @@ impl<'a> Monomorphizer<'a> {
                 StmtKind::Let {
                     name: name.clone(),
                     type_annotation: type_annotation.as_ref().map(|t| self.subst.substitute(t)),
-                    initializer: initializer.as_ref().map(|e| self.monomorphize_expr(e)),
+                    initializer: initializer.as_ref().map(|e| &*self.subst.arena.alloc(self.monomorphize_expr(e))),
                  is_private: *is_private,
                 }
             }
@@ -68,29 +71,29 @@ impl<'a> Monomorphizer<'a> {
                 StmtKind::Var {
                     name: name.clone(),
                     type_annotation: type_annotation.as_ref().map(|t| self.subst.substitute(t)),
-                    initializer: initializer.as_ref().map(|e| self.monomorphize_expr(e)),
+                    initializer: initializer.as_ref().map(|e| &*self.subst.arena.alloc(self.monomorphize_expr(e))),
                     is_weak: *is_weak,
                  is_private: *is_private,
                 }
             }
-            StmtKind::Expression(expr) => StmtKind::Expression(self.monomorphize_expr(expr)),
+            StmtKind::Expression(expr) => StmtKind::Expression(self.subst.arena.alloc(self.monomorphize_expr(expr))),
             StmtKind::Block(stmts) => StmtKind::Block(stmts.iter().map(|s| self.monomorphize_stmt(s)).collect()),
             StmtKind::If { condition, then_branch, else_branch } => {
                 StmtKind::If {
-                    condition: self.monomorphize_expr(condition),
-                    then_branch: Box::new(self.monomorphize_stmt(then_branch)),
-                    else_branch: else_branch.as_ref().map(|s| Box::new(self.monomorphize_stmt(s))),
+                    condition: self.subst.arena.alloc(self.monomorphize_expr(condition)),
+                    then_branch: self.subst.arena.alloc(self.monomorphize_stmt(then_branch)),
+                    else_branch: else_branch.as_ref().map(|s| &*self.subst.arena.alloc(self.monomorphize_stmt(s))),
                 }
             }
             StmtKind::While { condition, body } => {
                 StmtKind::While {
-                    condition: self.monomorphize_expr(condition),
-                    body: Box::new(self.monomorphize_stmt(body)),
+                    condition: self.subst.arena.alloc(self.monomorphize_expr(condition)),
+                    body: self.subst.arena.alloc(self.monomorphize_stmt(body)),
                 }
             }
             StmtKind::Return { value } => {
                 StmtKind::Return {
-                    value: value.as_ref().map(|e| self.monomorphize_expr(e)),
+                    value: value.as_ref().map(|e| &*self.subst.arena.alloc(self.monomorphize_expr(e))),
                 }
             }
             _ => stmt.kind.clone(), // Fallback for Interface, ForeignFunc which shouldn't have generics inside
@@ -99,66 +102,66 @@ impl<'a> Monomorphizer<'a> {
         Stmt { kind, span: stmt.span }
     }
 
-    fn monomorphize_expr(&self, expr: &Expr) -> Expr {
+    fn monomorphize_expr(&self, expr: &Expr<'a>) -> Expr<'a> {
         let kind = match &expr.kind {
             ExprKind::Binary(left, op, right) => {
-                ExprKind::Binary(Box::new(self.monomorphize_expr(left)), op.clone(), Box::new(self.monomorphize_expr(right)))
+                ExprKind::Binary(self.subst.arena.alloc(self.monomorphize_expr(left)), op.clone(), self.subst.arena.alloc(self.monomorphize_expr(right)))
             }
             ExprKind::Unary(op, inner) => {
-                ExprKind::Unary(op.clone(), Box::new(self.monomorphize_expr(inner)))
+                ExprKind::Unary(op.clone(), self.subst.arena.alloc(self.monomorphize_expr(inner)))
             }
-            ExprKind::Grouping(inner) => ExprKind::Grouping(Box::new(self.monomorphize_expr(inner))),
+            ExprKind::Grouping(inner) => ExprKind::Grouping(self.subst.arena.alloc(self.monomorphize_expr(inner))),
             ExprKind::Call { callee, type_args, arguments } => {
                 ExprKind::Call {
-                    callee: Box::new(self.monomorphize_expr(callee)),
+                    callee: self.subst.arena.alloc(self.monomorphize_expr(callee)),
                     type_args: type_args.iter().map(|t| self.subst.substitute(t)).collect(),
                     arguments: arguments.iter().map(|e| self.monomorphize_expr(e)).collect(),
                 }
             }
             ExprKind::Get { object, name } => {
                 ExprKind::Get {
-                    object: Box::new(self.monomorphize_expr(object)),
+                    object: self.subst.arena.alloc(self.monomorphize_expr(object)),
                     name: name.clone(),
                 }
             }
             ExprKind::Set { object, name, value } => {
                 ExprKind::Set {
-                    object: Box::new(self.monomorphize_expr(object)),
+                    object: self.subst.arena.alloc(self.monomorphize_expr(object)),
                     name: name.clone(),
-                    value: Box::new(self.monomorphize_expr(value)),
+                    value: self.subst.arena.alloc(self.monomorphize_expr(value)),
                 }
             }
             ExprKind::Assign { name, value } => {
                 ExprKind::Assign {
                     name: name.clone(),
-                    value: Box::new(self.monomorphize_expr(value)),
+                    value: self.subst.arena.alloc(self.monomorphize_expr(value)),
                 }
             }
-            ExprKind::ForceUnwrap(inner) => ExprKind::ForceUnwrap(Box::new(self.monomorphize_expr(inner))),
+            ExprKind::ForceUnwrap(inner) => ExprKind::ForceUnwrap(self.subst.arena.alloc(self.monomorphize_expr(inner))),
             ExprKind::OptionalGet { object, name } => {
                 ExprKind::OptionalGet {
-                    object: Box::new(self.monomorphize_expr(object)),
+                    object: self.subst.arena.alloc(self.monomorphize_expr(object)),
                     name: name.clone(),
                 }
             }
             ExprKind::Array(elements) => ExprKind::Array(elements.iter().map(|e| self.monomorphize_expr(e)).collect()),
             ExprKind::ArrayRepeat { value, count } => {
                 ExprKind::ArrayRepeat {
-                    value: Box::new(self.monomorphize_expr(value)),
-                    count: Box::new(self.monomorphize_expr(count)),
+                    value: self.subst.arena.alloc(self.monomorphize_expr(value)),
+                    count: self.subst.arena.alloc(self.monomorphize_expr(count)),
                 }
             }
             ExprKind::IndexGet { object, index } => {
                 ExprKind::IndexGet {
-                    object: Box::new(self.monomorphize_expr(object)),
-                    index: Box::new(self.monomorphize_expr(index)),
+                    object: self.subst.arena.alloc(self.monomorphize_expr(object)),
+                    index: self.subst.arena.alloc(self.monomorphize_expr(index)),
                 }
             }
             ExprKind::IndexSet { object, index, value } => {
                 ExprKind::IndexSet {
-                    object: Box::new(self.monomorphize_expr(object)),
-                    index: Box::new(self.monomorphize_expr(index)),
-                    value: Box::new(self.monomorphize_expr(value)),
+                    object: self.subst.arena.alloc(self.monomorphize_expr(object)),
+                    index: self.subst.arena.alloc(self.monomorphize_expr(index)),
+                    value: self.subst.arena.alloc(self.monomorphize_expr(value)),
                 }
             }
             _ => expr.kind.clone(), // Variables, Literals, SelfRef

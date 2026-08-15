@@ -10,16 +10,16 @@ use package::graph::PackageGraph;
 use package::package_id::PackageId;
 
 pub struct ModuleLoader<'a> {
-    graph: ModuleGraph,
+    graph: ModuleGraph<'a>,
     loaded_paths: std::collections::HashMap<PathBuf, ModuleId>,
     pub errors: Vec<Diagnostic>,
     package_graph: Option<&'a PackageGraph>,
     pub source_map: diagnostics::SourceMap,
-    pub session: &'a mut session::CompilerSession,
+    pub session: &'a session::CompilerSession,
 }
 
 impl<'a> ModuleLoader<'a> {
-    pub fn new(package_graph: Option<&'a PackageGraph>, session: &'a mut session::CompilerSession) -> Self {
+    pub fn new(package_graph: Option<&'a PackageGraph>, session: &'a session::CompilerSession) -> Self {
         Self {
             graph: ModuleGraph::new(),
             loaded_paths: std::collections::HashMap::new(),
@@ -116,7 +116,7 @@ impl<'a> ModuleLoader<'a> {
                                         }
                                     }
                                     prelude_imports.push(ast::Stmt::new(ast::StmtKind::Import {
-                                        path: self.session.interner.intern(&format!("\"{}\"", import_path)),
+                                        path: self.session.interner.borrow_mut().intern(&format!("\"{}\"", import_path)),
                                         alias: None,
                                         show: vec![],
                                         hide: vec![],
@@ -139,7 +139,7 @@ impl<'a> ModuleLoader<'a> {
         let mut dependencies = Vec::new();
         for stmt in &final_ast {
             if let StmtKind::Import { path: import_path_sym, .. } = &stmt.kind {
-                let import_path_str = self.session.interner.lookup(*import_path_sym).to_string();
+                let import_path_str = self.session.interner.borrow().lookup(*import_path_sym).to_string();
                 let clean_path = import_path_str.trim_matches('"').trim_matches('\'').to_string();
 
                 let resolved_import_path;
@@ -222,7 +222,7 @@ impl<'a> ModuleLoader<'a> {
         Some(module_id)
     }
 
-    pub fn into_graph(self) -> (ModuleGraph, diagnostics::SourceMap) {
+    pub fn into_graph(self) -> (ModuleGraph<'a>, diagnostics::SourceMap) {
         (self.graph, self.source_map)
     }
 }

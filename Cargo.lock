@@ -92,6 +92,7 @@ dependencies = [
 name = "ast"
 version = "0.2.0"
 dependencies = [
+ "bumpalo",
  "diagnostics",
  "session",
 ]
@@ -440,6 +441,8 @@ name = "generics"
 version = "0.2.0"
 dependencies = [
  "ast",
+ "bumpalo",
+ "diagnostics",
  "session",
 ]
 
@@ -641,6 +644,7 @@ name = "parser"
 version = "0.2.0"
 dependencies = [
  "ast",
+ "bumpalo",
  "diagnostics",
  "lexer",
  "session",
@@ -805,6 +809,9 @@ dependencies = [
 [[package]]
 name = "session"
 version = "0.2.0"
+dependencies = [
+ "bumpalo",
+]
 
 [[package]]
 name = "similar"
@@ -915,6 +922,7 @@ name = "typechecker"
 version = "0.2.0"
 dependencies = [
  "ast",
+ "bumpalo",
  "diagnostics",
  "generics",
  "module",

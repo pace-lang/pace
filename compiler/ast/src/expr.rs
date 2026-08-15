@@ -33,17 +33,17 @@ pub enum Pattern {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct MatchArm {
+pub struct MatchArm<'a> {
     pub pattern: Pattern,
-    pub body: Box<Expr>, // Using Expr for fat arrow block or single expr
+    pub body: &'a Expr<'a>, // Using Expr for fat arrow block or single expr
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ExprKind {
+pub enum ExprKind<'a> {
     /// A match expression: `match expr { ... }`
     Match {
-        value: Box<Expr>,
-        arms: Vec<MatchArm>,
+        value: &'a Expr<'a>,
+        arms: Vec<MatchArm<'a>>,
     },
     /// A literal integer like `10`
     Integer(i64),
@@ -51,7 +51,7 @@ pub enum ExprKind {
     Float(f64),
     /// A literal string like `"hello"`
     String(session::Symbol),
-    InterpolatedString(Vec<Expr>),
+    InterpolatedString(Vec<Expr<'a>>),
     /// A boolean literal like `true` or `false`
     Boolean(bool),
     /// A null literal `null`
@@ -59,90 +59,90 @@ pub enum ExprKind {
     /// A variable reference like `count`
     Variable(session::Symbol),
     Range {
-        start: Box<Expr>,
-        end: Box<Expr>,
+        start: &'a Expr<'a>,
+        end: &'a Expr<'a>,
     },
     /// A binary operation like `a + b`
-    Binary(Box<Expr>, BinaryOp, Box<Expr>),
+    Binary(&'a Expr<'a>, BinaryOp, &'a Expr<'a>),
     /// A unary operation like `-a`
-    Unary(UnaryOp, Box<Expr>),
+    Unary(UnaryOp, &'a Expr<'a>),
     /// A grouped expression like `(a + b)`
-    Grouping(Box<Expr>),
+    Grouping(&'a Expr<'a>),
     /// A function call like `f<T>(a, b)`
     Call {
-        callee: Box<Expr>,
-        type_args: Vec<TypeExpr>,
-        arguments: Vec<Expr>,
+        callee: &'a Expr<'a>,
+        type_args: Vec<TypeExpr<'a>>,
+        arguments: Vec<Expr<'a>>,
     },
     /// Property access: `object.name`
     Get {
-        object: Box<Expr>,
+        object: &'a Expr<'a>,
         name: session::Symbol,
     },
     /// Property assignment: `object.name = value`
     Set {
-        object: Box<Expr>,
+        object: &'a Expr<'a>,
         name: session::Symbol,
-        value: Box<Expr>,
+        value: &'a Expr<'a>,
     },
     /// Variable assignment: `name = value`
     Assign {
         name: session::Symbol,
-        value: Box<Expr>,
+        value: &'a Expr<'a>,
     },
     /// Self reference: `self`
     SelfRef,
     /// Force unwrap: `expr!`
-    ForceUnwrap(Box<Expr>),
+    ForceUnwrap(&'a Expr<'a>),
     /// Optional property access: `object?.name`
     OptionalGet {
-        object: Box<Expr>,
+        object: &'a Expr<'a>,
         name: session::Symbol,
     },
     /// Null Coalesce: `left ?? right`
     NullCoalesce {
-        left: Box<Expr>,
-        right: Box<Expr>,
+        left: &'a Expr<'a>,
+        right: &'a Expr<'a>,
     },
     /// Null Coalesce Assignment: `left ??= right`
     NullCoalesceAssign {
-        left: Box<Expr>,
-        right: Box<Expr>,
+        left: &'a Expr<'a>,
+        right: &'a Expr<'a>,
     },
     /// Array literal: `[1, 2, 3]`
-    Array(Vec<Expr>),
+    Array(Vec<Expr<'a>>),
     /// List comprehension: `[expr for item in iterator]`
     ListComprehension {
-        expr: Box<Expr>,
+        expr: &'a Expr<'a>,
         item_name: session::Symbol,
-        iterator: Box<Expr>,
+        iterator: &'a Expr<'a>,
     },
     /// Array repeat initialization: `[0; 10]`
     ArrayRepeat {
-        value: Box<Expr>,
-        count: Box<Expr>,
+        value: &'a Expr<'a>,
+        count: &'a Expr<'a>,
     },
     /// Index access: `arr[i]`
     IndexGet {
-        object: Box<Expr>,
-        index: Box<Expr>,
+        object: &'a Expr<'a>,
+        index: &'a Expr<'a>,
     },
     /// Index assignment: `arr[i] = value`
     IndexSet {
-        object: Box<Expr>,
-        index: Box<Expr>,
-        value: Box<Expr>,
+        object: &'a Expr<'a>,
+        index: &'a Expr<'a>,
+        value: &'a Expr<'a>,
     },
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Expr {
-    pub kind: ExprKind,
+pub struct Expr<'a> {
+    pub kind: ExprKind<'a>,
     pub span: Span,
 }
 
-impl Expr {
-    pub fn new(kind: ExprKind, span: Span) -> Self {
+impl<'a> Expr<'a> {
+    pub fn new(kind: ExprKind<'a>, span: Span) -> Self {
         Self { kind, span }
     }
 }
