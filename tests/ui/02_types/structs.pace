@@ -1,0 +1,17 @@
+struct Point {
+    var x: Int;
+    var y: Int;
+
+    func init(x: Int, y: Int) {
+        self.x = x;
+        self.y = y;
+    }
+
+    func printPoint() {
+        print(self.x);
+        print(self.y);
+    }
+}
+
+let p = Point(10, 20);
+p.printPoint();

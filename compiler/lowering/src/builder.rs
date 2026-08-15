@@ -95,15 +95,23 @@ impl<'a> ProgramBuilder<'a> {
         for stmt in statements {
             if let TypedStmtKind::Class {
                 name,
-                type_params: _,
-                implements: _,
                 methods,
                 fields,
+                ..
+            }
+            | TypedStmtKind::Struct {
+                name,
+                methods,
+                fields,
+                ..
             } = &stmt.kind
             {
                 let mut field_names = Vec::new();
                 let mut weak_fields = std::collections::HashSet::new();
                 let mut reference_fields = std::collections::HashSet::new();
+
+                let is_struct = matches!(stmt.kind, TypedStmtKind::Struct { .. });
+
 
                 for field in fields {
                     match &field.kind {
@@ -143,6 +151,7 @@ impl<'a> ProgramBuilder<'a> {
                 }
                 let class_def = mir::ClassDef {
                     name: self.session.interner.borrow().lookup(*name).to_string(),
+                    is_struct,
                     fields: field_names,
                     weak_fields,
                     reference_fields,
@@ -468,6 +477,7 @@ impl<'a> MirBuilder<'a> {
             }
             TypedStmtKind::Func { .. }
             | TypedStmtKind::Class { .. }
+            | TypedStmtKind::Struct { .. }
             | TypedStmtKind::Interface { .. }
             | TypedStmtKind::ForeignFunc { .. }
             | TypedStmtKind::Enum { .. } => {
@@ -1539,6 +1549,38 @@ impl<'a> MirBuilder<'a> {
                         self.current().instructions.push(__inst)
                     };
                     return Value::Place(temp);
+                }
+
+                if let Type::Struct(struct_name, _) =
+                    self.session.types.borrow().get(callee.ty).clone()
+                {
+                    let obj_temp = self.new_temp();
+                    {
+                        let __inst = Inst::Assign(
+                            obj_temp.clone(),
+                            RValue::AllocateStruct(
+                                self.session
+                                    .interner
+                                    .borrow()
+                                    .lookup(struct_name)
+                                    .to_string(),
+                            ),
+                        );
+                        self.current().instructions.push(__inst)
+                    };
+
+                    let actual_name = format!(
+                        "{}::init",
+                        self.session.interner.borrow().lookup(struct_name)
+                    );
+                    arg_values.insert(0, Value::Place(obj_temp.clone()));
+                    let init_temp = self.new_temp();
+                    {
+                        let __inst = Inst::Assign(init_temp, RValue::Call(actual_name, arg_values));
+                        self.current().instructions.push(__inst)
+                    };
+
+                    return Value::Place(obj_temp);
                 }
 
                 if let Type::Class(class_name, _) =

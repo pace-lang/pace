@@ -110,6 +110,21 @@ impl CompilerSession {
                 }
                 s
             }
+            Type::Struct(name, type_params) => {
+                let mut s = format!("Struct({})", self.interner.borrow().lookup(*name));
+                if !type_params.is_empty() {
+                    s.push('<');
+                    s.push_str(
+                        &type_params
+                            .iter()
+                            .map(|p| self.interner.borrow().lookup(*p).to_string())
+                            .collect::<Vec<String>>()
+                            .join(", "),
+                    );
+                    s.push('>');
+                }
+                s
+            }
             Type::Enum(name, type_params) => {
                 let mut s = format!("Enum({})", self.interner.borrow().lookup(*name));
                 if !type_params.is_empty() {

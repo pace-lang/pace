@@ -9,6 +9,7 @@ pub enum TokenKind {
     Init,
     SelfKeyword,
     Class,
+    Struct,
     Interface,
     Implements,
     Type,

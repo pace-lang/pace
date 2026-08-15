@@ -28,6 +28,7 @@ pub enum RValue {
     Call(String, Vec<Value>),
     MethodCall(Value, String, Vec<Value>),
     AllocateObject(String),
+    AllocateStruct(String),
     GetProperty(Value, String),
     WeakUpgrade(Value),
     ForceUnwrap(Value),

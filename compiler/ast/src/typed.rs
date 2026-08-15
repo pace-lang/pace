@@ -149,6 +149,12 @@ pub enum TypedStmtKind<'a> {
         methods: Vec<TypedStmt<'a>>,
         fields: Vec<TypedStmt<'a>>,
     },
+    Struct {
+        name: session::Symbol,
+        type_params: Vec<session::Symbol>,
+        methods: Vec<TypedStmt<'a>>,
+        fields: Vec<TypedStmt<'a>>,
+    },
     Interface {
         name: session::Symbol,
         methods: Vec<TypedStmt<'a>>,

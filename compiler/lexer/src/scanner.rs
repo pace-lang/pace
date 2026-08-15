@@ -426,6 +426,7 @@ impl<'a> Scanner<'a> {
             "init" => TokenKind::Init,
             "self" => TokenKind::SelfKeyword,
             "class" => TokenKind::Class,
+            "struct" => TokenKind::Struct,
             "enum" => TokenKind::Enum,
             "match" => TokenKind::Match,
             "interface" => TokenKind::Interface,

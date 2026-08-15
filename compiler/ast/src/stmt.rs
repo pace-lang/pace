@@ -103,6 +103,14 @@ pub enum StmtKind<'a> {
         fields: Vec<Stmt<'a>>,
         is_private: bool,
     },
+    /// A struct declaration: `struct name<T> { fields; methods; }`
+    Struct {
+        name: session::Symbol,
+        type_params: Vec<session::Symbol>,
+        methods: Vec<Stmt<'a>>,
+        fields: Vec<Stmt<'a>>,
+        is_private: bool,
+    },
     /// An interface declaration: `interface name { methods; }`
     Interface {
         name: session::Symbol,

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassDef {
     pub name: String,
+    pub is_struct: bool,
     pub fields: Vec<String>,
     pub weak_fields: std::collections::HashSet<String>,
     pub reference_fields: std::collections::HashSet<String>,

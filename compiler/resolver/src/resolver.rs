@@ -53,6 +53,11 @@ impl<'a> Resolver<'a> {
                         is_private: false,
                         ..
                     }
+                    | StmtKind::Struct {
+                        name,
+                        is_private: false,
+                        ..
+                    }
                     | StmtKind::Interface {
                         name,
                         is_private: false,
@@ -171,6 +176,10 @@ impl<'a> Resolver<'a> {
                     name,
                     ..
                 }
+                | StmtKind::Struct {
+                    name,
+                    ..
+                }
                 | StmtKind::Interface {
                     name,
                     ..
@@ -266,6 +275,12 @@ impl<'a> Resolver<'a> {
                 name: _,
                 type_params: _,
                 implements: _,
+                methods,
+                fields,
+                is_private: _,
+            } | StmtKind::Struct {
+                name: _,
+                type_params: _,
                 methods,
                 fields,
                 is_private: _,

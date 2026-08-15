@@ -18,6 +18,7 @@ pub enum Type {
     Function(Vec<Symbol>, Vec<TypeId>, TypeId),
     EnumVariantConstructor(Symbol, Symbol, Vec<Symbol>, Vec<TypeId>, TypeId),
     Class(Symbol, Vec<Symbol>),
+    Struct(Symbol, Vec<Symbol>),
     Enum(Symbol, Vec<Symbol>),
     Instance(Symbol),
     Generic(Symbol),

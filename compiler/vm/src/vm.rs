@@ -427,7 +427,7 @@ impl<'a> VirtualMachine<'a> {
                     RValue::Use(v) => self.resolve_value(v),
                     RValue::UnaryOp(op, right) => self.eval_unary(op.clone(), right),
                     RValue::BinaryOp(op, left, right) => self.eval_binary(op.clone(), left, right),
-                    RValue::AllocateObject(class_name) => {
+                    RValue::AllocateObject(class_name) | RValue::AllocateStruct(class_name) => {
                         let id = self.heap.len();
                         self.heap.push(Object {
                             class_name: class_name.clone(),

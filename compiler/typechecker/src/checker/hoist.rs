@@ -113,6 +113,107 @@ impl<'a> TypeChecker<'a> {
                     self.class_implements.insert(*name, implements.clone());
                     self.env.pop_scope();
                 }
+                StmtKind::Struct {
+                    name,
+                    type_params,
+                    methods,
+                    fields,
+                    is_private: _,
+                } => {
+                    if !type_params.is_empty() {
+                        self.generic_registry.register_class(*name, stmt.clone());
+                        continue;
+                    }
+
+                    self.env.declare(
+                        *name,
+                        self.session
+                            .types
+                            .borrow_mut()
+                            .intern(Type::Struct(*name, type_params.clone())),
+                    );
+                    self.classes.insert(*name, std::collections::HashMap::new());
+
+                    self.env.push_scope();
+                    for tp in type_params {
+                        self.env.declare(
+                            *tp,
+                            self.session.types.borrow_mut().intern(Type::Generic(*tp)),
+                        );
+                    }
+
+                    let mut struct_members = std::collections::HashMap::new();
+                    let mut uninit_props = Vec::new();
+                    let mut struct_mutables_map = std::collections::HashMap::new();
+
+                    for field in fields {
+                        let (f_name, type_annotation, initializer, is_mutable) = match &field.kind {
+                            StmtKind::Var {
+                                name,
+                                type_annotation,
+                                initializer,
+                                ..
+                            } => (name, type_annotation, initializer, true),
+                            StmtKind::Let {
+                                name,
+                                type_annotation,
+                                initializer,
+                                ..
+                            } => (name, type_annotation, initializer, false),
+                            _ => continue,
+                        };
+
+                        if initializer.is_none() {
+                            uninit_props.push(*f_name);
+                        }
+
+                        let ty = if let Some(ann) = type_annotation {
+                            self.parse_type(ann, field.span)
+                        } else if let Some(_init) = initializer {
+                            self.session.types.borrow_mut().intern(Type::Any)
+                        } else {
+                            self.session.types.borrow_mut().intern(Type::Any)
+                        };
+                        struct_members.insert(*f_name, ty);
+                        struct_mutables_map.insert(*f_name, is_mutable);
+                    }
+
+                    self.uninitialized_class_properties
+                        .insert(*name, uninit_props);
+
+                    for method in methods {
+                        if let StmtKind::Func {
+                            name: m_name,
+                            params,
+                            return_type,
+                            ..
+                        } = &method.kind
+                        {
+                            let ret_ty = if let Some(rt) = return_type {
+                                self.parse_type(rt, method.span)
+                            } else {
+                                self.session.types.borrow_mut().intern(Type::Void)
+                            };
+                            let mut param_types = Vec::new();
+                            for (_, pt) in params {
+                                param_types.push(self.parse_type(pt, method.span));
+                            }
+                            struct_members.insert(
+                                *m_name,
+                                self.session.types.borrow_mut().intern(Type::Function(
+                                    Vec::new(),
+                                    param_types,
+                                    ret_ty,
+                                )),
+                            );
+                        }
+                    }
+
+                    self.classes.insert(*name, struct_members);
+                    self.class_mutables.insert(*name, struct_mutables_map);
+                    self.class_implements.insert(*name, Vec::new());
+                    self.env.pop_scope();
+                }
                 StmtKind::Interface {
                     name,
                     methods,

@@ -374,6 +374,22 @@ impl<'a, 'b> Translator<'a, 'b> {
                             .call(local_alloc, &[size_val, metadata_ptr]);
                         self.builder.inst_results(call_inst)[0]
                     }
+                    RValue::AllocateStruct(struct_name) => {
+                        let struct_def = self
+                            .program
+                            .classes
+                            .get(struct_name)
+                            .unwrap_or_else(|| panic!("Struct {} not found", struct_name));
+                        
+                        let total_size = struct_def.fields.len() as u32 * 8; 
+
+                        let ss = self.builder.create_sized_stack_slot(ir::StackSlotData::new(
+                            ir::StackSlotKind::ExplicitSlot,
+                            total_size,
+                            3 // 8-byte alignment
+                        ));
+                        self.builder.ins().stack_addr(types::I64, ss, 0)
+                    }
                     RValue::GetProperty(obj_val, prop_name) => {
                         let cl_obj = self.translate_value(obj_val)?;
 

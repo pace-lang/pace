@@ -114,6 +114,72 @@ impl<'a> TypeChecker<'a> {
                     fields: typed_fields,
                 }
             }
+            StmtKind::Struct {
+                name,
+                type_params,
+                methods,
+                fields,
+                is_private: _,
+            } => {
+                if !type_params.is_empty() {
+                    return TypedStmt {
+                        kind: TypedStmtKind::Block(Vec::new()),
+                        span: stmt.span,
+                    };
+                }
+
+                self.env.push_scope();
+                for tp in type_params {
+                    self.env.declare(
+                        *tp,
+                        self.session.types.borrow_mut().intern(Type::Generic(*tp)),
+                    );
+                }
+
+                // Enforce that struct fields are only primitives or other structs
+                if let Some(struct_members) = self.classes.get(name).cloned() {
+                    for (field_name, field_ty_id) in struct_members {
+                        // methods are functions, those are fine
+                        if matches!(self.get_type(field_ty_id), Type::Function(..)) {
+                            continue;
+                        }
+                        
+                        let is_valid = match self.get_type(field_ty_id) {
+                            Type::Int | Type::Float | Type::Boolean | Type::Struct(_, _) | Type::Error | Type::Any => true,
+                            _ => false,
+                        };
+                        
+                        if !is_valid {
+                            self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Struct '{}' cannot contain field '{}' of type '{}'. Structs can only contain primitives (Int, Float, Boolean) or other structs.", self.session.interner.borrow().lookup(*name), self.session.interner.borrow().lookup(field_name), self.session.format_type(field_ty_id)));
+                        }
+                    }
+                }
+
+                let prev_class = self.current_class;
+                self.current_class = Some(*name); // Reuse current_class for struct context
+
+                let mut typed_methods = Vec::new();
+                for method in methods {
+                    let prev = self.is_checking_method;
+                    self.is_checking_method = true;
+                    typed_methods.push(self.check_stmt(method));
+                    self.is_checking_method = prev;
+                }
+
+                let mut typed_fields = Vec::new();
+                for field in fields {
+                    typed_fields.push(self.check_stmt(field));
+                }
+
+                self.env.pop_scope();
+                self.current_class = prev_class;
+                TypedStmtKind::Struct {
+                    name: *name,
+                    type_params: type_params.clone(),
+                    methods: typed_methods,
+                    fields: typed_fields,
+                }
+            }
             StmtKind::Interface {
                 name,
                 methods: _,

@@ -647,7 +647,7 @@ impl<'a> TypeChecker<'a> {
                 let ty = if let Some(class_props) = self.classes.get(&class_name) {
                     if let Some(prop_ty) = class_props.get(name) {
                         let mut resolved_ty = *prop_ty;
-                        if let Some(Type::Class(_, params)) =
+                        if let Some(Type::Class(_, params)) | Some(Type::Struct(_, params)) =
                             self.env.resolve(class_name).map(|id| self.get_type(id))
                         {
                             let mut inferred_map = std::collections::HashMap::new();
@@ -787,7 +787,7 @@ impl<'a> TypeChecker<'a> {
                 if let Some(class_props) = self.classes.get(&class_name) {
                     if let Some(prop_ty) = class_props.get(name) {
                         let mut resolved_ty = *prop_ty;
-                        if let Some(Type::Class(_, params)) =
+                        if let Some(Type::Class(_, params)) | Some(Type::Struct(_, params)) =
                             self.env.resolve(class_name).map(|id| self.get_type(id))
                         {
                             let mut inferred_map = std::collections::HashMap::new();
@@ -978,7 +978,7 @@ impl<'a> TypeChecker<'a> {
                     Type::EnumVariantConstructor(_, _, _, param_types, _) => {
                         expected_param_types = Some(param_types.clone());
                     }
-                    Type::Class(class_name, _) => {
+                    Type::Class(class_name, _) | Type::Struct(class_name, _) => {
                         if let Some(props) = self.classes.get(class_name)
                             && let Some(Type::Function(_, param_types, _)) = props
                                 .get(&self.session.interner.borrow_mut().intern("init"))
@@ -1038,7 +1038,7 @@ impl<'a> TypeChecker<'a> {
                             self.session.types.borrow_mut().intern(Type::Error)
                         }
                     }
-                    Type::Class(class_name, class_type_params) => {
+                    Type::Class(class_name, class_type_params) | Type::Struct(class_name, class_type_params) => {
                         let mut constructor_ty = self.classes.get(&class_name).and_then(|props| {
                             props
                                 .get(&self.session.interner.borrow_mut().intern("init"))
@@ -1049,6 +1049,10 @@ impl<'a> TypeChecker<'a> {
                             && let Some(generic_stmt) =
                                 self.generic_registry.get_class(class_name).cloned()
                             && let ast::StmtKind::Class {
+                                type_params,
+                                methods,
+                                ..
+                            } | ast::StmtKind::Struct {
                                 type_params,
                                 methods,
                                 ..
