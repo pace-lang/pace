@@ -13,6 +13,7 @@ pub struct TypeChecker {
     pub errors: Vec<Diagnostic>,
     current_return_type: Option<Type>,
     pub classes: HashMap<String, HashMap<String, Type>>,
+    pub class_mutables: HashMap<String, HashMap<String, bool>>,
     pub interfaces: HashMap<String, HashMap<String, Type>>,
     pub enums: HashMap<String, HashMap<String, Type>>,
     pub class_implements: HashMap<String, Vec<String>>,
@@ -37,6 +38,7 @@ impl TypeChecker {
             errors: Vec::new(),
             current_return_type: None,
             classes: HashMap::new(),
+            class_mutables: HashMap::new(),
             interfaces: HashMap::new(),
             enums: HashMap::new(),
             class_implements: HashMap::new(),
@@ -97,8 +99,8 @@ impl TypeChecker {
                 self.env.pop_scope();
                 TypedStmtKind::Block(typed_stmts)
             }
-            StmtKind::Let { name, type_annotation, initializer, is_private: _ } => self.check_var_decl(name, type_annotation, initializer, false, stmt.span).kind,
-            StmtKind::Var { name, type_annotation, initializer, is_weak, is_private: _ } => self.check_var_decl(name, type_annotation, initializer, *is_weak, stmt.span).kind,
+            StmtKind::Let { name, type_annotation, initializer, is_private: _ } => self.check_var_decl(name, type_annotation, initializer, false, false, stmt.span).kind,
+            StmtKind::Var { name, type_annotation, initializer, is_weak, is_private: _ } => self.check_var_decl(name, type_annotation, initializer, *is_weak, true, stmt.span).kind,
             StmtKind::Class { name, type_params, implements, methods, fields, is_private: _ } => {
                 if !type_params.is_empty() {
                     self.generic_registry.register_class(name.clone(), stmt.clone());
@@ -115,11 +117,12 @@ impl TypeChecker {
 
                 let mut class_members = HashMap::new();
                 let mut uninit_props = Vec::new();
+                let mut class_mutables_map = std::collections::HashMap::new();
                 
                 for field in fields {
-                    let (f_name, type_annotation, initializer, is_weak) = match &field.kind {
-                        StmtKind::Var { name, type_annotation, initializer, is_weak, is_private: _ } => (name, type_annotation, initializer, *is_weak),
-                        StmtKind::Let { name, type_annotation, initializer, is_private: _ } => (name, type_annotation, initializer, false),
+                    let (f_name, type_annotation, initializer, is_weak, is_mutable) = match &field.kind {
+                        StmtKind::Var { name, type_annotation, initializer, is_weak, is_private: _ } => (name, type_annotation, initializer, *is_weak, true),
+                        StmtKind::Let { name, type_annotation, initializer, is_private: _ } => (name, type_annotation, initializer, false, false),
                         _ => continue,
                     };
                     
@@ -148,6 +151,7 @@ impl TypeChecker {
                         Type::Any
                     };
                     class_members.insert(f_name.clone(), ty);
+                    class_mutables_map.insert(f_name.clone(), is_mutable);
                 }
 
                 self.uninitialized_class_properties.insert(name.clone(), uninit_props);
@@ -168,6 +172,7 @@ impl TypeChecker {
                 }
                 
                 self.classes.insert(name.clone(), class_members.clone());
+                self.class_mutables.insert(name.clone(), class_mutables_map);
                 self.class_implements.insert(name.clone(), implements.clone());
                 
                 // Validate implements
@@ -373,11 +378,11 @@ impl TypeChecker {
 
                 
                 if let Some(ref class_name) = self.current_class {
-                    self.env.declare("self".to_string(), Type::Instance(class_name.clone()));
+                    self.env.declare_var("self".to_string(), Type::Instance(class_name.clone()), false);
                 }
 
                 for ((param_name, _), param_ty) in params.iter().zip(param_types) {
-                    self.env.declare(param_name.clone(), param_ty);
+                    self.env.declare_var(param_name.clone(), param_ty, false);
                 }
 
                 let previous_return = self.current_return_type.take();
@@ -447,7 +452,7 @@ impl TypeChecker {
                 };
 
                 self.env.push_scope();
-                self.env.declare(item_name.clone(), item_type);
+                self.env.declare_var(item_name.clone(), item_type, false);
                 let typed_body = self.check_stmt(body);
                 self.env.pop_scope();
                 TypedStmtKind::For {
@@ -486,7 +491,7 @@ impl TypeChecker {
         TypedStmt::new(kind, stmt.span)
     }
 
-    fn check_var_decl(&mut self, name: &str, type_annotation: &Option<TypeExpr>, initializer: &Option<Expr>, is_weak: bool, span: Span) -> TypedStmt {
+    fn check_var_decl(&mut self, name: &str, type_annotation: &Option<TypeExpr>, initializer: &Option<Expr>, is_weak: bool, is_mutable: bool, span: Span) -> TypedStmt {
         let expected_ty = type_annotation.as_ref().map(|ann| self.parse_type(ann, span));
         
         let typed_init = initializer.as_ref().map(|init| self.check_expr_with_expected(init, expected_ty.as_ref()));
@@ -511,7 +516,7 @@ impl TypeChecker {
             init_type
         };
         
-        self.env.declare(name.to_owned(), decl_type);
+        self.env.declare_var(name.to_owned(), decl_type, is_mutable);
         
         let kind = if is_weak || (initializer.is_none() && type_annotation.is_some()) {
             TypedStmtKind::Var {
@@ -595,6 +600,9 @@ impl TypeChecker {
             ExprKind::Assign { name, value } => {
                 let typed_val = self.check_expr(value);
                 if let Some(var_type) = self.env.resolve(name) {
+                    if !self.env.is_mutable(name) {
+                        self.error(expr.span, DiagnosticCode::ImmutableAssignment, &format!("Cannot mutate immutable variable '{}'.", name))
+                    }
                     if typed_val.ty != var_type && typed_val.ty != Type::Error && var_type != Type::Error && var_type != Type::Any {
                         self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to variable of type '{}'.", typed_val.ty, var_type))
                     }
@@ -689,6 +697,12 @@ impl TypeChecker {
                 match &typed_left.ty {
                     Type::Optional(inner) => {
                         let expected = (**inner).clone();
+                        if let TypedExprKind::Variable(ref left_name) = typed_left.kind {
+                            if !self.env.is_mutable(left_name) {
+                                self.error(expr.span, DiagnosticCode::ImmutableAssignment, &format!("Cannot mutate immutable variable '{}'.", left_name))
+                            }
+                        }
+                        
                         let is_valid = typed_right.ty == expected || typed_right.ty == typed_left.ty || typed_right.ty == Type::Error || typed_left.ty == Type::Error;
                         
                         if !is_valid {
@@ -749,7 +763,7 @@ impl TypeChecker {
                 };
 
                 self.env.push_scope();
-                self.env.declare(item_name.clone(), item_type);
+                self.env.declare_var(item_name.clone(), item_type, false);
                 let typed_expr = self.check_expr(mapped_expr);
                 self.env.pop_scope();
 
@@ -897,6 +911,13 @@ impl TypeChecker {
                             resolved_ty = self.substitute_generics(prop_ty, &inferred_map);
                         }
                         
+                        if let Some(muts) = self.class_mutables.get(&class_name) {
+                            if let Some(&is_mut) = muts.get(name) {
+                                if !is_mut {
+                                    self.error(expr.span, DiagnosticCode::ImmutableAssignment, &format!("Cannot mutate immutable property '{}'.", name))
+                                }
+                            }
+                        }
                         if !self.is_assignable(&typed_val.ty, &resolved_ty) && typed_val.ty != Type::Error && resolved_ty != Type::Error && resolved_ty != Type::Any {
                             self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to property of type '{}'.", typed_val.ty, resolved_ty))
                         }
@@ -958,7 +979,7 @@ impl TypeChecker {
                                 for (i, bind) in binds.iter().enumerate() {
                                     if bind != "_" {
                                         let bind_ty = extracted_types.get(i).cloned().unwrap_or(Type::Any);
-                                        self.env.declare(bind.clone(), bind_ty);
+                                        self.env.declare_var(bind.clone(), bind_ty, false);
                                     }
                                 }
                             }
@@ -1757,5 +1778,29 @@ mod tests {
         checker.check(&[stmt]);
         assert_eq!(checker.errors.len(), 1);
         assert!(checker.errors[0].message.contains("Expected 'Boolean'"));
+    }
+
+    #[test]
+    fn test_immutable_assignment() {
+        let mut checker = TypeChecker::new();
+        // let x = 10;
+        let stmt1 = Stmt::new(StmtKind::Let {
+            name: "x".into(),
+            is_private: false,
+            type_annotation: None,
+            initializer: Some(Expr::new(ExprKind::Integer(10), make_span())),
+        }, make_span());
+
+        // x = 20;
+        let stmt2 = Stmt::new(StmtKind::Expression(
+            Expr::new(ExprKind::Assign {
+                name: "x".into(),
+                value: Box::new(Expr::new(ExprKind::Integer(20), make_span())),
+            }, make_span())
+        ), make_span());
+
+        checker.check(&[stmt1, stmt2]);
+        assert_eq!(checker.errors.len(), 1);
+        assert!(checker.errors[0].message.contains("Cannot mutate immutable variable 'x'"));
     }
 }

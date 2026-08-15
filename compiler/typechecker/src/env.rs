@@ -4,6 +4,7 @@ use ast::types::Type;
 #[derive(Debug)]
 pub struct Scope {
     types: HashMap<String, Type>,
+    mutables: HashMap<String, bool>,
 }
 
 impl Default for Scope {
@@ -16,15 +17,26 @@ impl Scope {
     pub fn new() -> Self {
         Self {
             types: HashMap::new(),
+            mutables: HashMap::new(),
         }
     }
 
     pub fn insert(&mut self, name: String, ty: Type) {
-        self.types.insert(name, ty);
+        self.types.insert(name.clone(), ty);
+        self.mutables.insert(name, false);
+    }
+    
+    pub fn insert_var(&mut self, name: String, ty: Type, is_mutable: bool) {
+        self.types.insert(name.clone(), ty);
+        self.mutables.insert(name, is_mutable);
     }
 
     pub fn get(&self, name: &str) -> Option<&Type> {
         self.types.get(name)
+    }
+
+    pub fn is_mutable(&self, name: &str) -> Option<bool> {
+        self.mutables.get(name).copied()
     }
 }
 
@@ -65,6 +77,11 @@ impl TypeEnvironment {
         current_scope.insert(name, ty);
     }
 
+    pub fn declare_var(&mut self, name: String, ty: Type, is_mutable: bool) {
+        let current_scope = self.scopes.last_mut().unwrap();
+        current_scope.insert_var(name, ty, is_mutable);
+    }
+
     pub fn resolve(&self, name: &str) -> Option<Type> {
         for scope in self.scopes.iter().rev() {
             if let Some(ty) = scope.get(name) {
@@ -72,5 +89,14 @@ impl TypeEnvironment {
             }
         }
         None
+    }
+
+    pub fn is_mutable(&self, name: &str) -> bool {
+        for scope in self.scopes.iter().rev() {
+            if let Some(mutability) = scope.is_mutable(name) {
+                return mutability;
+            }
+        }
+        false
     }
 }
