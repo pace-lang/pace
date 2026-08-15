@@ -160,7 +160,10 @@ pub extern "C" fn pace_release(obj: *mut u8) {
             for i in 0..field_count {
                 let offset = unsafe { *(*metadata).field_offsets.as_ptr().add(i as usize) };
                 let field_ptr = unsafe { *(obj.add(offset as usize) as *const *mut u8) };
-                if !field_ptr.is_null() && (field_ptr as usize).is_multiple_of(8) && (field_ptr as usize) > 0x10000 {
+                if !field_ptr.is_null()
+                    && (field_ptr as usize).is_multiple_of(8)
+                    && (field_ptr as usize) > 0x10000
+                {
                     pace_release(field_ptr);
                 }
             }
@@ -247,7 +250,11 @@ pub extern "C" fn stringConcat(a_ptr: *const c_char, b_ptr: *const c_char) -> *c
     unsafe {
         let payload_ptr = new_ptr.add(24);
         std::ptr::copy_nonoverlapping(a_bytes.as_ptr(), payload_ptr, a_bytes.len());
-        std::ptr::copy_nonoverlapping(b_bytes.as_ptr(), payload_ptr.add(a_bytes.len()), b_bytes.len());
+        std::ptr::copy_nonoverlapping(
+            b_bytes.as_ptr(),
+            payload_ptr.add(a_bytes.len()),
+            b_bytes.len(),
+        );
         // null terminator already set by calloc inside pace_alloc
     }
 
@@ -321,12 +328,10 @@ pub extern "C" fn fileReadAll(_ptr: *mut u8) -> *mut u8 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn fileClose(_ptr: *mut u8) {
-}
+pub extern "C" fn fileClose(_ptr: *mut u8) {}
 
 #[unsafe(no_mangle)]
-pub extern "C" fn fileWrite(_ptr: *mut u8, _data: *mut u8) {
-}
+pub extern "C" fn fileWrite(_ptr: *mut u8, _data: *mut u8) {}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn fileOpen(_path: *mut u8) -> *mut u8 {
@@ -334,25 +339,31 @@ pub extern "C" fn fileOpen(_path: *mut u8) -> *mut u8 {
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_string_concat(s1: *const c_char, s2: *const c_char) -> *const c_char {
-    if s1.is_null() && s2.is_null() { return std::ptr::null(); }
-    
-    let str1 = if s1.is_null() { "" } else {
+    if s1.is_null() && s2.is_null() {
+        return std::ptr::null();
+    }
+
+    let str1 = if s1.is_null() {
+        ""
+    } else {
         unsafe { CStr::from_ptr(s1.add(24)) }.to_str().unwrap_or("")
     };
-    let str2 = if s2.is_null() { "" } else {
+    let str2 = if s2.is_null() {
+        ""
+    } else {
         unsafe { CStr::from_ptr(s2.add(24)) }.to_str().unwrap_or("")
     };
-    
+
     let total_len = str1.len() + str2.len();
     let ptr = pace_alloc((24 + total_len + 1) as i64, !1_u64 as *const ());
-    
+
     unsafe {
         let payload = ptr.add(24);
         std::ptr::copy_nonoverlapping(str1.as_ptr(), payload, str1.len());
         std::ptr::copy_nonoverlapping(str2.as_ptr(), payload.add(str1.len()), str2.len());
         *payload.add(total_len) = 0; // null terminator
     }
-    
+
     ptr as *const c_char
 }
 
@@ -404,7 +415,9 @@ pub extern "C" fn printEnum(val: *const u8) {
         let enum_name = if metadata_ptr.is_null() {
             "Enum"
         } else {
-            std::ffi::CStr::from_ptr(metadata_ptr).to_str().unwrap_or("Enum")
+            std::ffi::CStr::from_ptr(metadata_ptr)
+                .to_str()
+                .unwrap_or("Enum")
         };
         println!("<{} Variant {}>", enum_name, tag);
     }

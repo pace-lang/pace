@@ -1,5 +1,5 @@
-use diagnostics::Span;
 use crate::stmt::TypeExpr;
+use diagnostics::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOp {

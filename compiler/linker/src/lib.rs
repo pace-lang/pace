@@ -1,6 +1,6 @@
+use std::env;
 use std::path::Path;
 use std::process::Command;
-use std::env;
 
 pub struct Linker;
 
@@ -8,9 +8,12 @@ impl Linker {
     pub fn link(object_file: &Path, output_file: &Path, release: bool) -> Result<(), String> {
         // Find the Rust runtime staticlib (libpace_runtime.a)
         // It should be in the same directory as the compiler executable (e.g., target/debug)
-        let exe_path = env::current_exe().map_err(|e| format!("Failed to get current executable path: {}", e))?;
-        let exe_dir = exe_path.parent().ok_or("Executable has no parent directory")?;
-        
+        let exe_path = env::current_exe()
+            .map_err(|e| format!("Failed to get current executable path: {}", e))?;
+        let exe_dir = exe_path
+            .parent()
+            .ok_or("Executable has no parent directory")?;
+
         let mut search_paths = vec![
             exe_dir.join("libpace_runtime.a"),
             exe_dir.join("../libpace_runtime.a"), // For tests in target/debug/deps
@@ -30,7 +33,7 @@ impl Linker {
             search_paths.push(cwd.join("compiler/runtime/target/debug/libpace_runtime.a"));
             search_paths.push(cwd.join("compiler/runtime/target/debug/pace_runtime.lib"));
         }
-        
+
         let mut runtime_lib = search_paths.into_iter().find(|p| p.exists());
 
         if runtime_lib.is_none() {
@@ -39,7 +42,7 @@ impl Linker {
                 exe_dir.join("deps"),
                 exe_dir.join("../deps"),
             ];
-            
+
             if let Ok(cwd) = env::current_dir() {
                 fallback_dirs.push(cwd.join("target/debug/deps"));
                 fallback_dirs.push(cwd.join("target/release/deps"));
@@ -50,14 +53,19 @@ impl Linker {
                     for entry in entries.flatten() {
                         let path = entry.path();
                         if let Some(file_name) = path.file_name().and_then(|n| n.to_str())
-                            && ((file_name.starts_with("libpace_runtime-") && file_name.ends_with(".a")) ||
-                               (file_name.starts_with("pace_runtime-") && file_name.ends_with(".lib"))) {
-                                runtime_lib = Some(path);
-                                break;
-                            }
+                            && ((file_name.starts_with("libpace_runtime-")
+                                && file_name.ends_with(".a"))
+                                || (file_name.starts_with("pace_runtime-")
+                                    && file_name.ends_with(".lib")))
+                        {
+                            runtime_lib = Some(path);
+                            break;
+                        }
                     }
                 }
-                if runtime_lib.is_some() { break; }
+                if runtime_lib.is_some() {
+                    break;
+                }
             }
         }
 
@@ -69,11 +77,12 @@ impl Linker {
         // but cc usually handles this natively.
 
         let mut command = Command::new("cc");
-        command.arg(object_file)
+        command
+            .arg(object_file)
             .arg(&runtime_lib)
             .arg("-o")
             .arg(output_file);
-            
+
         if release {
             command.arg("-O3").arg("-s"); // Optimize and strip symbols
         }

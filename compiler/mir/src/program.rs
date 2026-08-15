@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::function::Function;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassDef {

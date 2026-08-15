@@ -1,6 +1,4 @@
-pub mod env;
 pub mod checker;
+pub mod env;
 
-
-pub use env::TypeEnvironment;
 pub use checker::TypeChecker;

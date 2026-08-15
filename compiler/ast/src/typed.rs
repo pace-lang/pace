@@ -1,7 +1,6 @@
+use crate::expr::{BinaryOp, Pattern, UnaryOp};
+use crate::stmt::{EnumVariant, TypeExpr};
 use diagnostics::Span;
-use crate::expr::{BinaryOp, UnaryOp, Pattern};
-use crate::stmt::{TypeExpr, EnumVariant};
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedMatchArm<'a> {

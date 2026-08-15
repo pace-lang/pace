@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::Symbol;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeId(pub u32);

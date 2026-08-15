@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use session::Symbol;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct ScopeStack {

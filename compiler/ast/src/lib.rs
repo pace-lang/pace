@@ -3,7 +3,7 @@ pub mod stmt;
 pub mod typed;
 
 pub use diagnostics::{Location, Span};
-pub use expr::{Expr, ExprKind, BinaryOp, UnaryOp, Pattern, MatchArm};
-pub use stmt::{Stmt, StmtKind, TypeExpr, EnumField, EnumVariant};
+pub use expr::{BinaryOp, Expr, ExprKind, MatchArm, Pattern, UnaryOp};
 pub use session::types::Type;
-pub use typed::{TypedExpr, TypedExprKind, TypedStmt, TypedStmtKind, TypedMatchArm};
+pub use stmt::{EnumField, EnumVariant, Stmt, StmtKind, TypeExpr};
+pub use typed::{TypedExpr, TypedExprKind, TypedMatchArm, TypedStmt, TypedStmtKind};

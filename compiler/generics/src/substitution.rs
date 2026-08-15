@@ -8,10 +8,14 @@ pub struct TypeSubstitution<'a> {
 }
 
 impl<'a> TypeSubstitution<'a> {
-    pub fn new(arena: &'a bumpalo::Bump, type_params: &[session::Symbol], type_args: &[TypeExpr<'a>]) -> Self {
+    pub fn new(
+        arena: &'a bumpalo::Bump,
+        type_params: &[session::Symbol],
+        type_args: &[TypeExpr<'a>],
+    ) -> Self {
         let mut map = HashMap::new();
         for (param, arg) in type_params.iter().zip(type_args.iter()) {
-            map.insert(param.clone(), arg.clone());
+            map.insert(*param, arg.clone());
         }
         Self { map, arena }
     }
@@ -27,14 +31,12 @@ impl<'a> TypeSubstitution<'a> {
             }
             TypeExpr::GenericInstance(name, args) => {
                 let sub_args = args.iter().map(|a| self.substitute(a)).collect();
-                TypeExpr::GenericInstance(name.clone(), sub_args)
+                TypeExpr::GenericInstance(*name, sub_args)
             }
             TypeExpr::Optional(inner) => {
                 TypeExpr::Optional(self.arena.alloc(self.substitute(inner)))
             }
-            TypeExpr::Array(inner) => {
-                TypeExpr::Array(self.arena.alloc(self.substitute(inner)))
-            }
+            TypeExpr::Array(inner) => TypeExpr::Array(self.arena.alloc(self.substitute(inner))),
         }
     }
 }

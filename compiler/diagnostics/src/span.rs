@@ -22,7 +22,13 @@ pub struct Span {
 }
 
 impl Span {
-    pub fn new(file_id: u32, start: usize, end: usize, start_loc: Location, end_loc: Location) -> Self {
+    pub fn new(
+        file_id: u32,
+        start: usize,
+        end: usize,
+        start_loc: Location,
+        end_loc: Location,
+    ) -> Self {
         Self {
             file_id,
             start,

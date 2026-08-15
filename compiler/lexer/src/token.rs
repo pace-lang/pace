@@ -72,13 +72,13 @@ pub enum TokenKind {
     Colon,
     Semicolon,
     Underscore,
-    Arrow, // ->
+    Arrow,    // ->
     FatArrow, // =>
     Question,
-    QuestionDot, // ?.
-    QuestionQuestion, // ??
+    QuestionDot,           // ?.
+    QuestionQuestion,      // ??
     QuestionQuestionEqual, // ??=
-    Bang, // !
+    Bang,                  // !
 
     // Special
     Error(String),

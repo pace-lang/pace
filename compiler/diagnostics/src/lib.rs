@@ -1,10 +1,10 @@
-pub mod span;
-pub mod source_map;
 pub mod formatter;
+pub mod source_map;
+pub mod span;
 
-pub use span::{Location, Span};
-pub use source_map::SourceMap;
 pub use formatter::print_diagnostics;
+pub use source_map::SourceMap;
+pub use span::{Location, Span};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Severity {
@@ -16,26 +16,26 @@ pub enum Severity {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiagnosticCode {
     // Lexer & Syntax (P1xxx)
-    InvalidToken, // P1001
+    InvalidToken,    // P1001
     UnexpectedToken, // P1002
-    
+
     // Name Resolution (P2xxx)
-    UnknownIdentifier, // P2001
+    UnknownIdentifier,    // P2001
     DuplicateDeclaration, // P2002
-    
+
     // Type System (P3xxx)
-    TypeMismatch, // P3001
-    UnknownType, // P3002
+    TypeMismatch,          // P3001
+    UnknownType,           // P3002
     UninitializedVariable, // P3003
-    
+
     // Ownership & ARC (P4xxx)
     InvalidWeakReference, // P4001
-    OwnershipViolation, // P4002
-    ImmutableAssignment, // P4003
+    OwnershipViolation,   // P4002
+    ImmutableAssignment,  // P4003
 
     // Style & Linter (P5xxx)
     NamingConventionViolation, // P5001
-    
+
     // General
     Custom(String),
 }
@@ -81,7 +81,12 @@ pub struct DiagnosticBuilder {
 }
 
 impl DiagnosticBuilder {
-    pub fn new(severity: Severity, code: DiagnosticCode, message: String, primary_span: Span) -> Self {
+    pub fn new(
+        severity: Severity,
+        code: DiagnosticCode,
+        message: String,
+        primary_span: Span,
+    ) -> Self {
         Self {
             diagnostic: Diagnostic {
                 severity,
@@ -98,12 +103,12 @@ impl DiagnosticBuilder {
     pub fn error(code: DiagnosticCode, message: impl Into<String>, primary_span: Span) -> Self {
         Self::new(Severity::Error, code, message.into(), primary_span)
     }
-    
+
     pub fn global_error(code: DiagnosticCode, message: impl Into<String>) -> Self {
         let span = Span::new(u32::MAX, 0, 0, Location::new(0, 0), Location::new(0, 0));
         Self::new(Severity::Error, code, message.into(), span)
     }
-    
+
     pub fn warning(code: DiagnosticCode, message: impl Into<String>, primary_span: Span) -> Self {
         Self::new(Severity::Warning, code, message.into(), primary_span)
     }

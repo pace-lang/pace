@@ -58,7 +58,15 @@ pub struct BlockId(pub usize);
 #[derive(Debug, Clone, PartialEq)]
 pub enum Terminator {
     Jump(BlockId),
-    Branch { cond: Value, then_block: BlockId, else_block: BlockId },
-    Switch { cond: Value, cases: Vec<(usize, BlockId)>, default: Option<BlockId> },
+    Branch {
+        cond: Value,
+        then_block: BlockId,
+        else_block: BlockId,
+    },
+    Switch {
+        cond: Value,
+        cases: Vec<(usize, BlockId)>,
+        default: Option<BlockId>,
+    },
     Return(Option<Value>),
 }

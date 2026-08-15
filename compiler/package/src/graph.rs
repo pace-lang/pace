@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use crate::package_id::PackageId;
 use crate::manifest::Manifest;
+use crate::package_id::PackageId;
+use std::collections::HashMap;
 
 use std::path::PathBuf;
 

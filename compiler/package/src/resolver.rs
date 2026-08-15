@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
 use crate::manifest::Dependency;
 use std::env;
+use std::path::{Path, PathBuf};
 
 pub trait DependencySource {
     fn resolve(&self, name: &str, dep: &Dependency, base_path: &Path) -> Option<PathBuf>;
@@ -48,10 +48,7 @@ impl Default for DependencyResolver {
 impl DependencyResolver {
     pub fn new() -> Self {
         Self {
-            sources: vec![
-                Box::new(PathSource),
-                Box::new(RegistrySource),
-            ],
+            sources: vec![Box::new(PathSource), Box::new(RegistrySource)],
         }
     }
 

@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use mir::{BlockId, Inst, Place, RValue, Terminator, Value, Program};
 use ast::{BinaryOp, UnaryOp};
+use mir::{BlockId, Inst, Place, Program, RValue, Terminator, Value};
+use std::collections::HashMap;
 
 pub struct Frame {
     pub memory_vars: HashMap<String, Value>,
@@ -51,7 +51,13 @@ impl<'a> VirtualMachine<'a> {
     }
 
     pub fn call_function(&mut self, name: &str, args: &[Value]) -> Option<Value> {
-        if name == "print" || name == "printStr" || name == "printInt" || name == "printFloat" || name == "printBool" || name == "printEnum" {
+        if name == "print"
+            || name == "printStr"
+            || name == "printInt"
+            || name == "printFloat"
+            || name == "printBool"
+            || name == "printEnum"
+        {
             let mut out = String::new();
             for (i, arg) in args.iter().enumerate() {
                 if i > 0 {
@@ -59,7 +65,7 @@ impl<'a> VirtualMachine<'a> {
                 }
                 let resolved = match arg {
                     Value::Place(_) => panic!("Pass evaluated arguments to print"),
-                    _ => arg.clone()
+                    _ => arg.clone(),
                 };
                 match resolved {
                     Value::Int(v) => out.push_str(&v.to_string()),
@@ -69,11 +75,13 @@ impl<'a> VirtualMachine<'a> {
                     Value::Object(id) => {
                         let obj = &self.heap[id];
                         out.push_str(&format!("<{} object at {}>", obj.class_name, id));
-                    },
+                    }
                     Value::Void => out.push_str("void"),
                     Value::Null => out.push_str("null"),
                     Value::Array(_) => out.push_str("[Array]"),
-                    Value::EnumVariant(enum_name, tag, _payload) => out.push_str(&format!("<{} Variant {}>", enum_name, tag)),
+                    Value::EnumVariant(enum_name, tag, _payload) => {
+                        out.push_str(&format!("<{} Variant {}>", enum_name, tag))
+                    }
                     Value::Place(_) => unreachable!(),
                 }
             }
@@ -82,7 +90,12 @@ impl<'a> VirtualMachine<'a> {
         }
 
         let base_name = name.split('_').next().unwrap_or(name);
-        if let Some(foreign) = self.program.foreign_functions.get(name).or_else(|| self.program.foreign_functions.get(base_name)) {
+        if let Some(foreign) = self
+            .program
+            .foreign_functions
+            .get(name)
+            .or_else(|| self.program.foreign_functions.get(base_name))
+        {
             // Intercept standard library foreign functions natively in VM
             match base_name {
                 // String methods
@@ -97,10 +110,16 @@ impl<'a> VirtualMachine<'a> {
                     }
                 }
                 "stringSubstring" => {
-                    if let (Value::String(s), Value::Int(start), Value::Int(end)) = (&args[0], &args[1], &args[2]) {
+                    if let (Value::String(s), Value::Int(start), Value::Int(end)) =
+                        (&args[0], &args[1], &args[2])
+                    {
                         let st = (*start).max(0) as usize;
                         let en = (*end).max(0).min(s.len() as i64) as usize;
-                        let sub = if st <= en && st < s.len() { s[st..en].to_string() } else { "".to_string() };
+                        let sub = if st <= en && st < s.len() {
+                            s[st..en].to_string()
+                        } else {
+                            "".to_string()
+                        };
                         return Some(Value::String(sub));
                     }
                 }
@@ -113,53 +132,68 @@ impl<'a> VirtualMachine<'a> {
                 "arrayLen" => {
                     if let Value::Object(id) = &args[0]
                         && let Some(obj) = self.heap.get(*id)
-                            && let Some(Value::Int(len)) = obj.fields.get("length") {
-                                return Some(Value::Int(*len));
-                            }
+                        && let Some(Value::Int(len)) = obj.fields.get("length")
+                    {
+                        return Some(Value::Int(*len));
+                    }
                 }
                 "arrayPush" => {
                     if let Value::Object(id) = &args[0] {
                         let item = args[1].clone();
                         if let Some(obj) = self.heap.get_mut(*id)
-                            && let Some(Value::Int(len)) = obj.fields.get("length").cloned() {
-                                obj.fields.insert(len.to_string(), item);
-                                obj.fields.insert("length".to_string(), Value::Int(len + 1));
-                                return Some(Value::Void);
-                            }
+                            && let Some(Value::Int(len)) = obj.fields.get("length").cloned()
+                        {
+                            obj.fields.insert(len.to_string(), item);
+                            obj.fields.insert("length".to_string(), Value::Int(len + 1));
+                            return Some(Value::Void);
+                        }
                     }
                 }
                 "arrayPop" => {
                     if let Value::Object(id) = &args[0]
                         && let Some(obj) = self.heap.get_mut(*id)
-                            && let Some(Value::Int(len)) = obj.fields.get("length").cloned() {
-                                if len > 0 {
-                                    let item = obj.fields.remove(&(len - 1).to_string()).unwrap_or(Value::Void);
-                                    obj.fields.insert("length".to_string(), Value::Int(len - 1));
-                                    return Some(Value::EnumVariant("Option".to_string(), 0, vec![item])); // Some
-                                } else {
-                                    return Some(Value::EnumVariant("Option".to_string(), 1, vec![])); // None
-                                }
-                            }
+                        && let Some(Value::Int(len)) = obj.fields.get("length").cloned()
+                    {
+                        if len > 0 {
+                            let item = obj
+                                .fields
+                                .remove(&(len - 1).to_string())
+                                .unwrap_or(Value::Void);
+                            obj.fields.insert("length".to_string(), Value::Int(len - 1));
+                            return Some(Value::EnumVariant("Option".to_string(), 0, vec![item])); // Some
+                        } else {
+                            return Some(Value::EnumVariant("Option".to_string(), 1, vec![])); // None
+                        }
+                    }
                 }
                 "arrayGet" => {
                     if let (Value::Object(id), Value::Int(idx)) = (&args[0], &args[1])
-                        && let Some(obj) = self.heap.get(*id) {
-                            if let Some(Value::Int(len)) = obj.fields.get("length")
-                                && *idx >= 0 && *idx < *len {
-                                    let item = obj.fields.get(&idx.to_string()).cloned().unwrap_or(Value::Void);
-                                    return Some(Value::EnumVariant("Option".to_string(), 0, vec![item])); // Some
-                                }
-                            return Some(Value::EnumVariant("Option".to_string(), 1, vec![])); // None
+                        && let Some(obj) = self.heap.get(*id)
+                    {
+                        if let Some(Value::Int(len)) = obj.fields.get("length")
+                            && *idx >= 0
+                            && *idx < *len
+                        {
+                            let item = obj
+                                .fields
+                                .get(&idx.to_string())
+                                .cloned()
+                                .unwrap_or(Value::Void);
+                            return Some(Value::EnumVariant("Option".to_string(), 0, vec![item])); // Some
                         }
+                        return Some(Value::EnumVariant("Option".to_string(), 1, vec![])); // None
+                    }
                 }
                 "arraySet" => {
                     if let (Value::Object(id), Value::Int(idx)) = (&args[0], &args[1]) {
                         let item = args[2].clone();
                         if let Some(obj) = self.heap.get_mut(*id)
                             && let Some(Value::Int(len)) = obj.fields.get("length")
-                                && *idx >= 0 && *idx < *len {
-                                    obj.fields.insert(idx.to_string(), item);
-                                }
+                            && *idx >= 0
+                            && *idx < *len
+                        {
+                            obj.fields.insert(idx.to_string(), item);
+                        }
                         return Some(Value::Void);
                     }
                 }
@@ -188,9 +222,14 @@ impl<'a> VirtualMachine<'a> {
                     if let Value::Int(id) = &args[0] {
                         let key = args[1].clone();
                         if let Some(map) = self.maps.get(&(*id as usize))
-                            && let Some((_, value)) = map.iter().find(|(k, _)| *k == key) {
-                                return Some(Value::EnumVariant("Option".to_string(), 0, vec![value.clone()])); // Some
-                            }
+                            && let Some((_, value)) = map.iter().find(|(k, _)| *k == key)
+                        {
+                            return Some(Value::EnumVariant(
+                                "Option".to_string(),
+                                0,
+                                vec![value.clone()],
+                            )); // Some
+                        }
                         return Some(Value::EnumVariant("Option".to_string(), 1, vec![])); // None
                     }
                 }
@@ -198,9 +237,10 @@ impl<'a> VirtualMachine<'a> {
                     if let Value::Int(id) = &args[0] {
                         let key = args[1].clone();
                         if let Some(map) = self.maps.get_mut(&(*id as usize))
-                            && let Some(pos) = map.iter().position(|(k, _)| *k == key) {
-                                map.remove(pos);
-                            }
+                            && let Some(pos) = map.iter().position(|(k, _)| *k == key)
+                        {
+                            map.remove(pos);
+                        }
                         return Some(Value::Void);
                     }
                 }
@@ -218,10 +258,14 @@ impl<'a> VirtualMachine<'a> {
                     if let (Value::String(path), Value::String(mode)) = (&args[0], &args[1]) {
                         use std::fs::OpenOptions;
                         let mut options = OpenOptions::new();
-                        if mode == "r" { options.read(true); }
-                        else if mode == "w" { options.write(true).create(true).truncate(true); }
-                        else if mode == "a" { options.write(true).create(true).append(true); }
-                        
+                        if mode == "r" {
+                            options.read(true);
+                        } else if mode == "w" {
+                            options.write(true).create(true).truncate(true);
+                        } else if mode == "a" {
+                            options.write(true).create(true).append(true);
+                        }
+
                         if let Ok(file) = options.open(path) {
                             let id = self.next_file_id;
                             self.next_file_id += 1;
@@ -247,9 +291,10 @@ impl<'a> VirtualMachine<'a> {
                     if let (Value::Int(id), Value::String(data)) = (&args[0], &args[1]) {
                         use std::io::Write;
                         if let Some(file) = self.files.get_mut(&(*id as usize))
-                            && file.write_all(data.as_bytes()).is_ok() {
-                                return Some(Value::Int(data.len() as i64));
-                            }
+                            && file.write_all(data.as_bytes()).is_ok()
+                        {
+                            return Some(Value::Int(data.len() as i64));
+                        }
                     }
                     return Some(Value::Int(0));
                 }
@@ -261,7 +306,9 @@ impl<'a> VirtualMachine<'a> {
                 }
                 "fileIsValid" => {
                     if let Value::Int(id) = &args[0] {
-                        return Some(Value::Boolean(*id != 0 && self.files.contains_key(&(*id as usize))));
+                        return Some(Value::Boolean(
+                            *id != 0 && self.files.contains_key(&(*id as usize)),
+                        ));
                     }
                     return Some(Value::Boolean(false));
                 }
@@ -271,7 +318,10 @@ impl<'a> VirtualMachine<'a> {
             // Fallback for missing foreign function implementation
             if let Some(ret_ty) = &foreign.return_type {
                 return Some(match ret_ty {
-                    mir::ForeignAbiType::I8 | mir::ForeignAbiType::I16 | mir::ForeignAbiType::I32 | mir::ForeignAbiType::I64 => Value::Int(0),
+                    mir::ForeignAbiType::I8
+                    | mir::ForeignAbiType::I16
+                    | mir::ForeignAbiType::I32
+                    | mir::ForeignAbiType::I64 => Value::Int(0),
                     mir::ForeignAbiType::F32 | mir::ForeignAbiType::F64 => Value::Float(0.0),
                     mir::ForeignAbiType::Pointer => Value::Null,
                 });
@@ -279,8 +329,12 @@ impl<'a> VirtualMachine<'a> {
             return Some(Value::Void);
         }
 
-        let function = self.program.functions.get(name).unwrap_or_else(|| panic!("Function '{}' not found", name));
-        
+        let function = self
+            .program
+            .functions
+            .get(name)
+            .unwrap_or_else(|| panic!("Function '{}' not found", name));
+
         let mut frame = Frame {
             memory_vars: HashMap::new(),
             memory_temps: HashMap::new(),
@@ -288,7 +342,9 @@ impl<'a> VirtualMachine<'a> {
 
         // Map arguments to parameters
         for (i, param_name) in function.parameters.iter().enumerate() {
-            frame.memory_vars.insert(param_name.clone(), args[i].clone());
+            frame
+                .memory_vars
+                .insert(param_name.clone(), args[i].clone());
         }
 
         self.frames.push(frame);
@@ -296,7 +352,10 @@ impl<'a> VirtualMachine<'a> {
         let mut current_block_id = BlockId(0);
 
         loop {
-            let block = function.blocks.iter().find(|b| b.id == current_block_id)
+            let block = function
+                .blocks
+                .iter()
+                .find(|b| b.id == current_block_id)
                 .expect("Block not found");
 
             for inst in &block.instructions {
@@ -307,7 +366,11 @@ impl<'a> VirtualMachine<'a> {
                 Some(Terminator::Jump(next_block)) => {
                     current_block_id = *next_block;
                 }
-                Some(Terminator::Branch { cond, then_block, else_block }) => {
+                Some(Terminator::Branch {
+                    cond,
+                    then_block,
+                    else_block,
+                }) => {
                     let cond_val = self.resolve_value(cond);
                     if let Value::Boolean(b) = cond_val {
                         if b {
@@ -319,7 +382,11 @@ impl<'a> VirtualMachine<'a> {
                         panic!("Branch condition must be a Boolean.");
                     }
                 }
-                Some(Terminator::Switch { cond, cases, default }) => {
+                Some(Terminator::Switch {
+                    cond,
+                    cases,
+                    default,
+                }) => {
                     let cond_val = self.resolve_value(cond);
                     if let Value::Int(tag) = cond_val {
                         let mut matched = false;
@@ -389,13 +456,14 @@ impl<'a> VirtualMachine<'a> {
                         if let Value::Object(id) = obj_val {
                             let class_name = self.heap.get(id).unwrap().class_name.clone();
                             let func_name = format!("{}::{}", class_name, method_name);
-                            
+
                             let mut resolved_args = vec![Value::Object(id)];
                             for arg in args {
                                 resolved_args.push(self.resolve_value(arg));
                             }
-                            
-                            self.call_function(&func_name, &resolved_args).unwrap_or(Value::Void)
+
+                            self.call_function(&func_name, &resolved_args)
+                                .unwrap_or(Value::Void)
                         } else {
                             panic!("Cannot call method on non-object");
                         }
@@ -405,35 +473,38 @@ impl<'a> VirtualMachine<'a> {
                         for arg in args {
                             resolved_args.push(self.resolve_value(arg));
                         }
-                        
+
                         if self.program.classes.contains_key(func_name) {
                             let id = self.heap.len();
                             self.heap.push(Object {
                                 class_name: func_name.clone(),
                                 fields: HashMap::new(),
                             });
-                            
+
                             let class_def = &self.program.classes[func_name];
                             for field in &class_def.fields {
                                 self.heap[id].fields.insert(field.clone(), Value::Void);
                             }
-                            
+
                             let init_func = format!("{}::init", func_name);
                             if self.program.functions.contains_key(&init_func) {
                                 let mut init_args = vec![Value::Object(id)];
                                 init_args.extend(resolved_args);
                                 self.call_function(&init_func, &init_args);
                             }
-                            
+
                             Value::Object(id)
                         } else {
-                            self.call_function(func_name, &resolved_args).unwrap_or(Value::Void)
+                            self.call_function(func_name, &resolved_args)
+                                .unwrap_or(Value::Void)
                         }
                     }
                     RValue::ForceUnwrap(val) => {
                         let eval_val = self.resolve_value(val);
                         if eval_val == Value::Null {
-                            panic!("Fatal Error: Unexpectedly found null while unwrapping an Optional value.");
+                            panic!(
+                                "Fatal Error: Unexpectedly found null while unwrapping an Optional value."
+                            );
                         }
                         eval_val
                     }
@@ -447,22 +518,32 @@ impl<'a> VirtualMachine<'a> {
                             let val = self.resolve_value(elem);
                             self.heap[id].fields.insert(i.to_string(), val);
                         }
-                        self.heap[id].fields.insert("length".to_string(), Value::Int(elements.len() as i64));
+                        self.heap[id]
+                            .fields
+                            .insert("length".to_string(), Value::Int(elements.len() as i64));
                         Value::Object(id)
                     }
                     RValue::ArrayRepeat(val, count, _) => {
                         let id = self.heap.len();
                         let repeat_val = self.resolve_value(val);
                         let count_val = self.resolve_value(count);
-                        let count_int = if let Value::Int(c) = count_val { c } else { panic!("Count must be int") };
+                        let count_int = if let Value::Int(c) = count_val {
+                            c
+                        } else {
+                            panic!("Count must be int")
+                        };
                         self.heap.push(Object {
                             class_name: "[Array]".to_string(),
                             fields: HashMap::new(),
                         });
                         for i in 0..count_int {
-                            self.heap[id].fields.insert(i.to_string(), repeat_val.clone());
+                            self.heap[id]
+                                .fields
+                                .insert(i.to_string(), repeat_val.clone());
                         }
-                        self.heap[id].fields.insert("length".to_string(), Value::Int(count_int));
+                        self.heap[id]
+                            .fields
+                            .insert("length".to_string(), Value::Int(count_int));
                         Value::Object(id)
                     }
                     RValue::ArrayLength(array) => {
@@ -477,15 +558,26 @@ impl<'a> VirtualMachine<'a> {
                     RValue::IndexGet(array, index) => {
                         let obj_val = self.resolve_value(array);
                         let idx_val = self.resolve_value(index);
-                        let idx_int = if let Value::Int(i) = idx_val { i } else { panic!("Index must be int") };
+                        let idx_int = if let Value::Int(i) = idx_val {
+                            i
+                        } else {
+                            panic!("Index must be int")
+                        };
                         if let Value::Object(id) = obj_val {
                             let obj = &self.heap[id];
                             let len_val = obj.fields.get("length").unwrap();
-                            let len_int = if let Value::Int(l) = len_val { *l } else { panic!("Length must be int") };
+                            let len_int = if let Value::Int(l) = len_val {
+                                *l
+                            } else {
+                                panic!("Length must be int")
+                            };
                             if idx_int < 0 || idx_int >= len_int {
                                 panic!("Index out of bounds");
                             }
-                            obj.fields.get(&idx_int.to_string()).cloned().unwrap_or(Value::Void)
+                            obj.fields
+                                .get(&idx_int.to_string())
+                                .cloned()
+                                .unwrap_or(Value::Void)
                         } else {
                             panic!("Cannot index non-object");
                         }
@@ -501,7 +593,10 @@ impl<'a> VirtualMachine<'a> {
                         let resolved_val = self.resolve_value(val);
                         if let Value::EnumVariant(_, tag, payload) = resolved_val {
                             if tag != *expected_tag {
-                                panic!("Variant tag mismatch in ExtractPayload: expected {}, got {}", expected_tag, tag);
+                                panic!(
+                                    "Variant tag mismatch in ExtractPayload: expected {}, got {}",
+                                    expected_tag, tag
+                                );
                             }
                             payload[*field_idx].clone()
                         } else {
@@ -536,16 +631,25 @@ impl<'a> VirtualMachine<'a> {
                 let obj_val = self.resolve_value(array);
                 let idx_val = self.resolve_value(index);
                 let set_val = self.resolve_value(val);
-                let idx_int = if let Value::Int(i) = idx_val { i } else { panic!("Index must be int") };
+                let idx_int = if let Value::Int(i) = idx_val {
+                    i
+                } else {
+                    panic!("Index must be int")
+                };
                 if let Value::Object(id) = obj_val
-                    && let Some(obj) = self.heap.get_mut(id) {
-                        let len_val = obj.fields.get("length").unwrap();
-                        let len_int = if let Value::Int(l) = len_val { *l } else { panic!("Length must be int") };
-                        if idx_int < 0 || idx_int >= len_int {
-                            panic!("Index out of bounds");
-                        }
-                        obj.fields.insert(idx_int.to_string(), set_val);
+                    && let Some(obj) = self.heap.get_mut(id)
+                {
+                    let len_val = obj.fields.get("length").unwrap();
+                    let len_int = if let Value::Int(l) = len_val {
+                        *l
+                    } else {
+                        panic!("Length must be int")
+                    };
+                    if idx_int < 0 || idx_int >= len_int {
+                        panic!("Index out of bounds");
                     }
+                    obj.fields.insert(idx_int.to_string(), set_val);
+                }
             }
             Inst::Retain(_) => {}
             Inst::Release(_) => {}
@@ -564,16 +668,28 @@ impl<'a> VirtualMachine<'a> {
     fn load(&self, place: &Place) -> Value {
         let frame = self.frames.last().expect("No active frame");
         match place {
-            Place::Var(name) => frame.memory_vars.get(name).cloned().expect("Variable not found in VM memory"),
-            Place::Temp(id) => frame.memory_temps.get(id).cloned().expect("Temp not found in VM memory"),
+            Place::Var(name) => frame
+                .memory_vars
+                .get(name)
+                .cloned()
+                .expect("Variable not found in VM memory"),
+            Place::Temp(id) => frame
+                .memory_temps
+                .get(id)
+                .cloned()
+                .expect("Temp not found in VM memory"),
         }
     }
 
     fn store(&mut self, place: &Place, value: Value) {
         let frame = self.frames.last_mut().expect("No active frame");
         match place {
-            Place::Var(name) => { frame.memory_vars.insert(name.clone(), value); },
-            Place::Temp(id) => { frame.memory_temps.insert(*id, value); },
+            Place::Var(name) => {
+                frame.memory_vars.insert(name.clone(), value);
+            }
+            Place::Temp(id) => {
+                frame.memory_temps.insert(*id, value);
+            }
         }
     }
 
@@ -584,7 +700,7 @@ impl<'a> VirtualMachine<'a> {
                 Value::Int(i) => Value::Int(-i),
                 Value::Float(f) => Value::Float(-f),
                 _ => panic!("Cannot negate non-numeric value"),
-            }
+            },
         }
     }
     // No longer need eval_call as it is in call_function
@@ -644,18 +760,31 @@ impl<'a> VirtualMachine<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mir::{BasicBlock, BlockId, Function, Inst, Place, RValue, Terminator, Value};
     use ast::BinaryOp;
+    use mir::{BasicBlock, BlockId, Function, Inst, Place, RValue, Terminator, Value};
 
     #[test]
     fn test_execute_math() {
-        let mut fun = Function::new("main".into(), vec![], std::collections::HashSet::new(), false);
+        let mut fun = Function::new(
+            "main".into(),
+            vec![],
+            std::collections::HashSet::new(),
+            false,
+        );
         let mut block0 = BasicBlock::new(BlockId(0));
-        
-        block0.instructions.push(Inst::Assign(Place::Temp(0), RValue::BinaryOp(BinaryOp::Add, Value::Int(10), Value::Int(5))));
-        block0.instructions.push(Inst::Assign(Place::Var("x".into()), RValue::Use(Value::Place(Place::Temp(0)))));
-        block0.terminator = Some(Terminator::Return(Some(Value::Place(Place::Var("x".into())))));
-        
+
+        block0.instructions.push(Inst::Assign(
+            Place::Temp(0),
+            RValue::BinaryOp(BinaryOp::Add, Value::Int(10), Value::Int(5)),
+        ));
+        block0.instructions.push(Inst::Assign(
+            Place::Var("x".into()),
+            RValue::Use(Value::Place(Place::Temp(0))),
+        ));
+        block0.terminator = Some(Terminator::Return(Some(Value::Place(Place::Var(
+            "x".into(),
+        )))));
+
         fun.blocks.push(block0);
 
         let mut program = Program::new();

@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use session::{Symbol, TypeId};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Binding {
@@ -15,7 +15,9 @@ pub struct TypeEnvironment {
 
 impl Default for TypeEnvironment {
     fn default() -> Self {
-        panic!("TypeEnvironment requires a global scope to be initialized manually. Use TypeEnvironment::new(global_print_symbol)");
+        panic!(
+            "TypeEnvironment requires a global scope to be initialized manually. Use TypeEnvironment::new(global_print_symbol)"
+        );
     }
 }
 
@@ -55,15 +57,25 @@ impl TypeEnvironment {
     }
 
     pub fn declare_var(&mut self, name: Symbol, ty: TypeId, is_mutable: bool) {
-        self.bindings.entry(name).or_default().push(Binding { ty, is_mutable });
+        self.bindings
+            .entry(name)
+            .or_default()
+            .push(Binding { ty, is_mutable });
         self.scope_decls.last_mut().unwrap().push(name);
     }
 
     pub fn resolve(&self, name: Symbol) -> Option<TypeId> {
-        self.bindings.get(&name).and_then(|stack| stack.last()).map(|b| b.ty)
+        self.bindings
+            .get(&name)
+            .and_then(|stack| stack.last())
+            .map(|b| b.ty)
     }
 
     pub fn is_mutable(&self, name: Symbol) -> bool {
-        self.bindings.get(&name).and_then(|stack| stack.last()).map(|b| b.is_mutable).unwrap_or(false)
+        self.bindings
+            .get(&name)
+            .and_then(|stack| stack.last())
+            .map(|b| b.is_mutable)
+            .unwrap_or(false)
     }
 }

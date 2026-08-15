@@ -1,18 +1,23 @@
-use std::process::Command;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 fn run_ui_test(file_path: &Path) {
     if let Ok(content) = fs::read_to_string(file_path)
-        && content.contains("// skip-test") {
-            return;
-        }
+        && content.contains("// skip-test")
+    {
+        return;
+    }
 
     let mut cli_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     cli_path.push("../../target/debug/cli");
 
     // Ensure cli is built
-    assert!(cli_path.exists(), "CLI executable not found at {:?}", cli_path);
+    assert!(
+        cli_path.exists(),
+        "CLI executable not found at {:?}",
+        cli_path
+    );
 
     let output = Command::new(&cli_path)
         .arg("run")
@@ -27,7 +32,7 @@ fn run_ui_test(file_path: &Path) {
         combined_output.push('\n');
         combined_output.push_str(&stdout);
     }
-    
+
     // Determine the workspace root dynamically
     let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../")
@@ -40,10 +45,12 @@ fn run_ui_test(file_path: &Path) {
     let normalized_stderr = combined_output
         .lines()
         .map(|line| {
-            if line.starts_with("thread '") && line.contains("panicked at")
-                && let Some(idx) = line.find("panicked at") {
-                    return format!("thread 'main' {}", &line[idx..]);
-                }
+            if line.starts_with("thread '")
+                && line.contains("panicked at")
+                && let Some(idx) = line.find("panicked at")
+            {
+                return format!("thread 'main' {}", &line[idx..]);
+            }
             line.replace(&workspace_root, "$WORKSPACE").to_string()
         })
         .collect::<Vec<_>>()
@@ -52,12 +59,17 @@ fn run_ui_test(file_path: &Path) {
         .to_string();
 
     // Use insta to snapshot the stderr output
-    let snapshot_name = file_path.file_name().unwrap().to_string_lossy().to_string().replace(".pace", "");
-    
+    let snapshot_name = file_path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string()
+        .replace(".pace", "");
+
     let mut settings = insta::Settings::clone_current();
     settings.set_snapshot_path(file_path.parent().unwrap());
     settings.set_prepend_module_to_snapshot(false);
-    
+
     settings.bind(|| {
         insta::assert_snapshot!(snapshot_name, normalized_stderr);
     });

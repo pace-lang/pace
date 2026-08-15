@@ -11,7 +11,12 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new(name: String, parameters: Vec<String>, reference_parameters: std::collections::HashSet<String>, returns_reference: bool) -> Self {
+    pub fn new(
+        name: String,
+        parameters: Vec<String>,
+        reference_parameters: std::collections::HashSet<String>,
+        returns_reference: bool,
+    ) -> Self {
         Self {
             name,
             parameters,

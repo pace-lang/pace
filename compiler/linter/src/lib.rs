@@ -6,7 +6,6 @@ pub struct Linter<'a> {
     diagnostics: Vec<Diagnostic>,
 }
 
-
 impl<'a> Linter<'a> {
     pub fn new(session: &'a session::CompilerSession) -> Self {
         Self {
@@ -28,13 +27,30 @@ impl<'a> Linter<'a> {
     fn check_stmt(&mut self, stmt: &Stmt) {
         match &stmt.kind {
             StmtKind::Enum { name, variants, .. } => {
-                self.check_pascal_case(&self.session.interner.borrow().lookup(*name).to_string(), stmt.span, "Enum");
+                self.check_pascal_case(
+                    self.session.interner.borrow().lookup(*name),
+                    stmt.span,
+                    "Enum",
+                );
                 for variant in variants {
-                    self.check_pascal_case(self.session.interner.borrow().lookup(variant.name), stmt.span, "Enum variant");
+                    self.check_pascal_case(
+                        self.session.interner.borrow().lookup(variant.name),
+                        stmt.span,
+                        "Enum variant",
+                    );
                 }
             }
-            StmtKind::Class { name, methods, fields, .. } => {
-                self.check_pascal_case(&self.session.interner.borrow().lookup(*name).to_string(), stmt.span, "Class");
+            StmtKind::Class {
+                name,
+                methods,
+                fields,
+                ..
+            } => {
+                self.check_pascal_case(
+                    self.session.interner.borrow().lookup(*name),
+                    stmt.span,
+                    "Class",
+                );
                 for field in fields {
                     self.check_stmt(field);
                 }
@@ -43,24 +59,36 @@ impl<'a> Linter<'a> {
                 }
             }
             StmtKind::Interface { name, methods, .. } => {
-                self.check_pascal_case(&self.session.interner.borrow().lookup(*name).to_string(), stmt.span, "Interface");
+                self.check_pascal_case(
+                    self.session.interner.borrow().lookup(*name),
+                    stmt.span,
+                    "Interface",
+                );
                 for method in methods {
                     self.check_stmt(method);
                 }
             }
             StmtKind::Func { name, body, .. } => {
-                self.check_camel_case(&self.session.interner.borrow().lookup(*name).to_string(), stmt.span, "Function");
+                self.check_camel_case(
+                    self.session.interner.borrow().lookup(*name),
+                    stmt.span,
+                    "Function",
+                );
                 self.check_stmt(body);
             }
             StmtKind::ForeignFunc { name, .. } => {
-                self.check_camel_case(&self.session.interner.borrow().lookup(*name).to_string(), stmt.span, "Foreign function");
+                self.check_camel_case(
+                    self.session.interner.borrow().lookup(*name),
+                    stmt.span,
+                    "Foreign function",
+                );
             }
             StmtKind::Let { name, .. } | StmtKind::Var { name, .. } => {
-                // If it's a global constant-like value that they wrote in UPPER_SNAKE_CASE, 
+                // If it's a global constant-like value that they wrote in UPPER_SNAKE_CASE,
                 // we warn them. For now, Pace prefers camelCase for variables/lets.
-                // However, they specifically mentioned they want constants to be PascalCase. 
-                // Since Pace doesn't have a strict `const` keyword yet, we will just 
-                // ensure it's not UPPER_SNAKE_CASE. If it is UPPER_SNAKE_CASE, we'll 
+                // However, they specifically mentioned they want constants to be PascalCase.
+                // Since Pace doesn't have a strict `const` keyword yet, we will just
+                // ensure it's not UPPER_SNAKE_CASE. If it is UPPER_SNAKE_CASE, we'll
                 // guide them to PascalCase or camelCase.
                 let name_str = self.session.interner.borrow().lookup(*name).to_string();
                 if is_upper_snake_case(&name_str) {
@@ -72,7 +100,10 @@ impl<'a> Linter<'a> {
                 } else if !is_camel_case(&name_str) && !is_pascal_case(&name_str) {
                     self.report_naming_violation(
                         stmt.span,
-                        &format!("Variable `{}` does not follow Pace naming conventions", name_str),
+                        &format!(
+                            "Variable `{}` does not follow Pace naming conventions",
+                            name_str
+                        ),
                         "use camelCase for variables",
                     );
                 }
@@ -82,7 +113,11 @@ impl<'a> Linter<'a> {
                     self.check_stmt(s);
                 }
             }
-            StmtKind::If { then_branch, else_branch, .. } => {
+            StmtKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 self.check_stmt(then_branch);
                 if let Some(e) = else_branch {
                     self.check_stmt(e);
@@ -125,21 +160,33 @@ impl<'a> Linter<'a> {
 }
 
 fn is_pascal_case(s: &str) -> bool {
-    if s.is_empty() { return false; }
+    if s.is_empty() {
+        return false;
+    }
     let mut chars = s.chars();
-    if !chars.next().unwrap().is_ascii_uppercase() { return false; }
+    if !chars.next().unwrap().is_ascii_uppercase() {
+        return false;
+    }
     !s.contains('_')
 }
 
 fn is_camel_case(s: &str) -> bool {
-    if s.is_empty() { return false; }
-    if s == "main" { return true; }
-    
+    if s.is_empty() {
+        return false;
+    }
+    if s == "main" {
+        return true;
+    }
+
     // We allow init as a special method name
-    if s == "init" { return true; }
-    
+    if s == "init" {
+        return true;
+    }
+
     let mut chars = s.chars();
-    if !chars.next().unwrap().is_ascii_lowercase() { return false; }
+    if !chars.next().unwrap().is_ascii_lowercase() {
+        return false;
+    }
     !s.contains('_')
 }
 

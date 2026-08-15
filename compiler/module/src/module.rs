@@ -1,5 +1,5 @@
-use ast::Stmt;
 use crate::module_id::ModuleId;
+use ast::Stmt;
 use std::path::PathBuf;
 
 #[derive(Debug)]

@@ -3,19 +3,27 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SpecializationKey {
     pub definition_name: session::Symbol,
-    pub type_args: Vec<String>, 
+    pub type_args: Vec<String>,
 }
 
 impl SpecializationKey {
     pub fn new(definition_name: session::Symbol, type_args: Vec<String>) -> Self {
-        Self { definition_name, type_args }
+        Self {
+            definition_name,
+            type_args,
+        }
     }
 
     pub fn mangled_name(&self, interner: &session::Interner) -> String {
         let mut name = interner.lookup(self.definition_name).to_string();
         for arg in &self.type_args {
             name.push('_');
-            name.push_str(&arg.replace("<", "_").replace(">", "_").replace(",", "_").replace(" ", ""));
+            name.push_str(
+                &arg.replace("<", "_")
+                    .replace(">", "_")
+                    .replace(",", "_")
+                    .replace(" ", ""),
+            );
         }
         name
     }

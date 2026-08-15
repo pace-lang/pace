@@ -1,7 +1,7 @@
-use std::str::Chars;
+use crate::token::{Token, TokenKind};
 use ast::{Location, Span};
 use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
-use crate::token::{Token, TokenKind};
+use std::str::Chars;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LexerMode {
@@ -47,12 +47,18 @@ impl<'a> Scanner<'a> {
                 tokens.push(token);
             }
         }
-        
+
         tokens.push(Token::new(
             TokenKind::Eof,
-            Span::new(self.file_id, self.current_idx, self.current_idx, self.current_loc, self.current_loc)
+            Span::new(
+                self.file_id,
+                self.current_idx,
+                self.current_idx,
+                self.current_loc,
+                self.current_loc,
+            ),
         ));
-        
+
         tokens
     }
 
@@ -119,7 +125,13 @@ impl<'a> Scanner<'a> {
             '[' => TokenKind::LeftBracket,
             ']' => TokenKind::RightBracket,
             ',' => TokenKind::Comma,
-            '.' => if self.match_char('.') { TokenKind::DotDot } else { TokenKind::Dot },
+            '.' => {
+                if self.match_char('.') {
+                    TokenKind::DotDot
+                } else {
+                    TokenKind::Dot
+                }
+            }
             ':' => TokenKind::Colon,
             ';' => TokenKind::Semicolon,
             '+' => TokenKind::Plus,
@@ -186,7 +198,11 @@ impl<'a> Scanner<'a> {
                 }
             }
             '_' => {
-                if self.peek().map(|c| c.is_ascii_alphanumeric() || c == '_').unwrap_or(false) {
+                if self
+                    .peek()
+                    .map(|c| c.is_ascii_alphanumeric() || c == '_')
+                    .unwrap_or(false)
+                {
                     // It's the start of an identifier like _varName
                     self.identifier(session)
                 } else {
@@ -201,12 +217,25 @@ impl<'a> Scanner<'a> {
             '"' => {
                 self.mode_stack.push(LexerMode::String);
                 TokenKind::StringStart
-            },
+            }
             c if c.is_ascii_digit() => self.number(),
             c if c.is_ascii_alphabetic() => self.identifier(session),
             _ => {
-                let span = Span::new(self.file_id, self.start_idx, self.current_idx, self.start_loc, self.current_loc);
-                self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::UnexpectedToken, format!("Unexpected character '{}'", c), span).build());
+                let span = Span::new(
+                    self.file_id,
+                    self.start_idx,
+                    self.current_idx,
+                    self.start_loc,
+                    self.current_loc,
+                );
+                self.diagnostics.push(
+                    DiagnosticBuilder::error(
+                        DiagnosticCode::UnexpectedToken,
+                        format!("Unexpected character '{}'", c),
+                        span,
+                    )
+                    .build(),
+                );
                 TokenKind::Error(format!("Unexpected character '{}'", c))
             }
         };
@@ -274,8 +303,21 @@ impl<'a> Scanner<'a> {
         }
 
         if self.is_at_end() && value.is_empty() {
-            let span = Span::new(self.file_id, self.start_idx, self.current_idx, self.start_loc, self.current_loc);
-            self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::InvalidToken, "Unterminated string.", span).build());
+            let span = Span::new(
+                self.file_id,
+                self.start_idx,
+                self.current_idx,
+                self.start_loc,
+                self.current_loc,
+            );
+            self.diagnostics.push(
+                DiagnosticBuilder::error(
+                    DiagnosticCode::InvalidToken,
+                    "Unterminated string.",
+                    span,
+                )
+                .build(),
+            );
             return Some(self.make_token(TokenKind::Error("Unterminated string.".into())));
         }
 
@@ -324,8 +366,21 @@ impl<'a> Scanner<'a> {
             match text.parse::<f64>() {
                 Ok(f) => TokenKind::Float(f),
                 Err(_) => {
-                    let span = Span::new(self.file_id, self.start_idx, self.current_idx, self.start_loc, self.current_loc);
-                    self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::InvalidToken, "Invalid float literal", span).build());
+                    let span = Span::new(
+                        self.file_id,
+                        self.start_idx,
+                        self.current_idx,
+                        self.start_loc,
+                        self.current_loc,
+                    );
+                    self.diagnostics.push(
+                        DiagnosticBuilder::error(
+                            DiagnosticCode::InvalidToken,
+                            "Invalid float literal",
+                            span,
+                        )
+                        .build(),
+                    );
                     TokenKind::Error("Invalid float literal".into())
                 }
             }
@@ -333,8 +388,21 @@ impl<'a> Scanner<'a> {
             match text.parse::<i64>() {
                 Ok(i) => TokenKind::Integer(i),
                 Err(_) => {
-                    let span = Span::new(self.file_id, self.start_idx, self.current_idx, self.start_loc, self.current_loc);
-                    self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::InvalidToken, "Invalid integer literal", span).build());
+                    let span = Span::new(
+                        self.file_id,
+                        self.start_idx,
+                        self.current_idx,
+                        self.start_loc,
+                        self.current_loc,
+                    );
+                    self.diagnostics.push(
+                        DiagnosticBuilder::error(
+                            DiagnosticCode::InvalidToken,
+                            "Invalid integer literal",
+                            span,
+                        )
+                        .build(),
+                    );
                     TokenKind::Error("Invalid integer literal".into())
                 }
             }
@@ -391,7 +459,8 @@ impl<'a> Scanner<'a> {
     }
 
     fn make_token(&self, kind: TokenKind) -> Token {
-        let span = Span::new(self.file_id, 
+        let span = Span::new(
+            self.file_id,
             self.start_idx,
             self.current_idx,
             self.start_loc,
@@ -410,24 +479,30 @@ mod tests {
         let source = "let count = 10;";
         let mut session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
-        let tokens = scanner.scan_tokens(&mut session);
-        
+        let tokens = scanner.scan_tokens(&session);
+
         assert_eq!(tokens.len(), 6); // let, count, =, 10, ;, EOF
         assert_eq!(tokens[0].kind, TokenKind::Let);
-        assert_eq!(tokens[1].kind, TokenKind::Identifier(session.interner.borrow_mut().intern("count")));
+        assert_eq!(
+            tokens[1].kind,
+            TokenKind::Identifier(session.interner.borrow_mut().intern("count"))
+        );
         assert_eq!(tokens[2].kind, TokenKind::Equal);
         assert_eq!(tokens[3].kind, TokenKind::Integer(10));
         assert_eq!(tokens[4].kind, TokenKind::Semicolon);
         assert_eq!(tokens[5].kind, TokenKind::Eof);
     }
-    
+
     #[test]
     fn test_error_token() {
         let source = "let x = @;";
         let mut session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
-        let tokens = scanner.scan_tokens(&mut session);
-        
-        assert_eq!(tokens[3].kind, TokenKind::Error("Unexpected character '@'".into()));
+        let tokens = scanner.scan_tokens(&session);
+
+        assert_eq!(
+            tokens[3].kind,
+            TokenKind::Error("Unexpected character '@'".into())
+        );
     }
 }

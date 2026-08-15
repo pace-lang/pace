@@ -1,10 +1,10 @@
-use std::path::{Path, PathBuf};
-use std::fs;
 use crate::graph::PackageGraph;
-use crate::package_id::PackageId;
 use crate::manifest::Manifest;
+use crate::package_id::PackageId;
 use crate::resolver::DependencyResolver;
-use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode, Span, Location};
+use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode, Location, Span};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 pub struct PackageManager {
     pub graph: PackageGraph,
@@ -30,30 +30,38 @@ impl PackageManager {
     }
 
     pub fn load_root(&mut self, root_dir: &Path) -> Option<PackageId> {
-        let abs_dir = root_dir.canonicalize().unwrap_or_else(|_| root_dir.to_path_buf());
+        let abs_dir = root_dir
+            .canonicalize()
+            .unwrap_or_else(|_| root_dir.to_path_buf());
         self.load_package(&abs_dir)
     }
 
     pub fn load_dummy_root(&mut self) -> Option<PackageId> {
         let package_id = self.graph.next_id();
-        self.loaded_paths.insert(PathBuf::from("<dummy>"), package_id);
-        
+        self.loaded_paths
+            .insert(PathBuf::from("<dummy>"), package_id);
+
         let manifest = crate::manifest::Manifest {
-            package: crate::manifest::PackageInfo { name: "dummy".to_string(), version: "0.0.0".to_string() },
+            package: crate::manifest::PackageInfo {
+                name: "dummy".to_string(),
+                version: "0.0.0".to_string(),
+            },
             dependencies: std::collections::HashMap::new(),
         };
-        self.graph.add_package(package_id, manifest, PathBuf::from("<dummy>"));
-        
+        self.graph
+            .add_package(package_id, manifest, PathBuf::from("<dummy>"));
+
         if let Some(std_path) = Self::resolve_stdlib_path() {
             if let Some(std_id) = self.load_package(&std_path) {
-                self.graph.add_dependency(package_id, "std".to_string(), std_id);
+                self.graph
+                    .add_dependency(package_id, "std".to_string(), std_id);
             } else {
                 self.error("Failed to load standard library");
             }
         } else {
             self.error("Standard library not found. Please set PACE_STDLIB or PACE_HOME.");
         }
-        
+
         Some(package_id)
     }
 
@@ -66,7 +74,10 @@ impl PackageManager {
         let source = match fs::read_to_string(&toml_path) {
             Ok(content) => content,
             Err(e) => {
-                self.error(&format!("Failed to read manifest at {:?}: {}", toml_path, e));
+                self.error(&format!(
+                    "Failed to read manifest at {:?}: {}",
+                    toml_path, e
+                ));
                 return None;
             }
         };
@@ -81,20 +92,28 @@ impl PackageManager {
 
         let package_id = self.graph.next_id();
         self.loaded_paths.insert(dir.to_path_buf(), package_id);
-        
+
         let mut deps = manifest.dependencies.clone();
-        
+
         // Implicitly inject standard library if not currently compiling the standard library itself
         if manifest.package.name != "std" && !deps.contains_key("std") {
             if let Some(std_path) = Self::resolve_stdlib_path() {
-                deps.insert("std".to_string(), crate::manifest::Dependency::Path { path: std_path.to_string_lossy().to_string() });
+                deps.insert(
+                    "std".to_string(),
+                    crate::manifest::Dependency::Path {
+                        path: std_path.to_string_lossy().to_string(),
+                    },
+                );
             } else {
-                self.error("Could not locate the standard library. Please set PACE_STDLIB or PACE_HOME.");
+                self.error(
+                    "Could not locate the standard library. Please set PACE_STDLIB or PACE_HOME.",
+                );
             }
         }
-        
+
         // Register the package in the graph
-        self.graph.add_package(package_id, manifest, dir.to_path_buf());
+        self.graph
+            .add_package(package_id, manifest, dir.to_path_buf());
 
         // Recursively load dependencies
         for (dep_name, dep_spec) in deps {
@@ -102,7 +121,10 @@ impl PackageManager {
                 if let Some(dep_id) = self.load_package(&dep_path) {
                     self.graph.add_dependency(package_id, dep_name, dep_id);
                 } else {
-                    self.error(&format!("Failed to load dependency '{}' from {:?}", dep_name, dep_path));
+                    self.error(&format!(
+                        "Failed to load dependency '{}' from {:?}",
+                        dep_name, dep_path
+                    ));
                 }
             } else {
                 self.error(&format!("Could not resolve dependency '{}'", dep_name));
@@ -121,22 +143,22 @@ impl PackageManager {
         if let Ok(home) = std::env::var("PACE_HOME") {
             return Some(PathBuf::from(home).join("stdlib"));
         }
-        
+
         // 3. Production installation relative path
         // Expected layout: pace/bin/pace and pace/lib/pace/stdlib/
         if let Ok(exe_path) = std::env::current_exe()
             && let Some(bin_dir) = exe_path.parent()
-                && let Some(install_prefix) = bin_dir.parent() {
-                    let prod_stdlib = install_prefix.join("lib").join("pace").join("stdlib");
-                    if prod_stdlib.exists() {
-                        return Some(prod_stdlib.canonicalize().unwrap_or(prod_stdlib));
-                    }
-                }
-        
+            && let Some(install_prefix) = bin_dir.parent()
+        {
+            let prod_stdlib = install_prefix.join("lib").join("pace").join("stdlib");
+            if prod_stdlib.exists() {
+                return Some(prod_stdlib.canonicalize().unwrap_or(prod_stdlib));
+            }
+        }
+
         // 4. Fallback for development: relative to the package manager crate (cargo run)
-        let fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../stdlib");
-            
+        let fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../stdlib");
+
         if fallback.exists() {
             Some(fallback.canonicalize().unwrap_or(fallback))
         } else {
@@ -145,11 +167,14 @@ impl PackageManager {
     }
 
     fn error(&mut self, message: &str) {
-        self.errors.push(DiagnosticBuilder::error(
-            DiagnosticCode::InvalidToken, 
-            message, 
-            Span::new(0, 0, 0, Location::new(0, 0), Location::new(0, 0))
-        ).build());
+        self.errors.push(
+            DiagnosticBuilder::error(
+                DiagnosticCode::InvalidToken,
+                message,
+                Span::new(0, 0, 0, Location::new(0, 0), Location::new(0, 0)),
+            )
+            .build(),
+        );
     }
 
     pub fn into_graph(self) -> PackageGraph {

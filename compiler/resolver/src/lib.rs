@@ -1,5 +1,5 @@
-pub mod scope;
 pub mod resolver;
+pub mod scope;
 
-pub use scope::ScopeStack;
 pub use resolver::Resolver;
+pub use scope::ScopeStack;

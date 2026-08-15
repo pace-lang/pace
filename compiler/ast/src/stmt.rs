@@ -1,5 +1,5 @@
-use diagnostics::Span;
 use crate::expr::Expr;
+use diagnostics::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeExpr<'a> {
@@ -38,9 +38,7 @@ pub enum StmtKind<'a> {
         hide: Vec<session::Symbol>,
     },
     /// An export statement: `export "path"`
-    Export {
-        path: session::Symbol,
-    },
+    Export { path: session::Symbol },
     /// A let declaration: `let name = expression;`
     Let {
         name: session::Symbol,
@@ -95,9 +93,7 @@ pub enum StmtKind<'a> {
         is_private: bool,
     },
     /// A return statement: `return value;`
-    Return {
-        value: Option<&'a Expr<'a>>,
-    },
+    Return { value: Option<&'a Expr<'a>> },
     /// A class declaration: `class name<T> { fields; methods; }`
     Class {
         name: session::Symbol,

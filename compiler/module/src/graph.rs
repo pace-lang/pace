@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use crate::module_id::ModuleId;
 use crate::module::Module;
+use crate::module_id::ModuleId;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct ModuleGraph<'a> {
@@ -47,11 +47,17 @@ impl<'a> ModuleGraph<'a> {
     }
 
     pub fn add_import_mapping(&mut self, from: ModuleId, import_str: String, to: ModuleId) {
-        self.import_map.entry(from).or_default().insert(import_str, to);
+        self.import_map
+            .entry(from)
+            .or_default()
+            .insert(import_str, to);
     }
 
     pub fn resolve_import(&self, from: ModuleId, import_str: &str) -> Option<ModuleId> {
-        self.import_map.get(&from).and_then(|map| map.get(import_str)).copied()
+        self.import_map
+            .get(&from)
+            .and_then(|map| map.get(import_str))
+            .copied()
     }
 
     pub fn get_module(&self, id: ModuleId) -> Option<&Module<'_>> {
@@ -73,8 +79,15 @@ impl<'a> ModuleGraph<'a> {
         sorted
     }
 
-    fn visit<'b>(&'b self, id: ModuleId, visited: &mut std::collections::HashSet<ModuleId>, sorted: &mut Vec<&'b Module<'a>>) {
-        if visited.contains(&id) { return; }
+    fn visit<'b>(
+        &'b self,
+        id: ModuleId,
+        visited: &mut std::collections::HashSet<ModuleId>,
+        sorted: &mut Vec<&'b Module<'a>>,
+    ) {
+        if visited.contains(&id) {
+            return;
+        }
         visited.insert(id);
 
         if let Some(deps) = self.edges.get(&id) {
@@ -87,5 +100,4 @@ impl<'a> ModuleGraph<'a> {
             sorted.push(module);
         }
     }
-
 }

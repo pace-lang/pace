@@ -2,7 +2,7 @@ pub mod interner;
 pub mod types;
 
 pub use interner::{Interner, Symbol};
-pub use types::{TypeId, TypeArena};
+pub use types::{TypeArena, TypeId};
 
 use std::cell::RefCell;
 
@@ -38,29 +38,59 @@ impl CompilerSession {
             Type::Any => "Any".to_string(),
             Type::Range => "Range".to_string(),
             Type::BuiltinFunc => "<BuiltinFunc>".to_string(),
-            Type::OverloadedFunction(funcs) => format!("<OverloadedFunction({} variants)>", funcs.len()),
+            Type::OverloadedFunction(funcs) => {
+                format!("<OverloadedFunction({} variants)>", funcs.len())
+            }
             Type::Function(type_params, params, ret) => {
                 let mut s = "Func".to_string();
                 if !type_params.is_empty() {
                     s.push('<');
-                    s.push_str(&type_params.iter().map(|p| self.interner.borrow().lookup(*p).to_string()).collect::<Vec<String>>().join(", "));
+                    s.push_str(
+                        &type_params
+                            .iter()
+                            .map(|p| self.interner.borrow().lookup(*p).to_string())
+                            .collect::<Vec<String>>()
+                            .join(", "),
+                    );
                     s.push('>');
                 }
                 s.push('(');
-                s.push_str(&params.iter().map(|p| self.format_type_internal(*p)).collect::<Vec<_>>().join(", "));
+                s.push_str(
+                    &params
+                        .iter()
+                        .map(|p| self.format_type_internal(*p))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
                 s.push_str(") -> ");
                 s.push_str(&self.format_type_internal(*ret));
                 s
             }
             Type::EnumVariantConstructor(enum_name, variant_name, type_params, params, ret) => {
-                let mut s = format!("VariantConstructor({}::{})", self.interner.borrow().lookup(*enum_name), self.interner.borrow().lookup(*variant_name));
+                let mut s = format!(
+                    "VariantConstructor({}::{})",
+                    self.interner.borrow().lookup(*enum_name),
+                    self.interner.borrow().lookup(*variant_name)
+                );
                 if !type_params.is_empty() {
                     s.push('<');
-                    s.push_str(&type_params.iter().map(|p| self.interner.borrow().lookup(*p).to_string()).collect::<Vec<String>>().join(", "));
+                    s.push_str(
+                        &type_params
+                            .iter()
+                            .map(|p| self.interner.borrow().lookup(*p).to_string())
+                            .collect::<Vec<String>>()
+                            .join(", "),
+                    );
                     s.push('>');
                 }
                 s.push('(');
-                s.push_str(&params.iter().map(|p| self.format_type_internal(*p)).collect::<Vec<_>>().join(", "));
+                s.push_str(
+                    &params
+                        .iter()
+                        .map(|p| self.format_type_internal(*p))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
                 s.push_str(") -> ");
                 s.push_str(&self.format_type_internal(*ret));
                 s
@@ -69,7 +99,13 @@ impl CompilerSession {
                 let mut s = format!("Class({})", self.interner.borrow().lookup(*name));
                 if !type_params.is_empty() {
                     s.push('<');
-                    s.push_str(&type_params.iter().map(|p| self.interner.borrow().lookup(*p).to_string()).collect::<Vec<String>>().join(", "));
+                    s.push_str(
+                        &type_params
+                            .iter()
+                            .map(|p| self.interner.borrow().lookup(*p).to_string())
+                            .collect::<Vec<String>>()
+                            .join(", "),
+                    );
                     s.push('>');
                 }
                 s
@@ -78,7 +114,13 @@ impl CompilerSession {
                 let mut s = format!("Enum({})", self.interner.borrow().lookup(*name));
                 if !type_params.is_empty() {
                     s.push('<');
-                    s.push_str(&type_params.iter().map(|p| self.interner.borrow().lookup(*p).to_string()).collect::<Vec<String>>().join(", "));
+                    s.push_str(
+                        &type_params
+                            .iter()
+                            .map(|p| self.interner.borrow().lookup(*p).to_string())
+                            .collect::<Vec<String>>()
+                            .join(", "),
+                    );
                     s.push('>');
                 }
                 s
@@ -87,7 +129,13 @@ impl CompilerSession {
             Type::Generic(name) => self.interner.borrow().lookup(*name).to_string(),
             Type::GenericInstance(name, args) => {
                 let mut s = format!("{}<", self.interner.borrow().lookup(*name));
-                s.push_str(&args.iter().map(|a| self.format_type_internal(*a)).collect::<Vec<_>>().join(", "));
+                s.push_str(
+                    &args
+                        .iter()
+                        .map(|a| self.format_type_internal(*a))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
                 s.push('>');
                 s
             }

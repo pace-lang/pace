@@ -3,9 +3,9 @@ use module::module::Module;
 use module::module_id::ModuleId;
 use std::collections::HashMap;
 
-use ast::{Expr, ExprKind, Stmt, StmtKind, Span};
-use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
 use crate::scope::ScopeStack;
+use ast::{Expr, ExprKind, Span, Stmt, StmtKind};
+use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
 
 pub struct Resolver<'a> {
     pub session: &'a session::CompilerSession,
@@ -13,8 +13,6 @@ pub struct Resolver<'a> {
     pub errors: Vec<Diagnostic>,
     module_exports: HashMap<ModuleId, HashMap<session::Symbol, Vec<session::Symbol>>>,
 }
-
-
 
 impl<'a> Resolver<'a> {
     pub fn new(session: &'a session::CompilerSession) -> Self {
@@ -34,22 +32,50 @@ impl<'a> Resolver<'a> {
         }
     }
 
-
     pub fn resolve_graph(&mut self, graph: &ModuleGraph) {
         // Collect exports for all modules first
         for module in graph.modules() {
             let mut exports = HashMap::new();
             for stmt in &module.ast {
                 match &stmt.kind {
-                    StmtKind::Let { name, is_private: false, .. } |
-                    StmtKind::Var { name, is_private: false, .. } |
-                    StmtKind::Class { name, is_private: false, .. } |
-                    StmtKind::Interface { name, is_private: false, .. } |
-                    StmtKind::ForeignFunc { name, is_private: false, .. } |
-                    StmtKind::Func { name, is_private: false, .. } => {
+                    StmtKind::Let {
+                        name,
+                        is_private: false,
+                        ..
+                    }
+                    | StmtKind::Var {
+                        name,
+                        is_private: false,
+                        ..
+                    }
+                    | StmtKind::Class {
+                        name,
+                        is_private: false,
+                        ..
+                    }
+                    | StmtKind::Interface {
+                        name,
+                        is_private: false,
+                        ..
+                    }
+                    | StmtKind::ForeignFunc {
+                        name,
+                        is_private: false,
+                        ..
+                    }
+                    | StmtKind::Func {
+                        name,
+                        is_private: false,
+                        ..
+                    } => {
                         exports.insert(*name, Vec::new());
                     }
-                    StmtKind::Enum { name, is_private: false, variants, .. } => {
+                    StmtKind::Enum {
+                        name,
+                        is_private: false,
+                        variants,
+                        ..
+                    } => {
                         let mut sub_exports = Vec::new();
                         for variant in variants {
                             sub_exports.push(variant.name);
@@ -74,9 +100,22 @@ impl<'a> Resolver<'a> {
 
         // Resolve imports and inject into module scope
         for stmt in &module.ast {
-            if let StmtKind::Import { path, alias, show, hide } = &stmt.kind {
+            if let StmtKind::Import {
+                path,
+                alias,
+                show,
+                hide,
+            } = &stmt.kind
+            {
                 // Find the imported module
-                let clean_path = self.session.interner.borrow().lookup(*path).trim_matches('"').trim_matches('\'').to_string();
+                let clean_path = self
+                    .session
+                    .interner
+                    .borrow()
+                    .lookup(*path)
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string();
                 let imported_id = graph.resolve_import(module.id, &clean_path);
 
                 if let Some(id) = imported_id {
@@ -87,24 +126,97 @@ impl<'a> Resolver<'a> {
                             self.scopes.declare(*alias_name);
                         } else {
                             for (export, sub_exports) in exports {
-                                if (!show.is_empty() && !show.contains(export)) || hide.contains(export) {
+                                if (!show.is_empty() && !show.contains(export))
+                                    || hide.contains(export)
+                                {
                                     continue;
                                 }
-                                self.scopes.declare(export.clone());
+                                self.scopes.declare(*export);
                                 for sub in sub_exports {
-                                    self.scopes.declare(sub.clone());
+                                    self.scopes.declare(*sub);
                                 }
                             }
                         }
                     }
                 } else {
-                    self.error(stmt.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot resolve import '{}'", self.session.interner.borrow().lookup(*path)));
+                    self.error(
+                        stmt.span,
+                        DiagnosticCode::UnknownIdentifier,
+                        &format!(
+                            "Cannot resolve import '{}'",
+                            self.session.interner.borrow().lookup(*path)
+                        ),
+                    );
                 }
             }
         }
 
+        self.hoist_declarations(&module.ast);
         self.resolve(&module.ast);
         self.scopes.pop_scope();
+    }
+
+    pub fn hoist_declarations(&mut self, statements: &[Stmt]) {
+        for stmt in statements {
+            match &stmt.kind {
+                StmtKind::Func {
+                    name,
+                    ..
+                }
+                | StmtKind::ForeignFunc {
+                    name,
+                    ..
+                }
+                | StmtKind::Class {
+                    name,
+                    ..
+                }
+                | StmtKind::Interface {
+                    name,
+                    ..
+                } => {
+                    if !self.scopes.declare(*name) {
+                        self.error(
+                            stmt.span,
+                            DiagnosticCode::DuplicateDeclaration,
+                            &format!(
+                                "'{}' is already declared in this scope.",
+                                self.session.interner.borrow().lookup(*name)
+                            ),
+                        );
+                    }
+                }
+                StmtKind::Enum {
+                    name,
+                    variants,
+                    ..
+                } => {
+                    if !self.scopes.declare(*name) {
+                        self.error(
+                            stmt.span,
+                            DiagnosticCode::DuplicateDeclaration,
+                            &format!(
+                                "Enum '{}' is already declared in this scope.",
+                                self.session.interner.borrow().lookup(*name)
+                            ),
+                        );
+                    }
+                    for variant in variants {
+                        if !self.scopes.declare(variant.name) {
+                            self.error(
+                                stmt.span,
+                                DiagnosticCode::DuplicateDeclaration,
+                                &format!(
+                                    "Enum variant '{}' is already declared.",
+                                    self.session.interner.borrow().lookup(variant.name)
+                                ),
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     pub fn resolve(&mut self, statements: &[Stmt]) {
@@ -117,65 +229,117 @@ impl<'a> Resolver<'a> {
         match &stmt.kind {
             StmtKind::Block(stmts) => {
                 self.scopes.push_scope();
+                self.hoist_declarations(stmts);
                 self.resolve(stmts);
                 self.scopes.pop_scope();
             }
-            StmtKind::Let { name, type_annotation: _, initializer, is_private: _ } | StmtKind::Var { name, type_annotation: _, initializer, is_weak: _, is_private: _ } => {
+            StmtKind::Let {
+                name,
+                type_annotation: _,
+                initializer,
+                is_private: _,
+            }
+            | StmtKind::Var {
+                name,
+                type_annotation: _,
+                initializer,
+                is_weak: _,
+                is_private: _,
+            } => {
                 // Resolve initializer first so it can't reference the variable being declared
                 if let Some(init) = initializer {
                     self.resolve_expr(init);
                 }
-                
+
                 if !self.scopes.declare(*name) {
-                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Variable '{}' is already declared in this scope.", self.session.interner.borrow().lookup(*name)));
+                    self.error(
+                        stmt.span,
+                        DiagnosticCode::DuplicateDeclaration,
+                        &format!(
+                            "Variable '{}' is already declared in this scope.",
+                            self.session.interner.borrow().lookup(*name)
+                        ),
+                    );
                 }
             }
-            StmtKind::Class { name, type_params: _, implements: _, methods, fields, is_private: _ } => {
-                if !self.scopes.declare(*name) {
-                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Class '{}' is already declared in this scope.", self.session.interner.borrow().lookup(*name)));
-                }
-
+            StmtKind::Class {
+                name: _,
+                type_params: _,
+                implements: _,
+                methods,
+                fields,
+                is_private: _,
+            } => {
+                // Name declared in hoisting
                 self.scopes.push_scope();
-                self.scopes.declare(self.session.interner.borrow_mut().intern("self"));
-                
+                self.scopes
+                    .declare(self.session.interner.borrow_mut().intern("self"));
+
                 for field in fields {
                     self.resolve_stmt(field);
                 }
                 for method in methods {
                     self.resolve_stmt(method);
                 }
-                
+
                 self.scopes.pop_scope();
             }
-            StmtKind::Interface { name, methods: _methods, is_private: _ } => {
-                if !self.scopes.declare(*name) {
-                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Interface '{}' is already declared in this scope.", self.session.interner.borrow().lookup(*name)));
-                }
+            StmtKind::Interface {
+                name: _,
+                methods: _methods,
+                is_private: _,
+            } => {
+                // Name declared in hoisting
             }
-            StmtKind::Enum { name, type_params: _, variants: _, is_private: _ } => {
-                if !self.scopes.declare(*name) {
-                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Enum '{}' is already declared in this scope.", self.session.interner.borrow().lookup(*name)));
-                }
+            StmtKind::Enum {
+                name: _,
+                type_params: _,
+                variants: _,
+                is_private: _,
+            } => {
+                // Handled in hoisting pass
             }
-            StmtKind::ForeignFunc { name, type_params: _, params: _, return_type: _, is_private: _ } => {
-                if !self.scopes.declare(*name) {
-                    self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Foreign function '{}' is already declared in this scope.", self.session.interner.borrow().lookup(*name)));
-                }
+            StmtKind::ForeignFunc {
+                name: _,
+                type_params: _,
+                params: _,
+                return_type: _,
+                is_private: _,
+            } => {
+                // Name declared in hoisting
             }
-            StmtKind::Func { name, type_params: _, params, return_type: _, body, is_private: _ } => {
-                self.scopes.declare(*name);
+            StmtKind::Func {
+                name: _,
+                type_params: _,
+                params,
+                return_type: _,
+                body,
+                is_private: _,
+            } => {
+                // Name declared in hoisting
 
                 self.scopes.push_scope();
                 for (param_name, _) in params {
                     if !self.scopes.declare(*param_name) {
-                        self.error(stmt.span, DiagnosticCode::DuplicateDeclaration, &format!("Parameter '{}' is declared multiple times.", self.session.interner.borrow().lookup(*param_name)));
+                        self.error(
+                            stmt.span,
+                            DiagnosticCode::DuplicateDeclaration,
+                            &format!(
+                                "Parameter '{}' is declared multiple times.",
+                                self.session.interner.borrow().lookup(*param_name)
+                            ),
+                        );
                     }
                 }
-                
+
                 self.resolve_stmt(body);
                 self.scopes.pop_scope();
             }
-            StmtKind::If { condition, then_branch, else_branch } => {
+            StmtKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 self.resolve_expr(condition);
                 self.resolve_stmt(then_branch);
                 if let Some(e_branch) = else_branch {
@@ -186,7 +350,11 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(condition);
                 self.resolve_stmt(body);
             }
-            StmtKind::For { item_name, iterator, body } => {
+            StmtKind::For {
+                item_name,
+                iterator,
+                body,
+            } => {
                 self.resolve_expr(iterator);
 
                 self.scopes.push_scope();
@@ -194,7 +362,7 @@ impl<'a> Resolver<'a> {
                 self.resolve_stmt(body);
                 self.scopes.pop_scope();
             }
-            StmtKind::Import { .. } | StmtKind::Export { .. } => {},
+            StmtKind::Import { .. } | StmtKind::Export { .. } => {}
             StmtKind::Expression(expr) => {
                 self.resolve_expr(expr);
             }
@@ -210,7 +378,14 @@ impl<'a> Resolver<'a> {
         match &expr.kind {
             ExprKind::Variable(name) => {
                 if !self.scopes.resolve(*name) {
-                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot find variable '{}' in this scope.", self.session.interner.borrow().lookup(*name)));
+                    self.error(
+                        expr.span,
+                        DiagnosticCode::UnknownIdentifier,
+                        &format!(
+                            "Cannot find variable '{}' in this scope.",
+                            self.session.interner.borrow().lookup(*name)
+                        ),
+                    );
                 }
             }
             ExprKind::Range { start, end } => {
@@ -227,7 +402,11 @@ impl<'a> Resolver<'a> {
             ExprKind::Grouping(inner) => {
                 self.resolve_expr(inner);
             }
-            ExprKind::Call { callee, type_args: _, arguments } => {
+            ExprKind::Call {
+                callee,
+                type_args: _,
+                arguments,
+            } => {
                 self.resolve_expr(callee);
                 for arg in arguments {
                     self.resolve_expr(arg);
@@ -236,13 +415,24 @@ impl<'a> Resolver<'a> {
             ExprKind::Get { object, name: _ } => {
                 self.resolve_expr(object);
             }
-            ExprKind::Set { object, name: _, value } => {
+            ExprKind::Set {
+                object,
+                name: _,
+                value,
+            } => {
                 self.resolve_expr(object);
                 self.resolve_expr(value);
             }
             ExprKind::Assign { name, value } => {
                 if !self.scopes.resolve(*name) {
-                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot assign to undefined variable '{}'.", self.session.interner.borrow().lookup(*name)));
+                    self.error(
+                        expr.span,
+                        DiagnosticCode::UnknownIdentifier,
+                        &format!(
+                            "Cannot assign to undefined variable '{}'.",
+                            self.session.interner.borrow().lookup(*name)
+                        ),
+                    );
                 }
                 self.resolve_expr(value);
             }
@@ -255,7 +445,11 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(value);
                 self.resolve_expr(count);
             }
-            ExprKind::ListComprehension { expr: mapped_expr, item_name, iterator } => {
+            ExprKind::ListComprehension {
+                expr: mapped_expr,
+                item_name,
+                iterator,
+            } => {
                 self.resolve_expr(iterator);
 
                 self.scopes.push_scope();
@@ -272,18 +466,33 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(object);
                 self.resolve_expr(index);
             }
-            ExprKind::IndexSet { object, index, value } => {
+            ExprKind::IndexSet {
+                object,
+                index,
+                value,
+            } => {
                 self.resolve_expr(object);
                 self.resolve_expr(index);
                 self.resolve_expr(value);
             }
             ExprKind::SelfRef => {
-                if !self.scopes.resolve(self.session.interner.borrow_mut().intern("self")) {
-                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, "Cannot use 'self' outside of a class method.");
+                if !self
+                    .scopes
+                    .resolve(self.session.interner.borrow_mut().intern("self"))
+                {
+                    self.error(
+                        expr.span,
+                        DiagnosticCode::UnknownIdentifier,
+                        "Cannot use 'self' outside of a class method.",
+                    );
                 }
             }
             // Literals have no names to resolve
-            ExprKind::Integer(_) | ExprKind::Float(_) | ExprKind::String(_) | ExprKind::Boolean(_) | ExprKind::Null => {}
+            ExprKind::Integer(_)
+            | ExprKind::Float(_)
+            | ExprKind::String(_)
+            | ExprKind::Boolean(_)
+            | ExprKind::Null => {}
             ExprKind::ForceUnwrap(inner) => {
                 self.resolve_expr(inner);
             }
@@ -302,14 +511,20 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(value);
                 for arm in arms {
                     self.scopes.push_scope();
-                    
+
                     match &arm.pattern {
                         ast::Pattern::Wildcard => {}
                         ast::Pattern::Variant { path, bindings } => {
-                            if !path.is_empty()
-                                && !self.scopes.resolve(path[0]) {
-                                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Cannot find '{}' in this scope.", self.session.interner.borrow().lookup(path[0])));
-                                }
+                            if !path.is_empty() && !self.scopes.resolve(path[0]) {
+                                self.error(
+                                    expr.span,
+                                    DiagnosticCode::UnknownIdentifier,
+                                    &format!(
+                                        "Cannot find '{}' in this scope.",
+                                        self.session.interner.borrow().lookup(path[0])
+                                    ),
+                                );
+                            }
                             if let Some(binds) = bindings {
                                 for bind in binds {
                                     if *bind != self.session.interner.borrow_mut().intern("_") {
@@ -320,7 +535,7 @@ impl<'a> Resolver<'a> {
                         }
                     }
 
-                    self.resolve_expr(&arm.body);
+                    self.resolve_expr(arm.body);
                     self.scopes.pop_scope();
                 }
             }
@@ -328,14 +543,15 @@ impl<'a> Resolver<'a> {
     }
 
     fn error(&mut self, span: Span, code: DiagnosticCode, message: &str) {
-        self.errors.push(DiagnosticBuilder::error(code, message, span).build());
+        self.errors
+            .push(DiagnosticBuilder::error(code, message, span).build());
     }
 }
 
 #[cfg(any())]
 mod tests {
     use super::*;
-    use ast::{ExprKind, StmtKind, Location};
+    use ast::{ExprKind, Location, StmtKind};
 
     fn make_span() -> Span {
         Span::new(0, 0, 0, Location::new(1, 1), Location::new(1, 1))
@@ -344,52 +560,74 @@ mod tests {
     #[test]
     fn test_valid_shadowing() {
         // let x = 1; { let x = 2; print(x); }
-        let outer_let = Stmt::new(StmtKind::Let {
-            name: session.interner.borrow_mut().intern("x"),
-            is_private: false,
-            type_annotation: None,
-            initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
-        }, make_span());
+        let outer_let = Stmt::new(
+            StmtKind::Let {
+                name: session.interner.borrow_mut().intern("x"),
+                is_private: false,
+                type_annotation: None,
+                initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
+            },
+            make_span(),
+        );
 
-        let inner_let = Stmt::new(StmtKind::Let {
-            name: session.interner.borrow_mut().intern("x"),
-            is_private: false,
-            type_annotation: None,
-            initializer: Some(Expr::new(ExprKind::Integer(2), make_span())),
-        }, make_span());
+        let inner_let = Stmt::new(
+            StmtKind::Let {
+                name: session.interner.borrow_mut().intern("x"),
+                is_private: false,
+                type_annotation: None,
+                initializer: Some(Expr::new(ExprKind::Integer(2), make_span())),
+            },
+            make_span(),
+        );
 
-        let inner_usage = Stmt::new(StmtKind::Expression(Expr::new(ExprKind::Variable(session.interner.borrow_mut().intern("x")), make_span())), make_span());
+        let inner_usage = Stmt::new(
+            StmtKind::Expression(Expr::new(
+                ExprKind::Variable(session.interner.borrow_mut().intern("x")),
+                make_span(),
+            )),
+            make_span(),
+        );
 
         let block = Stmt::new(StmtKind::Block(vec![inner_let, inner_usage]), make_span());
 
         let mut session = session::CompilerSession::new();
         let mut resolver = Resolver::new(&mut session);
         resolver.resolve(&[outer_let, block]);
-        
-        assert!(resolver.errors.is_empty(), "Expected no errors, got: {:?}", resolver.errors);
+
+        assert!(
+            resolver.errors.is_empty(),
+            "Expected no errors, got: {:?}",
+            resolver.errors
+        );
     }
 
     #[test]
     fn test_invalid_redeclaration() {
         // let x = 1; let x = 2;
-        let let1 = Stmt::new(StmtKind::Let {
-            name: session.interner.borrow_mut().intern("x"),
-            is_private: false,
-            type_annotation: None,
-            initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
-        }, make_span());
+        let let1 = Stmt::new(
+            StmtKind::Let {
+                name: session.interner.borrow_mut().intern("x"),
+                is_private: false,
+                type_annotation: None,
+                initializer: Some(Expr::new(ExprKind::Integer(1), make_span())),
+            },
+            make_span(),
+        );
 
-        let let2 = Stmt::new(StmtKind::Let {
-            name: session.interner.borrow_mut().intern("x"),
-            is_private: false,
-            type_annotation: None,
-            initializer: Some(Expr::new(ExprKind::Integer(2), make_span())),
-        }, make_span());
+        let let2 = Stmt::new(
+            StmtKind::Let {
+                name: session.interner.borrow_mut().intern("x"),
+                is_private: false,
+                type_annotation: None,
+                initializer: Some(Expr::new(ExprKind::Integer(2), make_span())),
+            },
+            make_span(),
+        );
 
         let mut session = session::CompilerSession::new();
         let mut resolver = Resolver::new(&mut session);
         resolver.resolve(&[let1, let2]);
-        
+
         assert_eq!(resolver.errors.len(), 1);
         assert!(resolver.errors[0].message.contains("already declared"));
     }
@@ -397,13 +635,23 @@ mod tests {
     #[test]
     fn test_undefined_variable() {
         // print(y);
-        let usage = Stmt::new(StmtKind::Expression(Expr::new(ExprKind::Variable(session.interner.borrow_mut().intern("y")), make_span())), make_span());
+        let usage = Stmt::new(
+            StmtKind::Expression(Expr::new(
+                ExprKind::Variable(session.interner.borrow_mut().intern("y")),
+                make_span(),
+            )),
+            make_span(),
+        );
 
         let mut session = session::CompilerSession::new();
         let mut resolver = Resolver::new(&mut session);
         resolver.resolve(&[usage]);
-        
+
         assert_eq!(resolver.errors.len(), 1);
-        assert!(resolver.errors[0].message.contains("Cannot find variable 'y'"));
+        assert!(
+            resolver.errors[0]
+                .message
+                .contains("Cannot find variable 'y'")
+        );
     }
 }

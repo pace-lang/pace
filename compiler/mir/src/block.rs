@@ -1,4 +1,4 @@
-use crate::inst::{Inst, Terminator, BlockId};
+use crate::inst::{BlockId, Inst, Terminator};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BasicBlock {

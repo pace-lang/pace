@@ -1,6 +1,6 @@
-use ast::{Expr, ExprKind, Stmt, StmtKind, Span, BinaryOp, UnaryOp, TypeExpr};
-use lexer::{Token, TokenKind};
+use ast::{BinaryOp, Expr, ExprKind, Span, Stmt, StmtKind, TypeExpr, UnaryOp};
 use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
+use lexer::{Token, TokenKind};
 
 pub struct Parser<'a> {
     tokens: Vec<Token>,
@@ -90,7 +90,11 @@ impl<'a> Parser<'a> {
         if self.match_token(&[TokenKind::Less]) {
             if !self.check(&TokenKind::Greater) {
                 loop {
-                    if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
+                    if let Some(Token {
+                        kind: TokenKind::Identifier(t),
+                        ..
+                    }) = self.peek().cloned()
+                    {
                         self.advance();
                         type_params.push(t);
                     } else {
@@ -124,10 +128,14 @@ impl<'a> Parser<'a> {
             return Some(ty);
         }
 
-        if let Some(Token { kind: TokenKind::Identifier(t), .. }) = self.peek().cloned() {
+        if let Some(Token {
+            kind: TokenKind::Identifier(t),
+            ..
+        }) = self.peek().cloned()
+        {
             self.advance();
             let base_type = t;
-            
+
             if self.match_token(&[TokenKind::Less]) {
                 let mut type_args = Vec::new();
                 if !self.check(&TokenKind::Greater) {
@@ -141,19 +149,19 @@ impl<'a> Parser<'a> {
                         }
                     }
                 }
-                
+
                 if !self.match_token(&[TokenKind::Greater]) {
                     self.error_at_current("Expected '>' after generic type arguments.");
                     return None;
                 }
-                
+
                 let mut ty = TypeExpr::GenericInstance(base_type, type_args);
                 if self.match_token(&[TokenKind::Question]) {
                     ty = TypeExpr::Optional(self.session.ast_arena.alloc(ty));
                 }
                 return Some(ty);
             }
-            
+
             let mut ty = TypeExpr::Named(base_type);
             if self.match_token(&[TokenKind::Question]) {
                 ty = TypeExpr::Optional(self.session.ast_arena.alloc(ty));
@@ -168,7 +176,11 @@ impl<'a> Parser<'a> {
     fn enum_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
-        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+        let name = if let Some(Token {
+            kind: TokenKind::Identifier(n),
+            ..
+        }) = self.peek().cloned()
+        {
             self.advance();
             n
         } else {
@@ -186,18 +198,30 @@ impl<'a> Parser<'a> {
         let mut variants = Vec::new();
 
         while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
-            if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+            if let Some(Token {
+                kind: TokenKind::Identifier(n),
+                ..
+            }) = self.peek().cloned()
+            {
                 self.advance();
                 let variant_name = n;
-                
+
                 let fields = if self.match_token(&[TokenKind::LeftParen]) {
                     let mut variant_fields = Vec::new();
                     if !self.check(&TokenKind::RightParen) {
                         loop {
-                            let field_name = if let Some(Token { kind: TokenKind::Identifier(fname), .. }) = self.peek().cloned() {
+                            let field_name = if let Some(Token {
+                                kind: TokenKind::Identifier(fname),
+                                ..
+                            }) = self.peek().cloned()
+                            {
                                 // Could be a name `x: Int` or just a type `Int`
                                 // Let's check if there's a colon next
-                                let next_is_colon = self.tokens.get(self.current + 1).map(|t| t.kind == TokenKind::Colon).unwrap_or(false);
+                                let next_is_colon = self
+                                    .tokens
+                                    .get(self.current + 1)
+                                    .map(|t| t.kind == TokenKind::Colon)
+                                    .unwrap_or(false);
                                 if next_is_colon {
                                     self.advance(); // consume name
                                     self.advance(); // consume colon
@@ -211,7 +235,10 @@ impl<'a> Parser<'a> {
 
                             {
                                 let ty = self.parse_type_expr()?;
-                                variant_fields.push(ast::EnumField { name: field_name, ty });
+                                variant_fields.push(ast::EnumField {
+                                    name: field_name,
+                                    ty,
+                                });
                             }
 
                             if !self.match_token(&[TokenKind::Comma]) {
@@ -228,7 +255,10 @@ impl<'a> Parser<'a> {
                     None
                 };
 
-                variants.push(ast::EnumVariant { name: variant_name, fields });
+                variants.push(ast::EnumVariant {
+                    name: variant_name,
+                    fields,
+                });
 
                 if self.match_token(&[TokenKind::Comma]) {
                     continue;
@@ -245,20 +275,33 @@ impl<'a> Parser<'a> {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
 
-        Some(Stmt::new(StmtKind::Enum {
-            name,
-            type_params,
-            variants,
-            is_private,
-        }, span))
+        Some(Stmt::new(
+            StmtKind::Enum {
+                name,
+                type_params,
+                variants,
+                is_private,
+            },
+            span,
+        ))
     }
 
     fn class_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
-        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+        let name = if let Some(Token {
+            kind: TokenKind::Identifier(n),
+            ..
+        }) = self.peek().cloned()
+        {
             self.advance();
             n
         } else {
@@ -271,14 +314,18 @@ impl<'a> Parser<'a> {
         let mut implements = Vec::new();
         if self.match_token(&[TokenKind::Implements]) {
             loop {
-                if let Some(Token { kind: TokenKind::Identifier(i), .. }) = self.peek().cloned() {
+                if let Some(Token {
+                    kind: TokenKind::Identifier(i),
+                    ..
+                }) = self.peek().cloned()
+                {
                     self.advance();
                     implements.push(i);
                 } else {
                     self.error_at_current("Expected interface name.");
                     return None;
                 }
-                
+
                 if !self.match_token(&[TokenKind::Comma]) {
                     break;
                 }
@@ -339,14 +386,34 @@ impl<'a> Parser<'a> {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::Class { name: name.clone(), type_params, implements, methods, fields, is_private }, span))
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
+        Some(Stmt::new(
+            StmtKind::Class {
+                name,
+                type_params,
+                implements,
+                methods,
+                fields,
+                is_private,
+            },
+            span,
+        ))
     }
 
     fn interface_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
-        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+        let name = if let Some(Token {
+            kind: TokenKind::Identifier(n),
+            ..
+        }) = self.peek().cloned()
+        {
             self.advance();
             n
         } else {
@@ -380,14 +447,31 @@ impl<'a> Parser<'a> {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::Interface { name: name.clone(), methods, is_private }, span))
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
+        Some(Stmt::new(
+            StmtKind::Interface {
+                name,
+                methods,
+                is_private,
+            },
+            span,
+        ))
     }
 
     fn interface_method_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
-        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+        let name = if let Some(Token {
+            kind: TokenKind::Identifier(n),
+            ..
+        }) = self.peek().cloned()
+        {
             self.advance();
             n
         } else {
@@ -403,7 +487,11 @@ impl<'a> Parser<'a> {
         let mut params = Vec::new();
         if !self.check(&TokenKind::RightParen) {
             loop {
-                let param_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                let param_name = if let Some(Token {
+                    kind: TokenKind::Identifier(n),
+                    ..
+                }) = self.peek().cloned()
+                {
                     self.advance();
                     n
                 } else {
@@ -442,11 +530,30 @@ impl<'a> Parser<'a> {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
 
         // We use StmtKind::Func but with an empty block for the body.
-        let empty_body = self.session.ast_arena.alloc(Stmt::new(StmtKind::Block(Vec::new()), span));
-        Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params: Vec::new(), params, return_type, body: empty_body, is_private }, span))
+        let empty_body = self
+            .session
+            .ast_arena
+            .alloc(Stmt::new(StmtKind::Block(Vec::new()), span));
+        Some(Stmt::new(
+            StmtKind::Func {
+                name,
+                type_params: Vec::new(),
+                params,
+                return_type,
+                body: empty_body,
+                is_private,
+            },
+            span,
+        ))
     }
 
     fn init_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
@@ -461,7 +568,11 @@ impl<'a> Parser<'a> {
         let mut params = Vec::new();
         if !self.check(&TokenKind::RightParen) {
             loop {
-                let param_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                let param_name = if let Some(Token {
+                    kind: TokenKind::Identifier(n),
+                    ..
+                }) = self.peek().cloned()
+                {
                     self.advance();
                     n
                 } else {
@@ -489,7 +600,9 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        let return_type = Some(TypeExpr::Named(self.session.interner.borrow_mut().intern("Void")));
+        let return_type = Some(TypeExpr::Named(
+            self.session.interner.borrow_mut().intern("Void"),
+        ));
 
         if !self.match_token(&[TokenKind::LeftBrace]) {
             self.error_at_current("Expected '{' before init body.");
@@ -498,8 +611,24 @@ impl<'a> Parser<'a> {
 
         let body = self.block()?;
         let end_span = body.span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params: Vec::new(), params, return_type, body: self.session.ast_arena.alloc(body), is_private }, span))
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
+        Some(Stmt::new(
+            StmtKind::Func {
+                name,
+                type_params: Vec::new(),
+                params,
+                return_type,
+                body: self.session.ast_arena.alloc(body),
+                is_private,
+            },
+            span,
+        ))
     }
 
     fn foreign_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
@@ -510,7 +639,11 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+        let name = if let Some(Token {
+            kind: TokenKind::Identifier(n),
+            ..
+        }) = self.peek().cloned()
+        {
             self.advance();
             n
         } else {
@@ -528,7 +661,11 @@ impl<'a> Parser<'a> {
         let mut params = Vec::new();
         if !self.check(&TokenKind::RightParen) {
             loop {
-                let param_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                let param_name = if let Some(Token {
+                    kind: TokenKind::Identifier(n),
+                    ..
+                }) = self.peek().cloned()
+                {
                     self.advance();
                     n
                 } else {
@@ -567,21 +704,34 @@ impl<'a> Parser<'a> {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
 
-        Some(Stmt::new(StmtKind::ForeignFunc {
-            name,
-            type_params,
-            params,
-            return_type,
-            is_private,
-        }, span))
+        Some(Stmt::new(
+            StmtKind::ForeignFunc {
+                name,
+                type_params,
+                params,
+                return_type,
+                is_private,
+            },
+            span,
+        ))
     }
 
     fn function_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
-        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+        let name = if let Some(Token {
+            kind: TokenKind::Identifier(n),
+            ..
+        }) = self.peek().cloned()
+        {
             self.advance();
             n
         } else {
@@ -599,7 +749,11 @@ impl<'a> Parser<'a> {
         let mut params = Vec::new();
         if !self.check(&TokenKind::RightParen) {
             loop {
-                let param_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                let param_name = if let Some(Token {
+                    kind: TokenKind::Identifier(n),
+                    ..
+                }) = self.peek().cloned()
+                {
                     self.advance();
                     n
                 } else {
@@ -639,14 +793,39 @@ impl<'a> Parser<'a> {
 
         let body = self.block()?;
         let end_span = body.span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::Func { name: name.clone(), type_params, params, return_type, body: self.session.ast_arena.alloc(body), is_private }, span))
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
+        Some(Stmt::new(
+            StmtKind::Func {
+                name,
+                type_params,
+                params,
+                return_type,
+                body: self.session.ast_arena.alloc(body),
+                is_private,
+            },
+            span,
+        ))
     }
 
-    fn variable_declaration(&mut self, is_var: bool, is_weak: bool, is_private: bool) -> Option<Stmt<'a>> {
+    fn variable_declaration(
+        &mut self,
+        is_var: bool,
+        is_weak: bool,
+        is_private: bool,
+    ) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
-        let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+        let name = if let Some(Token {
+            kind: TokenKind::Identifier(n),
+            ..
+        }) = self.peek().cloned()
+        {
             self.advance();
             n
         } else {
@@ -669,12 +848,29 @@ impl<'a> Parser<'a> {
         self.match_token(&[TokenKind::Semicolon]);
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
+
         let kind = if is_var {
-            StmtKind::Var { name: name.clone(), type_annotation, initializer: initializer.map(|e| &*self.session.ast_arena.alloc(e)), is_weak, is_private }
+            StmtKind::Var {
+                name,
+                type_annotation,
+                initializer: initializer.map(|e| &*self.session.ast_arena.alloc(e)),
+                is_weak,
+                is_private,
+            }
         } else {
-            StmtKind::Let { name: name.clone(), type_annotation, initializer: initializer.map(|e| &*self.session.ast_arena.alloc(e)), is_private }
+            StmtKind::Let {
+                name,
+                type_annotation,
+                initializer: initializer.map(|e| &*self.session.ast_arena.alloc(e)),
+                is_private,
+            }
         };
 
         Some(Stmt::new(kind, span))
@@ -726,8 +922,21 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::If { condition: self.session.ast_arena.alloc(condition), then_branch: self.session.ast_arena.alloc(then_branch), else_branch: else_branch.map(|e| &*e) }, span))
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
+        Some(Stmt::new(
+            StmtKind::If {
+                condition: self.session.ast_arena.alloc(condition),
+                then_branch: self.session.ast_arena.alloc(then_branch),
+                else_branch: else_branch.map(|e| &*e),
+            },
+            span,
+        ))
     }
 
     fn while_statement(&mut self) -> Option<Stmt<'a>> {
@@ -743,14 +952,30 @@ impl<'a> Parser<'a> {
         let body = self.block()?;
         let end_span = body.span;
 
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::While { condition: self.session.ast_arena.alloc(condition), body: self.session.ast_arena.alloc(body) }, span))
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
+        Some(Stmt::new(
+            StmtKind::While {
+                condition: self.session.ast_arena.alloc(condition),
+                body: self.session.ast_arena.alloc(body),
+            },
+            span,
+        ))
     }
 
     fn for_statement(&mut self) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
-        let item_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+        let item_name = if let Some(Token {
+            kind: TokenKind::Identifier(n),
+            ..
+        }) = self.peek().cloned()
+        {
             self.advance();
             n
         } else {
@@ -758,8 +983,12 @@ impl<'a> Parser<'a> {
             return None;
         };
 
-        let is_in = if let Some(Token { kind: TokenKind::Identifier(s), .. }) = self.peek() {
-            self.session.interner.borrow().lookup(s.clone()) == "in"
+        let is_in = if let Some(Token {
+            kind: TokenKind::Identifier(s),
+            ..
+        }) = self.peek()
+        {
+            self.session.interner.borrow().lookup(*s) == "in"
         } else {
             false
         };
@@ -781,8 +1010,21 @@ impl<'a> Parser<'a> {
         let body = self.block()?;
         let end_span = body.span;
 
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::For { item_name, iterator: self.session.ast_arena.alloc(iterator), body: self.session.ast_arena.alloc(body) }, span))
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
+        Some(Stmt::new(
+            StmtKind::For {
+                item_name,
+                iterator: self.session.ast_arena.alloc(iterator),
+                body: self.session.ast_arena.alloc(body),
+            },
+            span,
+        ))
     }
 
     fn return_statement(&mut self) -> Option<Stmt<'a>> {
@@ -800,8 +1042,19 @@ impl<'a> Parser<'a> {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        Some(Stmt::new(StmtKind::Return { value: value.map(|e| &*self.session.ast_arena.alloc(e)) }, span))
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
+        Some(Stmt::new(
+            StmtKind::Return {
+                value: value.map(|e| &*self.session.ast_arena.alloc(e)),
+            },
+            span,
+        ))
     }
 
     fn block(&mut self) -> Option<Stmt<'a>> {
@@ -820,7 +1073,13 @@ impl<'a> Parser<'a> {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
         Some(Stmt::new(StmtKind::Block(statements), span))
     }
 
@@ -830,7 +1089,10 @@ impl<'a> Parser<'a> {
         self.match_token(&[TokenKind::Semicolon]);
 
         let span = expr.span;
-        Some(Stmt::new(StmtKind::Expression(self.session.ast_arena.alloc(expr)), span))
+        Some(Stmt::new(
+            StmtKind::Expression(self.session.ast_arena.alloc(expr)),
+            span,
+        ))
     }
 
     fn expression(&mut self) -> Option<Expr<'a>> {
@@ -847,8 +1109,20 @@ impl<'a> Parser<'a> {
             if op.kind == TokenKind::QuestionQuestionEqual {
                 match expr.kind {
                     ExprKind::Variable(_) | ExprKind::Get { .. } | ExprKind::IndexGet { .. } => {
-                        let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
-                        return Some(Expr::new(ExprKind::NullCoalesceAssign { left: self.session.ast_arena.alloc(expr), right: self.session.ast_arena.alloc(value) }, span));
+                        let span = Span::new(
+                            expr.span.file_id,
+                            expr.span.start,
+                            value.span.end,
+                            expr.span.start_loc,
+                            value.span.end_loc,
+                        );
+                        return Some(Expr::new(
+                            ExprKind::NullCoalesceAssign {
+                                left: self.session.ast_arena.alloc(expr),
+                                right: self.session.ast_arena.alloc(value),
+                            },
+                            span,
+                        ));
                     }
                     _ => {
                         self.error_at_current("Invalid assignment target for ??=.");
@@ -857,16 +1131,54 @@ impl<'a> Parser<'a> {
             } else {
                 match expr.kind {
                     ExprKind::Variable(name) => {
-                        let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
-                        return Some(Expr::new(ExprKind::Assign { name, value: self.session.ast_arena.alloc(value) }, span));
+                        let span = Span::new(
+                            expr.span.file_id,
+                            expr.span.start,
+                            value.span.end,
+                            expr.span.start_loc,
+                            value.span.end_loc,
+                        );
+                        return Some(Expr::new(
+                            ExprKind::Assign {
+                                name,
+                                value: self.session.ast_arena.alloc(value),
+                            },
+                            span,
+                        ));
                     }
                     ExprKind::Get { object, name } => {
-                        let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
-                        return Some(Expr::new(ExprKind::Set { object, name, value: self.session.ast_arena.alloc(value) }, span));
+                        let span = Span::new(
+                            expr.span.file_id,
+                            expr.span.start,
+                            value.span.end,
+                            expr.span.start_loc,
+                            value.span.end_loc,
+                        );
+                        return Some(Expr::new(
+                            ExprKind::Set {
+                                object,
+                                name,
+                                value: self.session.ast_arena.alloc(value),
+                            },
+                            span,
+                        ));
                     }
                     ExprKind::IndexGet { object, index } => {
-                        let span = Span::new(expr.span.file_id, expr.span.start, value.span.end, expr.span.start_loc, value.span.end_loc);
-                        return Some(Expr::new(ExprKind::IndexSet { object, index, value: self.session.ast_arena.alloc(value) }, span));
+                        let span = Span::new(
+                            expr.span.file_id,
+                            expr.span.start,
+                            value.span.end,
+                            expr.span.start_loc,
+                            value.span.end_loc,
+                        );
+                        return Some(Expr::new(
+                            ExprKind::IndexSet {
+                                object,
+                                index,
+                                value: self.session.ast_arena.alloc(value),
+                            },
+                            span,
+                        ));
                     }
                     _ => {
                         self.error_at_current("Invalid assignment target.");
@@ -883,8 +1195,20 @@ impl<'a> Parser<'a> {
 
         while self.match_token(&[TokenKind::QuestionQuestion]) {
             let right = self.range()?;
-            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::NullCoalesce { left: self.session.ast_arena.alloc(expr), right: self.session.ast_arena.alloc(right) }, span);
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::NullCoalesce {
+                    left: self.session.ast_arena.alloc(expr),
+                    right: self.session.ast_arena.alloc(right),
+                },
+                span,
+            );
         }
 
         Some(expr)
@@ -895,13 +1219,24 @@ impl<'a> Parser<'a> {
 
         while self.match_token(&[TokenKind::DotDot]) {
             let right = self.equality()?;
-            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::Range { start: self.session.ast_arena.alloc(expr), end: self.session.ast_arena.alloc(right) }, span);
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::Range {
+                    start: self.session.ast_arena.alloc(expr),
+                    end: self.session.ast_arena.alloc(right),
+                },
+                span,
+            );
         }
 
         Some(expr)
     }
-
 
     fn equality(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.comparison()?;
@@ -913,8 +1248,21 @@ impl<'a> Parser<'a> {
                 _ => unreachable!(),
             };
             let right = self.comparison()?;
-            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::Binary(self.session.ast_arena.alloc(expr), operator, self.session.ast_arena.alloc(right)), span);
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::Binary(
+                    self.session.ast_arena.alloc(expr),
+                    operator,
+                    self.session.ast_arena.alloc(right),
+                ),
+                span,
+            );
         }
 
         Some(expr)
@@ -923,7 +1271,12 @@ impl<'a> Parser<'a> {
     fn comparison(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.term()?;
 
-        while self.match_token(&[TokenKind::Greater, TokenKind::GreaterEqual, TokenKind::Less, TokenKind::LessEqual]) {
+        while self.match_token(&[
+            TokenKind::Greater,
+            TokenKind::GreaterEqual,
+            TokenKind::Less,
+            TokenKind::LessEqual,
+        ]) {
             let operator = match self.previous().kind {
                 TokenKind::Greater => BinaryOp::Greater,
                 TokenKind::GreaterEqual => BinaryOp::GreaterEqual,
@@ -932,8 +1285,21 @@ impl<'a> Parser<'a> {
                 _ => unreachable!(),
             };
             let right = self.term()?;
-            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::Binary(self.session.ast_arena.alloc(expr), operator, self.session.ast_arena.alloc(right)), span);
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::Binary(
+                    self.session.ast_arena.alloc(expr),
+                    operator,
+                    self.session.ast_arena.alloc(right),
+                ),
+                span,
+            );
         }
 
         Some(expr)
@@ -949,8 +1315,21 @@ impl<'a> Parser<'a> {
                 _ => unreachable!(),
             };
             let right = self.factor()?;
-            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::Binary(self.session.ast_arena.alloc(expr), operator, self.session.ast_arena.alloc(right)), span);
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::Binary(
+                    self.session.ast_arena.alloc(expr),
+                    operator,
+                    self.session.ast_arena.alloc(right),
+                ),
+                span,
+            );
         }
 
         Some(expr)
@@ -966,8 +1345,21 @@ impl<'a> Parser<'a> {
                 _ => unreachable!(),
             };
             let right = self.unary()?;
-            let span = Span::new(expr.span.file_id, expr.span.start, right.span.end, expr.span.start_loc, right.span.end_loc);
-            expr = Expr::new(ExprKind::Binary(self.session.ast_arena.alloc(expr), operator, self.session.ast_arena.alloc(right)), span);
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::Binary(
+                    self.session.ast_arena.alloc(expr),
+                    operator,
+                    self.session.ast_arena.alloc(right),
+                ),
+                span,
+            );
         }
 
         Some(expr)
@@ -977,8 +1369,17 @@ impl<'a> Parser<'a> {
         if self.match_token(&[TokenKind::Minus]) {
             let start_span = self.previous().span;
             let right = self.unary()?;
-            let span = Span::new(start_span.file_id, start_span.start, right.span.end, start_span.start_loc, right.span.end_loc);
-            return Some(Expr::new(ExprKind::Unary(UnaryOp::Negate, self.session.ast_arena.alloc(right)), span));
+            let span = Span::new(
+                start_span.file_id,
+                start_span.start,
+                right.span.end,
+                start_span.start_loc,
+                right.span.end_loc,
+            );
+            return Some(Expr::new(
+                ExprKind::Unary(UnaryOp::Negate, self.session.ast_arena.alloc(right)),
+                span,
+            ));
         }
 
         self.call()
@@ -1014,7 +1415,11 @@ impl<'a> Parser<'a> {
                 }
                 expr = self.finish_call(expr, type_args)?;
             } else if self.match_token(&[TokenKind::Dot]) {
-                let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                let name = if let Some(Token {
+                    kind: TokenKind::Identifier(n),
+                    ..
+                }) = self.peek().cloned()
+                {
                     self.advance();
                     n
                 } else {
@@ -1022,10 +1427,26 @@ impl<'a> Parser<'a> {
                     return None;
                 };
 
-                let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
-                expr = Expr::new(ExprKind::Get { object: self.session.ast_arena.alloc(expr), name }, span);
+                let span = Span::new(
+                    expr.span.file_id,
+                    expr.span.start,
+                    self.previous().span.end,
+                    expr.span.start_loc,
+                    self.previous().span.end_loc,
+                );
+                expr = Expr::new(
+                    ExprKind::Get {
+                        object: self.session.ast_arena.alloc(expr),
+                        name,
+                    },
+                    span,
+                );
             } else if self.match_token(&[TokenKind::QuestionDot]) {
-                let name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                let name = if let Some(Token {
+                    kind: TokenKind::Identifier(n),
+                    ..
+                }) = self.peek().cloned()
+                {
                     self.advance();
                     n
                 } else {
@@ -1033,19 +1454,52 @@ impl<'a> Parser<'a> {
                     return None;
                 };
 
-                let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
-                expr = Expr::new(ExprKind::OptionalGet { object: self.session.ast_arena.alloc(expr), name }, span);
+                let span = Span::new(
+                    expr.span.file_id,
+                    expr.span.start,
+                    self.previous().span.end,
+                    expr.span.start_loc,
+                    self.previous().span.end_loc,
+                );
+                expr = Expr::new(
+                    ExprKind::OptionalGet {
+                        object: self.session.ast_arena.alloc(expr),
+                        name,
+                    },
+                    span,
+                );
             } else if self.match_token(&[TokenKind::Bang]) {
-                let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
-                expr = Expr::new(ExprKind::ForceUnwrap(self.session.ast_arena.alloc(expr)), span);
+                let span = Span::new(
+                    expr.span.file_id,
+                    expr.span.start,
+                    self.previous().span.end,
+                    expr.span.start_loc,
+                    self.previous().span.end_loc,
+                );
+                expr = Expr::new(
+                    ExprKind::ForceUnwrap(self.session.ast_arena.alloc(expr)),
+                    span,
+                );
             } else if self.match_token(&[TokenKind::LeftBracket]) {
                 let index = self.expression()?;
                 if !self.match_token(&[TokenKind::RightBracket]) {
                     self.error_at_current("Expected ']' after index.");
                     return None;
                 }
-                let span = Span::new(expr.span.file_id, expr.span.start, self.previous().span.end, expr.span.start_loc, self.previous().span.end_loc);
-                expr = Expr::new(ExprKind::IndexGet { object: self.session.ast_arena.alloc(expr), index: self.session.ast_arena.alloc(index) }, span);
+                let span = Span::new(
+                    expr.span.file_id,
+                    expr.span.start,
+                    self.previous().span.end,
+                    expr.span.start_loc,
+                    self.previous().span.end_loc,
+                );
+                expr = Expr::new(
+                    ExprKind::IndexGet {
+                        object: self.session.ast_arena.alloc(expr),
+                        index: self.session.ast_arena.alloc(index),
+                    },
+                    span,
+                );
             } else {
                 break;
             }
@@ -1067,8 +1521,21 @@ impl<'a> Parser<'a> {
             self.error_at_current("Expected ')' after arguments.");
             return None;
         }
-        let span = Span::new(callee.span.file_id, callee.span.start, self.previous().span.end, callee.span.start_loc, self.previous().span.end_loc);
-        Some(Expr::new(ExprKind::Call { callee: self.session.ast_arena.alloc(callee), type_args, arguments }, span))
+        let span = Span::new(
+            callee.span.file_id,
+            callee.span.start,
+            self.previous().span.end,
+            callee.span.start_loc,
+            self.previous().span.end_loc,
+        );
+        Some(Expr::new(
+            ExprKind::Call {
+                callee: self.session.ast_arena.alloc(callee),
+                type_args,
+                arguments,
+            },
+            span,
+        ))
     }
 
     fn check_generic_call(&self) -> bool {
@@ -1084,12 +1551,16 @@ impl<'a> Parser<'a> {
                     depth -= 1;
                     if depth == 0 {
                         // Check if the next token is '('
-                        return i + 1 < self.tokens.len() && self.tokens[i + 1].kind == TokenKind::LeftParen
+                        return i + 1 < self.tokens.len()
+                            && self.tokens[i + 1].kind == TokenKind::LeftParen;
                     }
-                },
-                TokenKind::LeftParen | TokenKind::LeftBrace | TokenKind::Semicolon | TokenKind::Equal => {
+                }
+                TokenKind::LeftParen
+                | TokenKind::LeftBrace
+                | TokenKind::Semicolon
+                | TokenKind::Equal => {
                     return false; // Definitely not generic type args
-                },
+                }
                 _ => {}
             }
             i += 1;
@@ -1110,7 +1581,7 @@ impl<'a> Parser<'a> {
         if self.match_token(&[TokenKind::SelfKeyword]) {
             return Some(Expr::new(ExprKind::SelfRef, self.previous().span));
         }
-        
+
         if let Some(token) = self.peek().cloned() {
             match token.kind {
                 TokenKind::Match => {
@@ -1132,7 +1603,7 @@ impl<'a> Parser<'a> {
                     while let Some(tok) = self.peek().cloned() {
                         match &tok.kind {
                             TokenKind::StringPart(s) => {
-                                pieces.push(Expr::new(ExprKind::String(s.clone()), tok.span));
+                                pieces.push(Expr::new(ExprKind::String(*s), tok.span));
                                 self.advance();
                             }
                             TokenKind::InterpolationStart => {
@@ -1141,7 +1612,9 @@ impl<'a> Parser<'a> {
                                     pieces.push(expr);
                                 }
                                 if !self.match_token(&[TokenKind::InterpolationEnd]) {
-                                    self.error_at_current("Expected '}' after string interpolation expression.");
+                                    self.error_at_current(
+                                        "Expected '}' after string interpolation expression.",
+                                    );
                                 }
                             }
                             TokenKind::StringEnd => {
@@ -1165,21 +1638,30 @@ impl<'a> Parser<'a> {
                         }
                     }
                     let end_span = self.previous().span;
-                    let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-                    
+                    let span = Span::new(
+                        start_span.file_id,
+                        start_span.start,
+                        end_span.end,
+                        start_span.start_loc,
+                        end_span.end_loc,
+                    );
+
                     if pieces.len() == 1 {
                         if let ExprKind::String(s) = &pieces[0].kind {
-                            return Some(Expr::new(ExprKind::String(s.clone()), span));
+                            return Some(Expr::new(ExprKind::String(*s), span));
                         }
                     } else if pieces.is_empty() {
-                        return Some(Expr::new(ExprKind::String(self.session.interner.borrow_mut().intern("")), span));
+                        return Some(Expr::new(
+                            ExprKind::String(self.session.interner.borrow_mut().intern("")),
+                            span,
+                        ));
                     }
-                    
+
                     return Some(Expr::new(ExprKind::InterpolatedString(pieces), span));
                 }
                 TokenKind::Identifier(ref i) => {
                     self.advance();
-                    return Some(Expr::new(ExprKind::Variable(i.clone()), token.span));
+                    return Some(Expr::new(ExprKind::Variable(*i), token.span));
                 }
                 TokenKind::LeftParen => {
                     self.advance();
@@ -1190,18 +1672,33 @@ impl<'a> Parser<'a> {
                         return None;
                     }
                     let end_span = self.previous().span;
-                    let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-                    return Some(Expr::new(ExprKind::Grouping(self.session.ast_arena.alloc(expr)), span));
+                    let span = Span::new(
+                        start_span.file_id,
+                        start_span.start,
+                        end_span.end,
+                        start_span.start_loc,
+                        end_span.end_loc,
+                    );
+                    return Some(Expr::new(
+                        ExprKind::Grouping(self.session.ast_arena.alloc(expr)),
+                        span,
+                    ));
                 }
                 TokenKind::LeftBracket => {
                     self.advance();
                     let start_span = token.span;
                     if self.match_token(&[TokenKind::RightBracket]) {
                         let end_span = self.previous().span;
-                        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+                        let span = Span::new(
+                            start_span.file_id,
+                            start_span.start,
+                            end_span.end,
+                            start_span.start_loc,
+                            end_span.end_loc,
+                        );
                         return Some(Expr::new(ExprKind::Array(Vec::new()), span));
                     }
-                    
+
                     let first_expr = self.expression()?;
                     if self.match_token(&[TokenKind::Semicolon]) {
                         let count = self.expression()?;
@@ -1210,19 +1707,41 @@ impl<'a> Parser<'a> {
                             return None;
                         }
                         let end_span = self.previous().span;
-                        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-                        return Some(Expr::new(ExprKind::ArrayRepeat { value: self.session.ast_arena.alloc(first_expr), count: self.session.ast_arena.alloc(count) }, span));
+                        let span = Span::new(
+                            start_span.file_id,
+                            start_span.start,
+                            end_span.end,
+                            start_span.start_loc,
+                            end_span.end_loc,
+                        );
+                        return Some(Expr::new(
+                            ExprKind::ArrayRepeat {
+                                value: self.session.ast_arena.alloc(first_expr),
+                                count: self.session.ast_arena.alloc(count),
+                            },
+                            span,
+                        ));
                     } else if self.match_token(&[TokenKind::For]) {
-                        let item_name = if let Some(Token { kind: TokenKind::Identifier(n), .. }) = self.peek().cloned() {
+                        let item_name = if let Some(Token {
+                            kind: TokenKind::Identifier(n),
+                            ..
+                        }) = self.peek().cloned()
+                        {
                             self.advance();
                             n
                         } else {
-                            self.error_at_current("Expected item name after 'for' in list comprehension.");
+                            self.error_at_current(
+                                "Expected item name after 'for' in list comprehension.",
+                            );
                             return None;
                         };
 
-                        let is_in = if let Some(Token { kind: TokenKind::Identifier(s), .. }) = self.peek() {
-                            self.session.interner.borrow().lookup(s.clone()) == "in"
+                        let is_in = if let Some(Token {
+                            kind: TokenKind::Identifier(s),
+                            ..
+                        }) = self.peek()
+                        {
+                            self.session.interner.borrow().lookup(*s) == "in"
                         } else {
                             false
                         };
@@ -1230,7 +1749,9 @@ impl<'a> Parser<'a> {
                         if is_in {
                             self.advance();
                         } else {
-                            self.error_at_current("Expected 'in' after item name in list comprehension.");
+                            self.error_at_current(
+                                "Expected 'in' after item name in list comprehension.",
+                            );
                             return None;
                         }
 
@@ -1240,8 +1761,21 @@ impl<'a> Parser<'a> {
                             return None;
                         }
                         let end_span = self.previous().span;
-                        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-                        return Some(Expr::new(ExprKind::ListComprehension { expr: self.session.ast_arena.alloc(first_expr), item_name, iterator: self.session.ast_arena.alloc(iterator) }, span));
+                        let span = Span::new(
+                            start_span.file_id,
+                            start_span.start,
+                            end_span.end,
+                            start_span.start_loc,
+                            end_span.end_loc,
+                        );
+                        return Some(Expr::new(
+                            ExprKind::ListComprehension {
+                                expr: self.session.ast_arena.alloc(first_expr),
+                                item_name,
+                                iterator: self.session.ast_arena.alloc(iterator),
+                            },
+                            span,
+                        ));
                     } else {
                         let mut elements = vec![first_expr];
                         while self.match_token(&[TokenKind::Comma]) {
@@ -1255,7 +1789,13 @@ impl<'a> Parser<'a> {
                             return None;
                         }
                         let end_span = self.previous().span;
-                        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+                        let span = Span::new(
+                            start_span.file_id,
+                            start_span.start,
+                            end_span.end,
+                            start_span.start_loc,
+                            end_span.end_loc,
+                        );
                         return Some(Expr::new(ExprKind::Array(elements), span));
                     }
                 }
@@ -1269,7 +1809,7 @@ impl<'a> Parser<'a> {
 
     fn match_expression(&mut self, start_span: Span) -> Option<Expr<'a>> {
         let value = self.expression()?;
-        
+
         if !self.match_token(&[TokenKind::LeftBrace]) {
             self.error_at_current("Expected '{' before match arms.");
             return None;
@@ -1282,11 +1822,19 @@ impl<'a> Parser<'a> {
                 ast::Pattern::Wildcard
             } else {
                 let mut path = Vec::new();
-                if let Some(Token { kind: TokenKind::Identifier(first), .. }) = self.peek().cloned() {
+                if let Some(Token {
+                    kind: TokenKind::Identifier(first),
+                    ..
+                }) = self.peek().cloned()
+                {
                     self.advance();
                     path.push(first);
                     while self.match_token(&[TokenKind::Dot]) {
-                        if let Some(Token { kind: TokenKind::Identifier(next), .. }) = self.peek().cloned() {
+                        if let Some(Token {
+                            kind: TokenKind::Identifier(next),
+                            ..
+                        }) = self.peek().cloned()
+                        {
                             self.advance();
                             path.push(next);
                         } else {
@@ -1305,8 +1853,12 @@ impl<'a> Parser<'a> {
                         loop {
                             if self.match_token(&[TokenKind::Underscore]) {
                                 let b_symbol = self.session.interner.borrow_mut().intern("_");
-                    b.push(b_symbol);
-                            } else if let Some(Token { kind: TokenKind::Identifier(id), .. }) = self.peek().cloned() {
+                                b.push(b_symbol);
+                            } else if let Some(Token {
+                                kind: TokenKind::Identifier(id),
+                                ..
+                            }) = self.peek().cloned()
+                            {
                                 self.advance();
                                 b.push(id);
                             } else {
@@ -1336,11 +1888,14 @@ impl<'a> Parser<'a> {
             }
 
             let body = self.expression()?;
-            
+
             // Optional comma after arm
             self.match_token(&[TokenKind::Comma]);
 
-            arms.push(ast::MatchArm { pattern, body: self.session.ast_arena.alloc(body) });
+            arms.push(ast::MatchArm {
+                pattern,
+                body: self.session.ast_arena.alloc(body),
+            });
         }
 
         if !self.match_token(&[TokenKind::RightBrace]) {
@@ -1349,9 +1904,21 @@ impl<'a> Parser<'a> {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
-        
-        Some(Expr::new(ExprKind::Match { value: self.session.ast_arena.alloc(value), arms }, span))
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
+
+        Some(Expr::new(
+            ExprKind::Match {
+                value: self.session.ast_arena.alloc(value),
+                arms,
+            },
+            span,
+        ))
     }
 
     fn match_token(&mut self, types: &[TokenKind]) -> bool {
@@ -1379,7 +1946,9 @@ impl<'a> Parser<'a> {
     }
 
     fn is_at_end(&self) -> bool {
-        self.peek().map(|t| t.kind == TokenKind::Eof).unwrap_or(true)
+        self.peek()
+            .map(|t| t.kind == TokenKind::Eof)
+            .unwrap_or(true)
     }
 
     fn peek(&self) -> Option<&Token> {
@@ -1392,11 +1961,9 @@ impl<'a> Parser<'a> {
 
     fn error_at_current(&mut self, message: &str) {
         if let Some(token) = self.peek() {
-            let diag = DiagnosticBuilder::error(
-                DiagnosticCode::UnexpectedToken,
-                message,
-                token.span,
-            ).build();
+            let diag =
+                DiagnosticBuilder::error(DiagnosticCode::UnexpectedToken, message, token.span)
+                    .build();
             self.errors.push(diag);
         }
     }
@@ -1409,7 +1976,14 @@ impl<'a> Parser<'a> {
             }
             if let Some(token) = self.peek() {
                 match token.kind {
-                    TokenKind::Class | TokenKind::Func | TokenKind::Var | TokenKind::For | TokenKind::If | TokenKind::While | TokenKind::Return | TokenKind::Let => {
+                    TokenKind::Class
+                    | TokenKind::Func
+                    | TokenKind::Var
+                    | TokenKind::For
+                    | TokenKind::If
+                    | TokenKind::While
+                    | TokenKind::Return
+                    | TokenKind::Let => {
                         return;
                     }
                     _ => {}
@@ -1421,10 +1995,14 @@ impl<'a> Parser<'a> {
 
     fn import_declaration(&mut self) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
-        
+
         let mut path = session::Symbol(0);
         if self.match_token(&[TokenKind::StringStart]) {
-            if let Some(Token { kind: TokenKind::StringPart(p), .. }) = self.peek().cloned() {
+            if let Some(Token {
+                kind: TokenKind::StringPart(p),
+                ..
+            }) = self.peek().cloned()
+            {
                 self.advance();
                 path = p;
             }
@@ -1439,18 +2017,26 @@ impl<'a> Parser<'a> {
 
         let mut alias = None;
         if self.match_token(&[TokenKind::As]) {
-            if let Some(Token { kind: TokenKind::Identifier(a), .. }) = self.peek().cloned() {
+            if let Some(Token {
+                kind: TokenKind::Identifier(a),
+                ..
+            }) = self.peek().cloned()
+            {
                 self.advance();
                 alias = Some(a);
             } else {
                 self.error_at_current("Expected identifier after 'as'.");
             }
         }
-        
+
         let mut show = Vec::new();
         if self.match_token(&[TokenKind::Show]) {
             loop {
-                if let Some(Token { kind: TokenKind::Identifier(i), .. }) = self.peek().cloned() {
+                if let Some(Token {
+                    kind: TokenKind::Identifier(i),
+                    ..
+                }) = self.peek().cloned()
+                {
                     self.advance();
                     show.push(i);
                 } else {
@@ -1466,7 +2052,11 @@ impl<'a> Parser<'a> {
         let mut hide = Vec::new();
         if self.match_token(&[TokenKind::Hide]) {
             loop {
-                if let Some(Token { kind: TokenKind::Identifier(i), .. }) = self.peek().cloned() {
+                if let Some(Token {
+                    kind: TokenKind::Identifier(i),
+                    ..
+                }) = self.peek().cloned()
+                {
                     self.advance();
                     hide.push(i);
                 } else {
@@ -1485,17 +2075,35 @@ impl<'a> Parser<'a> {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
 
-        Some(Stmt::new(StmtKind::Import { path, alias, show, hide }, span))
+        Some(Stmt::new(
+            StmtKind::Import {
+                path,
+                alias,
+                show,
+                hide,
+            },
+            span,
+        ))
     }
 
     fn export_declaration(&mut self) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
-        
+
         let mut path = session::Symbol(0);
         if self.match_token(&[TokenKind::StringStart]) {
-            if let Some(Token { kind: TokenKind::StringPart(p), .. }) = self.peek().cloned() {
+            if let Some(Token {
+                kind: TokenKind::StringPart(p),
+                ..
+            }) = self.peek().cloned()
+            {
                 self.advance();
                 path = p;
             }
@@ -1514,11 +2122,16 @@ impl<'a> Parser<'a> {
         }
 
         let end_span = self.previous().span;
-        let span = Span::new(start_span.file_id, start_span.start, end_span.end, start_span.start_loc, end_span.end_loc);
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
 
         Some(Stmt::new(StmtKind::Export { path }, span))
     }
-
 }
 
 #[cfg(any())]
@@ -1533,15 +2146,23 @@ mod tests {
         let mut scanner = Scanner::new(0, source);
         let mut parser = Parser::new(scanner.scan_tokens(&mut session), &mut session);
         let (stmts, errors) = parser.parse();
-        
+
         assert!(errors.is_empty(), "Parse errors: {:?}", errors);
         assert_eq!(stmts.len(), 1);
         match &stmts[0].kind {
-            StmtKind::Func { name, params, return_type, .. } => {
+            StmtKind::Func {
+                name,
+                params,
+                return_type,
+                ..
+            } => {
                 assert_eq!(session.interner.lookup(*name), "add");
                 assert_eq!(params.len(), 2);
                 assert_eq!(session.interner.lookup(params[0].0), "a");
-                assert_eq!(return_type.as_ref().unwrap(), &ast::TypeExpr::Named(session.interner.intern("Int")));
+                assert_eq!(
+                    return_type.as_ref().unwrap(),
+                    &ast::TypeExpr::Named(session.interner.intern("Int"))
+                );
             }
             _ => panic!("Expected Func statement"),
         }
@@ -1554,20 +2175,20 @@ mod tests {
         let mut scanner = Scanner::new(0, source);
         let mut parser = Parser::new(scanner.scan_tokens(&mut session), &mut session);
         let (stmts, errors) = parser.parse();
-        
+
         assert!(errors.is_empty(), "Parse errors: {:?}", errors);
         assert_eq!(stmts.len(), 3);
-        
+
         match &stmts[0].kind {
             StmtKind::Func { is_private, .. } => assert!(*is_private),
             _ => panic!("Expected Func statement"),
         }
-        
+
         match &stmts[1].kind {
             StmtKind::Class { is_private, .. } => assert!(!(*is_private)),
             _ => panic!("Expected Class statement"),
         }
-        
+
         match &stmts[2].kind {
             StmtKind::Var { is_private, .. } => assert!(!(*is_private)),
             _ => panic!("Expected Var statement"),
@@ -1581,11 +2202,15 @@ mod tests {
         let mut scanner = Scanner::new(0, source);
         let mut parser = Parser::new(scanner.scan_tokens(&mut session), &mut session);
         let (stmts, errors) = parser.parse();
-        
+
         assert!(errors.is_empty(), "Parse errors: {:?}", errors);
         assert_eq!(stmts.len(), 1);
         match &stmts[0].kind {
-            StmtKind::If { then_branch, else_branch, .. } => {
+            StmtKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 assert!(matches!(then_branch.kind, StmtKind::Block(_)));
                 assert!(else_branch.is_some());
             }
