@@ -3,8 +3,8 @@ use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct GenericDefinitionRegistry {
-    classes: HashMap<String, Stmt>,
-    functions: HashMap<String, Stmt>,
+    classes: HashMap<session::Symbol, Stmt>,
+    functions: HashMap<session::Symbol, Stmt>,
 }
 
 impl GenericDefinitionRegistry {
@@ -12,19 +12,19 @@ impl GenericDefinitionRegistry {
         Self::default()
     }
 
-    pub fn register_class(&mut self, name: String, stmt: Stmt) {
+    pub fn register_class(&mut self, name: session::Symbol, stmt: Stmt) {
         self.classes.insert(name, stmt);
     }
 
-    pub fn register_function(&mut self, name: String, stmt: Stmt) {
+    pub fn register_function(&mut self, name: session::Symbol, stmt: Stmt) {
         self.functions.insert(name, stmt);
     }
 
-    pub fn get_class(&self, name: &str) -> Option<&Stmt> {
-        self.classes.get(name)
+    pub fn get_class(&self, name: session::Symbol) -> Option<&Stmt> {
+        self.classes.get(&name)
     }
 
-    pub fn get_function(&self, name: &str) -> Option<&Stmt> {
-        self.functions.get(name)
+    pub fn get_function(&self, name: session::Symbol) -> Option<&Stmt> {
+        self.functions.get(&name)
     }
 }

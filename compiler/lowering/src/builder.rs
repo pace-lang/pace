@@ -1,4 +1,5 @@
-use ast::{TypedExpr, TypedExprKind, TypedStmt, TypedStmtKind, TypeExpr, types::Type};
+use session::types::Type;
+use ast::{TypedExpr, TypedExprKind, TypedStmt, TypedStmtKind, TypeExpr};
 use mir::{BasicBlock, BlockId, ForeignAbiType, ForeignFunction, Function, Inst, Place, Program, RValue, Terminator, Value};
 
 pub struct ProgramBuilder<'a> {
@@ -502,8 +503,8 @@ self.current().instructions.push(__inst)
                 for piece in pieces {
                     let mut piece_val = self.lower_expr(piece);
 
-                    match &piece.ty {
-                        ast::Type::Int => {
+                    match self.session.types.get(piece.ty) {
+                        session::types::Type::Int => {
                             let temp = self.new_temp();
                             {
 let __inst = Inst::Assign(temp.clone(), RValue::Call("pace_int_to_string".to_string(), vec![piece_val]));
@@ -511,7 +512,7 @@ self.current().instructions.push(__inst)
 };
                             piece_val = Value::Place(temp);
                         }
-                        ast::Type::Float => {
+                        session::types::Type::Float => {
                             let temp = self.new_temp();
                             {
 let __inst = Inst::Assign(temp.clone(), RValue::Call("pace_float_to_string".to_string(), vec![piece_val]));
@@ -519,7 +520,7 @@ self.current().instructions.push(__inst)
 };
                             piece_val = Value::Place(temp);
                         }
-                        ast::Type::Boolean => {
+                        session::types::Type::Boolean => {
                             let temp = self.new_temp();
                             {
 let __inst = Inst::Assign(temp.clone(), RValue::Call("pace_bool_to_string".to_string(), vec![piece_val]));
@@ -735,12 +736,12 @@ self.current().instructions.push(__inst)
                 let mut default_block = None;
                 
                 let mut enum_name_opt = None;
-                match &value.ty {
-                    ast::Type::GenericInstance(name, _) => enum_name_opt = Some(name.clone()),
-                    ast::Type::Instance(name) => enum_name_opt = Some(name.clone()),
+                match self.session.types.get(value.ty) {
+                    session::types::Type::GenericInstance(name, _) => enum_name_opt = Some(name.clone()),
+                    session::types::Type::Instance(name) => enum_name_opt = Some(name.clone()),
                     _ => {}
                 }
-                let resolved_enum_name = enum_name_opt.unwrap_or_else(|| "".to_string());
+                let resolved_enum_name = enum_name_opt.unwrap_or(self.session.interner.intern(""));
                 
                 for arm in arms {
                     let arm_block = self.new_block();
@@ -748,7 +749,7 @@ self.current().instructions.push(__inst)
                     if let ast::Pattern::Variant { path, bindings } = &arm.pattern {
                         let enum_name = &resolved_enum_name;
                         let variant_name = path.last().unwrap();
-                        let variant_idx = self.enums_map.get(enum_name)
+                        let variant_idx = self.enums_map.get(self.session.interner.lookup(*enum_name))
                             .and_then(|variants| variants.iter().position(|v| v == self.session.interner.lookup(*variant_name)))
                             .unwrap_or(0); // Fallback if enum not found
                         cases.push((variant_idx, arm_block));
@@ -1075,8 +1076,8 @@ self.current().instructions.push(__inst)
                     let obj_val = self.lower_expr(object);
                     let temp = self.new_temp();
                     
-                    if let Type::Instance(class_name) | Type::GenericInstance(class_name, _) = &object.ty {
-                        let actual_name = format!("{}::{}", class_name, self.session.interner.lookup(*name));
+                    if let Type::Instance(class_name) | Type::GenericInstance(class_name, _) = self.session.types.get(object.ty) {
+                        let actual_name = format!("{}::{}", self.session.interner.lookup(*class_name), self.session.interner.lookup(*name));
                         arg_values.insert(0, obj_val);
                         {
 let __inst = Inst::Assign(temp.clone(), RValue::Call(actual_name, arg_values));
@@ -1104,14 +1105,14 @@ self.current().instructions.push(__inst)
                     return Value::Place(temp);
                 }
 
-                if let Type::Class(class_name, _) = &callee.ty {
+                if let Type::Class(class_name, _) = self.session.types.get(callee.ty).clone() {
                     let obj_temp = self.new_temp();
                     {
-let __inst = Inst::Assign(obj_temp.clone(), RValue::AllocateObject(class_name.clone()));
+let __inst = Inst::Assign(obj_temp.clone(), RValue::AllocateObject(self.session.interner.lookup(class_name).to_string()));
 self.current().instructions.push(__inst)
 };
                     
-                    let actual_name = format!("{}::init", class_name);
+                    let actual_name = format!("{}::init", self.session.interner.lookup(class_name));
                     arg_values.insert(0, Value::Place(obj_temp.clone()));
                     let init_temp = self.new_temp();
                     {
@@ -1129,11 +1130,11 @@ self.current().instructions.push(__inst)
                 };
                 
                 if self.session.interner.lookup(func_name) == "print" && arguments.len() == 1 {
-                    match &arguments[0].ty {
-                        ast::types::Type::String => func_name = self.session.interner.intern("printStr"),
-                        ast::types::Type::Float => func_name = self.session.interner.intern("printFloat"),
-                        ast::types::Type::Boolean => func_name = self.session.interner.intern("printBool"),
-                        ast::types::Type::Enum(_, _) | ast::types::Type::Instance(_) => func_name = self.session.interner.intern("printEnum"),
+                    match self.session.types.get(arguments[0].ty) {
+                session::types::Type::String => func_name = self.session.interner.intern("printStr"),
+                        session::types::Type::Float => func_name = self.session.interner.intern("printFloat"),
+                        session::types::Type::Boolean => func_name = self.session.interner.intern("printBool"),
+                        session::types::Type::Enum(_, _) | session::types::Type::Instance(_) => func_name = self.session.interner.intern("printEnum"),
                         _ => func_name = self.session.interner.intern("printInt"),
                     }
                 }
@@ -1161,7 +1162,7 @@ self.current().instructions.push(__inst)
                 let right_val = self.lower_expr(right);
                 let temp = self.new_temp();
                 
-                if op == &ast::BinaryOp::Add && left_ty == ast::types::Type::String && right_ty == ast::types::Type::String {
+                if op == &ast::BinaryOp::Add && left_ty == self.session.types.intern(session::types::Type::String) && right_ty == self.session.types.intern(session::types::Type::String) {
                     {
 let __inst = Inst::Assign(temp.clone(), RValue::Call("stringConcat".to_string(), vec![left_val, right_val]));
 self.current().instructions.push(__inst)
@@ -1182,7 +1183,8 @@ self.current().instructions.push(__inst)
 #[cfg(any())]
 mod tests {
     use super::*;
-    use ast::{BinaryOp, Location, Span};
+    use session::types::Type;
+use ast::{BinaryOp, Location, Span};
 
     fn make_span() -> Span {
         Span::new(0, 0, 0, Location::new(1, 1), Location::new(1, 1))
@@ -1196,10 +1198,10 @@ mod tests {
             name: session.interner.intern("x"),
             type_annotation: None,
             initializer: Some(TypedExpr::new(TypedExprKind::Binary(
-                Box::new(TypedExpr::new(TypedExprKind::Integer(10), ast::types::Type::Int, make_span())),
+                Box::new(TypedExpr::new(TypedExprKind::Integer(10), session::types::Type::Int, make_span())),
                 BinaryOp::Add,
-                Box::new(TypedExpr::new(TypedExprKind::Integer(5), ast::types::Type::Int, make_span())),
-            ), ast::types::Type::Int, make_span())),
+                Box::new(TypedExpr::new(TypedExprKind::Integer(5), session::types::Type::Int, make_span())),
+            ), session::types::Type::Int, make_span())),
         }, make_span());
 
         let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false, std::collections::HashMap::new(), &mut session);
@@ -1228,12 +1230,12 @@ mod tests {
         let mut session = session::CompilerSession::new();
         // if true { let x = 1; }
         let stmt = TypedStmt::new(TypedStmtKind::If {
-            condition: TypedExpr::new(TypedExprKind::Boolean(true), ast::types::Type::Boolean, make_span()),
+            condition: TypedExpr::new(TypedExprKind::Boolean(true), session::types::Type::Boolean, make_span()),
             then_branch: Box::new(TypedStmt::new(TypedStmtKind::Block(vec![
                 TypedStmt::new(TypedStmtKind::Let {
                     name: session.interner.intern("x"),
                     type_annotation: None,
-                    initializer: Some(TypedExpr::new(TypedExprKind::Integer(1), ast::types::Type::Int, make_span())),
+                    initializer: Some(TypedExpr::new(TypedExprKind::Integer(1), session::types::Type::Int, make_span())),
                 }, make_span())
             ]), make_span())),
             else_branch: None,

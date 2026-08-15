@@ -1,7 +1,7 @@
 use diagnostics::Span;
 use crate::expr::{BinaryOp, UnaryOp, Pattern};
 use crate::stmt::{TypeExpr, EnumVariant};
-use crate::types::Type;
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedMatchArm {
@@ -89,12 +89,12 @@ pub enum TypedExprKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedExpr {
     pub kind: TypedExprKind,
-    pub ty: Type,
+    pub ty: session::TypeId,
     pub span: Span,
 }
 
 impl TypedExpr {
-    pub fn new(kind: TypedExprKind, ty: Type, span: Span) -> Self {
+    pub fn new(kind: TypedExprKind, ty: session::TypeId, span: Span) -> Self {
         Self { kind, ty, span }
     }
 }

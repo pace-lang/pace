@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-use ast::types::Type;
-use session::Symbol;
+use session::{Symbol, TypeId};
 
 #[derive(Debug, Clone)]
 pub struct Binding {
-    pub ty: Type,
+    pub ty: TypeId,
     pub is_mutable: bool,
 }
 
@@ -21,13 +20,13 @@ impl Default for TypeEnvironment {
 }
 
 impl TypeEnvironment {
-    pub fn new(global_print_sym: Symbol) -> Self {
+    pub fn new(global_print_sym: Symbol, builtin_func_ty: TypeId) -> Self {
         let mut env = Self {
             bindings: HashMap::new(),
             scope_decls: vec![Vec::new()], // Global scope
         };
         // Insert global print function
-        env.declare(global_print_sym, Type::BuiltinFunc);
+        env.declare(global_print_sym, builtin_func_ty);
         env
     }
 
@@ -51,17 +50,17 @@ impl TypeEnvironment {
         }
     }
 
-    pub fn declare(&mut self, name: Symbol, ty: Type) {
+    pub fn declare(&mut self, name: Symbol, ty: TypeId) {
         self.declare_var(name, ty, false);
     }
 
-    pub fn declare_var(&mut self, name: Symbol, ty: Type, is_mutable: bool) {
+    pub fn declare_var(&mut self, name: Symbol, ty: TypeId, is_mutable: bool) {
         self.bindings.entry(name).or_default().push(Binding { ty, is_mutable });
         self.scope_decls.last_mut().unwrap().push(name);
     }
 
-    pub fn resolve(&self, name: Symbol) -> Option<Type> {
-        self.bindings.get(&name).and_then(|stack| stack.last()).map(|b| b.ty.clone())
+    pub fn resolve(&self, name: Symbol) -> Option<TypeId> {
+        self.bindings.get(&name).and_then(|stack| stack.last()).map(|b| b.ty)
     }
 
     pub fn is_mutable(&self, name: Symbol) -> bool {
