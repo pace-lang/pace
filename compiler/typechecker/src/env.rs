@@ -1,102 +1,70 @@
 use std::collections::HashMap;
 use ast::types::Type;
+use session::Symbol;
 
-#[derive(Debug)]
-pub struct Scope {
-    types: HashMap<String, Type>,
-    mutables: HashMap<String, bool>,
-}
-
-impl Default for Scope {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Scope {
-    pub fn new() -> Self {
-        Self {
-            types: HashMap::new(),
-            mutables: HashMap::new(),
-        }
-    }
-
-    pub fn insert(&mut self, name: String, ty: Type) {
-        self.types.insert(name.clone(), ty);
-        self.mutables.insert(name, false);
-    }
-    
-    pub fn insert_var(&mut self, name: String, ty: Type, is_mutable: bool) {
-        self.types.insert(name.clone(), ty);
-        self.mutables.insert(name, is_mutable);
-    }
-
-    pub fn get(&self, name: &str) -> Option<&Type> {
-        self.types.get(name)
-    }
-
-    pub fn is_mutable(&self, name: &str) -> Option<bool> {
-        self.mutables.get(name).copied()
-    }
+#[derive(Debug, Clone)]
+pub struct Binding {
+    pub ty: Type,
+    pub is_mutable: bool,
 }
 
 #[derive(Debug)]
 pub struct TypeEnvironment {
-    scopes: Vec<Scope>,
+    bindings: HashMap<Symbol, Vec<Binding>>,
+    scope_decls: Vec<Vec<Symbol>>,
 }
 
 impl Default for TypeEnvironment {
     fn default() -> Self {
-        Self::new()
+        panic!("TypeEnvironment requires a global scope to be initialized manually. Use TypeEnvironment::new(global_print_symbol)");
     }
 }
 
 impl TypeEnvironment {
-    pub fn new() -> Self {
-        let mut global_scope = Scope::new();
-        global_scope.insert("print".into(), Type::BuiltinFunc);
-        Self {
-            scopes: vec![global_scope],
-        }
+    pub fn new(global_print_sym: Symbol) -> Self {
+        let mut env = Self {
+            bindings: HashMap::new(),
+            scope_decls: vec![Vec::new()], // Global scope
+        };
+        // Insert global print function
+        env.declare(global_print_sym, Type::BuiltinFunc);
+        env
     }
 
     pub fn push_scope(&mut self) {
-        self.scopes.push(Scope::new());
+        self.scope_decls.push(Vec::new());
     }
 
     pub fn pop_scope(&mut self) {
-        if self.scopes.len() > 1 {
-            self.scopes.pop();
+        if self.scope_decls.len() > 1 {
+            let decls = self.scope_decls.pop().unwrap();
+            for sym in decls {
+                if let Some(stack) = self.bindings.get_mut(&sym) {
+                    stack.pop();
+                    if stack.is_empty() {
+                        self.bindings.remove(&sym);
+                    }
+                }
+            }
         } else {
             panic!("Cannot pop the global scope.");
         }
     }
 
-    pub fn declare(&mut self, name: String, ty: Type) {
-        let current_scope = self.scopes.last_mut().unwrap();
-        current_scope.insert(name, ty);
+    pub fn declare(&mut self, name: Symbol, ty: Type) {
+        self.declare_var(name, ty, false);
     }
 
-    pub fn declare_var(&mut self, name: String, ty: Type, is_mutable: bool) {
-        let current_scope = self.scopes.last_mut().unwrap();
-        current_scope.insert_var(name, ty, is_mutable);
+    pub fn declare_var(&mut self, name: Symbol, ty: Type, is_mutable: bool) {
+        self.bindings.entry(name).or_default().push(Binding { ty, is_mutable });
+        self.scope_decls.last_mut().unwrap().push(name);
     }
 
-    pub fn resolve(&self, name: &str) -> Option<Type> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(ty) = scope.get(name) {
-                return Some(ty.clone());
-            }
-        }
-        None
+    pub fn resolve(&self, name: Symbol) -> Option<Type> {
+        self.bindings.get(&name).and_then(|stack| stack.last()).map(|b| b.ty.clone())
     }
 
-    pub fn is_mutable(&self, name: &str) -> bool {
-        for scope in self.scopes.iter().rev() {
-            if let Some(mutability) = scope.is_mutable(name) {
-                return mutability;
-            }
-        }
-        false
+    pub fn is_mutable(&self, name: Symbol) -> bool {
+        self.bindings.get(&name).and_then(|stack| stack.last()).map(|b| b.is_mutable).unwrap_or(false)
     }
 }

@@ -1,30 +1,12 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use session::Symbol;
-
-#[derive(Debug, Default)]
-pub struct Scope {
-    declared_names: HashSet<Symbol>,
-}
-
-impl Scope {
-    pub fn new() -> Self {
-        Self {
-            declared_names: HashSet::new(),
-        }
-    }
-
-    pub fn declare(&mut self, name: Symbol) -> bool {
-        self.declared_names.insert(name)
-    }
-
-    pub fn is_declared_locally(&self, name: Symbol) -> bool {
-        self.declared_names.contains(&name)
-    }
-}
 
 #[derive(Debug)]
 pub struct ScopeStack {
-    scopes: Vec<Scope>,
+    /// Tracks how many times a symbol is currently active across all accessible scopes
+    active_counts: HashMap<Symbol, usize>,
+    /// Tracks which symbols were declared in which scope (by depth)
+    scope_decls: Vec<Vec<Symbol>>,
 }
 
 impl Default for ScopeStack {
@@ -35,19 +17,27 @@ impl Default for ScopeStack {
 
 impl ScopeStack {
     pub fn new() -> Self {
-        // Start with a global scope
         Self {
-            scopes: vec![Scope::new()],
+            active_counts: HashMap::new(),
+            scope_decls: vec![Vec::new()], // Start with a global scope
         }
     }
 
     pub fn push_scope(&mut self) {
-        self.scopes.push(Scope::new());
+        self.scope_decls.push(Vec::new());
     }
 
     pub fn pop_scope(&mut self) {
-        if self.scopes.len() > 1 {
-            self.scopes.pop();
+        if self.scope_decls.len() > 1 {
+            let decls = self.scope_decls.pop().unwrap();
+            for sym in decls {
+                if let Some(count) = self.active_counts.get_mut(&sym) {
+                    *count -= 1;
+                    if *count == 0 {
+                        self.active_counts.remove(&sym);
+                    }
+                }
+            }
         } else {
             panic!("Cannot pop the global scope.");
         }
@@ -56,17 +46,17 @@ impl ScopeStack {
     /// Attempts to declare a name in the current innermost scope.
     /// Returns true if successful, false if it was already declared in the *same* scope (re-declaration error).
     pub fn declare(&mut self, name: Symbol) -> bool {
-        let current_scope = self.scopes.last_mut().unwrap();
-        current_scope.declare(name)
+        let current_decls = self.scope_decls.last_mut().unwrap();
+        if current_decls.contains(&name) {
+            return false;
+        }
+        current_decls.push(name);
+        *self.active_counts.entry(name).or_insert(0) += 1;
+        true
     }
 
-    /// Checks if a name resolves to a valid declaration in any accessible scope (innermost to outermost).
+    /// Checks if a name resolves to a valid declaration in any accessible scope.
     pub fn resolve(&self, name: Symbol) -> bool {
-        for scope in self.scopes.iter().rev() {
-            if scope.is_declared_locally(name) {
-                return true;
-            }
-        }
-        false
+        self.active_counts.contains_key(&name)
     }
 }
