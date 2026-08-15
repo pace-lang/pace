@@ -321,6 +321,33 @@ impl<'a> TypeChecker<'a> {
                     }
                     self.enums.insert(*name, enum_variants);
                 }
+                StmtKind::TypeAlias {
+                    name,
+                    type_params,
+                    target_type,
+                    is_private: _,
+                } => {
+                    if !type_params.is_empty() {
+                        self.env.push_scope();
+                        for tp in type_params {
+                            self.env.declare(
+                                *tp,
+                                self.session.types.borrow_mut().intern(Type::Generic(*tp)),
+                            );
+                        }
+                    }
+                    let target_id = self.parse_type(target_type, stmt.span);
+                    if !type_params.is_empty() {
+                        self.env.pop_scope();
+                    }
+                    self.env.declare(
+                        *name,
+                        self.session
+                            .types
+                            .borrow_mut()
+                            .intern(Type::TypeAlias(*name, type_params.clone(), target_id)),
+                    );
+                }
                 StmtKind::ForeignFunc {
                     name,
                     type_params,

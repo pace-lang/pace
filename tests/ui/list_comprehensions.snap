@@ -1,10 +1,8 @@
 ---
 source: compiler/cli/tests/golden_tests.rs
-assertion_line: 62
 expression: normalized_stderr
 ---
 Finished `dev` profile [unoptimized + debuginfo] target(s)
-     Running `target/debug/ui`
 2
 10
 1

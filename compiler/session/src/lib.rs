@@ -110,6 +110,9 @@ impl CompilerSession {
                 }
                 s
             }
+            Type::TypeAlias(name, _type_params, _target_type) => {
+                self.interner.borrow().lookup(*name).to_string()
+            }
             Type::Struct(name, type_params) => {
                 let mut s = format!("Struct({})", self.interner.borrow().lookup(*name));
                 if !type_params.is_empty() {

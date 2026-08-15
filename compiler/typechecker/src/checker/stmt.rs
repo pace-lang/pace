@@ -144,10 +144,10 @@ impl<'a> TypeChecker<'a> {
                             continue;
                         }
                         
-                        let is_valid = match self.get_type(field_ty_id) {
-                            Type::Int | Type::Float | Type::Boolean | Type::Struct(_, _) | Type::Error | Type::Any => true,
-                            _ => false,
-                        };
+                        let is_valid = matches!(
+                            self.get_type(field_ty_id),
+                            Type::Int | Type::Float | Type::Boolean | Type::Struct(_, _) | Type::Error | Type::Any
+                        );
                         
                         if !is_valid {
                             self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Struct '{}' cannot contain field '{}' of type '{}'. Structs can only contain primitives (Int, Float, Boolean) or other structs.", self.session.interner.borrow().lookup(*name), self.session.interner.borrow().lookup(field_name), self.session.format_type(field_ty_id)));
@@ -197,6 +197,16 @@ impl<'a> TypeChecker<'a> {
                 name: *name,
                 type_params: type_params.clone(),
                 variants: variants.clone(),
+            },
+            StmtKind::TypeAlias {
+                name,
+                type_params,
+                target_type,
+                is_private: _,
+            } => TypedStmtKind::TypeAlias {
+                name: *name,
+                type_params: type_params.clone(),
+                target_type: target_type.clone(),
             },
             StmtKind::ForeignFunc {
                 name,

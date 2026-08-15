@@ -20,6 +20,7 @@ pub enum Type {
     Class(Symbol, Vec<Symbol>),
     Struct(Symbol, Vec<Symbol>),
     Enum(Symbol, Vec<Symbol>),
+    TypeAlias(Symbol, Vec<Symbol>, TypeId),
     Instance(Symbol),
     Generic(Symbol),
     GenericInstance(Symbol, Vec<TypeId>),

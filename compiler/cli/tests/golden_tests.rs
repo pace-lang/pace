@@ -44,6 +44,11 @@ fn run_ui_test(file_path: &Path) {
     // Normalize paths, variable memory addresses, and thread IDs in panics
     let normalized_stderr = combined_output
         .lines()
+        .filter(|line| {
+            !line.starts_with("Finished `dev` profile")
+                && !line.starts_with("Finished `release` profile")
+                && !line.starts_with("     Running `target/")
+        })
         .map(|line| {
             if line.starts_with("thread '")
                 && line.contains("panicked at")

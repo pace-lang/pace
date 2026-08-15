@@ -478,7 +478,7 @@ mod tests {
     #[test]
     fn test_basic_tokens() {
         let source = "let count = 10;";
-        let mut session = session::CompilerSession::new();
+        let session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
         let tokens = scanner.scan_tokens(&session);
 
@@ -497,7 +497,7 @@ mod tests {
     #[test]
     fn test_error_token() {
         let source = "let x = @;";
-        let mut session = session::CompilerSession::new();
+        let session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
         let tokens = scanner.scan_tokens(&session);
 

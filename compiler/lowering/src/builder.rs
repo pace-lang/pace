@@ -480,9 +480,9 @@ impl<'a> MirBuilder<'a> {
             | TypedStmtKind::Struct { .. }
             | TypedStmtKind::Interface { .. }
             | TypedStmtKind::ForeignFunc { .. }
+            | TypedStmtKind::TypeAlias { .. }
             | TypedStmtKind::Enum { .. } => {
-                // Nested functions/classes/interfaces are not fully supported in MIR yet,
-                // or are handled at the top level.
+                // Declarations are already processed during `collect_items`
             }
             TypedStmtKind::For {
                 item_name,

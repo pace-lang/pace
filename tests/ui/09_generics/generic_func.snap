@@ -3,7 +3,6 @@ source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
 Finished `dev` profile [unoptimized + debuginfo] target(s)
-     Running `target/debug/09_generics`
 10
 100
 42

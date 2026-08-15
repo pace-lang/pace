@@ -68,6 +68,11 @@ impl<'a> Resolver<'a> {
                         is_private: false,
                         ..
                     }
+                    | StmtKind::TypeAlias {
+                        name,
+                        is_private: false,
+                        ..
+                    }
                     | StmtKind::Func {
                         name,
                         is_private: false,
@@ -177,6 +182,10 @@ impl<'a> Resolver<'a> {
                     ..
                 }
                 | StmtKind::Struct {
+                    name,
+                    ..
+                }
+                | StmtKind::TypeAlias {
                     name,
                     ..
                 }
@@ -319,6 +328,14 @@ impl<'a> Resolver<'a> {
                 type_params: _,
                 params: _,
                 return_type: _,
+                is_private: _,
+            } => {
+                // Name declared in hoisting
+            }
+            StmtKind::TypeAlias {
+                name: _,
+                type_params: _,
+                target_type: _,
                 is_private: _,
             } => {
                 // Name declared in hoisting

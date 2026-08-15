@@ -1,0 +1,16 @@
+type StatusCode = Int;
+type Message = String;
+
+func testAlias(code: StatusCode, msg: Message) -> StatusCode {
+    print(msg);
+    return code;
+}
+
+func main() {
+    let x: StatusCode = 404;
+    let s: Message = "Not Found";
+    
+    // Type aliases are completely transparent, so passing Int/String directly is fine
+    testAlias(200, "OK");
+    testAlias(x, s);
+}

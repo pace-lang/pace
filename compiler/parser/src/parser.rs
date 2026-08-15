@@ -43,6 +43,8 @@ impl<'a> Parser<'a> {
 
         let res = if self.match_token(&[TokenKind::Interface]) {
             self.interface_declaration(is_private)
+        } else if self.match_token(&[TokenKind::Type]) {
+            self.type_alias_declaration(is_private)
         } else if self.match_token(&[TokenKind::Struct]) {
             self.struct_declaration(is_private)
         } else if self.match_token(&[TokenKind::Class]) {
@@ -402,6 +404,55 @@ impl<'a> Parser<'a> {
                 implements,
                 methods,
                 fields,
+                is_private,
+            },
+            span,
+        ))
+    }
+
+    fn type_alias_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
+        let start_span = self.previous().span;
+
+        let name = if let Some(Token {
+            kind: TokenKind::Identifier(n),
+            ..
+        }) = self.peek().cloned()
+        {
+            self.advance();
+            n
+        } else {
+            self.error_at_current("Expected type alias name.");
+            return None;
+        };
+
+        let type_params = self.parse_type_params()?;
+
+        if !self.match_token(&[TokenKind::Equal]) {
+            self.error_at_current("Expected '=' after type alias name.");
+            return None;
+        }
+
+        let target_type = self.parse_type_expr()?;
+
+        if !self.match_token(&[TokenKind::Semicolon]) {
+            self.error_at_current("Expected ';' after type alias declaration.");
+            return None;
+        }
+
+        let end_span = self.previous().span;
+        let span = Span::new(
+            start_span.file_id,
+            start_span.start,
+            end_span.end,
+            start_span.start_loc,
+            end_span.end_loc,
+        );
+
+        Some(Stmt::new(
+            StmtKind::TypeAlias {
+                name,
+                type_params,
+                target_type,
                 is_private,
             },
             span,

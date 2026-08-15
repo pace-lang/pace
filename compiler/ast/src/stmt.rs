@@ -111,6 +111,13 @@ pub enum StmtKind<'a> {
         fields: Vec<Stmt<'a>>,
         is_private: bool,
     },
+    /// A type alias declaration: `type name<T> = target_type;`
+    TypeAlias {
+        name: session::Symbol,
+        type_params: Vec<session::Symbol>,
+        target_type: TypeExpr<'a>,
+        is_private: bool,
+    },
     /// An interface declaration: `interface name { methods; }`
     Interface {
         name: session::Symbol,

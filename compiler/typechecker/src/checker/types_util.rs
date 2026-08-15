@@ -15,10 +15,12 @@ impl<'a> TypeChecker<'a> {
                 "CChar" => self.session.types.borrow_mut().intern(Type::CChar),
                 "CSize" => self.session.types.borrow_mut().intern(Type::CSize),
                 _ => {
-                    if let Some(ty_id) = self.env.resolve(*name)
-                        && let Type::Generic(_g) = self.session.types.borrow().get(ty_id) {
+                    if let Some(ty_id) = self.env.resolve(*name) {
+                        let ty = self.session.types.borrow().get(ty_id).clone();
+                        if matches!(ty, Type::Generic(_) | Type::TypeAlias(..)) {
                             return ty_id;
                         }
+                    }
                     if self.classes.contains_key(name) || self.enums.contains_key(name) {
                         self.session
                             .types
@@ -90,7 +92,21 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub(crate) fn is_assignable(&mut self, source: TypeId, target: TypeId) -> bool {
+    pub(crate) fn is_assignable(&mut self, mut source: TypeId, mut target: TypeId) -> bool {
+        loop {
+            let mut changed = false;
+            if let Type::TypeAlias(_, _, inner) = self.get_type(source) {
+                source = inner;
+                changed = true;
+            }
+            if let Type::TypeAlias(_, _, inner) = self.get_type(target) {
+                target = inner;
+                changed = true;
+            }
+            if !changed {
+                break;
+            }
+        }
         let err_id = self.session.types.borrow_mut().intern(Type::Error);
         let any_id = self.session.types.borrow_mut().intern(Type::Any);
         let null_id = self.session.types.borrow_mut().intern(Type::Null);
