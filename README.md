@@ -41,14 +41,6 @@ The Pace compiler is a multi-pass, modern architecture built in Rust, heavily in
 5. **Development VM**: Includes a built-in bytecode VM for rapid testing, debugging, and development.
 6. **Diagnostics Engine**: Beautiful, structured error reporting with precise source spans (inspired by `miette`).
 
-## Project Structure
-
-This repository contains the Pace compiler workspace and standard library.
-
-- `compiler/`: Contains the modular compiler pipeline (lexer, parser, ast, typechecker, codegen, etc.)
-- `stdlib/`: The Pace standard library written in Pace.
-- `archive/`: Design specifications and historical design documentation.
-
 ## Install Pace Toolchain
 
 Pace is distributed as a prebuilt native toolchain. **You do not need Rust or Cargo to use Pace.**
