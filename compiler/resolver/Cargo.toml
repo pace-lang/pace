@@ -11,3 +11,4 @@ ast = { version = "0.2.0", path = "../ast" }
 diagnostics = { path = "../diagnostics" }
 module = { version = "0.2.0", path = "../module" }
 package = { version = "0.2.0", path = "../package" }
+session = { path = "../session" }

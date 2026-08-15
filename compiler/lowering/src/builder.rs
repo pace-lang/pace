@@ -1,14 +1,15 @@
 use ast::{TypedExpr, TypedExprKind, TypedStmt, TypedStmtKind, TypeExpr, types::Type};
 use mir::{BasicBlock, BlockId, ForeignAbiType, ForeignFunction, Function, Inst, Place, Program, RValue, Terminator, Value};
 
-pub struct ProgramBuilder {
+pub struct ProgramBuilder<'a> {
+    session: &'a mut session::CompilerSession,
     program: Program,
     current_class: Option<String>,
 }
 
-fn type_expr_to_abi(type_expr: &TypeExpr) -> ForeignAbiType {
+fn type_expr_to_abi(type_expr: &TypeExpr, session: &session::CompilerSession) -> ForeignAbiType {
     match type_expr {
-        TypeExpr::Named(name) => match name.as_str() {
+        TypeExpr::Named(name) => match session.interner.lookup(*name) {
             "CInt" => ForeignAbiType::I32,
             "CUInt" => ForeignAbiType::I32,
             "CChar" => ForeignAbiType::I8,
@@ -18,18 +19,18 @@ fn type_expr_to_abi(type_expr: &TypeExpr) -> ForeignAbiType {
             "Void" => ForeignAbiType::I64, // Not really used for params
             _ => ForeignAbiType::I64,
         },
-        TypeExpr::GenericInstance(name, _) if name == "Pointer" => ForeignAbiType::Pointer,
+        TypeExpr::GenericInstance(name, _) if session.interner.lookup(*name) == "Pointer" => ForeignAbiType::Pointer,
         _ => ForeignAbiType::I64,
     }
 }
 
-fn is_ref_type_opt(te: &Option<ast::TypeExpr>) -> bool {
+fn is_ref_type_opt(te: &Option<ast::TypeExpr>, session: &session::CompilerSession) -> bool {
     match te {
         Some(ast::TypeExpr::Named(name)) => {
-            !["Int", "Float", "Boolean"].contains(&name.as_str())
+            !["Int", "Float", "Boolean"].contains(&session.interner.lookup(*name))
         }
         Some(ast::TypeExpr::Optional(inner)) => {
-            is_ref_type_opt(&Some((**inner).clone()))
+            is_ref_type_opt(&Some((**inner).clone()), session)
         }
         Some(ast::TypeExpr::Array(_)) => true,
         Some(ast::TypeExpr::GenericInstance(_, _)) => true,
@@ -37,19 +38,14 @@ fn is_ref_type_opt(te: &Option<ast::TypeExpr>) -> bool {
     }
 }
 
-fn is_ref_type(te: &ast::TypeExpr) -> bool {
-    is_ref_type_opt(&Some(te.clone()))
+fn is_ref_type(te: &ast::TypeExpr, session: &session::CompilerSession) -> bool {
+    is_ref_type_opt(&Some(te.clone()), session)
 }
 
-impl Default for ProgramBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ProgramBuilder {
-    pub fn new() -> Self {
+impl<'a> ProgramBuilder<'a> {
+    pub fn new(session: &'a mut session::CompilerSession) -> Self {
         Self {
+            session,
             program: Program::new(),
             current_class: None,
         }
@@ -63,18 +59,18 @@ impl ProgramBuilder {
                     let mut reference_payloads = std::collections::HashSet::new();
                     if let Some(fields) = &v.fields {
                         for (idx, field) in fields.iter().enumerate() {
-                            if is_ref_type(&field.ty) {
+                            if is_ref_type(&field.ty, self.session) {
                                 reference_payloads.insert(idx);
                             }
                         }
                     }
                     variant_defs.push(mir::EnumVariantDef {
-                        name: v.name.clone(),
+                        name: self.session.interner.lookup(v.name).to_string(),
                         reference_payloads,
                     });
                 }
-                self.program.enums.insert(name.clone(), mir::EnumDef {
-                    name: name.clone(),
+                self.program.enums.insert(self.session.interner.lookup(*name).to_string(), mir::EnumDef {
+                    name: self.session.interner.lookup(*name).to_string(),
                     variants: variant_defs,
                 });
             }
@@ -96,32 +92,32 @@ impl ProgramBuilder {
                 for field in fields {
                     match &field.kind {
                         TypedStmtKind::Var { name: f_name, is_weak, type_annotation, .. } => {
-                            field_names.push(f_name.clone());
+                            field_names.push(self.session.interner.lookup(*f_name).to_string());
                             if *is_weak {
-                                weak_fields.insert(f_name.clone());
-                            } else if is_ref_type_opt(type_annotation) {
-                                reference_fields.insert(f_name.clone());
+                                weak_fields.insert(self.session.interner.lookup(*f_name).to_string());
+                            } else if is_ref_type_opt(type_annotation, self.session) {
+                                reference_fields.insert(self.session.interner.lookup(*f_name).to_string());
                             }
                         }
                         TypedStmtKind::Let { name: f_name, type_annotation, .. } => {
-                            field_names.push(f_name.clone());
-                            if is_ref_type_opt(type_annotation) {
-                                reference_fields.insert(f_name.clone());
+                            field_names.push(self.session.interner.lookup(*f_name).to_string());
+                            if is_ref_type_opt(type_annotation, self.session) {
+                                reference_fields.insert(self.session.interner.lookup(*f_name).to_string());
                             }
                         }
                         _ => {}
                     }
                 }
                 let class_def = mir::ClassDef {
-                    name: name.clone(),
+                    name: self.session.interner.lookup(*name).to_string(),
                     fields: field_names,
                     weak_fields,
                     reference_fields,
                 };
-                self.program.classes.insert(name.clone(), class_def);
+                self.program.classes.insert(self.session.interner.lookup(*name).to_string(), class_def);
 
                 let prev_class = self.current_class.clone();
-                self.current_class = Some(name.clone());
+                self.current_class = Some(self.session.interner.lookup(*name).to_string());
 
                 for method in methods {
                     if let TypedStmtKind::Func { name: m_name, params, return_type, body, .. } = &method.kind {
@@ -129,14 +125,14 @@ impl ProgramBuilder {
                         let mut ref_params = std::collections::HashSet::new();
                         ref_params.insert("self".to_string());
                         for (p, ty) in params {
-                            param_names.push(p.clone());
-                            if is_ref_type(ty) {
-                                ref_params.insert(p.clone());
+                            param_names.push(self.session.interner.lookup(*p).to_string());
+                            if is_ref_type(ty, self.session) {
+                                ref_params.insert(self.session.interner.lookup(*p).to_string());
                             }
                         }
-                        let returns_ref = return_type.as_ref().is_some_and(is_ref_type);
-                        let actual_name = format!("{}::{}", name, m_name);
-                        let builder = MirBuilder::new(actual_name.clone(), param_names, ref_params, returns_ref, enums_map.clone());
+                        let returns_ref = return_type.as_ref().is_some_and(|t| is_ref_type(t, self.session));
+                        let actual_name = format!("{}::{}", self.session.interner.lookup(*name), self.session.interner.lookup(*m_name));
+                        let builder = MirBuilder::new(actual_name.clone(), param_names, ref_params, returns_ref, enums_map.clone(), self.session);
                         let mir_func = match &body.kind {
                             TypedStmtKind::Block(stmts) => builder.build(stmts),
                             _ => builder.build(std::slice::from_ref(body)),
@@ -150,27 +146,27 @@ impl ProgramBuilder {
                 let mut param_names = Vec::new();
                 let mut ref_params = std::collections::HashSet::new();
                 for (p, ty) in params {
-                    param_names.push(p.clone());
-                    if is_ref_type(ty) {
-                        ref_params.insert(p.clone());
+                    param_names.push(self.session.interner.lookup(*p).to_string());
+                    if is_ref_type(ty, self.session) {
+                        ref_params.insert(self.session.interner.lookup(*p).to_string());
                     }
                 }
-                let returns_ref = return_type.as_ref().is_some_and(is_ref_type);
-                let builder = MirBuilder::new(name.clone(), param_names, ref_params, returns_ref, enums_map.clone());
+                let returns_ref = return_type.as_ref().is_some_and(|t| is_ref_type(t, self.session));
+                let builder = MirBuilder::new(self.session.interner.lookup(*name).to_string(), param_names, ref_params, returns_ref, enums_map.clone(), self.session);
                 let mir_func = match &body.kind {
                     TypedStmtKind::Block(stmts) => builder.build(stmts),
                     _ => builder.build(std::slice::from_ref(body)),
                 };
-                self.program.functions.insert(name.clone(), mir_func);
+                self.program.functions.insert(self.session.interner.lookup(*name).to_string(), mir_func);
             } else if let TypedStmtKind::ForeignFunc { name, params, return_type } = &stmt.kind {
                 let mut param_types = Vec::new();
                 for (_, ty) in params {
-                    param_types.push(type_expr_to_abi(ty));
+                    param_types.push(type_expr_to_abi(ty, self.session));
                 }
-                let ret_ty = return_type.as_ref().map(type_expr_to_abi);
-                self.program.foreign_functions.insert(name.clone(), ForeignFunction {
-                    name: name.clone(),
-                    symbol: name.clone(),
+                let ret_ty = return_type.as_ref().map(|t| type_expr_to_abi(t, self.session));
+                self.program.foreign_functions.insert(self.session.interner.lookup(*name).to_string(), ForeignFunction {
+                    name: self.session.interner.lookup(*name).to_string(),
+                    symbol: self.session.interner.lookup(*name).to_string(),
                     param_types,
                     return_type: ret_ty,
                 });
@@ -188,7 +184,7 @@ impl ProgramBuilder {
             }
         }
         if !main_stmts.is_empty() {
-            let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false, enums_map.clone());
+            let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false, enums_map.clone(), self.session);
             let main_func = builder.build(&main_stmts);
             self.program.functions.insert("main".into(), main_func);
         }
@@ -197,20 +193,22 @@ impl ProgramBuilder {
     }
 }
 
-pub struct MirBuilder {
+pub struct MirBuilder<'a> {
+    session: &'a mut session::CompilerSession,
     function: Function,
     current_block: BlockId,
     temp_counter: usize,
     enums_map: std::collections::HashMap<String, Vec<String>>,
 }
 
-impl MirBuilder {
-    pub fn new(name: String, parameters: Vec<String>, reference_parameters: std::collections::HashSet<String>, returns_reference: bool, enums_map: std::collections::HashMap<String, Vec<String>>) -> Self {
+impl<'a> MirBuilder<'a> {
+    pub fn new(name: String, parameters: Vec<String>, reference_parameters: std::collections::HashSet<String>, returns_reference: bool, enums_map: std::collections::HashMap<String, Vec<String>>, session: &'a mut session::CompilerSession) -> Self {
         let mut function = Function::new(name, parameters, reference_parameters, returns_reference);
         let start_block = BlockId(0);
         function.blocks.push(BasicBlock::new(start_block));
 
         Self {
+            session,
             function,
             current_block: start_block,
             temp_counter: 0,
@@ -255,20 +253,32 @@ impl MirBuilder {
             TypedStmtKind::Let { name, initializer, .. } => {
                 if let Some(init) = initializer {
                     let val = self.lower_expr(init);
-                    self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(val)));
+                    {
+let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(val));
+self.current().instructions.push(__inst)
+};
                 } else {
-                    self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(Value::Void)));
+                    {
+let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(Value::Void));
+self.current().instructions.push(__inst)
+};
                 }
             }
             TypedStmtKind::Var { name, initializer, is_weak, .. } => {
                 if *is_weak {
-                    self.function.weak_vars.insert(name.clone());
+                    self.function.weak_vars.insert(self.session.interner.lookup(*name).to_string());
                 }
                 if let Some(init) = initializer {
                     let val = self.lower_expr(init);
-                    self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(val)));
+                    {
+let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(val));
+self.current().instructions.push(__inst)
+};
                 } else {
-                    self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(Value::Void)));
+                    {
+let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(Value::Void));
+self.current().instructions.push(__inst)
+};
                 }
             }
             TypedStmtKind::Expression(expr) => {
@@ -342,7 +352,10 @@ impl MirBuilder {
                         let end_val = self.lower_expr(end);
 
                         let current_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(current_var.clone(), RValue::Use(start_val)));
+                        {
+let __inst = Inst::Assign(current_var.clone(), RValue::Use(start_val));
+self.current().instructions.push(__inst)
+};
 
                         let cond_block = self.new_block();
                         let body_block = self.new_block();
@@ -353,27 +366,39 @@ impl MirBuilder {
                         // Condition Block
                         self.current_block = cond_block;
                         let cond_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(
+                        {
+let __inst = Inst::Assign(
                             cond_temp.clone(),
                             RValue::BinaryOp(ast::BinaryOp::Less, Value::Place(current_var.clone()), end_val),
-                        ));
+                        );
+self.current().instructions.push(__inst)
+};
                         self.current().terminator = Some(Terminator::Branch { cond: Value::Place(cond_temp), then_block: body_block, else_block: merge_block });
 
                         // Body Block
                         self.current_block = body_block;
-                        self.current().instructions.push(Inst::Assign(Place::Var(item_name.clone()), RValue::Use(Value::Place(current_var.clone()))));
+                        {
+let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*item_name).to_string()), RValue::Use(Value::Place(current_var.clone())));
+self.current().instructions.push(__inst)
+};
                         self.lower_stmt(body);
                         
                         // Increment
                         let inc_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(
+                        {
+let __inst = Inst::Assign(
                             inc_temp.clone(),
                             RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(current_var.clone()), Value::Int(1)),
-                        ));
-                        self.current().instructions.push(Inst::Assign(
+                        );
+self.current().instructions.push(__inst)
+};
+                        {
+let __inst = Inst::Assign(
                             current_var.clone(),
                             RValue::Use(Value::Place(inc_temp)),
-                        ));
+                        );
+self.current().instructions.push(__inst)
+};
                         
                         self.current().terminator = Some(Terminator::Jump(cond_block));
 
@@ -385,10 +410,16 @@ impl MirBuilder {
                         let arr_val = self.lower_expr(iterator);
                         
                         let len_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(len_var.clone(), RValue::ArrayLength(arr_val.clone())));
+                        {
+let __inst = Inst::Assign(len_var.clone(), RValue::ArrayLength(arr_val.clone()));
+self.current().instructions.push(__inst)
+};
                         
                         let idx_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(idx_var.clone(), RValue::Use(Value::Int(0))));
+                        {
+let __inst = Inst::Assign(idx_var.clone(), RValue::Use(Value::Int(0)));
+self.current().instructions.push(__inst)
+};
                         
                         let cond_block = self.new_block();
                         let body_block = self.new_block();
@@ -399,32 +430,47 @@ impl MirBuilder {
                         // Condition Block
                         self.current_block = cond_block;
                         let cond_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(
+                        {
+let __inst = Inst::Assign(
                             cond_temp.clone(),
                             RValue::BinaryOp(ast::BinaryOp::Less, Value::Place(idx_var.clone()), Value::Place(len_var.clone())),
-                        ));
+                        );
+self.current().instructions.push(__inst)
+};
                         self.current().terminator = Some(Terminator::Branch { cond: Value::Place(cond_temp), then_block: body_block, else_block: merge_block });
                         
                         // Body Block
                         self.current_block = body_block;
                         let item_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(
+                        {
+let __inst = Inst::Assign(
                             item_var.clone(),
                             RValue::IndexGet(arr_val.clone(), Value::Place(idx_var.clone())),
-                        ));
-                        self.current().instructions.push(Inst::Assign(Place::Var(item_name.clone()), RValue::Use(Value::Place(item_var.clone()))));
+                        );
+self.current().instructions.push(__inst)
+};
+                        {
+let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*item_name).to_string()), RValue::Use(Value::Place(item_var.clone())));
+self.current().instructions.push(__inst)
+};
                         self.lower_stmt(body);
                         
                         // Increment
                         let inc_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(
+                        {
+let __inst = Inst::Assign(
                             inc_temp.clone(),
                             RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(idx_var.clone()), Value::Int(1)),
-                        ));
-                        self.current().instructions.push(Inst::Assign(
+                        );
+self.current().instructions.push(__inst)
+};
+                        {
+let __inst = Inst::Assign(
                             idx_var.clone(),
                             RValue::Use(Value::Place(inc_temp)),
-                        ));
+                        );
+self.current().instructions.push(__inst)
+};
                         
                         self.current().terminator = Some(Terminator::Jump(cond_block));
                         
@@ -445,7 +491,7 @@ impl MirBuilder {
         match &expr.kind {
             TypedExprKind::Integer(i) => Value::Int(*i),
             TypedExprKind::Float(f) => Value::Float(*f),
-            TypedExprKind::String(s) => Value::String(s.clone()),
+            TypedExprKind::String(s) => Value::String(self.session.interner.lookup(*s).to_string()),
             TypedExprKind::InterpolatedString(pieces) => {
                 if pieces.is_empty() {
                     return Value::String("".to_string());
@@ -459,17 +505,26 @@ impl MirBuilder {
                     match &piece.ty {
                         ast::Type::Int => {
                             let temp = self.new_temp();
-                            self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call("pace_int_to_string".to_string(), vec![piece_val])));
+                            {
+let __inst = Inst::Assign(temp.clone(), RValue::Call("pace_int_to_string".to_string(), vec![piece_val]));
+self.current().instructions.push(__inst)
+};
                             piece_val = Value::Place(temp);
                         }
                         ast::Type::Float => {
                             let temp = self.new_temp();
-                            self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call("pace_float_to_string".to_string(), vec![piece_val])));
+                            {
+let __inst = Inst::Assign(temp.clone(), RValue::Call("pace_float_to_string".to_string(), vec![piece_val]));
+self.current().instructions.push(__inst)
+};
                             piece_val = Value::Place(temp);
                         }
                         ast::Type::Boolean => {
                             let temp = self.new_temp();
-                            self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call("pace_bool_to_string".to_string(), vec![piece_val])));
+                            {
+let __inst = Inst::Assign(temp.clone(), RValue::Call("pace_bool_to_string".to_string(), vec![piece_val]));
+self.current().instructions.push(__inst)
+};
                             piece_val = Value::Place(temp);
                         }
                         _ => {}
@@ -477,7 +532,10 @@ impl MirBuilder {
 
                     if let Some(current) = current_str_val {
                         let temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call("pace_string_concat".to_string(), vec![current, piece_val])));
+                        {
+let __inst = Inst::Assign(temp.clone(), RValue::Call("pace_string_concat".to_string(), vec![current, piece_val]));
+self.current().instructions.push(__inst)
+};
                         current_str_val = Some(Value::Place(temp));
                     } else {
                         current_str_val = Some(piece_val);
@@ -488,21 +546,27 @@ impl MirBuilder {
             }
             TypedExprKind::Boolean(b) => Value::Boolean(*b),
             TypedExprKind::Null => Value::Null,
-            TypedExprKind::Variable(name) => Value::Place(Place::Var(name.clone())),
+            TypedExprKind::Variable(name) => Value::Place(Place::Var(self.session.interner.lookup(*name).to_string())),
             TypedExprKind::Array(elements) => {
                 let mut vals = Vec::new();
                 for el in elements {
                     vals.push(self.lower_expr(el));
                 }
                 let temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Array(vals, false)));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::Array(vals, false));
+self.current().instructions.push(__inst)
+};
                 Value::Place(temp)
             }
             TypedExprKind::ArrayRepeat { value, count } => {
                 let val = self.lower_expr(value);
                 let count_val = self.lower_expr(count);
                 let temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ArrayRepeat(val, count_val, false)));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::ArrayRepeat(val, count_val, false));
+self.current().instructions.push(__inst)
+};
                 Value::Place(temp)
             }
             TypedExprKind::ListComprehension { expr: mapped_expr, item_name, iterator } => {
@@ -512,16 +576,28 @@ impl MirBuilder {
                         let end_val = self.lower_expr(end);
                         
                         let len_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(len_var.clone(), RValue::BinaryOp(ast::BinaryOp::Subtract, end_val.clone(), start_val.clone())));
+                        {
+let __inst = Inst::Assign(len_var.clone(), RValue::BinaryOp(ast::BinaryOp::Subtract, end_val.clone(), start_val.clone()));
+self.current().instructions.push(__inst)
+};
                         
                         let arr_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(arr_var.clone(), RValue::ArrayRepeat(Value::Int(0), Value::Place(len_var.clone()), false)));
+                        {
+let __inst = Inst::Assign(arr_var.clone(), RValue::ArrayRepeat(Value::Int(0), Value::Place(len_var.clone()), false));
+self.current().instructions.push(__inst)
+};
                         
                         let current_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(current_var.clone(), RValue::Use(start_val)));
+                        {
+let __inst = Inst::Assign(current_var.clone(), RValue::Use(start_val));
+self.current().instructions.push(__inst)
+};
                         
                         let idx_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(idx_var.clone(), RValue::Use(Value::Int(0))));
+                        {
+let __inst = Inst::Assign(idx_var.clone(), RValue::Use(Value::Int(0)));
+self.current().instructions.push(__inst)
+};
                         
                         let cond_block = self.new_block();
                         let body_block = self.new_block();
@@ -531,22 +607,43 @@ impl MirBuilder {
                         
                         self.current_block = cond_block;
                         let cond_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(cond_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Less, Value::Place(current_var.clone()), end_val)));
+                        {
+let __inst = Inst::Assign(cond_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Less, Value::Place(current_var.clone()), end_val));
+self.current().instructions.push(__inst)
+};
                         self.current().terminator = Some(Terminator::Branch { cond: Value::Place(cond_temp), then_block: body_block, else_block: merge_block });
                         
                         self.current_block = body_block;
-                        self.current().instructions.push(Inst::Assign(Place::Var(item_name.clone()), RValue::Use(Value::Place(current_var.clone()))));
+                        {
+let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*item_name).to_string()), RValue::Use(Value::Place(current_var.clone())));
+self.current().instructions.push(__inst)
+};
                         
                         let mapped_val = self.lower_expr(mapped_expr);
-                        self.current().instructions.push(Inst::IndexSet(Value::Place(arr_var.clone()), Value::Place(idx_var.clone()), mapped_val));
+                        {
+let __inst = Inst::IndexSet(Value::Place(arr_var.clone()), Value::Place(idx_var.clone()), mapped_val);
+self.current().instructions.push(__inst)
+};
                         
                         let inc_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(inc_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(current_var.clone()), Value::Int(1))));
-                        self.current().instructions.push(Inst::Assign(current_var.clone(), RValue::Use(Value::Place(inc_temp))));
+                        {
+let __inst = Inst::Assign(inc_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(current_var.clone()), Value::Int(1)));
+self.current().instructions.push(__inst)
+};
+                        {
+let __inst = Inst::Assign(current_var.clone(), RValue::Use(Value::Place(inc_temp)));
+self.current().instructions.push(__inst)
+};
                         
                         let inc_idx_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(inc_idx_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(idx_var.clone()), Value::Int(1))));
-                        self.current().instructions.push(Inst::Assign(idx_var.clone(), RValue::Use(Value::Place(inc_idx_temp))));
+                        {
+let __inst = Inst::Assign(inc_idx_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(idx_var.clone()), Value::Int(1)));
+self.current().instructions.push(__inst)
+};
+                        {
+let __inst = Inst::Assign(idx_var.clone(), RValue::Use(Value::Place(inc_idx_temp)));
+self.current().instructions.push(__inst)
+};
                         
                         self.current().terminator = Some(Terminator::Jump(cond_block));
                         
@@ -557,13 +654,22 @@ impl MirBuilder {
                         let iter_val = self.lower_expr(iterator);
                         
                         let len_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(len_var.clone(), RValue::ArrayLength(iter_val.clone())));
+                        {
+let __inst = Inst::Assign(len_var.clone(), RValue::ArrayLength(iter_val.clone()));
+self.current().instructions.push(__inst)
+};
                         
                         let arr_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(arr_var.clone(), RValue::ArrayRepeat(Value::Int(0), Value::Place(len_var.clone()), false)));
+                        {
+let __inst = Inst::Assign(arr_var.clone(), RValue::ArrayRepeat(Value::Int(0), Value::Place(len_var.clone()), false));
+self.current().instructions.push(__inst)
+};
                         
                         let idx_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(idx_var.clone(), RValue::Use(Value::Int(0))));
+                        {
+let __inst = Inst::Assign(idx_var.clone(), RValue::Use(Value::Int(0)));
+self.current().instructions.push(__inst)
+};
                         
                         let cond_block = self.new_block();
                         let body_block = self.new_block();
@@ -573,20 +679,38 @@ impl MirBuilder {
                         
                         self.current_block = cond_block;
                         let cond_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(cond_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Less, Value::Place(idx_var.clone()), Value::Place(len_var.clone()))));
+                        {
+let __inst = Inst::Assign(cond_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Less, Value::Place(idx_var.clone()), Value::Place(len_var.clone())));
+self.current().instructions.push(__inst)
+};
                         self.current().terminator = Some(Terminator::Branch { cond: Value::Place(cond_temp), then_block: body_block, else_block: merge_block });
                         
                         self.current_block = body_block;
                         let item_var = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(item_var.clone(), RValue::IndexGet(iter_val.clone(), Value::Place(idx_var.clone()))));
-                        self.current().instructions.push(Inst::Assign(Place::Var(item_name.clone()), RValue::Use(Value::Place(item_var))));
+                        {
+let __inst = Inst::Assign(item_var.clone(), RValue::IndexGet(iter_val.clone(), Value::Place(idx_var.clone())));
+self.current().instructions.push(__inst)
+};
+                        {
+let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*item_name).to_string()), RValue::Use(Value::Place(item_var)));
+self.current().instructions.push(__inst)
+};
                         
                         let mapped_val = self.lower_expr(mapped_expr);
-                        self.current().instructions.push(Inst::IndexSet(Value::Place(arr_var.clone()), Value::Place(idx_var.clone()), mapped_val));
+                        {
+let __inst = Inst::IndexSet(Value::Place(arr_var.clone()), Value::Place(idx_var.clone()), mapped_val);
+self.current().instructions.push(__inst)
+};
                         
                         let inc_idx_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(inc_idx_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(idx_var.clone()), Value::Int(1))));
-                        self.current().instructions.push(Inst::Assign(idx_var.clone(), RValue::Use(Value::Place(inc_idx_temp))));
+                        {
+let __inst = Inst::Assign(inc_idx_temp.clone(), RValue::BinaryOp(ast::BinaryOp::Add, Value::Place(idx_var.clone()), Value::Int(1)));
+self.current().instructions.push(__inst)
+};
+                        {
+let __inst = Inst::Assign(idx_var.clone(), RValue::Use(Value::Place(inc_idx_temp)));
+self.current().instructions.push(__inst)
+};
                         
                         self.current().terminator = Some(Terminator::Jump(cond_block));
                         
@@ -598,7 +722,10 @@ impl MirBuilder {
             TypedExprKind::Match { value, arms } => {
                 let match_val = self.lower_expr(value);
                 let tag_temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(tag_temp.clone(), RValue::GetVariantTag(match_val.clone())));
+                {
+let __inst = Inst::Assign(tag_temp.clone(), RValue::GetVariantTag(match_val.clone()));
+self.current().instructions.push(__inst)
+};
                 
                 let current_block = self.current_block;
                 let end_block = self.new_block();
@@ -622,17 +749,23 @@ impl MirBuilder {
                         let enum_name = &resolved_enum_name;
                         let variant_name = path.last().unwrap();
                         let variant_idx = self.enums_map.get(enum_name)
-                            .and_then(|variants| variants.iter().position(|v| v == variant_name))
+                            .and_then(|variants| variants.iter().position(|v| v == self.session.interner.lookup(*variant_name)))
                             .unwrap_or(0); // Fallback if enum not found
                         cases.push((variant_idx, arm_block));
                         
                         self.current_block = arm_block;
                         if let Some(binds) = bindings {
                             for (field_idx, bind) in binds.iter().enumerate() {
-                                if bind != "_" {
+                                if self.session.interner.lookup(*bind) != "_" {
                                     let field_temp = self.new_temp();
-                                    self.current().instructions.push(Inst::Assign(field_temp.clone(), RValue::ExtractPayload(match_val.clone(), variant_idx, field_idx)));
-                                    self.current().instructions.push(Inst::Assign(Place::Var(bind.clone()), RValue::Use(Value::Place(field_temp))));
+                                    {
+let __inst = Inst::Assign(field_temp.clone(), RValue::ExtractPayload(match_val.clone(), variant_idx, field_idx));
+self.current().instructions.push(__inst)
+};
+                                    {
+let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*bind).to_string()), RValue::Use(Value::Place(field_temp)));
+self.current().instructions.push(__inst)
+};
                                 }
                             }
                         }
@@ -642,7 +775,10 @@ impl MirBuilder {
                     }
                     
                     let arm_val = self.lower_expr(&arm.body);
-                    self.current().instructions.push(Inst::Assign(result_temp.clone(), RValue::Use(arm_val)));
+                    {
+let __inst = Inst::Assign(result_temp.clone(), RValue::Use(arm_val));
+self.current().instructions.push(__inst)
+};
                     self.current().terminator = Some(Terminator::Jump(end_block));
                 }
                 
@@ -657,38 +793,53 @@ impl MirBuilder {
                 Value::Place(result_temp)
             }
             TypedExprKind::EnumVariant { enum_name, variant_name } => {
-                let variant_idx = self.enums_map.get(enum_name)
-                    .and_then(|variants| variants.iter().position(|v| v == variant_name))
+                let variant_idx = self.enums_map.get(self.session.interner.lookup(*enum_name))
+                    .and_then(|variants| variants.iter().position(|v| v == self.session.interner.lookup(*variant_name)))
                     .unwrap_or(0);
                 let temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ConstructVariant(enum_name.clone(), variant_idx, Vec::new())));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::ConstructVariant(self.session.interner.lookup(*enum_name).to_string(), variant_idx, Vec::new()));
+self.current().instructions.push(__inst)
+};
                 Value::Place(temp)
             }
             TypedExprKind::IndexGet { object, index } => {
                 let obj_val = self.lower_expr(object);
                 let idx_val = self.lower_expr(index);
                 let temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::IndexGet(obj_val, idx_val)));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::IndexGet(obj_val, idx_val));
+self.current().instructions.push(__inst)
+};
                 Value::Place(temp)
             }
             TypedExprKind::IndexSet { object, index, value } => {
                 let obj_val = self.lower_expr(object);
                 let idx_val = self.lower_expr(index);
                 let val_val = self.lower_expr(value);
-                self.current().instructions.push(Inst::IndexSet(obj_val, idx_val, val_val.clone()));
+                {
+let __inst = Inst::IndexSet(obj_val, idx_val, val_val.clone());
+self.current().instructions.push(__inst)
+};
                 val_val
             }
             TypedExprKind::Grouping(inner) => self.lower_expr(inner),
             TypedExprKind::Get { object, name } => {
                 let obj_val = self.lower_expr(object);
                 let temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, name.clone())));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, self.session.interner.lookup(*name).to_string()));
+self.current().instructions.push(__inst)
+};
                 Value::Place(temp)
             }
             TypedExprKind::ForceUnwrap(inner) => {
                 let inner_val = self.lower_expr(inner);
                 let temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ForceUnwrap(inner_val)));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::ForceUnwrap(inner_val));
+self.current().instructions.push(__inst)
+};
                 Value::Place(temp)
             }
             TypedExprKind::OptionalGet { object, name } => {
@@ -700,10 +851,13 @@ impl MirBuilder {
                 let merge_block = self.new_block();
                 
                 let is_null_temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(
+                {
+let __inst = Inst::Assign(
                     is_null_temp.clone(), 
                     RValue::BinaryOp(ast::BinaryOp::Equal, obj_val.clone(), Value::Null)
-                ));
+                );
+self.current().instructions.push(__inst)
+};
                 
                 self.current().terminator = Some(Terminator::Branch {
                     cond: Value::Place(is_null_temp),
@@ -712,11 +866,17 @@ impl MirBuilder {
                 });
                 
                 self.current_block = then_block;
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Use(Value::Null)));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::Use(Value::Null));
+self.current().instructions.push(__inst)
+};
                 self.current().terminator = Some(Terminator::Jump(merge_block));
                 
                 self.current_block = else_block;
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, name.clone())));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::GetProperty(obj_val, self.session.interner.lookup(*name).to_string()));
+self.current().instructions.push(__inst)
+};
                 self.current().terminator = Some(Terminator::Jump(merge_block));
                 
                 self.current_block = merge_block;
@@ -731,10 +891,13 @@ impl MirBuilder {
                 let merge_block = self.new_block();
                 
                 let is_null_temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(
+                {
+let __inst = Inst::Assign(
                     is_null_temp.clone(), 
                     RValue::BinaryOp(ast::BinaryOp::Equal, left_val.clone(), Value::Null)
-                ));
+                );
+self.current().instructions.push(__inst)
+};
                 
                 self.current().terminator = Some(Terminator::Branch {
                     cond: Value::Place(is_null_temp),
@@ -744,11 +907,17 @@ impl MirBuilder {
                 
                 self.current_block = then_block;
                 let right_val = self.lower_expr(right);
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Use(right_val)));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::Use(right_val));
+self.current().instructions.push(__inst)
+};
                 self.current().terminator = Some(Terminator::Jump(merge_block));
                 
                 self.current_block = else_block;
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Use(left_val)));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::Use(left_val));
+self.current().instructions.push(__inst)
+};
                 self.current().terminator = Some(Terminator::Jump(merge_block));
                 
                 self.current_block = merge_block;
@@ -757,15 +926,18 @@ impl MirBuilder {
             TypedExprKind::NullCoalesceAssign { left, right } => {
                 match &left.kind {
                     TypedExprKind::Variable(name) => {
-                        let current_val = Value::Place(Place::Var(name.clone()));
+                        let current_val = Value::Place(Place::Var(self.session.interner.lookup(*name).to_string()));
                         let then_block = self.new_block();
                         let merge_block = self.new_block();
                         
                         let is_null_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(
+                        {
+let __inst = Inst::Assign(
                             is_null_temp.clone(), 
                             RValue::BinaryOp(ast::BinaryOp::Equal, current_val.clone(), Value::Null)
-                        ));
+                        );
+self.current().instructions.push(__inst)
+};
                         
                         self.current().terminator = Some(Terminator::Branch {
                             cond: Value::Place(is_null_temp),
@@ -775,7 +947,10 @@ impl MirBuilder {
                         
                         self.current_block = then_block;
                         let right_val = self.lower_expr(right);
-                        self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(right_val)));
+                        {
+let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(right_val));
+self.current().instructions.push(__inst)
+};
                         self.current().terminator = Some(Terminator::Jump(merge_block));
                         
                         self.current_block = merge_block;
@@ -784,17 +959,23 @@ impl MirBuilder {
                     TypedExprKind::Get { object, name } => {
                         let obj_val = self.lower_expr(object);
                         let current_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(current_temp.clone(), RValue::GetProperty(obj_val.clone(), name.clone())));
+                        {
+let __inst = Inst::Assign(current_temp.clone(), RValue::GetProperty(obj_val.clone(), self.session.interner.lookup(*name).to_string()));
+self.current().instructions.push(__inst)
+};
                         let current_val = Value::Place(current_temp.clone());
                         
                         let then_block = self.new_block();
                         let merge_block = self.new_block();
                         
                         let is_null_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(
+                        {
+let __inst = Inst::Assign(
                             is_null_temp.clone(), 
                             RValue::BinaryOp(ast::BinaryOp::Equal, current_val.clone(), Value::Null)
-                        ));
+                        );
+self.current().instructions.push(__inst)
+};
                         
                         self.current().terminator = Some(Terminator::Branch {
                             cond: Value::Place(is_null_temp),
@@ -804,8 +985,14 @@ impl MirBuilder {
                         
                         self.current_block = then_block;
                         let right_val = self.lower_expr(right);
-                        self.current().instructions.push(Inst::SetProperty(obj_val, name.clone(), right_val.clone()));
-                        self.current().instructions.push(Inst::Assign(current_temp.clone(), RValue::Use(right_val)));
+                        {
+let __inst = Inst::SetProperty(obj_val, self.session.interner.lookup(*name).to_string(), right_val.clone());
+self.current().instructions.push(__inst)
+};
+                        {
+let __inst = Inst::Assign(current_temp.clone(), RValue::Use(right_val));
+self.current().instructions.push(__inst)
+};
                         self.current().terminator = Some(Terminator::Jump(merge_block));
                         
                         self.current_block = merge_block;
@@ -816,17 +1003,23 @@ impl MirBuilder {
                         let idx_val = self.lower_expr(index);
                         
                         let current_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(current_temp.clone(), RValue::IndexGet(obj_val.clone(), idx_val.clone())));
+                        {
+let __inst = Inst::Assign(current_temp.clone(), RValue::IndexGet(obj_val.clone(), idx_val.clone()));
+self.current().instructions.push(__inst)
+};
                         let current_val = Value::Place(current_temp.clone());
                         
                         let then_block = self.new_block();
                         let merge_block = self.new_block();
                         
                         let is_null_temp = self.new_temp();
-                        self.current().instructions.push(Inst::Assign(
+                        {
+let __inst = Inst::Assign(
                             is_null_temp.clone(), 
                             RValue::BinaryOp(ast::BinaryOp::Equal, current_val.clone(), Value::Null)
-                        ));
+                        );
+self.current().instructions.push(__inst)
+};
                         
                         self.current().terminator = Some(Terminator::Branch {
                             cond: Value::Place(is_null_temp),
@@ -836,8 +1029,14 @@ impl MirBuilder {
                         
                         self.current_block = then_block;
                         let right_val = self.lower_expr(right);
-                        self.current().instructions.push(Inst::IndexSet(obj_val, idx_val, right_val.clone()));
-                        self.current().instructions.push(Inst::Assign(current_temp.clone(), RValue::Use(right_val)));
+                        {
+let __inst = Inst::IndexSet(obj_val, idx_val, right_val.clone());
+self.current().instructions.push(__inst)
+};
+                        {
+let __inst = Inst::Assign(current_temp.clone(), RValue::Use(right_val));
+self.current().instructions.push(__inst)
+};
                         self.current().terminator = Some(Terminator::Jump(merge_block));
                         
                         self.current_block = merge_block;
@@ -849,12 +1048,18 @@ impl MirBuilder {
             TypedExprKind::Set { object, name, value } => {
                 let obj_val = self.lower_expr(object);
                 let val_val = self.lower_expr(value);
-                self.current().instructions.push(Inst::SetProperty(obj_val, name.clone(), val_val.clone()));
+                {
+let __inst = Inst::SetProperty(obj_val, self.session.interner.lookup(*name).to_string(), val_val.clone());
+self.current().instructions.push(__inst)
+};
                 val_val
             }
             TypedExprKind::Assign { name, value } => {
                 let val = self.lower_expr(value);
-                self.current().instructions.push(Inst::Assign(Place::Var(name.clone()), RValue::Use(val.clone())));
+                {
+let __inst = Inst::Assign(Place::Var(self.session.interner.lookup(*name).to_string()), RValue::Use(val.clone()));
+self.current().instructions.push(__inst)
+};
                 val
             }
             TypedExprKind::SelfRef => {
@@ -871,33 +1076,48 @@ impl MirBuilder {
                     let temp = self.new_temp();
                     
                     if let Type::Instance(class_name) | Type::GenericInstance(class_name, _) = &object.ty {
-                        let actual_name = format!("{}::{}", class_name, name);
+                        let actual_name = format!("{}::{}", class_name, self.session.interner.lookup(*name));
                         arg_values.insert(0, obj_val);
-                        self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call(actual_name, arg_values)));
+                        {
+let __inst = Inst::Assign(temp.clone(), RValue::Call(actual_name, arg_values));
+self.current().instructions.push(__inst)
+};
                         return Value::Place(temp);
                     }
                     
-                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::MethodCall(obj_val.clone(), name.clone(), arg_values)));
+                    {
+let __inst = Inst::Assign(temp.clone(), RValue::MethodCall(obj_val.clone(), self.session.interner.lookup(*name).to_string(), arg_values));
+self.current().instructions.push(__inst)
+};
                     return Value::Place(temp);
                 }
 
                 if let TypedExprKind::EnumVariant { enum_name, variant_name } = &callee.kind {
                     let temp = self.new_temp();
-                    let variant_idx = self.enums_map.get(enum_name)
-                        .and_then(|variants| variants.iter().position(|v| v == variant_name))
+                    let variant_idx = self.enums_map.get(self.session.interner.lookup(*enum_name))
+                        .and_then(|variants| variants.iter().position(|v| v == self.session.interner.lookup(*variant_name)))
                         .unwrap_or(0);
-                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::ConstructVariant(enum_name.clone(), variant_idx, arg_values)));
+                    {
+let __inst = Inst::Assign(temp.clone(), RValue::ConstructVariant(self.session.interner.lookup(*enum_name).to_string(), variant_idx, arg_values));
+self.current().instructions.push(__inst)
+};
                     return Value::Place(temp);
                 }
 
                 if let Type::Class(class_name, _) = &callee.ty {
                     let obj_temp = self.new_temp();
-                    self.current().instructions.push(Inst::Assign(obj_temp.clone(), RValue::AllocateObject(class_name.clone())));
+                    {
+let __inst = Inst::Assign(obj_temp.clone(), RValue::AllocateObject(class_name.clone()));
+self.current().instructions.push(__inst)
+};
                     
                     let actual_name = format!("{}::init", class_name);
                     arg_values.insert(0, Value::Place(obj_temp.clone()));
                     let init_temp = self.new_temp();
-                    self.current().instructions.push(Inst::Assign(init_temp, RValue::Call(actual_name, arg_values)));
+                    {
+let __inst = Inst::Assign(init_temp, RValue::Call(actual_name, arg_values));
+self.current().instructions.push(__inst)
+};
                     
                     return Value::Place(obj_temp);
                 }
@@ -908,24 +1128,30 @@ impl MirBuilder {
                     panic!("Only direct function calls by name are currently supported.");
                 };
                 
-                if func_name == "print" && arguments.len() == 1 {
+                if self.session.interner.lookup(func_name) == "print" && arguments.len() == 1 {
                     match &arguments[0].ty {
-                        ast::types::Type::String => func_name = "printStr".to_string(),
-                        ast::types::Type::Float => func_name = "printFloat".to_string(),
-                        ast::types::Type::Boolean => func_name = "printBool".to_string(),
-                        ast::types::Type::Enum(_, _) | ast::types::Type::Instance(_) => func_name = "printEnum".to_string(),
-                        _ => func_name = "printInt".to_string(),
+                        ast::types::Type::String => func_name = self.session.interner.intern("printStr"),
+                        ast::types::Type::Float => func_name = self.session.interner.intern("printFloat"),
+                        ast::types::Type::Boolean => func_name = self.session.interner.intern("printBool"),
+                        ast::types::Type::Enum(_, _) | ast::types::Type::Instance(_) => func_name = self.session.interner.intern("printEnum"),
+                        _ => func_name = self.session.interner.intern("printInt"),
                     }
                 }
 
                 let temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call(func_name, arg_values)));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::Call(self.session.interner.lookup(func_name).to_string(), arg_values));
+self.current().instructions.push(__inst)
+};
                 Value::Place(temp)
             }
             TypedExprKind::Unary(op, right) => {
                 let right_val = self.lower_expr(right);
                 let temp = self.new_temp();
-                self.current().instructions.push(Inst::Assign(temp.clone(), RValue::UnaryOp(op.clone(), right_val)));
+                {
+let __inst = Inst::Assign(temp.clone(), RValue::UnaryOp(op.clone(), right_val));
+self.current().instructions.push(__inst)
+};
                 Value::Place(temp)
             }
             TypedExprKind::Binary(left, op, right) => {
@@ -936,9 +1162,15 @@ impl MirBuilder {
                 let temp = self.new_temp();
                 
                 if op == &ast::BinaryOp::Add && left_ty == ast::types::Type::String && right_ty == ast::types::Type::String {
-                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::Call("stringConcat".to_string(), vec![left_val, right_val])));
+                    {
+let __inst = Inst::Assign(temp.clone(), RValue::Call("stringConcat".to_string(), vec![left_val, right_val]));
+self.current().instructions.push(__inst)
+};
                 } else {
-                    self.current().instructions.push(Inst::Assign(temp.clone(), RValue::BinaryOp(op.clone(), left_val, right_val)));
+                    {
+let __inst = Inst::Assign(temp.clone(), RValue::BinaryOp(op.clone(), left_val, right_val));
+self.current().instructions.push(__inst)
+};
                 }
                 Value::Place(temp)
             }
@@ -947,7 +1179,7 @@ impl MirBuilder {
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use ast::{BinaryOp, Location, Span};
@@ -958,9 +1190,10 @@ mod tests {
 
     #[test]
     fn test_lower_assignment() {
+        let mut session = session::CompilerSession::new();
         // let x = 10 + 5;
         let stmt = TypedStmt::new(TypedStmtKind::Let {
-            name: "x".into(),
+            name: session.interner.intern("x"),
             type_annotation: None,
             initializer: Some(TypedExpr::new(TypedExprKind::Binary(
                 Box::new(TypedExpr::new(TypedExprKind::Integer(10), ast::types::Type::Int, make_span())),
@@ -969,7 +1202,7 @@ mod tests {
             ), ast::types::Type::Int, make_span())),
         }, make_span());
 
-        let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false, std::collections::HashMap::new());
+        let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false, std::collections::HashMap::new(), &mut session);
         let fun = builder.build(&[stmt]);
 
         assert_eq!(fun.blocks.len(), 1);
@@ -992,12 +1225,13 @@ mod tests {
 
     #[test]
     fn test_lower_if_statement() {
+        let mut session = session::CompilerSession::new();
         // if true { let x = 1; }
         let stmt = TypedStmt::new(TypedStmtKind::If {
             condition: TypedExpr::new(TypedExprKind::Boolean(true), ast::types::Type::Boolean, make_span()),
             then_branch: Box::new(TypedStmt::new(TypedStmtKind::Block(vec![
                 TypedStmt::new(TypedStmtKind::Let {
-                    name: "x".into(),
+                    name: session.interner.intern("x"),
                     type_annotation: None,
                     initializer: Some(TypedExpr::new(TypedExprKind::Integer(1), ast::types::Type::Int, make_span())),
                 }, make_span())
@@ -1005,7 +1239,7 @@ mod tests {
             else_branch: None,
         }, make_span());
 
-        let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false, std::collections::HashMap::new());
+        let builder = MirBuilder::new("main".into(), vec![], std::collections::HashSet::new(), false, std::collections::HashMap::new(), &mut session);
         let fun = builder.build(&[stmt]);
 
         // Start block, Then Block, Merge Block

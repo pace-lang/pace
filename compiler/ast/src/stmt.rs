@@ -3,21 +3,21 @@ use crate::expr::Expr;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeExpr {
-    Named(String),
-    GenericInstance(String, Vec<TypeExpr>),
+    Named(session::Symbol),
+    GenericInstance(session::Symbol, Vec<TypeExpr>),
     Optional(Box<TypeExpr>),
     Array(Box<TypeExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumField {
-    pub name: Option<String>,
+    pub name: Option<session::Symbol>,
     pub ty: TypeExpr,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumVariant {
-    pub name: String,
+    pub name: session::Symbol,
     pub fields: Option<Vec<EnumField>>,
 }
 
@@ -25,32 +25,32 @@ pub struct EnumVariant {
 pub enum StmtKind {
     /// An enum declaration: `enum Name<T> { Variant(Int), Unit }`
     Enum {
-        name: String,
-        type_params: Vec<String>,
+        name: session::Symbol,
+        type_params: Vec<session::Symbol>,
         variants: Vec<EnumVariant>,
         is_private: bool,
     },
     /// An import statement: `import "path" [as alias] [show a, b] [hide x, y]`
     Import {
-        path: String,
-        alias: Option<String>,
-        show: Vec<String>,
-        hide: Vec<String>,
+        path: session::Symbol,
+        alias: Option<session::Symbol>,
+        show: Vec<session::Symbol>,
+        hide: Vec<session::Symbol>,
     },
     /// An export statement: `export "path"`
     Export {
-        path: String,
+        path: session::Symbol,
     },
     /// A let declaration: `let name = expression;`
     Let {
-        name: String,
+        name: session::Symbol,
         type_annotation: Option<TypeExpr>,
         initializer: Option<Expr>,
         is_private: bool,
     },
     /// A var declaration: `[weak] var name: type = expression;`
     Var {
-        name: String,
+        name: session::Symbol,
         type_annotation: Option<TypeExpr>,
         initializer: Option<Expr>,
         is_weak: bool,
@@ -73,24 +73,24 @@ pub enum StmtKind {
     },
     /// A for loop: `for item in iterator { body }`
     For {
-        item_name: String,
+        item_name: session::Symbol,
         iterator: Expr,
         body: Box<Stmt>,
     },
     /// A function declaration: `func name<T>(params) -> return_type { body }`
     Func {
-        name: String,
-        type_params: Vec<String>,
-        params: Vec<(String, TypeExpr)>, // (name, type)
+        name: session::Symbol,
+        type_params: Vec<session::Symbol>,
+        params: Vec<(session::Symbol, TypeExpr)>, // (name, type)
         return_type: Option<TypeExpr>,
         body: Box<Stmt>,
         is_private: bool,
     },
     /// A foreign function declaration: `foreign func name<T>(params) -> return_type;`
     ForeignFunc {
-        name: String,
-        type_params: Vec<String>,
-        params: Vec<(String, TypeExpr)>,
+        name: session::Symbol,
+        type_params: Vec<session::Symbol>,
+        params: Vec<(session::Symbol, TypeExpr)>,
         return_type: Option<TypeExpr>,
         is_private: bool,
     },
@@ -100,16 +100,16 @@ pub enum StmtKind {
     },
     /// A class declaration: `class name<T> { fields; methods; }`
     Class {
-        name: String,
-        type_params: Vec<String>,
-        implements: Vec<String>,
+        name: session::Symbol,
+        type_params: Vec<session::Symbol>,
+        implements: Vec<session::Symbol>,
         methods: Vec<Stmt>,
         fields: Vec<Stmt>,
         is_private: bool,
     },
     /// An interface declaration: `interface name { methods; }`
     Interface {
-        name: String,
+        name: session::Symbol,
         methods: Vec<Stmt>,
         is_private: bool,
     },

@@ -3,11 +3,11 @@ use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct TypeSubstitution {
-    map: HashMap<String, TypeExpr>,
+    map: HashMap<session::Symbol, TypeExpr>,
 }
 
 impl TypeSubstitution {
-    pub fn new(type_params: &[String], type_args: &[TypeExpr]) -> Self {
+    pub fn new(type_params: &[session::Symbol], type_args: &[TypeExpr]) -> Self {
         let mut map = HashMap::new();
         for (param, arg) in type_params.iter().zip(type_args.iter()) {
             map.insert(param.clone(), arg.clone());

@@ -13,11 +13,11 @@ pub struct TypedMatchArm {
 pub enum TypedExprKind {
     Integer(i64),
     Float(f64),
-    String(String),
+    String(session::Symbol),
     InterpolatedString(Vec<TypedExpr>),
     Boolean(bool),
     Null,
-    Variable(String),
+    Variable(session::Symbol),
     Range {
         start: Box<TypedExpr>,
         end: Box<TypedExpr>,
@@ -32,22 +32,22 @@ pub enum TypedExprKind {
     },
     Get {
         object: Box<TypedExpr>,
-        name: String,
+        name: session::Symbol,
     },
     Set {
         object: Box<TypedExpr>,
-        name: String,
+        name: session::Symbol,
         value: Box<TypedExpr>,
     },
     Assign {
-        name: String,
+        name: session::Symbol,
         value: Box<TypedExpr>,
     },
     SelfRef,
     ForceUnwrap(Box<TypedExpr>),
     OptionalGet {
         object: Box<TypedExpr>,
-        name: String,
+        name: session::Symbol,
     },
     NullCoalesce {
         left: Box<TypedExpr>,
@@ -60,7 +60,7 @@ pub enum TypedExprKind {
     Array(Vec<TypedExpr>),
     ListComprehension {
         expr: Box<TypedExpr>,
-        item_name: String,
+        item_name: session::Symbol,
         iterator: Box<TypedExpr>,
     },
     ArrayRepeat {
@@ -81,8 +81,8 @@ pub enum TypedExprKind {
         arms: Vec<TypedMatchArm>,
     },
     EnumVariant {
-        enum_name: String,
-        variant_name: String,
+        enum_name: session::Symbol,
+        variant_name: session::Symbol,
     },
 }
 
@@ -102,12 +102,12 @@ impl TypedExpr {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypedStmtKind {
     Let {
-        name: String,
+        name: session::Symbol,
         type_annotation: Option<TypeExpr>,
         initializer: Option<TypedExpr>,
     },
     Var {
-        name: String,
+        name: session::Symbol,
         type_annotation: Option<TypeExpr>,
         initializer: Option<TypedExpr>,
         is_weak: bool,
@@ -124,39 +124,39 @@ pub enum TypedStmtKind {
         body: Box<TypedStmt>,
     },
     For {
-        item_name: String,
+        item_name: session::Symbol,
         iterator: TypedExpr,
         body: Box<TypedStmt>,
     },
     Func {
-        name: String,
-        type_params: Vec<String>,
-        params: Vec<(String, TypeExpr)>,
+        name: session::Symbol,
+        type_params: Vec<session::Symbol>,
+        params: Vec<(session::Symbol, TypeExpr)>,
         return_type: Option<TypeExpr>,
         body: Box<TypedStmt>,
     },
     ForeignFunc {
-        name: String,
-        params: Vec<(String, TypeExpr)>,
+        name: session::Symbol,
+        params: Vec<(session::Symbol, TypeExpr)>,
         return_type: Option<TypeExpr>,
     },
     Return {
         value: Option<TypedExpr>,
     },
     Class {
-        name: String,
-        type_params: Vec<String>,
-        implements: Vec<String>,
+        name: session::Symbol,
+        type_params: Vec<session::Symbol>,
+        implements: Vec<session::Symbol>,
         methods: Vec<TypedStmt>,
         fields: Vec<TypedStmt>,
     },
     Interface {
-        name: String,
+        name: session::Symbol,
         methods: Vec<TypedStmt>,
     },
     Enum {
-        name: String,
-        type_params: Vec<String>,
+        name: session::Symbol,
+        type_params: Vec<session::Symbol>,
         variants: Vec<EnumVariant>,
     },
 }

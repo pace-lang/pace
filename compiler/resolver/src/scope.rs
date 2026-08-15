@@ -1,8 +1,9 @@
 use std::collections::HashSet;
+use session::Symbol;
 
 #[derive(Debug, Default)]
 pub struct Scope {
-    declared_names: HashSet<String>,
+    declared_names: HashSet<Symbol>,
 }
 
 impl Scope {
@@ -12,12 +13,12 @@ impl Scope {
         }
     }
 
-    pub fn declare(&mut self, name: String) -> bool {
+    pub fn declare(&mut self, name: Symbol) -> bool {
         self.declared_names.insert(name)
     }
 
-    pub fn is_declared_locally(&self, name: &str) -> bool {
-        self.declared_names.contains(name)
+    pub fn is_declared_locally(&self, name: Symbol) -> bool {
+        self.declared_names.contains(&name)
     }
 }
 
@@ -54,13 +55,13 @@ impl ScopeStack {
 
     /// Attempts to declare a name in the current innermost scope.
     /// Returns true if successful, false if it was already declared in the *same* scope (re-declaration error).
-    pub fn declare(&mut self, name: String) -> bool {
+    pub fn declare(&mut self, name: Symbol) -> bool {
         let current_scope = self.scopes.last_mut().unwrap();
         current_scope.declare(name)
     }
 
     /// Checks if a name resolves to a valid declaration in any accessible scope (innermost to outermost).
-    pub fn resolve(&self, name: &str) -> bool {
+    pub fn resolve(&self, name: Symbol) -> bool {
         for scope in self.scopes.iter().rev() {
             if scope.is_declared_locally(name) {
                 return true;

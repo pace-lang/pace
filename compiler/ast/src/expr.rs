@@ -27,8 +27,8 @@ pub enum Pattern {
     /// `Ok(x)` or `Move(x, y)` or `Quit`
     Variant {
         // Can be just "Quit" or "Message.Quit"
-        path: Vec<String>,
-        bindings: Option<Vec<String>>,
+        path: Vec<session::Symbol>,
+        bindings: Option<Vec<session::Symbol>>,
     },
 }
 
@@ -50,14 +50,14 @@ pub enum ExprKind {
     /// A literal float like `3.14`
     Float(f64),
     /// A literal string like `"hello"`
-    String(String),
+    String(session::Symbol),
     InterpolatedString(Vec<Expr>),
     /// A boolean literal like `true` or `false`
     Boolean(bool),
     /// A null literal `null`
     Null,
     /// A variable reference like `count`
-    Variable(String),
+    Variable(session::Symbol),
     Range {
         start: Box<Expr>,
         end: Box<Expr>,
@@ -77,17 +77,17 @@ pub enum ExprKind {
     /// Property access: `object.name`
     Get {
         object: Box<Expr>,
-        name: String,
+        name: session::Symbol,
     },
     /// Property assignment: `object.name = value`
     Set {
         object: Box<Expr>,
-        name: String,
+        name: session::Symbol,
         value: Box<Expr>,
     },
     /// Variable assignment: `name = value`
     Assign {
-        name: String,
+        name: session::Symbol,
         value: Box<Expr>,
     },
     /// Self reference: `self`
@@ -97,7 +97,7 @@ pub enum ExprKind {
     /// Optional property access: `object?.name`
     OptionalGet {
         object: Box<Expr>,
-        name: String,
+        name: session::Symbol,
     },
     /// Null Coalesce: `left ?? right`
     NullCoalesce {
@@ -114,7 +114,7 @@ pub enum ExprKind {
     /// List comprehension: `[expr for item in iterator]`
     ListComprehension {
         expr: Box<Expr>,
-        item_name: String,
+        item_name: session::Symbol,
         iterator: Box<Expr>,
     },
     /// Array repeat initialization: `[0; 10]`

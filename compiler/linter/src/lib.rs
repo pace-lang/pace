@@ -1,19 +1,16 @@
 use ast::stmt::{Stmt, StmtKind};
 use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode, Span};
 
-pub struct Linter {
+pub struct Linter<'a> {
+    session: &'a session::CompilerSession,
     diagnostics: Vec<Diagnostic>,
 }
 
-impl Default for Linter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
-impl Linter {
-    pub fn new() -> Self {
+impl<'a> Linter<'a> {
+    pub fn new(session: &'a session::CompilerSession) -> Self {
         Self {
+            session,
             diagnostics: Vec::new(),
         }
     }
@@ -31,13 +28,13 @@ impl Linter {
     fn check_stmt(&mut self, stmt: &Stmt) {
         match &stmt.kind {
             StmtKind::Enum { name, variants, .. } => {
-                self.check_pascal_case(name, stmt.span, "Enum");
+                self.check_pascal_case(self.session.interner.lookup(*name), stmt.span, "Enum");
                 for variant in variants {
-                    self.check_pascal_case(&variant.name, stmt.span, "Enum variant");
+                    self.check_pascal_case(self.session.interner.lookup(variant.name), stmt.span, "Enum variant");
                 }
             }
             StmtKind::Class { name, methods, fields, .. } => {
-                self.check_pascal_case(name, stmt.span, "Class");
+                self.check_pascal_case(self.session.interner.lookup(*name), stmt.span, "Class");
                 for field in fields {
                     self.check_stmt(field);
                 }
@@ -46,17 +43,17 @@ impl Linter {
                 }
             }
             StmtKind::Interface { name, methods, .. } => {
-                self.check_pascal_case(name, stmt.span, "Interface");
+                self.check_pascal_case(self.session.interner.lookup(*name), stmt.span, "Interface");
                 for method in methods {
                     self.check_stmt(method);
                 }
             }
             StmtKind::Func { name, body, .. } => {
-                self.check_camel_case(name, stmt.span, "Function");
+                self.check_camel_case(self.session.interner.lookup(*name), stmt.span, "Function");
                 self.check_stmt(body);
             }
             StmtKind::ForeignFunc { name, .. } => {
-                self.check_camel_case(name, stmt.span, "Foreign function");
+                self.check_camel_case(self.session.interner.lookup(*name), stmt.span, "Foreign function");
             }
             StmtKind::Let { name, .. } | StmtKind::Var { name, .. } => {
                 // If it's a global constant-like value that they wrote in UPPER_SNAKE_CASE, 
@@ -65,16 +62,17 @@ impl Linter {
                 // Since Pace doesn't have a strict `const` keyword yet, we will just 
                 // ensure it's not UPPER_SNAKE_CASE. If it is UPPER_SNAKE_CASE, we'll 
                 // guide them to PascalCase or camelCase.
-                if is_upper_snake_case(name) {
+                let name_str = self.session.interner.lookup(*name);
+                if is_upper_snake_case(name_str) {
                     self.report_naming_violation(
                         stmt.span,
-                        &format!("Variable `{}` uses UPPER_SNAKE_CASE which is not idiomatic in Pace", name),
-                        &format!("use camelCase for variables, or PascalCase if this is intended to be a constant (e.g. `{}`)", to_pascal_case(name)),
+                        &format!("Variable `{}` uses UPPER_SNAKE_CASE which is not idiomatic in Pace", name_str),
+                        &format!("use camelCase for variables, or PascalCase if this is intended to be a constant (e.g. `{}`)", to_pascal_case(name_str)),
                     );
-                } else if !is_camel_case(name) && !is_pascal_case(name) {
+                } else if !is_camel_case(name_str) && !is_pascal_case(name_str) {
                     self.report_naming_violation(
                         stmt.span,
-                        &format!("Variable `{}` does not follow Pace naming conventions", name),
+                        &format!("Variable `{}` does not follow Pace naming conventions", name_str),
                         "use camelCase for variables",
                     );
                 }

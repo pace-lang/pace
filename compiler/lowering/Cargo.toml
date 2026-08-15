@@ -10,3 +10,4 @@ license.workspace = true
 ast = { version = "0.2.0", path = "../ast" }
 mir = { version = "0.2.0", path = "../mir" }
 diagnostics = { path = "../diagnostics" }
+session = { path = "../session" }

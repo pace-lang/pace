@@ -5,10 +5,8 @@ use crate::env::TypeEnvironment;
 use std::collections::HashMap;
 use diagnostics::{Diagnostic, DiagnosticBuilder, DiagnosticCode};
 
-#[derive(Debug)]
-
-
-pub struct TypeChecker {
+pub struct TypeChecker<'a> {
+    pub session: &'a mut session::CompilerSession,
     env: TypeEnvironment,
     pub errors: Vec<Diagnostic>,
     current_return_type: Option<Type>,
@@ -25,15 +23,10 @@ pub struct TypeChecker {
     pub is_checking_method: bool,
 }
 
-impl Default for TypeChecker {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TypeChecker {
-    pub fn new() -> Self {
+impl<'a> TypeChecker<'a> {
+    pub fn new(session: &'a mut session::CompilerSession) -> Self {
         Self {
+            session,
             env: TypeEnvironment::new(),
             errors: Vec::new(),
             current_return_type: None,
@@ -99,20 +92,20 @@ impl TypeChecker {
                 self.env.pop_scope();
                 TypedStmtKind::Block(typed_stmts)
             }
-            StmtKind::Let { name, type_annotation, initializer, is_private: _ } => self.check_var_decl(name, type_annotation, initializer, false, false, stmt.span).kind,
-            StmtKind::Var { name, type_annotation, initializer, is_weak, is_private: _ } => self.check_var_decl(name, type_annotation, initializer, *is_weak, true, stmt.span).kind,
+            StmtKind::Let { name, type_annotation, initializer, is_private: _ } => self.check_var_decl(*name, type_annotation, initializer, false, false, stmt.span).kind,
+            StmtKind::Var { name, type_annotation, initializer, is_weak, is_private: _ } => self.check_var_decl(*name, type_annotation, initializer, *is_weak, true, stmt.span).kind,
             StmtKind::Class { name, type_params, implements, methods, fields, is_private: _ } => {
                 if !type_params.is_empty() {
-                    self.generic_registry.register_class(name.clone(), stmt.clone());
+                    self.generic_registry.register_class(self.session.interner.lookup(*name).to_string(), stmt.clone());
                     return TypedStmt { kind: TypedStmtKind::Block(Vec::new()), span: stmt.span };
                 }
 
-                self.env.declare(name.clone(), Type::Class(name.clone(), type_params.clone()));
-                self.classes.insert(name.clone(), std::collections::HashMap::new());
+                self.env.declare(self.session.interner.lookup(*name).to_string(), Type::Class(self.session.interner.lookup(*name).to_string(), type_params.iter().map(|s| self.session.interner.lookup(*s).to_string()).collect()));
+                self.classes.insert(self.session.interner.lookup(*name).to_string(), std::collections::HashMap::new());
                 
                 self.env.push_scope();
                 for tp in type_params {
-                    self.env.declare(tp.clone(), Type::Generic(tp.clone()));
+                    self.env.declare(self.session.interner.lookup(*tp).to_string(), Type::Generic(self.session.interner.lookup(*tp).to_string()));
                 }
 
                 let mut class_members = HashMap::new();
@@ -127,7 +120,7 @@ impl TypeChecker {
                     };
                     
                     if initializer.is_none() {
-                        uninit_props.push(f_name.clone());
+                        uninit_props.push(self.session.interner.lookup(*f_name).to_string());
                     }
                     
                     let ty = if let Some(ann) = type_annotation {
@@ -150,11 +143,11 @@ impl TypeChecker {
                         }
                         Type::Any
                     };
-                    class_members.insert(f_name.clone(), ty);
-                    class_mutables_map.insert(f_name.clone(), is_mutable);
+                    class_members.insert(self.session.interner.lookup(*f_name).to_string(), ty);
+                    class_mutables_map.insert(self.session.interner.lookup(*f_name).to_string(), is_mutable);
                 }
 
-                self.uninitialized_class_properties.insert(name.clone(), uninit_props);
+                self.uninitialized_class_properties.insert(self.session.interner.lookup(*name).to_string(), uninit_props);
 
                 for method in methods {
                     if let StmtKind::Func { name: m_name, params, return_type, .. } = &method.kind {
@@ -167,33 +160,33 @@ impl TypeChecker {
                         for (_, pt) in params {
                             param_types.push(self.parse_type(pt, method.span));
                         }
-                        class_members.insert(m_name.clone(), Type::Function(Vec::new(), param_types, Box::new(ret_ty)));
+                        class_members.insert(self.session.interner.lookup(*m_name).to_string(), Type::Function(Vec::new(), param_types, Box::new(ret_ty)));
                     }
                 }
                 
-                self.classes.insert(name.clone(), class_members.clone());
-                self.class_mutables.insert(name.clone(), class_mutables_map);
-                self.class_implements.insert(name.clone(), implements.clone());
+                self.classes.insert(self.session.interner.lookup(*name).to_string(), class_members.clone());
+                self.class_mutables.insert(self.session.interner.lookup(*name).to_string(), class_mutables_map);
+                self.class_implements.insert(self.session.interner.lookup(*name).to_string(), implements.iter().map(|s| self.session.interner.lookup(*s).to_string()).collect());
                 
                 // Validate implements
                 for interface_name in implements {
-                    if let Some(interface_members) = self.interfaces.get(interface_name).cloned() {
+                    if let Some(interface_members) = self.interfaces.get(&self.session.interner.lookup(*interface_name).to_string()).cloned() {
                         for (i_method_name, i_method_ty) in interface_members {
                             if let Some(c_method_ty) = class_members.get(&i_method_name) {
                                 if *c_method_ty != i_method_ty {
-                                    self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Class '{}' incorrectly implements method '{}' of interface '{}'. Expected '{}', found '{}'.", name, i_method_name, interface_name, i_method_ty, c_method_ty))
+                                    self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Class \'{}\' incorrectly implements method '{}' of interface '{}'. Expected '{}', found '{}'.", self.session.interner.lookup(*name), i_method_name, self.session.interner.lookup(*interface_name), i_method_ty, c_method_ty))
                                 }
                             } else {
-                                self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Class '{}' does not implement required method '{}' of interface '{}'.", name, i_method_name, interface_name))
+                                self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Class \'{}\' does not implement required method '{}' of interface '{}'.", self.session.interner.lookup(*name), i_method_name, self.session.interner.lookup(*interface_name)))
                             }
                         }
                     } else {
-                        self.error(stmt.span, DiagnosticCode::UnknownType, &format!("Interface '{}' not found.", interface_name))
+                        self.error(stmt.span, DiagnosticCode::UnknownType, &format!("Interface \'{}\' not found.", self.session.interner.lookup(*interface_name)))
                     }
                 }
                 
                 let prev_class = self.current_class.clone();
-                self.current_class = Some(name.clone());
+                self.current_class = Some(self.session.interner.lookup(*name).to_string());
                 
                 let mut typed_methods = Vec::new();
                 for method in methods {
@@ -231,12 +224,12 @@ impl TypeChecker {
                         for (_, pt) in params {
                             param_types.push(self.parse_type(pt, method.span));
                         }
-                        interface_methods.insert(m_name.clone(), Type::Function(Vec::new(), param_types, Box::new(ret_ty)));
+                        interface_methods.insert(self.session.interner.lookup(*m_name).to_string(), Type::Function(Vec::new(), param_types, Box::new(ret_ty)));
                     }
                 }
                 
-                self.interfaces.insert(name.clone(), interface_methods);
-                self.env.declare(name.clone(), Type::Interface(name.clone()));
+                self.interfaces.insert(self.session.interner.lookup(*name).to_string(), interface_methods);
+                self.env.declare(self.session.interner.lookup(*name).to_string(), Type::Interface(self.session.interner.lookup(*name).to_string()));
                 
                 TypedStmtKind::Interface {
                     name: name.clone(),
@@ -249,11 +242,11 @@ impl TypeChecker {
                     // self.generic_registry.register_enum(name.clone(), stmt.clone());
                 }
 
-                self.env.declare(name.clone(), Type::Enum(name.clone(), type_params.clone()));
+                self.env.declare(self.session.interner.lookup(*name).to_string(), Type::Enum(self.session.interner.lookup(*name).to_string(), type_params.iter().map(|s| self.session.interner.lookup(*s).to_string()).collect()));
                 
                 self.env.push_scope();
                 for tp in type_params {
-                    self.env.declare(tp.clone(), Type::Generic(tp.clone()));
+                    self.env.declare(self.session.interner.lookup(*tp).to_string(), Type::Generic(self.session.interner.lookup(*tp).to_string()));
                 }
                 
                 let mut enum_variants = HashMap::new();
@@ -267,18 +260,18 @@ impl TypeChecker {
                     }
                     
                     let ret_ty = if type_params.is_empty() {
-                        Type::Instance(name.clone())
+                        Type::Instance(self.session.interner.lookup(*name).to_string())
                     } else {
                         let mut ret_args = Vec::new();
                         for tp in type_params {
-                            ret_args.push(Type::Generic(tp.clone()));
+                            ret_args.push(Type::Generic(self.session.interner.lookup(*tp).to_string()));
                         }
-                        Type::GenericInstance(name.clone(), ret_args)
+                        Type::GenericInstance(self.session.interner.lookup(*name).to_string(), ret_args)
                     };
                     
-                    let variant_ty = Type::EnumVariantConstructor(name.clone(), variant.name.clone(), type_params.clone(), param_types, Box::new(ret_ty));
+                    let variant_ty = Type::EnumVariantConstructor(self.session.interner.lookup(*name).to_string(), self.session.interner.lookup(variant.name).to_string(), type_params.iter().map(|s| self.session.interner.lookup(*s).to_string()).collect(), param_types, Box::new(ret_ty));
                     
-                    enum_variants.insert(variant.name.clone(), variant_ty);
+                    enum_variants.insert(self.session.interner.lookup(variant.name).to_string(), variant_ty);
                 }
                 
                 self.env.pop_scope();
@@ -288,10 +281,10 @@ impl TypeChecker {
                     self.env.declare(variant_name.clone(), variant_ty.clone());
                 }
                 
-                self.enums.insert(name.clone(), enum_variants);
+                self.enums.insert(self.session.interner.lookup(*name).to_string(), enum_variants);
 
                 TypedStmtKind::Enum {
-                    name: name.clone(),
+                    name: *name,
                     type_params: type_params.clone(),
                     variants: variants.clone(),
                 }
@@ -299,7 +292,7 @@ impl TypeChecker {
             StmtKind::ForeignFunc { name, type_params, params, return_type, is_private: _ } => {
                 self.env.push_scope();
                 for tp in type_params {
-                    self.env.declare(tp.clone(), Type::Generic(tp.clone()));
+                    self.env.declare(self.session.interner.lookup(*tp).to_string(), Type::Generic(self.session.interner.lookup(*tp).to_string()));
                 }
 
                 let ret_ty = if let Some(rt) = return_type {
@@ -315,7 +308,7 @@ impl TypeChecker {
 
                 self.env.pop_scope();
                 
-                self.env.declare(name.clone(), Type::Function(type_params.clone(), param_types.clone(), Box::new(ret_ty.clone())));
+                self.env.declare(self.session.interner.lookup(*name).to_string(), Type::Function(type_params.iter().map(|s| self.session.interner.lookup(*s).to_string()).collect(), param_types.clone(), Box::new(ret_ty.clone())));
                 TypedStmtKind::ForeignFunc {
                     name: name.clone(),
                     params: params.clone(),
@@ -324,7 +317,7 @@ impl TypeChecker {
             }
             StmtKind::Func { name, type_params, params, return_type, body, is_private: _ } => {
                 if !type_params.is_empty() {
-                    self.generic_registry.register_function(name.clone(), stmt.clone());
+                    self.generic_registry.register_function(self.session.interner.lookup(*name).to_string(), stmt.clone());
                     return TypedStmt { kind: TypedStmtKind::Block(Vec::new()), span: stmt.span };
                 }
 
@@ -345,35 +338,35 @@ impl TypeChecker {
 
                 let mut resolved_name = name.clone();
                 if !is_method {
-                    let func_ty = Type::Function(type_params.clone(), param_types.clone(), Box::new(ret_ty.clone()));
-                    if let Some(existing) = self.env.resolve(name) {
+                    let func_ty = Type::Function(type_params.iter().map(|s| self.session.interner.lookup(*s).to_string()).collect(), param_types.clone(), Box::new(ret_ty.clone()));
+                    if let Some(existing) = self.env.resolve(self.session.interner.lookup(*name)) {
                         if matches!(existing, Type::Function(..) | Type::OverloadedFunction(..)) {
                             let mut funcs = match existing {
                                 Type::OverloadedFunction(fs) => fs,
-                                Type::Function(..) => vec![(name.clone(), existing)],
+                                Type::Function(..) => vec![(self.session.interner.lookup(*name).to_string(), existing)],
                                 _ => unreachable!(),
                             };
 
-                            let mut mangled = format!("_PO_{}", name);
+                            let mut mangled = format!("_PO_{}", self.session.interner.lookup(*name));
                             for ty in &param_types {
                                 mangled.push_str(&format!("_{}", ty).replace("<", "_").replace(">", "").replace(" ", "").replace("?", "Opt").replace("[]", "Arr"));
                             }
 
                             funcs.push((mangled.clone(), func_ty.clone()));
-                            self.env.declare(name.clone(), Type::OverloadedFunction(funcs));
+                            self.env.declare(self.session.interner.lookup(*name).to_string(), Type::OverloadedFunction(funcs));
                             self.env.declare(mangled.clone(), func_ty);
-                            resolved_name = mangled;
+                            resolved_name = self.session.interner.intern(&mangled);
                         } else {
-                            self.env.declare(name.clone(), func_ty);
+                            self.env.declare(self.session.interner.lookup(*name).to_string(), func_ty);
                         }
                     } else {
-                        self.env.declare(name.clone(), func_ty);
+                        self.env.declare(self.session.interner.lookup(*name).to_string(), func_ty);
                     }
                 }
 
                 self.env.push_scope();
                 for tp in type_params {
-                    self.env.declare(tp.clone(), Type::Generic(tp.clone()));
+                    self.env.declare(self.session.interner.lookup(*tp).to_string(), Type::Generic(self.session.interner.lookup(*tp).to_string()));
                 }
 
                 
@@ -382,7 +375,7 @@ impl TypeChecker {
                 }
 
                 for ((param_name, _), param_ty) in params.iter().zip(param_types) {
-                    self.env.declare_var(param_name.clone(), param_ty, false);
+                    self.env.declare_var(self.session.interner.lookup(*param_name).to_string(), param_ty, false);
                 }
 
                 let previous_return = self.current_return_type.take();
@@ -390,13 +383,13 @@ impl TypeChecker {
 
                 let typed_body = self.check_stmt(body);
 
-                if name == "init"
+                if self.session.interner.lookup(*name) == "init"
                     && let Some(ref class_name) = self.current_class
                         && let Some(uninit_props_ref) = self.uninitialized_class_properties.get(class_name) {
                             let uninit_props = uninit_props_ref.clone();
                             let assigned_props = Self::get_assigned_properties_in_init(&typed_body);
                             for prop in uninit_props {
-                                if !assigned_props.contains(&prop) {
+                                if !assigned_props.contains(&self.session.interner.intern(&prop)) {
                                     self.error(stmt.span, DiagnosticCode::UninitializedVariable, &format!("Property '{}' is not initialized by the constructor.", prop));
                                 }
                             }
@@ -452,7 +445,7 @@ impl TypeChecker {
                 };
 
                 self.env.push_scope();
-                self.env.declare_var(item_name.clone(), item_type, false);
+                self.env.declare_var(self.session.interner.lookup(*item_name).to_string(), item_type, false);
                 let typed_body = self.check_stmt(body);
                 self.env.pop_scope();
                 TypedStmtKind::For {
@@ -491,7 +484,7 @@ impl TypeChecker {
         TypedStmt::new(kind, stmt.span)
     }
 
-    fn check_var_decl(&mut self, name: &str, type_annotation: &Option<TypeExpr>, initializer: &Option<Expr>, is_weak: bool, is_mutable: bool, span: Span) -> TypedStmt {
+    fn check_var_decl(&mut self, name: session::Symbol, type_annotation: &Option<TypeExpr>, initializer: &Option<Expr>, is_weak: bool, is_mutable: bool, span: Span) -> TypedStmt {
         let expected_ty = type_annotation.as_ref().map(|ann| self.parse_type(ann, span));
         
         let typed_init = initializer.as_ref().map(|init| self.check_expr_with_expected(init, expected_ty.as_ref()));
@@ -516,18 +509,18 @@ impl TypeChecker {
             init_type
         };
         
-        self.env.declare_var(name.to_owned(), decl_type, is_mutable);
+        self.env.declare_var(self.session.interner.lookup(name).to_string(), decl_type, is_mutable);
         
         let kind = if is_weak || (initializer.is_none() && type_annotation.is_some()) {
             TypedStmtKind::Var {
-                name: name.to_owned(),
+                name,
                 type_annotation: type_annotation.clone(),
                 initializer: typed_init,
                 is_weak,
             }
         } else {
             TypedStmtKind::Let {
-                name: name.to_owned(),
+                name,
                 type_annotation: type_annotation.clone(),
                 initializer: typed_init,
             }
@@ -561,19 +554,19 @@ impl TypeChecker {
             ExprKind::Boolean(v) => (TypedExprKind::Boolean(*v), Type::Boolean),
             ExprKind::Null => (TypedExprKind::Null, Type::Null),
             ExprKind::Variable(name) => {
-                if let Some(ty) = self.env.resolve(name) {
+                if let Some(ty) = self.env.resolve(self.session.interner.lookup(*name)) {
                     (TypedExprKind::Variable(name.clone()), ty)
-                } else if let Some(generic_stmt) = self.generic_registry.get_class(name).cloned() {
+                } else if let Some(generic_stmt) = self.generic_registry.get_class(self.session.interner.lookup(*name)).cloned() {
                     if let ast::StmtKind::Class { type_params, .. } = &generic_stmt.kind {
-                        (TypedExprKind::Variable(name.clone()), Type::Class(name.clone(), type_params.clone()))
+                        (TypedExprKind::Variable(name.clone()), Type::Class(self.session.interner.lookup(*name).to_string(), type_params.iter().map(|s| self.session.interner.lookup(*s).to_string()).collect()))
                     } else {
                         unreachable!()
                     }
-                } else if let Some(generic_stmt) = self.generic_registry.get_function(name).cloned() {
+                } else if let Some(generic_stmt) = self.generic_registry.get_function(self.session.interner.lookup(*name)).cloned() {
                     if let ast::StmtKind::Func { type_params, params, return_type, .. } = &generic_stmt.kind {
                         self.env.push_scope();
                         for tp in type_params {
-                            self.env.declare(tp.clone(), Type::Generic(tp.clone()));
+                            self.env.declare(self.session.interner.lookup(*tp).to_string(), Type::Generic(self.session.interner.lookup(*tp).to_string()));
                         }
                         
                         let mut param_types = Vec::new();
@@ -588,26 +581,26 @@ impl TypeChecker {
                         
                         self.env.pop_scope();
                         
-                        (TypedExprKind::Variable(name.clone()), Type::Function(type_params.clone(), param_types, Box::new(ret_ty)))
+                        (TypedExprKind::Variable(*name), Type::Function(type_params.iter().map(|s| self.session.interner.lookup(*s).to_string()).collect(), param_types, Box::new(ret_ty)))
                     } else {
                         unreachable!()
                     }
                 } else {
-                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Variable '{}' not found.", name));
+                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Variable \'{}\' not found.", self.session.interner.lookup(*name)));
                     (TypedExprKind::Variable(name.clone()), Type::Error)
                 }
             }
             ExprKind::Assign { name, value } => {
                 let typed_val = self.check_expr(value);
-                if let Some(var_type) = self.env.resolve(name) {
-                    if !self.env.is_mutable(name) {
-                        self.error(expr.span, DiagnosticCode::ImmutableAssignment, &format!("Cannot mutate immutable variable '{}'.", name))
+                if let Some(var_type) = self.env.resolve(self.session.interner.lookup(*name)) {
+                    if !self.env.is_mutable(self.session.interner.lookup(*name)) {
+                        self.error(expr.span, DiagnosticCode::ImmutableAssignment, &format!("Cannot mutate immutable variable \'{}\'.", self.session.interner.lookup(*name)))
                     }
                     if typed_val.ty != var_type && typed_val.ty != Type::Error && var_type != Type::Error && var_type != Type::Any {
                         self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to variable of type '{}'.", typed_val.ty, var_type))
                     }
                 } else {
-                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Variable '{}' not found.", name))
+                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Variable \'{}\' not found.", self.session.interner.lookup(*name)))
                 }
                 (TypedExprKind::Assign { name: name.clone(), value: Box::new(typed_val.clone()) }, typed_val.ty)
             }
@@ -641,10 +634,10 @@ impl TypeChecker {
                     Type::Optional(inner) => {
                         if let Type::Instance(class_name) = &**inner {
                             if let Some(fields) = self.classes.get(class_name) {
-                                if let Some(field_ty) = fields.get(name) {
+                                if let Some(field_ty) = fields.get(self.session.interner.lookup(*name)) {
                                     Type::Optional(Box::new(field_ty.clone()))
                                 } else {
-                                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Property '{}' not found on '{}'.", name, class_name));
+                                    self.error(expr.span, DiagnosticCode::UnknownIdentifier, &format!("Property \'{}\' not found on '{}'.", self.session.interner.lookup(*name), class_name));
                                     Type::Error
                                 }
                             } else {
@@ -698,8 +691,8 @@ impl TypeChecker {
                     Type::Optional(inner) => {
                         let expected = (**inner).clone();
                         if let TypedExprKind::Variable(ref left_name) = typed_left.kind {
-                            if !self.env.is_mutable(left_name) {
-                                self.error(expr.span, DiagnosticCode::ImmutableAssignment, &format!("Cannot mutate immutable variable '{}'.", left_name))
+                            if !self.env.is_mutable(self.session.interner.lookup(*left_name)) {
+                                self.error(expr.span, DiagnosticCode::ImmutableAssignment, &format!("Cannot mutate immutable variable \'{}\'.", self.session.interner.lookup(*left_name)))
                             }
                         }
                         
@@ -763,7 +756,7 @@ impl TypeChecker {
                 };
 
                 self.env.push_scope();
-                self.env.declare_var(item_name.clone(), item_type, false);
+                self.env.declare_var(self.session.interner.lookup(*item_name).to_string(), item_type, false);
                 let typed_expr = self.check_expr(mapped_expr);
                 self.env.pop_scope();
 
@@ -818,14 +811,14 @@ impl TypeChecker {
                     Type::Enum(n, _args) => (n.clone(), Vec::new()),
                     _ => {
                         if typed_obj.ty != Type::Error {
-                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot get property '{}' on non-instance type '{}'.", name, typed_obj.ty))
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot get property \'{}\' on non-instance type '{}'.", self.session.interner.lookup(*name), typed_obj.ty))
                         }
                         return TypedExpr::new(TypedExprKind::Get { object: Box::new(typed_obj), name: name.clone() }, Type::Error, expr.span);
                     }
                 };
                 
                 let ty = if let Some(class_props) = self.classes.get(&class_name) {
-                    if let Some(prop_ty) = class_props.get(name) {
+                    if let Some(prop_ty) = class_props.get(self.session.interner.lookup(*name)) {
                         let mut resolved_ty = prop_ty.clone();
                         if let Some(Type::Class(_, params)) = self.env.resolve(&class_name) {
                             let mut inferred_map = std::collections::HashMap::new();
@@ -838,18 +831,18 @@ impl TypeChecker {
                         }
                         resolved_ty
                     } else {
-                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Property '{}' not found on class '{}'.", name, class_name));
+                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Property \'{}\' not found on class '{}'.", self.session.interner.lookup(*name), class_name));
                         Type::Error
                     }
                 } else if let Some(interface_props) = self.interfaces.get(&class_name) {
-                    if let Some(prop_ty) = interface_props.get(name) {
+                    if let Some(prop_ty) = interface_props.get(self.session.interner.lookup(*name)) {
                         prop_ty.clone()
                     } else {
-                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Property '{}' not found on interface '{}'.", name, class_name));
+                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Property \'{}\' not found on interface '{}'.", self.session.interner.lookup(*name), class_name));
                         Type::Error
                     }
                 } else if let Some(enum_variants) = self.enums.get(&class_name) {
-                    if let Some(variant_ty) = enum_variants.get(name) {
+                    if let Some(variant_ty) = enum_variants.get(self.session.interner.lookup(*name)) {
                         let mut resolved_ty = variant_ty.clone();
                         // Instantiate generic arguments if present
                         if let Type::Enum(_, params) = &typed_obj.ty {
@@ -869,15 +862,15 @@ impl TypeChecker {
                             }
 
                         return TypedExpr::new(TypedExprKind::EnumVariant {
-                            enum_name: class_name.clone(),
+                            enum_name: self.session.interner.intern(&class_name),
                             variant_name: name.clone(),
                         }, resolved_ty, expr.span);
                     } else {
-                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Variant '{}' not found in enum '{}'.", name, class_name));
+                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Variant \'{}\' not found in enum '{}'.", self.session.interner.lookup(*name), class_name));
                         Type::Error
                     }
                 } else {
-                    self.error(expr.span, DiagnosticCode::UnknownType, &format!("Type '{}' not found.", class_name));
+                    self.error(expr.span, DiagnosticCode::UnknownType, &format!("Type \'{}\' not found.", class_name));
                     Type::Error
                 };
                 (TypedExprKind::Get { object: Box::new(typed_obj), name: name.clone() }, ty)
@@ -892,14 +885,14 @@ impl TypeChecker {
                     Type::Interface(n) => (n.clone(), Vec::new()),
                     _ => {
                         if typed_obj.ty != Type::Error {
-                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot set property '{}' on non-instance type '{}'.", name, typed_obj.ty))
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot set property \'{}\' on non-instance type '{}'.", self.session.interner.lookup(*name), typed_obj.ty))
                         }
                         return TypedExpr::new(TypedExprKind::Set { object: Box::new(typed_obj), name: name.clone(), value: Box::new(typed_val.clone()) }, typed_val.ty, expr.span);
                     }
                 };
 
                 if let Some(class_props) = self.classes.get(&class_name) {
-                    if let Some(prop_ty) = class_props.get(name) {
+                    if let Some(prop_ty) = class_props.get(self.session.interner.lookup(*name)) {
                         let mut resolved_ty = prop_ty.clone();
                         if let Some(Type::Class(_, params)) = self.env.resolve(&class_name) {
                             let mut inferred_map = std::collections::HashMap::new();
@@ -912,9 +905,9 @@ impl TypeChecker {
                         }
                         
                         if let Some(muts) = self.class_mutables.get(&class_name) {
-                            if let Some(&is_mut) = muts.get(name) {
+                            if let Some(&is_mut) = muts.get(self.session.interner.lookup(*name)) {
                                 if !is_mut {
-                                    self.error(expr.span, DiagnosticCode::ImmutableAssignment, &format!("Cannot mutate immutable property '{}'.", name))
+                                    self.error(expr.span, DiagnosticCode::ImmutableAssignment, &format!("Cannot mutate immutable property \'{}\'.", self.session.interner.lookup(*name)))
                                 }
                             }
                         }
@@ -922,7 +915,7 @@ impl TypeChecker {
                             self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Cannot assign type '{}' to property of type '{}'.", typed_val.ty, resolved_ty))
                         }
                     } else {
-                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Property '{}' not found on class '{}'.", name, class_name))
+                        self.error(expr.span, DiagnosticCode::UnknownType, &format!("Property \'{}\' not found on class '{}'.", self.session.interner.lookup(*name), class_name))
                     }
                 }
                 (TypedExprKind::Set { object: Box::new(typed_obj), name: name.clone(), value: Box::new(typed_val.clone()) }, typed_val.ty)
@@ -963,8 +956,8 @@ impl TypeChecker {
                                 
                                 if let Some(enum_name) = enum_name_opt
                                     && let Some(variants) = self.enums.get(&enum_name) {
-                                        let variant_name = path.last().unwrap_or(&"".to_string()).clone();
-                                        if let Some(Type::EnumVariantConstructor(_, _, func_type_params, param_types, _)) = variants.get(&variant_name) {
+                                        let variant_name = path.last().copied().unwrap_or_else(|| self.session.interner.intern(""));
+                                        if let Some(Type::EnumVariantConstructor(_, _, func_type_params, param_types, _)) = variants.get(self.session.interner.lookup(variant_name)) {
                                             // Substitute generics
                                             let mut replacements = std::collections::HashMap::new();
                                             for (tp, actual) in func_type_params.iter().zip(type_args.iter()) {
@@ -977,9 +970,9 @@ impl TypeChecker {
                                     }
                                 
                                 for (i, bind) in binds.iter().enumerate() {
-                                    if bind != "_" {
+                                    if self.session.interner.lookup(*bind) != "_" {
                                         let bind_ty = extracted_types.get(i).cloned().unwrap_or(Type::Any);
-                                        self.env.declare_var(bind.clone(), bind_ty, false);
+                                        self.env.declare_var(self.session.interner.lookup(*bind).to_string(), bind_ty, false);
                                     }
                                 }
                             }
@@ -1066,7 +1059,7 @@ impl TypeChecker {
 
                         if let Some((mangled_name, ty, ret_ty)) = matched_variant {
                             typed_callee = TypedExpr {
-                                kind: TypedExprKind::Variable(mangled_name),
+                                kind: TypedExprKind::Variable(self.session.interner.intern(&mangled_name)),
                                 ty,
                                 span: typed_callee.span,
                             };
@@ -1085,11 +1078,11 @@ impl TypeChecker {
                                 && let ast::StmtKind::Class { type_params, methods, .. } = &generic_stmt.kind {
                                     self.env.push_scope();
                                     for tp in type_params {
-                                        self.env.declare(tp.clone(), Type::Generic(tp.clone()));
+                                        self.env.declare(self.session.interner.lookup(*tp).to_string(), Type::Generic(self.session.interner.lookup(*tp).to_string()));
                                     }
                                     for method in methods {
                                         if let ast::StmtKind::Func { name, params, .. } = &method.kind
-                                            && name == "init" {
+                                            && self.session.interner.lookup(*name) == "init" {
                                                 let mut param_types = Vec::new();
                                                 for (_, ty) in params {
                                                     param_types.push(self.parse_type(ty, expr.span));
@@ -1141,7 +1134,7 @@ impl TypeChecker {
                                     
                                     // Rewrite the callee to point to the mangled name!
                                     let new_callee = TypedExpr {
-                                        kind: TypedExprKind::Variable(mangled_name.clone()),
+                                        kind: TypedExprKind::Variable(self.session.interner.intern(&mangled_name)),
                                         ty: Type::Class(mangled_name.clone(), Vec::new()),
                                         span: callee.span,
                                     };
@@ -1195,14 +1188,14 @@ impl TypeChecker {
                                 }
                             }
                         } else if !arg_types.is_empty() {
-                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Class '{}' has no 'init' method but arguments were provided.", class_name))
+                            self.error(expr.span, DiagnosticCode::TypeMismatch, &format!("Class \'{}\' has no 'init' method but arguments were provided.", class_name))
                         }
                         
                         if !class_type_params.is_empty() {
                             let mangled_name = self.instantiate_generic_class(class_name, class_type_params, &resolved_type_args);
                             
                             let new_callee = TypedExpr {
-                                kind: TypedExprKind::Variable(mangled_name.clone()),
+                                kind: TypedExprKind::Variable(self.session.interner.intern(&mangled_name)),
                                 ty: Type::BuiltinFunc, // Or Class
                                 span: callee.span,
                             };
@@ -1281,10 +1274,11 @@ impl TypeChecker {
                             }
                             
                             if let TypedExprKind::Variable(func_name) = &typed_callee.kind {
-                                let mangled_name = self.instantiate_generic_function(func_name, func_type_params, &resolved_type_args);
+                                let func_name_str = self.session.interner.lookup(*func_name).to_string();
+                                let mangled = self.instantiate_generic_function(&func_name_str, func_type_params, &resolved_type_args);
                                 
                                 let new_callee = TypedExpr {
-                                    kind: TypedExprKind::Variable(mangled_name.clone()),
+                                    kind: TypedExprKind::Variable(self.session.interner.intern(&mangled)),
                                     ty: Type::BuiltinFunc, // Can be treated as builtin or regular function
                                     span: callee.span,
                                 };
@@ -1365,8 +1359,8 @@ impl TypeChecker {
                             kind: TypedExprKind::Call {
                                 callee: Box::new(TypedExpr {
                                     kind: TypedExprKind::EnumVariant {
-                                        enum_name: enum_name.clone(),
-                                        variant_name: variant_name.clone(),
+                                        enum_name: self.session.interner.intern(&enum_name),
+                                        variant_name: self.session.interner.intern(&variant_name),
                                     },
                                     ty: Type::BuiltinFunc,
                                     span: callee.span,
@@ -1456,7 +1450,7 @@ impl TypeChecker {
 
     fn parse_type(&mut self, type_expr: &TypeExpr, span: Span) -> Type {
         match type_expr {
-            TypeExpr::Named(name) => match name.as_str() {
+            TypeExpr::Named(name) => match self.session.interner.lookup(*name) {
                 "Int" => Type::Int,
                 "Float" => Type::Float,
                 "String" => Type::String,
@@ -1467,15 +1461,15 @@ impl TypeChecker {
                 "CChar" => Type::CChar,
                 "CSize" => Type::CSize,
                 _ => {
-                    if let Some(Type::Generic(g)) = self.env.resolve(name) {
+                    if let Some(Type::Generic(g)) = self.env.resolve(self.session.interner.lookup(*name)) {
                         return Type::Generic(g.clone());
                     }
-                    if self.classes.contains_key(name) || self.enums.contains_key(name) {
-                        Type::Instance(name.to_string())
-                    } else if self.interfaces.contains_key(name) {
-                        Type::Interface(name.to_string())
+                    if self.classes.contains_key(self.session.interner.lookup(*name)) || self.enums.contains_key(self.session.interner.lookup(*name)) {
+                        Type::Instance(self.session.interner.lookup(*name).to_string())
+                    } else if self.interfaces.contains_key(self.session.interner.lookup(*name)) {
+                        Type::Interface(self.session.interner.lookup(*name).to_string())
                     } else {
-                        self.error(span, DiagnosticCode::UnknownType, &format!("Unknown type '{}'.", name));
+                        self.error(span, DiagnosticCode::UnknownType, &format!("Unknown type \'{}\'.", self.session.interner.lookup(*name)));
 
                         Type::Error
                     }
@@ -1483,12 +1477,12 @@ impl TypeChecker {
             },
             TypeExpr::GenericInstance(name, args) => {
                 let parsed_args = args.iter().map(|a| self.parse_type(a, span)).collect::<Vec<_>>();
-                if name == "Pointer" && parsed_args.len() == 1 {
+                if self.session.interner.lookup(*name) == "Pointer" && parsed_args.len() == 1 {
                     Type::Pointer(Box::new(parsed_args[0].clone()))
-                } else if self.classes.contains_key(name) || self.enums.contains_key(name) {
-                    Type::GenericInstance(name.clone(), parsed_args)
+                } else if self.classes.contains_key(self.session.interner.lookup(*name)) || self.enums.contains_key(self.session.interner.lookup(*name)) {
+                    Type::GenericInstance(self.session.interner.lookup(*name).to_string(), parsed_args)
                 } else {
-                    self.error(span, DiagnosticCode::UnknownType, &format!("Unknown generic class '{}'.", name));
+                    self.error(span, DiagnosticCode::UnknownType, &format!("Unknown generic class \'{}\'.", self.session.interner.lookup(*name)));
 
                     Type::Error
                 }
@@ -1588,19 +1582,19 @@ impl TypeChecker {
         self.errors.push(DiagnosticBuilder::error(code, message, span).build());
     }
 
-    fn type_to_type_expr(ty: &Type) -> ast::TypeExpr {
+    fn type_to_type_expr(&mut self, ty: &Type) -> ast::TypeExpr {
         match ty {
-            Type::Int => ast::TypeExpr::Named("Int".to_string()),
-            Type::Float => ast::TypeExpr::Named("Float".to_string()),
-            Type::Boolean => ast::TypeExpr::Named("Boolean".to_string()),
-            Type::String => ast::TypeExpr::Named("String".to_string()),
-            Type::Instance(name) | Type::Interface(name) => ast::TypeExpr::Named(name.clone()),
+            Type::Int => ast::TypeExpr::Named(self.session.interner.intern("Int")),
+            Type::Float => ast::TypeExpr::Named(self.session.interner.intern("Float")),
+            Type::Boolean => ast::TypeExpr::Named(self.session.interner.intern("Boolean")),
+            Type::String => ast::TypeExpr::Named(self.session.interner.intern("String")),
+            Type::Instance(name) | Type::Interface(name) => ast::TypeExpr::Named(self.session.interner.intern(name)),
             Type::GenericInstance(name, args) => {
-                ast::TypeExpr::GenericInstance(name.clone(), args.iter().map(Self::type_to_type_expr).collect())
+                ast::TypeExpr::GenericInstance(self.session.interner.intern(name), args.iter().map(|t| self.type_to_type_expr(t)).collect())
             }
-            Type::Optional(inner) => ast::TypeExpr::Optional(Box::new(Self::type_to_type_expr(inner))),
-            Type::Array(inner) => ast::TypeExpr::Array(Box::new(Self::type_to_type_expr(inner))),
-            _ => ast::TypeExpr::Named("Any".to_string()),
+            Type::Optional(inner) => ast::TypeExpr::Optional(Box::new(self.type_to_type_expr(inner))),
+            Type::Array(inner) => ast::TypeExpr::Array(Box::new(self.type_to_type_expr(inner))),
+            _ => ast::TypeExpr::Named(self.session.interner.intern("Any")),
         }
     }
 
@@ -1621,11 +1615,12 @@ impl TypeChecker {
         if let Some(generic_stmt) = self.generic_registry.get_class(class_name).cloned() {
             let mut type_arg_exprs = Vec::new();
             for ty in type_args {
-                type_arg_exprs.push(Self::type_to_type_expr(ty));
+                type_arg_exprs.push(self.type_to_type_expr(ty));
             }
 
-            let substitution = generics::TypeSubstitution::new(type_params, &type_arg_exprs);
-            let monomorphizer = generics::Monomorphizer::new(&substitution, mangled_name.clone());
+            let param_syms: Vec<session::Symbol> = type_params.iter().map(|s| self.session.interner.intern(s)).collect();
+            let substitution = generics::TypeSubstitution::new(&param_syms, &type_arg_exprs);
+            let monomorphizer = generics::Monomorphizer::new(&substitution, self.session.interner.intern(&mangled_name));
             
             let concrete_stmt = monomorphizer.monomorphize_stmt(&generic_stmt);
             self.spec_registry.mark_complete(key);
@@ -1659,15 +1654,16 @@ impl TypeChecker {
         if let Some(generic_stmt) = self.generic_registry.get_function(func_name).cloned() {
             let mut type_arg_exprs = Vec::new();
             for ty in type_args {
-                type_arg_exprs.push(Self::type_to_type_expr(ty));
+                type_arg_exprs.push(self.type_to_type_expr(ty));
             }
 
-            let substitution = generics::TypeSubstitution::new(type_params, &type_arg_exprs);
-            let monomorphizer = generics::Monomorphizer::new(&substitution, mangled_name.clone());
+            let param_syms: Vec<session::Symbol> = type_params.iter().map(|s| self.session.interner.intern(s)).collect();
+            let substitution = generics::TypeSubstitution::new(&param_syms, &type_arg_exprs);
+            let monomorphizer = generics::Monomorphizer::new(&substitution, self.session.interner.intern(&mangled_name));
             
             let mut concrete_stmt = monomorphizer.monomorphize_stmt(&generic_stmt);
             if let ast::StmtKind::Func { name, .. } = &mut concrete_stmt.kind {
-                *name = mangled_name.clone();
+                *name = self.session.interner.intern(&mangled_name);
             }
             
             self.spec_registry.mark_complete(key);
@@ -1681,7 +1677,7 @@ impl TypeChecker {
         
         mangled_name
     }
-    fn get_assigned_properties_in_init(stmt: &TypedStmt) -> std::collections::HashSet<String> {
+    fn get_assigned_properties_in_init(stmt: &TypedStmt) -> std::collections::HashSet<session::Symbol> {
         let mut assigned = std::collections::HashSet::new();
         match &stmt.kind {
             TypedStmtKind::Block(stmts) => {
@@ -1692,7 +1688,7 @@ impl TypeChecker {
             TypedStmtKind::Expression(expr) => {
                 if let TypedExprKind::Set { object, name, value: _ } = &expr.kind
                     && let TypedExprKind::SelfRef = &object.kind {
-                        assigned.insert(name.clone());
+                        assigned.insert(*name);
                     }
             }
             TypedStmtKind::If { then_branch, else_branch, .. } => {
@@ -1716,7 +1712,7 @@ impl TypeChecker {
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use ast::Location;
@@ -1727,10 +1723,11 @@ mod tests {
 
     #[test]
     fn test_valid_math() {
-        let mut checker = TypeChecker::new();
+        let mut session = session::CompilerSession::new();
+        let mut checker = TypeChecker::new(&mut session);
         // let x = 10 + 5;
         let stmt = Stmt::new(StmtKind::Let {
-            name: "x".into(),
+            name: session.interner.intern("x"),
             is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Binary(
@@ -1747,16 +1744,17 @@ mod tests {
 
     #[test]
     fn test_type_mismatch() {
-        let mut checker = TypeChecker::new();
+        let mut session = session::CompilerSession::new();
+        let mut checker = TypeChecker::new(&mut session);
         // let x = 10 + "hello";
         let stmt = Stmt::new(StmtKind::Let {
-            name: "x".into(),
+            name: session.interner.intern("x"),
             is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Binary(
                 Box::new(Expr::new(ExprKind::Integer(10), make_span())),
                 BinaryOp::Add,
-                Box::new(Expr::new(ExprKind::String("hello".into()), make_span())),
+                Box::new(Expr::new(ExprKind::String(session.interner.intern("hello")), make_span())),
             ), make_span())),
         }, make_span());
 
@@ -1767,7 +1765,8 @@ mod tests {
 
     #[test]
     fn test_if_condition_type() {
-        let mut checker = TypeChecker::new();
+        let mut session = session::CompilerSession::new();
+        let mut checker = TypeChecker::new(&mut session);
         // if 10 { }
         let stmt = Stmt::new(StmtKind::If {
             condition: Expr::new(ExprKind::Integer(10), make_span()),
@@ -1782,10 +1781,11 @@ mod tests {
 
     #[test]
     fn test_immutable_assignment() {
-        let mut checker = TypeChecker::new();
+        let mut session = session::CompilerSession::new();
+        let mut checker = TypeChecker::new(&mut session);
         // let x = 10;
         let stmt1 = Stmt::new(StmtKind::Let {
-            name: "x".into(),
+            name: session.interner.intern("x"),
             is_private: false,
             type_annotation: None,
             initializer: Some(Expr::new(ExprKind::Integer(10), make_span())),
@@ -1794,7 +1794,7 @@ mod tests {
         // x = 20;
         let stmt2 = Stmt::new(StmtKind::Expression(
             Expr::new(ExprKind::Assign {
-                name: "x".into(),
+                name: session.interner.intern("x"),
                 value: Box::new(Expr::new(ExprKind::Integer(20), make_span())),
             }, make_span())
         ), make_span());

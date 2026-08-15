@@ -11,3 +11,4 @@ ast = { path = "../ast" }
 diagnostics = { path = "../diagnostics" }
 generics = { path = "../generics" }
 module = { version = "0.2.0", path = "../module" }
+session = { path = "../session" }

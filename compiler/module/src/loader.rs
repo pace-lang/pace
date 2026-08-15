@@ -15,16 +15,18 @@ pub struct ModuleLoader<'a> {
     pub errors: Vec<Diagnostic>,
     package_graph: Option<&'a PackageGraph>,
     pub source_map: diagnostics::SourceMap,
+    pub session: &'a mut session::CompilerSession,
 }
 
 impl<'a> ModuleLoader<'a> {
-    pub fn new(package_graph: Option<&'a PackageGraph>) -> Self {
+    pub fn new(package_graph: Option<&'a PackageGraph>, session: &'a mut session::CompilerSession) -> Self {
         Self {
             graph: ModuleGraph::new(),
             loaded_paths: std::collections::HashMap::new(),
             errors: Vec::new(),
             package_graph,
             source_map: diagnostics::SourceMap::new(),
+            session,
         }
     }
 
@@ -55,13 +57,13 @@ impl<'a> ModuleLoader<'a> {
         let file_id = self.source_map.add_file(path.to_path_buf(), source.clone());
 
         let mut scanner = lexer::Scanner::new(file_id, &source);
-        let tokens = scanner.scan_tokens();
+        let tokens = scanner.scan_tokens(self.session);
         if !scanner.diagnostics.is_empty() {
             self.errors.extend(scanner.diagnostics);
             return None;
         }
 
-        let mut parser = parser::Parser::new(tokens);
+        let mut parser = parser::Parser::new(tokens, self.session);
         let (ast, parse_errors) = parser.parse();
         if !parse_errors.is_empty() {
             self.errors.extend(parse_errors);
@@ -114,7 +116,7 @@ impl<'a> ModuleLoader<'a> {
                                         }
                                     }
                                     prelude_imports.push(ast::Stmt::new(ast::StmtKind::Import {
-                                        path: import_path,
+                                        path: self.session.interner.intern(&format!("\"{}\"", import_path)),
                                         alias: None,
                                         show: vec![],
                                         hide: vec![],
@@ -136,12 +138,14 @@ impl<'a> ModuleLoader<'a> {
         // Find imports and recursively load
         let mut dependencies = Vec::new();
         for stmt in &final_ast {
-            if let StmtKind::Import { path: import_path_str, .. } = &stmt.kind {
-                let clean_path = import_path_str.trim_matches('"').trim_matches('\'');
+            if let StmtKind::Import { path: import_path_sym, .. } = &stmt.kind {
+                let import_path_str = self.session.interner.lookup(*import_path_sym).to_string();
+                let clean_path = import_path_str.trim_matches('"').trim_matches('\'').to_string();
+
                 let resolved_import_path;
 
                 let mut local_resolved = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
-                local_resolved.push(clean_path);
+                local_resolved.push(&clean_path);
                 if !clean_path.ends_with(".pace") {
                     local_resolved.set_extension("pace");
                 }

@@ -39,11 +39,11 @@ pub enum TokenKind {
     Foreign,
 
     // Identifiers and Literals
-    Identifier(String),
+    Identifier(session::Symbol),
     Integer(i64),
     Float(f64),
     StringStart,
-    StringPart(String),
+    StringPart(session::Symbol),
     StringEnd,
     InterpolationStart,
     InterpolationEnd,

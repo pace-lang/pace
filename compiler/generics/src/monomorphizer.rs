@@ -3,11 +3,11 @@ use crate::substitution::TypeSubstitution;
 
 pub struct Monomorphizer<'a> {
     subst: &'a TypeSubstitution,
-    mangled_name: String,
+    mangled_name: session::Symbol,
 }
 
 impl<'a> Monomorphizer<'a> {
-    pub fn new(subst: &'a TypeSubstitution, mangled_name: String) -> Self {
+    pub fn new(subst: &'a TypeSubstitution, mangled_name: session::Symbol) -> Self {
         Self { subst, mangled_name }
     }
 

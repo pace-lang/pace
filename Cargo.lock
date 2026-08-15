@@ -93,6 +93,7 @@ name = "ast"
 version = "0.2.0"
 dependencies = [
  "diagnostics",
+ "session",
 ]
 
 [[package]]
@@ -177,6 +178,7 @@ dependencies = [
  "resolver",
  "runtime",
  "serde",
+ "session",
  "toml",
  "typechecker",
  "vm",
@@ -438,6 +440,7 @@ name = "generics"
 version = "0.2.0"
 dependencies = [
  "ast",
+ "session",
 ]
 
 [[package]]
@@ -521,6 +524,7 @@ version = "0.2.0"
 dependencies = [
  "ast",
  "diagnostics",
+ "session",
 ]
 
 [[package]]
@@ -548,6 +552,7 @@ version = "0.2.0"
 dependencies = [
  "ast",
  "diagnostics",
+ "session",
 ]
 
 [[package]]
@@ -569,6 +574,7 @@ dependencies = [
  "ast",
  "diagnostics",
  "mir",
+ "session",
 ]
 
 [[package]]
@@ -594,6 +600,7 @@ dependencies = [
  "lexer",
  "package",
  "parser",
+ "session",
 ]
 
 [[package]]
@@ -636,6 +643,7 @@ dependencies = [
  "ast",
  "diagnostics",
  "lexer",
+ "session",
 ]
 
 [[package]]
@@ -726,6 +734,7 @@ dependencies = [
  "diagnostics",
  "module",
  "package",
+ "session",
 ]
 
 [[package]]
@@ -792,6 +801,10 @@ checksum = "6662b5879511e06e8999a8a235d848113e942c9124f211511b16466ee2995f26"
 dependencies = [
  "serde_core",
 ]
+
+[[package]]
+name = "session"
+version = "0.2.0"
 
 [[package]]
 name = "similar"
@@ -905,6 +918,7 @@ dependencies = [
  "diagnostics",
  "generics",
  "module",
+ "session",
 ]
 
 [[package]]

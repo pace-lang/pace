@@ -38,12 +38,12 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn scan_tokens(&mut self) -> Vec<Token> {
+    pub fn scan_tokens(&mut self, session: &mut session::CompilerSession) -> Vec<Token> {
         let mut tokens = Vec::new();
         while !self.is_at_end() {
             self.start_idx = self.current_idx;
             self.start_loc = self.current_loc;
-            if let Some(token) = self.scan_token() {
+            if let Some(token) = self.scan_token(session) {
                 tokens.push(token);
             }
         }
@@ -88,9 +88,9 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn scan_token(&mut self) -> Option<Token> {
+    fn scan_token(&mut self, session: &mut session::CompilerSession) -> Option<Token> {
         if self.mode_stack.last() == Some(&LexerMode::String) {
-            return self.scan_string_mode();
+            return self.scan_string_mode(session);
         }
 
         let c = self.advance()?;
@@ -188,7 +188,7 @@ impl<'a> Scanner<'a> {
             '_' => {
                 if self.peek().map(|c| c.is_ascii_alphanumeric() || c == '_').unwrap_or(false) {
                     // It's the start of an identifier like _varName
-                    self.identifier()
+                    self.identifier(session)
                 } else {
                     // It's just a lone underscore
                     TokenKind::Underscore
@@ -203,7 +203,7 @@ impl<'a> Scanner<'a> {
                 TokenKind::StringStart
             },
             c if c.is_ascii_digit() => self.number(),
-            c if c.is_ascii_alphabetic() => self.identifier(),
+            c if c.is_ascii_alphabetic() => self.identifier(session),
             _ => {
                 let span = Span::new(self.file_id, self.start_idx, self.current_idx, self.start_loc, self.current_loc);
                 self.diagnostics.push(DiagnosticBuilder::error(DiagnosticCode::UnexpectedToken, format!("Unexpected character '{}'", c), span).build());
@@ -214,7 +214,7 @@ impl<'a> Scanner<'a> {
         Some(self.make_token(kind))
     }
 
-    fn scan_string_mode(&mut self) -> Option<Token> {
+    fn scan_string_mode(&mut self, session: &mut session::CompilerSession) -> Option<Token> {
         let mut value = String::new();
         while !self.is_at_end() {
             let peek = self.peek();
@@ -279,7 +279,8 @@ impl<'a> Scanner<'a> {
             return Some(self.make_token(TokenKind::Error("Unterminated string.".into())));
         }
 
-        Some(self.make_token(TokenKind::StringPart(value)))
+        let symbol = session.interner.intern(&value);
+        Some(self.make_token(TokenKind::StringPart(symbol)))
     }
 
     fn number(&mut self) -> TokenKind {
@@ -340,7 +341,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn identifier(&mut self) -> TokenKind {
+    fn identifier(&mut self, session: &mut session::CompilerSession) -> TokenKind {
         while let Some(c) = self.peek() {
             if c.is_ascii_alphanumeric() || c == '_' {
                 self.advance();
@@ -385,7 +386,7 @@ impl<'a> Scanner<'a> {
             "weak" => TokenKind::Weak,
             "null" => TokenKind::Null,
             "foreign" => TokenKind::Foreign,
-            _ => TokenKind::Identifier(text.to_string()),
+            _ => TokenKind::Identifier(session.interner.intern(text)),
         }
     }
 
@@ -407,12 +408,13 @@ mod tests {
     #[test]
     fn test_basic_tokens() {
         let source = "let count = 10;";
+        let mut session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
-        let tokens = scanner.scan_tokens();
+        let tokens = scanner.scan_tokens(&mut session);
         
         assert_eq!(tokens.len(), 6); // let, count, =, 10, ;, EOF
         assert_eq!(tokens[0].kind, TokenKind::Let);
-        assert_eq!(tokens[1].kind, TokenKind::Identifier("count".into()));
+        assert_eq!(tokens[1].kind, TokenKind::Identifier(session.interner.intern("count")));
         assert_eq!(tokens[2].kind, TokenKind::Equal);
         assert_eq!(tokens[3].kind, TokenKind::Integer(10));
         assert_eq!(tokens[4].kind, TokenKind::Semicolon);
@@ -422,8 +424,9 @@ mod tests {
     #[test]
     fn test_error_token() {
         let source = "let x = @;";
+        let mut session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
-        let tokens = scanner.scan_tokens();
+        let tokens = scanner.scan_tokens(&mut session);
         
         assert_eq!(tokens[3].kind, TokenKind::Error("Unexpected character '@'".into()));
     }

@@ -11,8 +11,9 @@ members = [
     "compiler/cli",
     "compiler/linker",
     "compiler/codegen",
-    "compiler/arc"
-, "compiler/diagnostics", "compiler/generics", "compiler/module", "compiler/package", "compiler/runtime", "compiler/linter"]
+    "compiler/arc",
+    "compiler/diagnostics", "compiler/generics", "compiler/module", "compiler/package", "compiler/runtime", "compiler/linter", "compiler/session"
+]
 resolver = "2"
 
 [workspace.package]

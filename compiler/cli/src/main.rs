@@ -141,7 +141,8 @@ fn compile_to_mir(file: &Path) -> mir::Program {
         Some(package_manager.into_graph())
     };
 
-    let mut loader = module::loader::ModuleLoader::new(package_graph.as_ref());
+    let mut session = session::CompilerSession::new();
+    let mut loader = module::loader::ModuleLoader::new(package_graph.as_ref(), &mut session);
     loader.load_root(file);
     
     let loader_errors = std::mem::take(&mut loader.errors);
@@ -159,7 +160,7 @@ fn compile_to_mir(file: &Path) -> mir::Program {
     if has_errors { exit(1); }
     
     // Lint Pass
-    let mut linter = linter::Linter::new();
+    let mut linter = linter::Linter::new(&session);
     for module in graph.modules() {
         linter.lint(&module.ast);
     }
@@ -169,7 +170,7 @@ fn compile_to_mir(file: &Path) -> mir::Program {
     }
 
     // 3. Name Resolution
-    let mut resolver = Resolver::new();
+    let mut resolver = Resolver::new(&mut session);
     resolver.resolve_graph(&graph);
     if !resolver.errors.is_empty() {
         print_diagnostics(&resolver.errors, &source_map);
@@ -181,7 +182,7 @@ fn compile_to_mir(file: &Path) -> mir::Program {
     if has_errors { exit(1); }
 
     // 4. Type Checking
-    let mut typechecker = TypeChecker::new();
+    let mut typechecker = TypeChecker::new(&mut session);
     let typed_ast = typechecker.check_graph(&graph);
     if !typechecker.errors.is_empty() {
         print_diagnostics(&typechecker.errors, &source_map);
@@ -193,7 +194,7 @@ fn compile_to_mir(file: &Path) -> mir::Program {
     if has_errors { exit(1); }
 
     // 5. Lowering (AST -> MIR)
-    let builder = ProgramBuilder::new();
+    let builder = ProgramBuilder::new(&mut session);
     let mut mir_program = builder.build(&typed_ast);
     
     // 6. ARC Pass
@@ -311,7 +312,8 @@ fn do_lint() {
     }
     let package_graph = package_manager.into_graph();
 
-    let mut loader = module::loader::ModuleLoader::new(Some(&package_graph));
+    let mut session = session::CompilerSession::new();
+    let mut loader = module::loader::ModuleLoader::new(Some(&package_graph), &mut session);
     loader.load_root(&main_file);
     
     let loader_errors = std::mem::take(&mut loader.errors);
@@ -324,7 +326,7 @@ fn do_lint() {
         }
     }
 
-    let mut linter = linter::Linter::new();
+    let mut linter = linter::Linter::new(&session);
     for module in graph.modules() {
         linter.lint(&module.ast);
     }
