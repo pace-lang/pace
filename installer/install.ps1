@@ -97,4 +97,4 @@ if (-not $compilerFound) {
 Write-Host ""
 Write-Host "Try running:"
 Write-Host "    pace --version" -ForegroundColor Cyan
-Write-Host "    pace new hello" -ForegroundColor Cyan
+Write-Host "    pace create hello" -ForegroundColor Cyan

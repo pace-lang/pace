@@ -7,7 +7,12 @@ REPO="pace-lang/pace"
 INSTALL_DIR="$HOME/.pace"
 BIN_DIR="$INSTALL_DIR/bin"
 
-echo "✨ Installing Pace Toolchain..."
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+echo "${CYAN}${BOLD}✨ Installing Pace Toolchain...${NC}"
 
 # Detect OS
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -37,10 +42,11 @@ if [ -z "$LATEST_RELEASE" ]; then
 fi
 
 if [ -x "$BIN_DIR/pace" ]; then
-    CURRENT_VERSION=$("$BIN_DIR/pace" --version 2>/dev/null | awk '{print $2}')
+    # Extract just the version number to ignore ANSI color codes and extraneous text
+    CURRENT_VERSION=$("$BIN_DIR/pace" --version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
     if [ "v$CURRENT_VERSION" = "$LATEST_RELEASE" ] || [ "$CURRENT_VERSION" = "$LATEST_RELEASE" ]; then
         echo ""
-        echo "🎉 Congrats! You're already on the latest version of Pace (which is $LATEST_RELEASE)"
+        echo "🎉 Congrats! You're already on the latest version of ${GREEN}${BOLD}Pace${NC} (which is ${LATEST_RELEASE})"
         exit 0
     fi
 fi
@@ -88,12 +94,12 @@ if ! grep -q "$BIN_DIR" "$PROFILE_FILE" 2>/dev/null; then
     echo "export PATH=\"\$PATH:$BIN_DIR\"" >> "$PROFILE_FILE"
     
     echo ""
-    echo "✅ Pace Toolchain installed successfully!"
+    echo "✅ ${GREEN}${BOLD}Pace Toolchain installed successfully!${NC}"
     echo "Please restart your terminal or run:"
     echo "    source $PROFILE_FILE"
 else
     echo ""
-    echo "✅ Pace Toolchain installed successfully!"
+    echo "✅ ${GREEN}${BOLD}Pace Toolchain installed successfully!${NC}"
     echo "PATH is already configured."
 fi
 
@@ -108,4 +114,4 @@ fi
 echo ""
 echo "Try running:"
 echo "    pace --version"
-echo "    pace new hello"
+echo "    pace create hello"
