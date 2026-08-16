@@ -25,7 +25,7 @@ impl<'a> TypeChecker<'a> {
                 expected_param_types = Some(param_types.clone());
             }
             Type::Class(class_name, _) | Type::Struct(class_name, _) => {
-                if let Some(props) = self.classes.get(&class_name)
+                if let Some(props) = self.classes.get(class_name)
                     && let Some(Type::Function(_, param_types, _)) = props
                         .get(&self.session.interner.borrow_mut().intern("init"))
                         .map(|id| self.get_type(*id))

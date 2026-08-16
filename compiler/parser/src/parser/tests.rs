@@ -6,9 +6,9 @@ use lexer::*;
     #[test]
     fn test_func_declaration() {
         let source = "func add(a: Int, b: Int) -> Int { return a + b; }";
-        let mut session = session::CompilerSession::new();
+        let session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
-        let mut parser = Parser::new(scanner.scan_tokens(&mut session), &session);
+        let mut parser = Parser::new(scanner.scan_tokens(&session), &session);
         let (stmts, errors) = parser.parse();
 
         assert!(errors.is_empty(), "Parse errors: {:?}", errors);
@@ -35,9 +35,9 @@ use lexer::*;
     #[test]
     fn test_visibility_modifiers() {
         let source = "private func hidden() {} public class Visible {} var unadorned = 1;";
-        let mut session = session::CompilerSession::new();
+        let session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
-        let mut parser = Parser::new(scanner.scan_tokens(&mut session), &session);
+        let mut parser = Parser::new(scanner.scan_tokens(&session), &session);
         let (stmts, errors) = parser.parse();
 
         assert!(errors.is_empty(), "Parse errors: {:?}", errors);
@@ -62,9 +62,9 @@ use lexer::*;
     #[test]
     fn test_if_statement() {
         let source = "if count > 0 { let x = 1; } else { let x = 0; }";
-        let mut session = session::CompilerSession::new();
+        let session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
-        let mut parser = Parser::new(scanner.scan_tokens(&mut session), &session);
+        let mut parser = Parser::new(scanner.scan_tokens(&session), &session);
         let (stmts, errors) = parser.parse();
 
         assert!(errors.is_empty(), "Parse errors: {:?}", errors);
@@ -85,9 +85,9 @@ use lexer::*;
     #[test]
     fn test_while_statement() {
         let source = "while count > 0 { let x = 1; }";
-        let mut session = session::CompilerSession::new();
+        let session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
-        let mut parser = Parser::new(scanner.scan_tokens(&mut session), &session);
+        let mut parser = Parser::new(scanner.scan_tokens(&session), &session);
         let (stmts, errors) = parser.parse();
 
         assert!(errors.is_empty(), "Parse errors: {:?}", errors);
@@ -104,9 +104,9 @@ use lexer::*;
     #[test]
     fn test_for_statement() {
         let source = "for item in items { let x = 1; }";
-        let mut session = session::CompilerSession::new();
+        let session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
-        let mut parser = Parser::new(scanner.scan_tokens(&mut session), &session);
+        let mut parser = Parser::new(scanner.scan_tokens(&session), &session);
         let (stmts, errors) = parser.parse();
 
         assert!(errors.is_empty(), "Parse errors: {:?}", errors);

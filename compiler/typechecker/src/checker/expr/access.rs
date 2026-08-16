@@ -158,7 +158,7 @@ impl<'a> TypeChecker<'a> {
         let ty = match self.get_type(typed_obj.ty) {
             Type::Optional(inner) => {
                 if let Type::Instance(class_name) = self.session.types.borrow().get(inner) {
-                    if let Some(fields) = self.classes.get(&class_name) {
+                    if let Some(fields) = self.classes.get(class_name) {
                         if let Some(field_ty) = fields.get(&name) {
                             self.session
                                 .types

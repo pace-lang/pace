@@ -11,7 +11,7 @@ fn run_ui_test(file_path: &Path) {
 
     let cli_path = env!("CARGO_BIN_EXE_cli");
 
-    let output = Command::new(&cli_path)
+    let output = Command::new(cli_path)
         .arg("run")
         .arg(file_path)
         .output()

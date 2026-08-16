@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 use std::process::{Command, exit};
 use vm::VirtualMachine;
 
@@ -19,7 +19,7 @@ pub fn execute(file: Option<&str>, release: bool) {
     exit(status.code().unwrap_or(1));
 }
 
-pub fn execute_debug(file: &PathBuf) {
+pub fn execute_debug(file: &Path) {
     let ast_program = compile_to_mir(file);
 
     if !ast_program.functions.contains_key("main") {
