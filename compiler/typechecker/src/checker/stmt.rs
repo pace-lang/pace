@@ -62,28 +62,37 @@ impl<'a> TypeChecker<'a> {
 
                 // Note: Class implements validation is kept here since it emits diagnostics
                 if let Some(class_members) = self.classes.get(name).cloned() {
-                    for interface_name in implements {
-                        if let Some(interface_members) =
-                            self.interfaces.get(interface_name).cloned()
-                        {
-                            for (i_method_name, i_method_ty) in interface_members {
-                                if let Some(c_method_ty) = class_members.get(&i_method_name) {
-                                    if *c_method_ty != i_method_ty {
-                                        self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Class '{}' incorrectly implements method '{}' of interface '{}'. Expected '{}', found '{}'.", self.session.interner.borrow().lookup(*name), self.session.interner.borrow().lookup(i_method_name), self.session.interner.borrow().lookup(*interface_name), self.session.format_type(i_method_ty), self.session.format_type(*c_method_ty)));
+                    if let Some(resolved_implements) = self.class_implements.get(name).cloned() {
+                        for imp_ty in resolved_implements {
+                            let interface_name = match self.get_type(imp_ty) {
+                                Type::Interface(n, _) => n,
+                                Type::GenericInstance(n, _) => n,
+                                _ => continue,
+                            };
+                            if let Some(interface_members) = self.interfaces.get(&interface_name).cloned() {
+                                for (i_method_name, i_method_ty) in interface_members {
+                                    if let Some(c_method_ty) = class_members.get(&i_method_name) {
+                                        // Skip exact type check for generic interfaces for now to prevent false positives
+                                        if let Type::GenericInstance(_, _) = self.get_type(imp_ty) {
+                                            continue;
+                                        }
+                                        if *c_method_ty != i_method_ty {
+                                            self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Class '{}' incorrectly implements method '{}' of interface '{}'. Expected '{}', found '{}'.", self.session.interner.borrow().lookup(*name), self.session.interner.borrow().lookup(i_method_name), self.session.interner.borrow().lookup(interface_name), self.session.format_type(i_method_ty), self.session.format_type(*c_method_ty)));
+                                        }
+                                    } else {
+                                        self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Class '{}' does not implement required method '{}' of interface '{}'.", self.session.interner.borrow().lookup(*name), self.session.interner.borrow().lookup(i_method_name), self.session.interner.borrow().lookup(interface_name)))
                                     }
-                                } else {
-                                    self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Class '{}' does not implement required method '{}' of interface '{}'.", self.session.interner.borrow().lookup(*name), self.session.interner.borrow().lookup(i_method_name), self.session.interner.borrow().lookup(*interface_name)))
                                 }
+                            } else {
+                                self.error(
+                                    stmt.span,
+                                    DiagnosticCode::UnknownType,
+                                    &format!(
+                                        "Interface '{}' not found.",
+                                        self.session.interner.borrow().lookup(interface_name)
+                                    ),
+                                )
                             }
-                        } else {
-                            self.error(
-                                stmt.span,
-                                DiagnosticCode::UnknownType,
-                                &format!(
-                                    "Interface '{}' not found.",
-                                    self.session.interner.borrow().lookup(*interface_name)
-                                ),
-                            )
                         }
                     }
                 }
@@ -187,10 +196,12 @@ impl<'a> TypeChecker<'a> {
             }
             StmtKind::Interface {
                 name,
+                type_params,
                 methods: _,
                 is_private: _,
             } => TypedStmtKind::Interface {
                 name: *name,
+                type_params: type_params.clone(),
                 methods: Vec::new(),
             },
             StmtKind::Enum {
@@ -394,6 +405,33 @@ impl<'a> TypeChecker<'a> {
                     Type::Range => self.session.types.borrow_mut().intern(Type::Int),
                     Type::Array(inner) => inner,
                     Type::Error => self.session.types.borrow_mut().intern(Type::Error),
+                    Type::Instance(class_name) => {
+                        let mut item_ty = None;
+                        if let Some(implements) = self.class_implements.get(&class_name) {
+                            let iterable_sym = self.session.interner.borrow_mut().intern("Iterable");
+                            for imp_ty in implements {
+                                if let Type::GenericInstance(name, args) = self.get_type(*imp_ty) {
+                                    if name == iterable_sym && args.len() == 1 {
+                                        item_ty = Some(args[0]);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(ty) = item_ty {
+                            ty
+                        } else {
+                            self.error(
+                                stmt.span,
+                                DiagnosticCode::TypeMismatch,
+                                &format!(
+                                    "Cannot iterate over type '{}' because it does not implement 'Iterable<T>'.",
+                                    self.session.format_type(typed_iterator.ty)
+                                ),
+                            );
+                            self.session.types.borrow_mut().intern(Type::Error)
+                        }
+                    }
                     _ => {
                         self.error(
                             stmt.span,
@@ -516,7 +554,7 @@ impl<'a> TypeChecker<'a> {
             }
 
             if is_weak
-                && !matches!(self.session.types.borrow().get(ann_type), Type::Optional(inner) if matches!(self.session.types.borrow().get(*inner), Type::Instance(_) | Type::Interface(_)))
+                && !matches!(self.session.types.borrow().get(ann_type), Type::Optional(inner) if matches!(self.session.types.borrow().get(*inner), Type::Instance(_) | Type::Interface(_, _)))
             {
                 self.error(
                     span,
@@ -527,7 +565,7 @@ impl<'a> TypeChecker<'a> {
             ann_type
         } else {
             if is_weak
-                && !matches!(self.session.types.borrow().get(init_type), Type::Optional(inner) if matches!(self.session.types.borrow().get(*inner), Type::Instance(_) | Type::Interface(_)))
+                && !matches!(self.session.types.borrow().get(init_type), Type::Optional(inner) if matches!(self.session.types.borrow().get(*inner), Type::Instance(_) | Type::Interface(_, _)))
             {
                 self.error(
                     span,

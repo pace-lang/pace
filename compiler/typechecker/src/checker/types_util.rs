@@ -30,7 +30,7 @@ impl<'a> TypeChecker<'a> {
                         self.session
                             .types
                             .borrow_mut()
-                            .intern(Type::Interface(*name))
+                            .intern(Type::Interface(*name, Vec::new()))
                     } else {
                         self.error(
                             span,
@@ -57,7 +57,7 @@ impl<'a> TypeChecker<'a> {
                         .types
                         .borrow_mut()
                         .intern(Type::Pointer(parsed_args[0]))
-                } else if self.classes.contains_key(name) || self.enums.contains_key(name) {
+                } else if self.classes.contains_key(name) || self.enums.contains_key(name) || self.generic_registry.get_interface(*name).is_some() || self.generic_registry.get_class(*name).is_some() {
                     self.session
                         .types
                         .borrow_mut()
@@ -140,12 +140,29 @@ impl<'a> TypeChecker<'a> {
         if target == any_id {
             return true;
         }
-        if let (Type::Instance(class_name), Type::Interface(interface_name)) =
-            (source_ty, target_ty)
-            && let Some(implements) = self.class_implements.get(&class_name)
-            && implements.contains(&interface_name)
-        {
-            return true;
+        if let Type::Instance(class_name) = source_ty {
+            if let Some(implements) = self.class_implements.get(&class_name) {
+                // If target is a non-generic interface
+                if let Type::Interface(interface_name, _) = target_ty {
+                    for implemented_ty_id in implements {
+                        if let Type::Interface(impl_name, _) = self.get_type(*implemented_ty_id) {
+                            if impl_name == interface_name {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                // If target is a generic interface
+                if let Type::GenericInstance(interface_name, target_args) = target_ty {
+                    for implemented_ty_id in implements {
+                        if let Type::GenericInstance(impl_name, impl_args) = self.get_type(*implemented_ty_id) {
+                            if impl_name == interface_name && impl_args == target_args {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
         }
         false
     }
@@ -265,7 +282,7 @@ impl<'a> TypeChecker<'a> {
             Type::String => {
                 ast::TypeExpr::Named(self.session.interner.borrow_mut().intern("String"))
             }
-            Type::Instance(name) | Type::Interface(name) => ast::TypeExpr::Named(name),
+            Type::Instance(name) | Type::Interface(name, _) => ast::TypeExpr::Named(name),
             Type::GenericInstance(name, args) => ast::TypeExpr::GenericInstance(
                 name,
                 args.iter().map(|t| self.type_to_type_expr(*t)).collect(),

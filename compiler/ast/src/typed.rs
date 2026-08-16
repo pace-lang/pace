@@ -146,7 +146,7 @@ pub enum TypedStmtKind<'a> {
     Class {
         name: session::Symbol,
         type_params: Vec<session::Symbol>,
-        implements: Vec<session::Symbol>,
+        implements: Vec<TypeExpr<'a>>,
         methods: Vec<TypedStmt<'a>>,
         fields: Vec<TypedStmt<'a>>,
     },
@@ -163,6 +163,7 @@ pub enum TypedStmtKind<'a> {
     },
     Interface {
         name: session::Symbol,
+        type_params: Vec<session::Symbol>,
         methods: Vec<TypedStmt<'a>>,
     },
     Enum {

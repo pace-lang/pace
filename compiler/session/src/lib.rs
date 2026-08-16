@@ -157,7 +157,17 @@ impl CompilerSession {
                 s.push('>');
                 s
             }
-            Type::Interface(name) => format!("Interface({})", self.interner.borrow().lookup(*name)),
+            Type::Interface(name, type_params) => {
+                if type_params.is_empty() {
+                    format!("Interface({})", self.interner.borrow().lookup(*name))
+                } else {
+                    let mut type_names = Vec::new();
+                    for t in type_params {
+                        type_names.push(self.interner.borrow().lookup(*t).to_string());
+                    }
+                    format!("Interface({}<{}>)", self.interner.borrow().lookup(*name), type_names.join(", "))
+                }
+            }
             Type::Optional(inner) => format!("{}?", self.format_type_internal(*inner)),
             Type::Array(inner) => format!("[{}]", self.format_type_internal(*inner)),
             Type::Null => "Null".to_string(),

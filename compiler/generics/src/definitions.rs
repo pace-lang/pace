@@ -5,6 +5,7 @@ use std::collections::HashMap;
 pub struct GenericDefinitionRegistry<'a> {
     classes: HashMap<session::Symbol, Stmt<'a>>,
     functions: HashMap<session::Symbol, Stmt<'a>>,
+    interfaces: HashMap<session::Symbol, Stmt<'a>>,
 }
 
 impl<'a> GenericDefinitionRegistry<'a> {
@@ -20,11 +21,19 @@ impl<'a> GenericDefinitionRegistry<'a> {
         self.functions.insert(name, stmt);
     }
 
+    pub fn register_interface(&mut self, name: session::Symbol, stmt: Stmt<'a>) {
+        self.interfaces.insert(name, stmt);
+    }
+
     pub fn get_class(&self, name: session::Symbol) -> Option<&Stmt<'a>> {
         self.classes.get(&name)
     }
 
     pub fn get_function(&self, name: session::Symbol) -> Option<&Stmt<'a>> {
         self.functions.get(&name)
+    }
+
+    pub fn get_interface(&self, name: session::Symbol) -> Option<&Stmt<'a>> {
+        self.interfaces.get(&name)
     }
 }

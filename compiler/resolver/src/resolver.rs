@@ -289,9 +289,13 @@ impl<'a> Resolver<'a> {
             }
             StmtKind::Interface {
                 name: _,
-                methods: _methods,
+                type_params,
+                methods: _,
                 is_private: _,
             } => {
+                if !type_params.is_empty() {
+                    return;
+                }
                 // Name declared in hoisting
             }
             StmtKind::Enum {

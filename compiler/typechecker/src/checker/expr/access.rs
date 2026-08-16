@@ -332,7 +332,7 @@ impl<'a> TypeChecker<'a> {
         let (class_name, instance_args) = match self.get_type(typed_obj.ty) {
             Type::Instance(n) => (n, Vec::new()),
             Type::GenericInstance(n, args) => (n, args.clone()),
-            Type::Interface(n) => (n, Vec::new()),
+            Type::Interface(n, type_args) => (n, type_args.iter().map(|s| self.session.types.borrow_mut().intern(Type::Generic(*s))).collect()),
             Type::Enum(n, _args) => (n, Vec::new()),
             _ => {
                 if typed_obj.ty != self.session.types.borrow_mut().intern(Type::Error) {
@@ -473,7 +473,7 @@ impl<'a> TypeChecker<'a> {
         let (class_name, instance_args) = match self.get_type(typed_obj.ty) {
             Type::Instance(n) => (n, Vec::new()),
             Type::GenericInstance(n, args) => (n, args.clone()),
-            Type::Interface(n) => (n, Vec::new()),
+            Type::Interface(n, type_args) => (n, type_args.iter().map(|s| self.session.types.borrow_mut().intern(Type::Generic(*s))).collect()),
             _ => {
                 if typed_obj.ty != self.session.types.borrow_mut().intern(Type::Error) {
                     self.error(

@@ -27,7 +27,7 @@ pub struct TypeChecker<'a> {
     pub class_mutables: HashMap<Symbol, HashMap<Symbol, bool>>,
     pub interfaces: HashMap<Symbol, HashMap<Symbol, TypeId>>,
     pub enums: HashMap<Symbol, HashMap<Symbol, TypeId>>,
-    pub class_implements: HashMap<Symbol, Vec<Symbol>>,
+    pub class_implements: HashMap<Symbol, Vec<TypeId>>,
     current_class: Option<Symbol>,
     pub generic_registry: generics::GenericDefinitionRegistry<'a>,
     pub spec_registry: generics::SpecializationRegistry,

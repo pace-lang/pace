@@ -1,0 +1,3 @@
+interface Iterator<T> {
+    func next() -> Option<T>;
+}

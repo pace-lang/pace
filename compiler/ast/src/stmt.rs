@@ -98,7 +98,7 @@ pub enum StmtKind<'a> {
     Class {
         name: session::Symbol,
         type_params: Vec<session::Symbol>,
-        implements: Vec<session::Symbol>,
+        implements: Vec<TypeExpr<'a>>,
         methods: Vec<Stmt<'a>>,
         fields: Vec<Stmt<'a>>,
         is_private: bool,
@@ -118,9 +118,10 @@ pub enum StmtKind<'a> {
         target_type: TypeExpr<'a>,
         is_private: bool,
     },
-    /// An interface declaration: `interface name { methods; }`
+    /// An interface declaration: `interface name<T> { methods; }`
     Interface {
         name: session::Symbol,
+        type_params: Vec<session::Symbol>,
         methods: Vec<Stmt<'a>>,
         is_private: bool,
     },

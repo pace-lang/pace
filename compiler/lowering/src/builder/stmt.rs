@@ -220,8 +220,110 @@ impl<'a> MirBuilder<'a> {
                         self.current_block = merge_block;
                     }
                     _ => {
-                        // Array Iteration
-                        let arr_val = self.lower_expr(iterator);
+                        let is_iterable = matches!(
+                            self.session.types.borrow().get(iterator.ty),
+                            session::types::Type::Instance(_)
+                        );
+
+                        if is_iterable {
+                            let iter_obj = self.lower_expr(iterator);
+                            let iter_call = self.new_temp();
+                            let iter_sym = self.session.interner.borrow_mut().intern("iter");
+                            
+                            {
+                                let __inst = Inst::Assign(
+                                    iter_call.clone(),
+                                    RValue::MethodCall(
+                                        iter_obj,
+                                        self.session.interner.borrow().lookup(iter_sym).to_string(),
+                                        vec![]
+                                    )
+                                );
+                                self.current().instructions.push(__inst);
+                            }
+
+                            let cond_block = self.new_block();
+                            let body_block = self.new_block();
+                            let merge_block = self.new_block();
+
+                            self.current().terminator = Some(Terminator::Jump(cond_block));
+                            self.current_block = cond_block;
+
+                            let next_call = self.new_temp();
+                            let next_sym = self.session.interner.borrow_mut().intern("next");
+                            
+                            {
+                                let __inst = Inst::Assign(
+                                    next_call.clone(),
+                                    RValue::MethodCall(
+                                        Value::Place(iter_call.clone()),
+                                        self.session.interner.borrow().lookup(next_sym).to_string(),
+                                        vec![]
+                                    )
+                                );
+                                self.current().instructions.push(__inst);
+                            }
+
+                            let tag_temp = self.new_temp();
+                            {
+                                let __inst = Inst::Assign(
+                                    tag_temp.clone(),
+                                    RValue::GetVariantTag(Value::Place(next_call.clone()))
+                                );
+                                self.current().instructions.push(__inst);
+                            }
+
+                            let cond_temp = self.new_temp();
+                            {
+                                let __inst = Inst::Assign(
+                                    cond_temp.clone(),
+                                    RValue::BinaryOp(
+                                        ast::BinaryOp::Equal,
+                                        Value::Place(tag_temp),
+                                        Value::Int(0)
+                                    )
+                                );
+                                self.current().instructions.push(__inst);
+                            }
+
+                            self.current().terminator = Some(Terminator::Branch {
+                                cond: Value::Place(cond_temp),
+                                then_block: body_block,
+                                else_block: merge_block,
+                            });
+
+                            self.current_block = body_block;
+
+                            let item_temp = self.new_temp();
+                            {
+                                let __inst = Inst::Assign(
+                                    item_temp.clone(),
+                                    RValue::ExtractPayload(Value::Place(next_call.clone()), 0, 0)
+                                );
+                                self.current().instructions.push(__inst);
+                            }
+
+                            {
+                                let __inst = Inst::Assign(
+                                    Place::Var(
+                                        self.session
+                                            .interner
+                                            .borrow()
+                                            .lookup(*item_name)
+                                            .to_string(),
+                                    ),
+                                    RValue::Use(Value::Place(item_temp)),
+                                );
+                                self.current().instructions.push(__inst);
+                            }
+
+                            self.lower_stmt(body);
+
+                            self.current().terminator = Some(Terminator::Jump(cond_block));
+                            self.current_block = merge_block;
+                        } else {
+                            // Array Iteration
+                            let arr_val = self.lower_expr(iterator);
 
                         let len_var = self.new_temp();
                         {
@@ -310,6 +412,7 @@ impl<'a> MirBuilder<'a> {
 
                         // Merge Block
                         self.current_block = merge_block;
+                    }
                     }
                 }
             }

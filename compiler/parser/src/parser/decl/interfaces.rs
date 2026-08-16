@@ -18,6 +18,8 @@ impl<'a> Parser<'a> {
             return None;
         };
 
+        let type_params = self.parse_type_params()?;
+
         if !self.match_token(&[TokenKind::LeftBrace]) {
             self.error_at_current("Expected '{' before interface body.");
             return None;
@@ -54,6 +56,7 @@ impl<'a> Parser<'a> {
         Some(Stmt::new(
             StmtKind::Interface {
                 name,
+                type_params,
                 methods,
                 is_private,
             },

@@ -24,7 +24,7 @@ pub enum Type {
     Instance(Symbol),
     Generic(Symbol),
     GenericInstance(Symbol, Vec<TypeId>),
-    Interface(Symbol),
+    Interface(Symbol, Vec<Symbol>),
     Optional(TypeId),
     Array(TypeId),
     Range,

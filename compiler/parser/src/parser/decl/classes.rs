@@ -23,15 +23,10 @@ impl<'a> Parser<'a> {
         let mut implements = Vec::new();
         if self.match_token(&[TokenKind::Implements]) {
             loop {
-                if let Some(Token {
-                    kind: TokenKind::Identifier(i),
-                    ..
-                }) = self.peek().cloned()
-                {
-                    self.advance();
-                    implements.push(i);
+                if let Some(ty) = self.parse_type_expr() {
+                    implements.push(ty);
                 } else {
-                    self.error_at_current("Expected interface name.");
+                    self.error_at_current("Expected interface name or type.");
                     return None;
                 }
 

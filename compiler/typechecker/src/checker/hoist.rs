@@ -109,7 +109,11 @@ impl<'a> TypeChecker<'a> {
 
                     self.classes.insert(*name, class_members.clone());
                     self.class_mutables.insert(*name, class_mutables_map);
-                    self.class_implements.insert(*name, implements.clone());
+                    let mut parsed_implements = Vec::new();
+                    for imp in implements {
+                        parsed_implements.push(self.parse_type(imp, stmt.span));
+                    }
+                    self.class_implements.insert(*name, parsed_implements);
                     self.env.pop_scope();
                 }
                 StmtKind::Struct {
@@ -215,9 +219,15 @@ impl<'a> TypeChecker<'a> {
                 }
                 StmtKind::Interface {
                     name,
+                    type_params,
                     methods,
                     is_private: _,
                 } => {
+                    if !type_params.is_empty() {
+                        self.generic_registry.register_interface(*name, stmt.clone());
+                        continue;
+                    }
+
                     let mut interface_methods = std::collections::HashMap::new();
                     for method in methods {
                         if let StmtKind::Func {
@@ -252,7 +262,7 @@ impl<'a> TypeChecker<'a> {
                         self.session
                             .types
                             .borrow_mut()
-                            .intern(Type::Interface(*name)),
+                            .intern(Type::Interface(*name, type_params.clone())),
                     );
                 }
                 StmtKind::Enum {
