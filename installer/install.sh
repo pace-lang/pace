@@ -36,6 +36,15 @@ if [ -z "$LATEST_RELEASE" ]; then
     echo "Falling back to $LATEST_RELEASE"
 fi
 
+if [ -x "$BIN_DIR/pace" ]; then
+    CURRENT_VERSION=$("$BIN_DIR/pace" --version 2>/dev/null | awk '{print $2}')
+    if [ "v$CURRENT_VERSION" = "$LATEST_RELEASE" ] || [ "$CURRENT_VERSION" = "$LATEST_RELEASE" ]; then
+        echo ""
+        echo "🎉 Congrats! You're already on the latest version of Pace (which is $LATEST_RELEASE)"
+        exit 0
+    fi
+fi
+
 FILENAME="pace-${LATEST_RELEASE}-${OS_NAME}-${ARCH_NAME}.tar.gz"
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_RELEASE/$FILENAME"
 
