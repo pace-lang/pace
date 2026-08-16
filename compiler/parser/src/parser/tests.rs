@@ -83,3 +83,41 @@ use diagnostics::*;
         }
     }
 
+    #[test]
+    fn test_while_statement() {
+        let source = "while count > 0 { let x = 1; }";
+        let mut session = session::CompilerSession::new();
+        let mut scanner = Scanner::new(0, source);
+        let mut parser = Parser::new(scanner.scan_tokens(&mut session), &session);
+        let (stmts, errors) = parser.parse();
+
+        assert!(errors.is_empty(), "Parse errors: {:?}", errors);
+        assert_eq!(stmts.len(), 1);
+        match &stmts[0].kind {
+            StmtKind::While { condition, body } => {
+                assert!(matches!(condition.kind, ExprKind::Binary(..)));
+                assert!(matches!(body.kind, StmtKind::Block(_)));
+            }
+            _ => panic!("Expected While statement"),
+        }
+    }
+
+    #[test]
+    fn test_for_statement() {
+        let source = "for item in items { let x = 1; }";
+        let mut session = session::CompilerSession::new();
+        let mut scanner = Scanner::new(0, source);
+        let mut parser = Parser::new(scanner.scan_tokens(&mut session), &session);
+        let (stmts, errors) = parser.parse();
+
+        assert!(errors.is_empty(), "Parse errors: {:?}", errors);
+        assert_eq!(stmts.len(), 1);
+        match &stmts[0].kind {
+            StmtKind::For { item_name, iterator, body } => {
+                assert_eq!(session.interner.borrow().lookup(*item_name), "item");
+                assert!(matches!(iterator.kind, ExprKind::Variable(_)));
+                assert!(matches!(body.kind, StmtKind::Block(_)));
+            }
+            _ => panic!("Expected For statement"),
+        }
+    }

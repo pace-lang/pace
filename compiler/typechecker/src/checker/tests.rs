@@ -127,3 +127,41 @@ fn test_immutable_assignment() {
             .contains("Cannot mutate immutable variable 'x'")
     );
 }
+
+#[test]
+fn test_block_scope() {
+    let session = CompilerSession::new();
+    let mut checker = TypeChecker::new(&session);
+    let sym_x = session.interner.borrow_mut().intern("x");
+    // let x = 10;
+    let stmt1 = Stmt::new(
+        StmtKind::Let {
+            name: sym_x,
+            is_private: false,
+            type_annotation: None,
+            initializer: Some(checker.alloc(Expr::new(ExprKind::Integer(10), make_span()))),
+        },
+        make_span(),
+    );
+
+    // { let x = "hello"; }
+    let sym_y = session.interner.borrow_mut().intern("hello");
+    let inner_stmt = Stmt::new(
+        StmtKind::Let {
+            name: sym_x,
+            is_private: false,
+            type_annotation: None,
+            initializer: Some(checker.alloc(Expr::new(ExprKind::String(sym_y), make_span()))),
+        },
+        make_span(),
+    );
+    let block = Stmt::new(StmtKind::Block(vec![inner_stmt]), make_span());
+
+    // x is still an int after block
+    checker.check(&[stmt1, block]);
+    assert!(checker.errors.is_empty());
+    assert_eq!(
+        checker.env.resolve(sym_x).unwrap(),
+        session.types.borrow_mut().intern(Type::Int)
+    );
+}
