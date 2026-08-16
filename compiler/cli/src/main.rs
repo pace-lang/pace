@@ -445,11 +445,7 @@ fn do_build(override_file: Option<&str>, release: bool) -> PathBuf {
         exit(1);
     }
 
-    if release {
-        println!("    Finished `release` profile [optimized] target(s)");
-    } else {
-        println!("    Finished `dev` profile [unoptimized + debuginfo] target(s)");
-    }
+
     out_file
 }
 
@@ -478,16 +474,11 @@ fn main() {
             do_check();
         }
         Commands::Build { file, release } => {
-            do_build(file.as_deref(), *release);
+            let out_file = do_build(file.as_deref(), *release);
+            println!("{}", out_file.display());
         }
         Commands::Run { file, release } => {
             let out_file = do_build(file.as_deref(), *release);
-            let package_name = out_file
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("app");
-            let profile_dir = if *release { "release" } else { "debug" };
-            println!("     Running `target/{}/{}`", profile_dir, package_name);
             let status = Command::new(out_file.to_str().unwrap())
                 .status()
                 .expect("Failed to execute process");

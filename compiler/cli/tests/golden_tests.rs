@@ -9,15 +9,7 @@ fn run_ui_test(file_path: &Path) {
         return;
     }
 
-    let mut cli_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    cli_path.push("../../target/debug/cli");
-
-    // Ensure cli is built
-    assert!(
-        cli_path.exists(),
-        "CLI executable not found at {:?}",
-        cli_path
-    );
+    let cli_path = env!("CARGO_BIN_EXE_cli");
 
     let output = Command::new(&cli_path)
         .arg("run")
@@ -44,11 +36,6 @@ fn run_ui_test(file_path: &Path) {
     // Normalize paths, variable memory addresses, and thread IDs in panics
     let normalized_stderr = combined_output
         .lines()
-        .filter(|line| {
-            !line.starts_with("Finished `dev` profile")
-                && !line.starts_with("Finished `release` profile")
-                && !line.starts_with("     Running `target/")
-        })
         .map(|line| {
             if line.starts_with("thread '")
                 && line.contains("panicked at")

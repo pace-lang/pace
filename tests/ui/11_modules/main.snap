@@ -13,5 +13,4 @@ expression: normalized_stderr
  [38;5;240m  │[0m [33m│[0m   
  [38;5;240m  │[0m [33m│[0m   [38;5;115mHelp[0m: use camelCase (e.g. `getValue`)
 [38;5;246m───╯[0m
-    Finished `dev` profile [unoptimized + debuginfo] target(s)
 42

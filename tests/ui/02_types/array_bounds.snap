@@ -2,5 +2,4 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-Finished `dev` profile [unoptimized + debuginfo] target(s)
 Pace Runtime Error: Array index out of bounds
