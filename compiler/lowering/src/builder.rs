@@ -112,7 +112,6 @@ impl<'a> ProgramBuilder<'a> {
 
                 let is_struct = matches!(stmt.kind, TypedStmtKind::Struct { .. });
 
-
                 for field in fields {
                     match &field.kind {
                         TypedStmtKind::Var {
@@ -1046,9 +1045,7 @@ impl<'a> MirBuilder<'a> {
 
                 let mut enum_name_opt = None;
                 match self.session.types.borrow().get(value.ty) {
-                    session::types::Type::GenericInstance(name, _) => {
-                        enum_name_opt = Some(*name)
-                    }
+                    session::types::Type::GenericInstance(name, _) => enum_name_opt = Some(*name),
                     session::types::Type::Instance(name) => enum_name_opt = Some(*name),
                     _ => {}
                 }
@@ -1202,10 +1199,8 @@ impl<'a> MirBuilder<'a> {
                 let inner_val = self.lower_expr(inner);
                 let tag_temp = self.new_temp();
                 {
-                    let __inst = Inst::Assign(
-                        tag_temp.clone(),
-                        RValue::GetVariantTag(inner_val.clone()),
-                    );
+                    let __inst =
+                        Inst::Assign(tag_temp.clone(), RValue::GetVariantTag(inner_val.clone()));
                     self.current().instructions.push(__inst)
                 };
 
@@ -1225,14 +1220,19 @@ impl<'a> MirBuilder<'a> {
                     err_payload.clone(),
                     RValue::ExtractPayload(inner_val.clone(), 1, 0),
                 ));
-                
+
                 let err_result = self.new_temp();
                 self.current().instructions.push(Inst::Assign(
                     err_result.clone(),
-                    RValue::ConstructVariant("Result".to_string(), 1, vec![Value::Place(err_payload)]),
+                    RValue::ConstructVariant(
+                        "Result".to_string(),
+                        1,
+                        vec![Value::Place(err_payload)],
+                    ),
                 ));
-                
-                self.current().terminator = Some(Terminator::Return(Some(Value::Place(err_result))));
+
+                self.current().terminator =
+                    Some(Terminator::Return(Some(Value::Place(err_result))));
 
                 // Ok branch
                 self.current_block = then_block;
@@ -1241,7 +1241,7 @@ impl<'a> MirBuilder<'a> {
                     ok_payload.clone(),
                     RValue::ExtractPayload(inner_val, 0, 0),
                 ));
-                
+
                 Value::Place(ok_payload)
             }
             TypedExprKind::ForceUnwrap(inner) => {

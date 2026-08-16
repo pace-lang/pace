@@ -215,9 +215,11 @@ impl<'a> TypeChecker<'a> {
                 let typed_inner = self.check_expr(inner);
                 let result_sym = self.session.interner.borrow_mut().intern("Result");
                 let inner_ty = self.get_type(typed_inner.ty);
-                
+
                 let (t_ty, e_ty) = match inner_ty {
-                    Type::GenericInstance(sym, ref args) if sym == result_sym && args.len() == 2 => {
+                    Type::GenericInstance(sym, ref args)
+                        if sym == result_sym && args.len() == 2 =>
+                    {
                         (args[0], args[1])
                     }
                     Type::Error => {
@@ -236,7 +238,10 @@ impl<'a> TypeChecker<'a> {
                                 self.session.format_type(typed_inner.ty)
                             ),
                         );
-                        (self.session.types.borrow_mut().intern(Type::Error), self.session.types.borrow_mut().intern(Type::Error))
+                        (
+                            self.session.types.borrow_mut().intern(Type::Error),
+                            self.session.types.borrow_mut().intern(Type::Error),
+                        )
                     }
                 };
 
@@ -244,7 +249,9 @@ impl<'a> TypeChecker<'a> {
                     if let Some(ret_id) = self.current_return_type {
                         let ret_ty = self.get_type(ret_id);
                         match ret_ty {
-                            Type::GenericInstance(sym, ref args) if sym == result_sym && args.len() == 2 => {
+                            Type::GenericInstance(sym, ref args)
+                                if sym == result_sym && args.len() == 2 =>
+                            {
                                 let func_e_ty = args[1];
                                 if !self.is_assignable(e_ty, func_e_ty) {
                                     self.error(
@@ -278,10 +285,7 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
 
-                (
-                    TypedExprKind::PostfixTry(self.alloc(typed_inner)),
-                    t_ty,
-                )
+                (TypedExprKind::PostfixTry(self.alloc(typed_inner)), t_ty)
             }
             ExprKind::OptionalGet { object, name } => {
                 let typed_obj = self.check_expr(object);
@@ -416,16 +420,17 @@ impl<'a> TypeChecker<'a> {
                     Type::Optional(inner) => {
                         let expected = inner;
                         if let TypedExprKind::Variable(ref left_name) = typed_left.kind
-                            && !self.env.is_mutable(*left_name) {
-                                self.error(
-                                    expr.span,
-                                    DiagnosticCode::ImmutableAssignment,
-                                    &format!(
-                                        "Cannot mutate immutable variable '{}'.",
-                                        self.session.interner.borrow().lookup(*left_name)
-                                    ),
-                                )
-                            }
+                            && !self.env.is_mutable(*left_name)
+                        {
+                            self.error(
+                                expr.span,
+                                DiagnosticCode::ImmutableAssignment,
+                                &format!(
+                                    "Cannot mutate immutable variable '{}'.",
+                                    self.session.interner.borrow().lookup(*left_name)
+                                ),
+                            )
+                        }
 
                         let is_valid = typed_right.ty == expected
                             || typed_right.ty == typed_left.ty
@@ -873,16 +878,17 @@ impl<'a> TypeChecker<'a> {
 
                         if let Some(muts) = self.class_mutables.get(&class_name)
                             && let Some(&is_mut) = muts.get(name)
-                                && !is_mut {
-                                    self.error(
-                                        expr.span,
-                                        DiagnosticCode::ImmutableAssignment,
-                                        &format!(
-                                            "Cannot mutate immutable property '{}'.",
-                                            self.session.interner.borrow().lookup(*name)
-                                        ),
-                                    )
-                                }
+                            && !is_mut
+                        {
+                            self.error(
+                                expr.span,
+                                DiagnosticCode::ImmutableAssignment,
+                                &format!(
+                                    "Cannot mutate immutable property '{}'.",
+                                    self.session.interner.borrow().lookup(*name)
+                                ),
+                            )
+                        }
                         if !self.is_assignable(typed_val.ty, resolved_ty)
                             && typed_val.ty != self.session.types.borrow_mut().intern(Type::Error)
                             && resolved_ty != self.session.types.borrow_mut().intern(Type::Error)
@@ -1087,8 +1093,7 @@ impl<'a> TypeChecker<'a> {
                                     }
                                 }
                                 if matches {
-                                    matched_variant =
-                                        Some((mangled_name, ty, ret_ty));
+                                    matched_variant = Some((mangled_name, ty, ret_ty));
                                     break;
                                 }
                             }
@@ -1110,7 +1115,8 @@ impl<'a> TypeChecker<'a> {
                             self.session.types.borrow_mut().intern(Type::Error)
                         }
                     }
-                    Type::Class(class_name, class_type_params) | Type::Struct(class_name, class_type_params) => {
+                    Type::Class(class_name, class_type_params)
+                    | Type::Struct(class_name, class_type_params) => {
                         let mut constructor_ty = self.classes.get(&class_name).and_then(|props| {
                             props
                                 .get(&self.session.interner.borrow_mut().intern("init"))
@@ -1124,7 +1130,8 @@ impl<'a> TypeChecker<'a> {
                                 type_params,
                                 methods,
                                 ..
-                            } | ast::StmtKind::Struct {
+                            }
+                            | ast::StmtKind::Struct {
                                 type_params,
                                 methods,
                                 ..
@@ -1230,14 +1237,15 @@ impl<'a> TypeChecker<'a> {
                                     );
 
                                     // Rewrite the callee to point to the mangled name!
-                                    let new_callee =
-                                        TypedExpr {
-                                            kind: TypedExprKind::Variable(mangled_name),
-                                            ty: self.session.types.borrow_mut().intern(
-                                                Type::Class(mangled_name, Vec::new()),
-                                            ),
-                                            span: callee.span,
-                                        };
+                                    let new_callee = TypedExpr {
+                                        kind: TypedExprKind::Variable(mangled_name),
+                                        ty: self
+                                            .session
+                                            .types
+                                            .borrow_mut()
+                                            .intern(Type::Class(mangled_name, Vec::new())),
+                                        span: callee.span,
+                                    };
 
                                     // We must update ty to be Instance(mangled_name) instead of GenericInstance.
                                     let new_ty = self
@@ -1295,10 +1303,7 @@ impl<'a> TypeChecker<'a> {
                                         let mut type_map = std::collections::HashMap::new();
                                         for (i, p) in class_type_params.iter().enumerate() {
                                             if i < resolved_type_args.len() {
-                                                type_map.insert(
-                                                    *p,
-                                                    resolved_type_args[i],
-                                                );
+                                                type_map.insert(*p, resolved_type_args[i]);
                                             }
                                         }
                                         self.substitute_generics(*expected, &type_map)

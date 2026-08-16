@@ -133,18 +133,20 @@ impl<'a> TypeChecker<'a> {
             return true;
         }
         if let Type::Optional(inner) = target_ty
-            && self.is_assignable(source, inner) {
-                return true;
-            }
+            && self.is_assignable(source, inner)
+        {
+            return true;
+        }
         if target == any_id {
             return true;
         }
         if let (Type::Instance(class_name), Type::Interface(interface_name)) =
             (source_ty, target_ty)
             && let Some(implements) = self.class_implements.get(&class_name)
-                && implements.contains(&interface_name) {
-                    return true;
-                }
+            && implements.contains(&interface_name)
+        {
+            return true;
+        }
         false
     }
 

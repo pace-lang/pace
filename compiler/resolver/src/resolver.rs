@@ -169,30 +169,12 @@ impl<'a> Resolver<'a> {
     pub fn hoist_declarations(&mut self, statements: &[Stmt]) {
         for stmt in statements {
             match &stmt.kind {
-                StmtKind::Func {
-                    name,
-                    ..
-                }
-                | StmtKind::ForeignFunc {
-                    name,
-                    ..
-                }
-                | StmtKind::Class {
-                    name,
-                    ..
-                }
-                | StmtKind::Struct {
-                    name,
-                    ..
-                }
-                | StmtKind::TypeAlias {
-                    name,
-                    ..
-                }
-                | StmtKind::Interface {
-                    name,
-                    ..
-                } => {
+                StmtKind::Func { name, .. }
+                | StmtKind::ForeignFunc { name, .. }
+                | StmtKind::Class { name, .. }
+                | StmtKind::Struct { name, .. }
+                | StmtKind::TypeAlias { name, .. }
+                | StmtKind::Interface { name, .. } => {
                     if !self.scopes.declare(*name) {
                         self.error(
                             stmt.span,
@@ -204,11 +186,7 @@ impl<'a> Resolver<'a> {
                         );
                     }
                 }
-                StmtKind::Enum {
-                    name,
-                    variants,
-                    ..
-                } => {
+                StmtKind::Enum { name, variants, .. } => {
                     if !self.scopes.declare(*name) {
                         self.error(
                             stmt.span,
@@ -287,7 +265,8 @@ impl<'a> Resolver<'a> {
                 methods,
                 fields,
                 is_private: _,
-            } | StmtKind::Struct {
+            }
+            | StmtKind::Struct {
                 name: _,
                 type_params: _,
                 methods,

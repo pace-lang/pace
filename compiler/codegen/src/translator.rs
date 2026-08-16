@@ -380,13 +380,13 @@ impl<'a, 'b> Translator<'a, 'b> {
                             .classes
                             .get(struct_name)
                             .unwrap_or_else(|| panic!("Struct {} not found", struct_name));
-                        
-                        let total_size = struct_def.fields.len() as u32 * 8; 
+
+                        let total_size = struct_def.fields.len() as u32 * 8;
 
                         let ss = self.builder.create_sized_stack_slot(ir::StackSlotData::new(
                             ir::StackSlotKind::ExplicitSlot,
                             total_size,
-                            3 // 8-byte alignment
+                            3, // 8-byte alignment
                         ));
                         self.builder.ins().stack_addr(types::I64, ss, 0)
                     }

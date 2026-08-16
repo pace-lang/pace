@@ -143,12 +143,17 @@ impl<'a> TypeChecker<'a> {
                         if matches!(self.get_type(field_ty_id), Type::Function(..)) {
                             continue;
                         }
-                        
+
                         let is_valid = matches!(
                             self.get_type(field_ty_id),
-                            Type::Int | Type::Float | Type::Boolean | Type::Struct(_, _) | Type::Error | Type::Any
+                            Type::Int
+                                | Type::Float
+                                | Type::Boolean
+                                | Type::Struct(_, _)
+                                | Type::Error
+                                | Type::Any
                         );
-                        
+
                         if !is_valid {
                             self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Struct '{}' cannot contain field '{}' of type '{}'. Structs can only contain primitives (Int, Float, Boolean) or other structs.", self.session.interner.borrow().lookup(*name), self.session.interner.borrow().lookup(field_name), self.session.format_type(field_ty_id)));
                         }
@@ -251,21 +256,22 @@ impl<'a> TypeChecker<'a> {
                 let mut resolved_name = *name;
                 if !is_method
                     && let Some(existing) = self.env.resolve(*name)
-                        && matches!(self.get_type(existing), Type::OverloadedFunction(..)) {
-                            let mut mangled =
-                                format!("_PO_{}", self.session.interner.borrow().lookup(*name));
-                            for ty in &param_types {
-                                mangled.push_str(
-                                    &format!("_{}", self.session.format_type(*ty))
-                                        .replace("<", "_")
-                                        .replace(">", "")
-                                        .replace(" ", "")
-                                        .replace("?", "Opt")
-                                        .replace("[]", "Arr"),
-                                );
-                            }
-                            resolved_name = self.session.interner.borrow_mut().intern(&mangled);
-                        }
+                    && matches!(self.get_type(existing), Type::OverloadedFunction(..))
+                {
+                    let mut mangled =
+                        format!("_PO_{}", self.session.interner.borrow().lookup(*name));
+                    for ty in &param_types {
+                        mangled.push_str(
+                            &format!("_{}", self.session.format_type(*ty))
+                                .replace("<", "_")
+                                .replace(">", "")
+                                .replace(" ", "")
+                                .replace("?", "Opt")
+                                .replace("[]", "Arr"),
+                        );
+                    }
+                    resolved_name = self.session.interner.borrow_mut().intern(&mangled);
+                }
 
                 self.env.push_scope();
                 for tp in type_params {

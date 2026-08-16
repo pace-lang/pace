@@ -66,7 +66,6 @@ impl<'a> TypeChecker<'a> {
                         }
 
                         let ty = if let Some(ann) = type_annotation {
-                            
                             self.parse_type(ann, field.span)
                         } else if let Some(_init) = initializer {
                             self.session.types.borrow_mut().intern(Type::Any)
@@ -342,10 +341,11 @@ impl<'a> TypeChecker<'a> {
                     }
                     self.env.declare(
                         *name,
-                        self.session
-                            .types
-                            .borrow_mut()
-                            .intern(Type::TypeAlias(*name, type_params.clone(), target_id)),
+                        self.session.types.borrow_mut().intern(Type::TypeAlias(
+                            *name,
+                            type_params.clone(),
+                            target_id,
+                        )),
                     );
                 }
                 StmtKind::ForeignFunc {
