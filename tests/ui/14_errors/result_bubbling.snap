@@ -1,0 +1,8 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+assertion_line: 79
+expression: normalized_stderr
+---
+Finished `dev` profile [unoptimized + debuginfo] target(s)
+84
+Failed to perform action

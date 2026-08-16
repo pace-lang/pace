@@ -44,6 +44,7 @@ pub enum TypedExprKind<'a> {
     },
     SelfRef,
     ForceUnwrap(&'a TypedExpr<'a>),
+    PostfixTry(&'a TypedExpr<'a>),
     OptionalGet {
         object: &'a TypedExpr<'a>,
         name: session::Symbol,

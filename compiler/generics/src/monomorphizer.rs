@@ -200,6 +200,9 @@ impl<'a> Monomorphizer<'a> {
             ExprKind::ForceUnwrap(inner) => {
                 ExprKind::ForceUnwrap(self.subst.arena.alloc(self.monomorphize_expr(inner)))
             }
+            ExprKind::PostfixTry(inner) => {
+                ExprKind::PostfixTry(self.subst.arena.alloc(self.monomorphize_expr(inner)))
+            }
             ExprKind::OptionalGet { object, name } => ExprKind::OptionalGet {
                 object: self.subst.arena.alloc(self.monomorphize_expr(object)),
                 name: *name,

@@ -94,6 +94,8 @@ pub enum ExprKind<'a> {
     SelfRef,
     /// Force unwrap: `expr!`
     ForceUnwrap(&'a Expr<'a>),
+    /// Postfix Try `expr?`
+    PostfixTry(&'a Expr<'a>),
     /// Optional property access: `object?.name`
     OptionalGet {
         object: &'a Expr<'a>,

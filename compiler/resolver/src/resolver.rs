@@ -408,6 +408,7 @@ impl<'a> Resolver<'a> {
 
     fn resolve_expr(&mut self, expr: &Expr) {
         match &expr.kind {
+            ExprKind::PostfixTry(inner) => self.resolve_expr(inner),
             ExprKind::Variable(name) => {
                 if !self.scopes.resolve(*name) {
                     self.error(

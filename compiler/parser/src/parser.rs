@@ -1620,6 +1620,18 @@ impl<'a> Parser<'a> {
                     ExprKind::ForceUnwrap(self.session.ast_arena.alloc(expr)),
                     span,
                 );
+            } else if self.match_token(&[TokenKind::Question]) {
+                let span = Span::new(
+                    expr.span.file_id,
+                    expr.span.start,
+                    self.previous().span.end,
+                    expr.span.start_loc,
+                    self.previous().span.end_loc,
+                );
+                expr = Expr::new(
+                    ExprKind::PostfixTry(self.session.ast_arena.alloc(expr)),
+                    span,
+                );
             } else if self.match_token(&[TokenKind::LeftBracket]) {
                 let index = self.expression()?;
                 if !self.match_token(&[TokenKind::RightBracket]) {

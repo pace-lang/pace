@@ -211,6 +211,78 @@ impl<'a> TypeChecker<'a> {
                 };
                 (TypedExprKind::ForceUnwrap(self.alloc(typed_inner)), ty)
             }
+            ExprKind::PostfixTry(inner) => {
+                let typed_inner = self.check_expr(inner);
+                let result_sym = self.session.interner.borrow_mut().intern("Result");
+                let inner_ty = self.get_type(typed_inner.ty);
+                
+                let (t_ty, e_ty) = match inner_ty {
+                    Type::GenericInstance(sym, ref args) if sym == result_sym && args.len() == 2 => {
+                        (args[0], args[1])
+                    }
+                    Type::Error => {
+                        return TypedExpr::new(
+                            TypedExprKind::PostfixTry(self.alloc(typed_inner)),
+                            self.session.types.borrow_mut().intern(Type::Error),
+                            expr.span,
+                        );
+                    }
+                    _ => {
+                        self.error(
+                            expr.span,
+                            DiagnosticCode::TypeMismatch,
+                            &format!(
+                                "Cannot use `?` operator on type '{}', expected a Result type.",
+                                self.session.format_type(typed_inner.ty)
+                            ),
+                        );
+                        (self.session.types.borrow_mut().intern(Type::Error), self.session.types.borrow_mut().intern(Type::Error))
+                    }
+                };
+
+                if t_ty != self.session.types.borrow_mut().intern(Type::Error) {
+                    if let Some(ret_id) = self.current_return_type {
+                        let ret_ty = self.get_type(ret_id);
+                        match ret_ty {
+                            Type::GenericInstance(sym, ref args) if sym == result_sym && args.len() == 2 => {
+                                let func_e_ty = args[1];
+                                if !self.is_assignable(e_ty, func_e_ty) {
+                                    self.error(
+                                        expr.span,
+                                        DiagnosticCode::TypeMismatch,
+                                        &format!(
+                                            "Cannot bubble up error of type '{}' into function returning error of type '{}'.",
+                                            self.session.format_type(e_ty),
+                                            self.session.format_type(func_e_ty)
+                                        ),
+                                    );
+                                }
+                            }
+                            _ => {
+                                self.error(
+                                    expr.span,
+                                    DiagnosticCode::TypeMismatch,
+                                    &format!(
+                                        "Cannot use `?` operator in a function that returns '{}'. The function must return a Result.",
+                                        self.session.format_type(ret_id)
+                                    ),
+                                );
+                            }
+                        }
+                    } else {
+                        self.error(
+                            expr.span,
+                            DiagnosticCode::TypeMismatch,
+                            "Cannot use `?` operator outside of a function.",
+                        );
+                    }
+                }
+
+                (
+                    TypedExprKind::PostfixTry(self.alloc(typed_inner)),
+                    t_ty,
+                )
+            }
             ExprKind::OptionalGet { object, name } => {
                 let typed_obj = self.check_expr(object);
                 let ty = match self.get_type(typed_obj.ty) {

@@ -1198,6 +1198,52 @@ impl<'a> MirBuilder<'a> {
                 };
                 Value::Place(temp)
             }
+            TypedExprKind::PostfixTry(inner) => {
+                let inner_val = self.lower_expr(inner);
+                let tag_temp = self.new_temp();
+                {
+                    let __inst = Inst::Assign(
+                        tag_temp.clone(),
+                        RValue::GetVariantTag(inner_val.clone()),
+                    );
+                    self.current().instructions.push(__inst)
+                };
+
+                let then_block = self.new_block();
+                let else_block = self.new_block();
+
+                self.current().terminator = Some(Terminator::Switch {
+                    cond: Value::Place(tag_temp),
+                    cases: vec![(0, then_block), (1, else_block)],
+                    default: None,
+                });
+
+                // Err branch
+                self.current_block = else_block;
+                let err_payload = self.new_temp();
+                self.current().instructions.push(Inst::Assign(
+                    err_payload.clone(),
+                    RValue::ExtractPayload(inner_val.clone(), 1, 0),
+                ));
+                
+                let err_result = self.new_temp();
+                self.current().instructions.push(Inst::Assign(
+                    err_result.clone(),
+                    RValue::ConstructVariant("Result".to_string(), 1, vec![Value::Place(err_payload)]),
+                ));
+                
+                self.current().terminator = Some(Terminator::Return(Some(Value::Place(err_result))));
+
+                // Ok branch
+                self.current_block = then_block;
+                let ok_payload = self.new_temp();
+                self.current().instructions.push(Inst::Assign(
+                    ok_payload.clone(),
+                    RValue::ExtractPayload(inner_val, 0, 0),
+                ));
+                
+                Value::Place(ok_payload)
+            }
             TypedExprKind::ForceUnwrap(inner) => {
                 let inner_val = self.lower_expr(inner);
                 let temp = self.new_temp();
