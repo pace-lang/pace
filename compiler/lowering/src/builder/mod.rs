@@ -1,9 +1,9 @@
-use ast::{TypeExpr, TypedExpr, TypedExprKind, TypedStmt, TypedStmtKind};
+use ast::{TypeExpr, TypedExprKind, TypedStmt, TypedStmtKind};
 use mir::{
     BasicBlock, BlockId, ForeignAbiType, ForeignFunction, Function, Inst, Place, Program, RValue,
     Terminator, Value,
 };
-use session::types::Type;
+
 
 pub mod stmt;
 pub mod expr;

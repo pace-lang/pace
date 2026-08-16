@@ -1,7 +1,6 @@
 use super::Parser;
 use ast::*;
 use lexer::*;
-use diagnostics::*;
 
 #[cfg(test)]
     #[test]
