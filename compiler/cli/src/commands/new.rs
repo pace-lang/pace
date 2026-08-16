@@ -58,10 +58,16 @@ pub fn execute(path: &Path, name: &str) {
             exit(1);
         }
     } else {
-        fs::create_dir_all(path).unwrap();
+        if let Err(e) = fs::create_dir_all(path) {
+            crate::utils::errors::print_global_error(&format!("Failed to create directory {:?}: {}", path, e));
+            exit(1);
+        }
     }
 
-    fs::create_dir_all(path.join("src")).unwrap();
+    if let Err(e) = fs::create_dir_all(path.join("src")) {
+        crate::utils::errors::print_global_error(&format!("Failed to create src directory: {}", e));
+        exit(1);
+    }
     let toml = format!(
         r#"[package]
 name = "{}"
@@ -71,13 +77,50 @@ version = "0.1.0"
 "#,
         name
     );
-    fs::write(path.join("pace.toml"), toml).unwrap();
+    if let Err(e) = fs::write(path.join("pace.toml"), toml) {
+        crate::utils::errors::print_global_error(&format!("Failed to write pace.toml: {}", e));
+        exit(1);
+    }
 
     let main_pace = r#"func main() {
     print("✨ Welcome to Pace — let's make something great.");
 }
 "#;
-    fs::write(path.join("src").join("main.pace"), main_pace).unwrap();
+    if let Err(e) = fs::write(path.join("src").join("main.pace"), main_pace) {
+        crate::utils::errors::print_global_error(&format!("Failed to write main.pace: {}", e));
+        exit(1);
+    }
+
+    let gitignore = r#"/target
+"#;
+    if let Err(e) = fs::write(path.join(".gitignore"), gitignore) {
+        crate::utils::errors::print_global_error(&format!("Failed to write .gitignore: {}", e));
+        exit(1);
+    }
+
+    let readme = format!(
+        r#"# {}
+
+A Pace language project.
+
+## Getting Started
+
+To run your project directly, use:
+```sh
+pace run
+```
+
+To build a standalone executable in the `target/` directory, use:
+```sh
+pace build
+```
+"#,
+        name
+    );
+    if let Err(e) = fs::write(path.join("README.md"), readme) {
+        crate::utils::errors::print_global_error(&format!("Failed to write README.md: {}", e));
+        exit(1);
+    }
     use colored::Colorize;
     
     println!(" ");

@@ -124,7 +124,13 @@ fn main() {
             commands::new::execute(&path, name);
         }
         Commands::Init => {
-            let current_dir = std::env::current_dir().unwrap();
+            let current_dir = match std::env::current_dir() {
+                Ok(dir) => dir,
+                Err(e) => {
+                    eprintln!("[E002] Error: Failed to determine current directory: {}", e);
+                    std::process::exit(1);
+                }
+            };
             let name = match current_dir.file_name().and_then(|n| n.to_str()) {
                 Some(n) => n,
                 None => {

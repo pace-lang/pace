@@ -46,7 +46,10 @@ pub fn execute(override_file: Option<&str>, release: bool) -> PathBuf {
 
     let profile_dir = if release { "release" } else { "debug" };
     let target_dir = root.join("target").join(profile_dir);
-    fs::create_dir_all(&target_dir).unwrap();
+    if let Err(e) = fs::create_dir_all(&target_dir) {
+        print_global_error(&format!("Failed to create target directory: {}", e));
+        exit(1);
+    }
 
     let obj_file = target_dir.join("out.o");
     if let Err(e) = generator.compile_program(&ast_program, &obj_file, release) {
