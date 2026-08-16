@@ -1,0 +1,8 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+Start
+Dropped!
+42
+End

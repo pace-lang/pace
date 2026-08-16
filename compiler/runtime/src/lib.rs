@@ -11,6 +11,7 @@ unsafe extern "C" {
 
 #[repr(C)]
 pub struct PaceClassMetadata {
+    pub deinit_fn: *const (),
     pub field_count: u64,
     pub field_offsets: [u64; 0],
 }
@@ -156,6 +157,13 @@ pub extern "C" fn pace_release(obj: *mut u8) {
         } else if metadata_val != !1 && metadata_val != 0 {
             // !1 is -2 as u64
             let metadata = metadata_val as *const PaceClassMetadata;
+            
+            let deinit_fn = unsafe { (*metadata).deinit_fn };
+            if !deinit_fn.is_null() {
+                let deinit: extern "C" fn(*mut u8) = unsafe { std::mem::transmute(deinit_fn) };
+                deinit(obj);
+            }
+
             let field_count = unsafe { (*metadata).field_count };
             for i in 0..field_count {
                 let offset = unsafe { *(*metadata).field_offsets.as_ptr().add(i as usize) };

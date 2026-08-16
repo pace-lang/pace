@@ -217,11 +217,14 @@ impl CraneliftGenerator {
             data_ctx.set_align(8);
             let mut metadata_bytes = Vec::new();
 
-            // field_count (uint64_t)
+            // 0: deinit_fn (8 bytes, set via relocation later if exists)
+            metadata_bytes.extend_from_slice(&0u64.to_le_bytes());
+
+            // 8: field_count (uint64_t)
             metadata_bytes
                 .extend_from_slice(&(class_def.reference_fields.len() as u64).to_le_bytes());
 
-            // field_offsets (uint64_t[])
+            // 16+: field_offsets (uint64_t[])
             for (idx, field_name) in class_def.fields.iter().enumerate() {
                 if class_def.reference_fields.contains(field_name) {
                     let offset = 24 + idx * 8; // 24 bytes header + index * 8
@@ -230,6 +233,12 @@ impl CraneliftGenerator {
             }
 
             data_ctx.define(metadata_bytes.into_boxed_slice());
+
+            let deinit_name = format!("{}::deinit", class_name);
+            if let Some(func_id) = func_ids.get(&deinit_name) {
+                let func_ref = module.declare_func_in_data(*func_id, &mut data_ctx);
+                data_ctx.write_function_addr(0, func_ref);
+            }
 
             let data_id = module
                 .declare_data(
@@ -251,6 +260,10 @@ impl CraneliftGenerator {
                 data_ctx.set_align(8);
                 let mut metadata_bytes = Vec::new();
 
+                // 0: deinit_fn (Enums don't have deinit, so it's always 0)
+                metadata_bytes.extend_from_slice(&0u64.to_le_bytes());
+
+                // 8: field_count (uint64_t)
                 metadata_bytes.extend_from_slice(
                     &(variant_def.reference_payloads.len() as u64).to_le_bytes(),
                 );

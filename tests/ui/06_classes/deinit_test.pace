@@ -1,0 +1,23 @@
+class DropMe {
+    var id: Int;
+
+    func init(id: Int) {
+        self.id = id;
+    }
+
+    func deinit() {
+        print("Dropped!");
+        print(self.id);
+    }
+}
+
+func testDrop() {
+    let a = DropMe(42);
+    // a goes out of scope here, should print "Dropped!\n42"
+}
+
+func main() {
+    print("Start");
+    testDrop();
+    print("End");
+}
