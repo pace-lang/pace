@@ -170,6 +170,7 @@ pub enum TypedStmtKind<'a> {
         name: session::Symbol,
         type_params: Vec<session::Symbol>,
         variants: Vec<EnumVariant<'a>>,
+        methods: Vec<TypedStmt<'a>>,
     },
 }
 

@@ -1,10 +1,14 @@
-import "../core/option.pace";
+import "../core/option.pace" show Option;
+import "list.pace" show List;
 
 foreign func mapInit<K, V>() -> Pointer<CChar>; // Opaque pointer to underlying map
 foreign func mapSet<K, V>(ptr: Pointer<CChar>, key: K, value: V);
 foreign func mapGet<K, V>(ptr: Pointer<CChar>, key: K) -> Option<V>;
 foreign func mapRemove<K, V>(ptr: Pointer<CChar>, key: K);
 foreign func mapContains<K, V>(ptr: Pointer<CChar>, key: K) -> Boolean;
+foreign func mapClear<K, V>(ptr: Pointer<CChar>);
+foreign func mapKeys<K, V>(ptr: Pointer<CChar>) -> List<K>;
+foreign func mapValues<K, V>(ptr: Pointer<CChar>) -> List<V>;
 
 class Map<K, V> {
     var ptr: Pointer<CChar>;
@@ -27,5 +31,17 @@ class Map<K, V> {
 
     func contains(key: K) -> Boolean {
         return mapContains<K, V>(self.ptr, key);
+    }
+
+    func clear() {
+        mapClear<K, V>(self.ptr);
+    }
+
+    func keys() -> List<K> {
+        return mapKeys<K, V>(self.ptr);
+    }
+
+    func values() -> List<V> {
+        return mapValues<K, V>(self.ptr);
     }
 }

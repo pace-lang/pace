@@ -28,6 +28,7 @@ pub enum StmtKind<'a> {
         name: session::Symbol,
         type_params: Vec<session::Symbol>,
         variants: Vec<EnumVariant<'a>>,
+        methods: Vec<Stmt<'a>>,
         is_private: bool,
     },
     /// An import statement: `import "path" [as alias] [show a, b] [hide x, y]`

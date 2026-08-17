@@ -26,8 +26,17 @@ impl<'a> Parser<'a> {
         }
 
         let mut variants = Vec::new();
+        let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+            let is_method = self.check(&TokenKind::Func) || self.check(&TokenKind::Private);
+            if is_method {
+                if let Some(method) = self.declaration() {
+                    methods.push(method);
+                }
+                continue;
+            }
+
             if let Some(Token {
                 kind: TokenKind::Identifier(n),
                 ..
@@ -94,7 +103,7 @@ impl<'a> Parser<'a> {
                     continue;
                 }
             } else {
-                self.error_at_current("Expected enum variant name.");
+                self.error_at_current("Expected enum variant name or method declaration.");
                 return None;
             }
         }
@@ -118,6 +127,7 @@ impl<'a> Parser<'a> {
                 name,
                 type_params,
                 variants,
+                methods,
                 is_private,
             },
             span,

@@ -270,8 +270,12 @@ impl<'a> TypeChecker<'a> {
                     name,
                     type_params,
                     variants,
+                    methods,
                     is_private: _,
                 } => {
+                    if !type_params.is_empty() {
+                        self.generic_registry.register_class(*name, stmt.clone());
+                    }
                     self.env.declare(
                         *name,
                         self.session
@@ -325,6 +329,37 @@ impl<'a> TypeChecker<'a> {
                                 ));
                         enum_variants.insert(variant.name, variant_ty);
                     }
+                    
+                    let mut enum_methods = std::collections::HashMap::new();
+                    for method in methods {
+                        if let StmtKind::Func {
+                            name: m_name,
+                            params,
+                            return_type,
+                            ..
+                        } = &method.kind
+                        {
+                            let ret_ty = if let Some(rt) = return_type {
+                                self.parse_type(rt, method.span)
+                            } else {
+                                self.session.types.borrow_mut().intern(Type::Void)
+                            };
+                            let mut param_types = Vec::new();
+                            for (_, pt) in params {
+                                param_types.push(self.parse_type(pt, method.span));
+                            }
+                            enum_methods.insert(
+                                *m_name,
+                                self.session.types.borrow_mut().intern(Type::Function(
+                                    Vec::new(),
+                                    param_types,
+                                    ret_ty,
+                                )),
+                            );
+                        }
+                    }
+                    self.classes.insert(*name, enum_methods);
+
                     self.env.pop_scope();
                     for (variant_name, variant_ty) in &enum_variants {
                         self.env.declare(*variant_name, *variant_ty);

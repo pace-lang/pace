@@ -331,7 +331,18 @@ impl<'a> TypeChecker<'a> {
 
         let (class_name, instance_args) = match self.get_type(typed_obj.ty) {
             Type::Instance(n) => (n, Vec::new()),
-            Type::GenericInstance(n, args) => (n, args.clone()),
+            Type::GenericInstance(n, args) => {
+                let mut mangled_name = n;
+                if let Some(stmt) = self.generic_registry.get_class(n).cloned() {
+                    match &stmt.kind {
+                        StmtKind::Class { type_params, .. } | StmtKind::Struct { type_params, .. } => {
+                            mangled_name = self.instantiate_generic_class(n, type_params, &args);
+                        }
+                        _ => {}
+                    }
+                }
+                (mangled_name, args.clone())
+            }
             Type::Interface(n, type_args) => (
                 n,
                 type_args
@@ -365,7 +376,9 @@ impl<'a> TypeChecker<'a> {
         let ty = if let Some(class_props) = self.classes.get(&class_name) {
             if let Some(prop_ty) = class_props.get(&name) {
                 let mut resolved_ty = *prop_ty;
-                if let Some(Type::Class(_, params)) | Some(Type::Struct(_, params)) =
+                if let Some(Type::Class(_, params))
+                | Some(Type::Struct(_, params))
+                | Some(Type::Enum(_, params)) =
                     self.env.resolve(class_name).map(|id| self.get_type(id))
                 {
                     let mut inferred_map = std::collections::HashMap::new();
@@ -377,6 +390,39 @@ impl<'a> TypeChecker<'a> {
                     resolved_ty = self.substitute_generics(*prop_ty, &inferred_map);
                 }
                 resolved_ty
+            } else if let Some(enum_variants) = self.enums.get(&class_name) {
+                if let Some(variant_ty) = enum_variants.get(&name) {
+                    let mut resolved_ty = *variant_ty;
+                    // Instantiate generic arguments if present
+                    if let Type::Enum(_, params) = self.session.types.borrow().get(typed_obj.ty) {
+                        let mut inferred_map = std::collections::HashMap::new();
+                        for (i, p) in params.iter().enumerate() {
+                            if i < instance_args.len() {
+                                inferred_map.insert(*p, instance_args[i]);
+                            }
+                        }
+                        resolved_ty = self.substitute_generics(*variant_ty, &inferred_map);
+                    }
+
+                    return (
+                        TypedExprKind::EnumVariant {
+                            enum_name: class_name,
+                            variant_name: name,
+                        },
+                        resolved_ty,
+                    );
+                } else {
+                    self.error(
+                        span,
+                        DiagnosticCode::UnknownType,
+                        &format!(
+                            "Property '{}' not found on enum/class '{}'.",
+                            self.session.interner.borrow().lookup(name),
+                            self.session.interner.borrow().lookup(class_name)
+                        ),
+                    );
+                    self.session.types.borrow_mut().intern(Type::Error)
+                }
             } else {
                 self.error(
                     span,
@@ -398,39 +444,6 @@ impl<'a> TypeChecker<'a> {
                     DiagnosticCode::UnknownType,
                     &format!(
                         "Property '{}' not found on interface '{}'.",
-                        self.session.interner.borrow().lookup(name),
-                        self.session.interner.borrow().lookup(class_name)
-                    ),
-                );
-                self.session.types.borrow_mut().intern(Type::Error)
-            }
-        } else if let Some(enum_variants) = self.enums.get(&class_name) {
-            if let Some(variant_ty) = enum_variants.get(&name) {
-                let mut resolved_ty = *variant_ty;
-                // Instantiate generic arguments if present
-                if let Type::Enum(_, params) = self.session.types.borrow().get(typed_obj.ty) {
-                    let mut inferred_map = std::collections::HashMap::new();
-                    for (i, p) in params.iter().enumerate() {
-                        if i < instance_args.len() {
-                            inferred_map.insert(*p, instance_args[i]);
-                        }
-                    }
-                    resolved_ty = self.substitute_generics(*variant_ty, &inferred_map);
-                }
-
-                return (
-                    TypedExprKind::EnumVariant {
-                        enum_name: class_name,
-                        variant_name: name,
-                    },
-                    resolved_ty,
-                );
-            } else {
-                self.error(
-                    span,
-                    DiagnosticCode::UnknownType,
-                    &format!(
-                        "Variant '{}' not found in enum '{}'.",
                         self.session.interner.borrow().lookup(name),
                         self.session.interner.borrow().lookup(class_name)
                     ),

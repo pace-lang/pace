@@ -1,0 +1,20 @@
+import "../../../stdlib/src/collections/list.pace" show List;
+import "../../../stdlib/src/collections/map.pace" show Map;
+
+func main() {
+    let list = List<Int>();
+    list.push(1);
+    list.push(2);
+    list.push(3);
+    
+    let a = list.get(0).unwrap();
+    let len = list.len();
+
+    let map = Map<String, Int>();
+    map.set("a", 1);
+    map.set("b", 2);
+
+    let b = map.get("a").unwrap();
+    let keys = map.keys();
+    let keyLen = keys.len();
+}

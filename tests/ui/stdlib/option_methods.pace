@@ -1,0 +1,14 @@
+import "../../../stdlib/src/core/option.pace" show Option;
+
+func main() {
+    let opt = Option.Some<String>("hello");
+    let opt2 = Option.None<String>();
+
+    if opt.isSome() {
+        let x = opt.unwrap();
+    }
+
+    if opt2.isNone() {
+        let y = opt2.unwrapOr("default");
+    }
+}

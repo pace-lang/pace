@@ -301,6 +301,7 @@ impl<'a> Resolver<'a> {
                 name: _,
                 type_params: _,
                 variants: _,
+                methods: _,
                 is_private: _,
             } => {
                 // Handled in hoisting pass

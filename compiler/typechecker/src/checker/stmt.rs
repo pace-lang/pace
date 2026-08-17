@@ -209,12 +209,37 @@ impl<'a> TypeChecker<'a> {
                 name,
                 type_params,
                 variants,
+                methods,
                 is_private: _,
-            } => TypedStmtKind::Enum {
-                name: *name,
-                type_params: type_params.clone(),
-                variants: variants.clone(),
-            },
+            } => {
+                self.env.push_scope();
+                for tp in type_params {
+                    self.env.declare(
+                        *tp,
+                        self.session.types.borrow_mut().intern(Type::Generic(*tp)),
+                    );
+                }
+
+                let prev_class = self.current_class;
+                self.current_class = Some(*name);
+
+                let mut typed_methods = Vec::new();
+                for method in methods {
+                    let prev = self.is_checking_method;
+                    self.is_checking_method = true;
+                    typed_methods.push(self.check_stmt(method));
+                    self.is_checking_method = prev;
+                }
+
+                self.env.pop_scope();
+                self.current_class = prev_class;
+                TypedStmtKind::Enum {
+                    name: *name,
+                    type_params: type_params.clone(),
+                    variants: variants.clone(),
+                    methods: typed_methods,
+                }
+            }
             StmtKind::TypeAlias {
                 name,
                 type_params,

@@ -19,6 +19,8 @@ pub struct VirtualMachine<'a> {
     heap: Vec<Object>,
     maps: HashMap<usize, Vec<(Value, Value)>>,
     next_map_id: usize,
+    lists: HashMap<usize, Vec<Value>>,
+    next_list_id: usize,
     files: HashMap<usize, std::fs::File>,
     next_file_id: usize,
 }
@@ -31,6 +33,8 @@ impl<'a> VirtualMachine<'a> {
             heap: Vec::new(),
             maps: HashMap::new(),
             next_map_id: 1,
+            lists: HashMap::new(),
+            next_list_id: 1,
             files: HashMap::new(),
             next_file_id: 1,
         }
@@ -253,7 +257,118 @@ impl<'a> VirtualMachine<'a> {
                         return Some(Value::Boolean(false));
                     }
                 }
-                // File methods
+                "mapClear" => {
+                    if let Value::Int(id) = &args[0] {
+                        if let Some(map) = self.maps.get_mut(&(*id as usize)) {
+                            map.clear();
+                        }
+                        return Some(Value::Void);
+                    }
+                }
+                "mapKeys" => {
+                    if let Value::Int(id) = &args[0] {
+                        let list_id = self.next_list_id;
+                        self.next_list_id += 1;
+                        let mut keys = Vec::new();
+                        if let Some(map) = self.maps.get(&(*id as usize)) {
+                            keys = map.iter().map(|(k, _)| k.clone()).collect();
+                        }
+                        self.lists.insert(list_id, keys);
+                        // Return List object instance
+                        // Wait! The user expects a List object, but we just return Pointer!
+                        return Some(Value::Int(list_id as i64));
+                    }
+                }
+                "mapValues" => {
+                    if let Value::Int(id) = &args[0] {
+                        let list_id = self.next_list_id;
+                        self.next_list_id += 1;
+                        let mut values = Vec::new();
+                        if let Some(map) = self.maps.get(&(*id as usize)) {
+                            values = map.iter().map(|(_, v)| v.clone()).collect();
+                        }
+                        self.lists.insert(list_id, values);
+                        return Some(Value::Int(list_id as i64));
+                    }
+                }
+                // List methods
+                "listInit" => {
+                    let id = self.next_list_id;
+                    self.next_list_id += 1;
+                    self.lists.insert(id, Vec::new());
+                    return Some(Value::Int(id as i64));
+                }
+                "listPush" => {
+                    if let Value::Int(id) = &args[0] {
+                        let val = args[1].clone();
+                        if let Some(list) = self.lists.get_mut(&(*id as usize)) {
+                            list.push(val);
+                        }
+                        return Some(Value::Void);
+                    }
+                }
+                "listPop" => {
+                    if let Value::Int(id) = &args[0] {
+                        if let Some(list) = self.lists.get_mut(&(*id as usize))
+                            && let Some(val) = list.pop()
+                        {
+                            return Some(Value::EnumVariant("Option".to_string(), 0, vec![val]));
+                        }
+                        return Some(Value::EnumVariant("Option".to_string(), 1, vec![]));
+                    }
+                }
+                "listGet" => {
+                    if let (Value::Int(id), Value::Int(idx)) = (&args[0], &args[1]) {
+                        if let Some(list) = self.lists.get(&(*id as usize))
+                            && *idx >= 0
+                            && (*idx as usize) < list.len()
+                        {
+                            let val = list[*idx as usize].clone();
+                            return Some(Value::EnumVariant("Option".to_string(), 0, vec![val]));
+                        }
+                        return Some(Value::EnumVariant("Option".to_string(), 1, vec![]));
+                    }
+                }
+                "listSet" => {
+                    if let (Value::Int(id), Value::Int(idx)) = (&args[0], &args[1]) {
+                        let val = args[2].clone();
+                        if let Some(list) = self.lists.get_mut(&(*id as usize))
+                            && *idx >= 0
+                            && (*idx as usize) < list.len()
+                        {
+                            list[*idx as usize] = val;
+                        }
+                        return Some(Value::Void);
+                    }
+                }
+                "listLen" => {
+                    if let Value::Int(id) = &args[0] {
+                        if let Some(list) = self.lists.get(&(*id as usize)) {
+                            return Some(Value::Int(list.len() as i64));
+                        }
+                        return Some(Value::Int(0));
+                    }
+                }
+                "listClear" => {
+                    if let Value::Int(id) = &args[0] {
+                        if let Some(list) = self.lists.get_mut(&(*id as usize)) {
+                            list.clear();
+                        }
+                        return Some(Value::Void);
+                    }
+                }
+                "listRemove" => {
+                    if let (Value::Int(id), Value::Int(idx)) = (&args[0], &args[1]) {
+                        if let Some(list) = self.lists.get_mut(&(*id as usize))
+                            && *idx >= 0
+                            && (*idx as usize) < list.len()
+                        {
+                            let val = list.remove(*idx as usize);
+                            return Some(Value::EnumVariant("Option".to_string(), 0, vec![val]));
+                        }
+                        return Some(Value::EnumVariant("Option".to_string(), 1, vec![]));
+                    }
+                }
                 "fileOpen" => {
                     if let (Value::String(path), Value::String(mode)) = (&args[0], &args[1]) {
                         use std::fs::OpenOptions;
