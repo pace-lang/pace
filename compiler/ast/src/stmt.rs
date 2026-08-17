@@ -89,6 +89,7 @@ pub enum StmtKind<'a> {
     /// A foreign function declaration: `foreign func name<T>(params) -> return_type;`
     ForeignFunc {
         name: session::Symbol,
+        base_name: session::Symbol,
         type_params: Vec<session::Symbol>,
         params: Vec<(session::Symbol, TypeExpr<'a>)>,
         return_type: Option<TypeExpr<'a>>,

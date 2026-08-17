@@ -87,6 +87,7 @@ impl<'a> Parser<'a> {
         Some(Stmt::new(
             StmtKind::ForeignFunc {
                 name,
+                base_name: name,
                 type_params,
                 params,
                 return_type,

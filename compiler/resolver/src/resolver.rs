@@ -308,6 +308,7 @@ impl<'a> Resolver<'a> {
             }
             StmtKind::ForeignFunc {
                 name: _,
+                base_name: _,
                 type_params: _,
                 params: _,
                 return_type: _,

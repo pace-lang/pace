@@ -2,12 +2,12 @@ import "../core/option.pace";
 
 foreign func listInit<T>(): Pointer<CChar>;
 foreign func listPush<T>(ptr: Pointer<CChar>, value: T);
-foreign func listPop<T>(ptr: Pointer<CChar>): Option<T>;
-foreign func listGet<T>(ptr: Pointer<CChar>, index: Int): Option<T>;
+foreign func listPopRaw<T>(ptr: Pointer<CChar>): T;
+foreign func listGetRaw<T>(ptr: Pointer<CChar>, index: Int): T;
 foreign func listSet<T>(ptr: Pointer<CChar>, index: Int, value: T);
 foreign func listLen<T>(ptr: Pointer<CChar>): Int;
 foreign func listClear<T>(ptr: Pointer<CChar>);
-foreign func listRemove<T>(ptr: Pointer<CChar>, index: Int): Option<T>;
+foreign func listRemoveRaw<T>(ptr: Pointer<CChar>, index: Int): T;
 
 class List<T> {
     var ptr: Pointer<CChar>;
@@ -21,11 +21,22 @@ class List<T> {
     }
 
     func pop(): Option<T> {
-        return listPop<T>(self.ptr);
+        if self.len() == 0 {
+            return Option.None();
+        }
+        let val = listPopRaw<T>(self.ptr);
+        return Option.Some(val);
     }
 
     func get(index: Int): Option<T> {
-        return listGet<T>(self.ptr, index);
+        if index < 0 {
+            return Option.None();
+        }
+        if index >= self.len() {
+            return Option.None();
+        }
+        let val = listGetRaw<T>(self.ptr, index);
+        return Option.Some(val);
     }
 
     func set(index: Int, value: T) {
@@ -41,6 +52,13 @@ class List<T> {
     }
 
     func remove(index: Int): Option<T> {
-        return listRemove<T>(self.ptr, index);
+        if index < 0 {
+            return Option.None();
+        }
+        if index >= self.len() {
+            return Option.None();
+        }
+        let val = listRemoveRaw<T>(self.ptr, index);
+        return Option.Some(val);
     }
 }

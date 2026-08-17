@@ -77,6 +77,7 @@ impl<'a> Monomorphizer<'a> {
             }
             StmtKind::ForeignFunc {
                 name: _name,
+                base_name,
                 type_params: _,
                 params,
                 return_type,
@@ -89,6 +90,7 @@ impl<'a> Monomorphizer<'a> {
                 let new_return = return_type.as_ref().map(|t| self.subst.substitute(t));
                 StmtKind::ForeignFunc {
                     name: self.mangled_name, // Ensure foreign functions get mangled names too!
+                    base_name: *base_name,
                     type_params: Vec::new(),
                     params: new_params,
                     return_type: new_return,

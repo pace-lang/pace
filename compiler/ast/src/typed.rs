@@ -137,6 +137,7 @@ pub enum TypedStmtKind<'a> {
     },
     ForeignFunc {
         name: session::Symbol,
+        base_name: session::Symbol,
         params: Vec<(session::Symbol, TypeExpr<'a>)>,
         return_type: Option<TypeExpr<'a>>,
     },

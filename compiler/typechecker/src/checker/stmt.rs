@@ -252,12 +252,14 @@ impl<'a> TypeChecker<'a> {
             },
             StmtKind::ForeignFunc {
                 name,
+                base_name,
                 type_params: _,
                 params,
                 return_type,
                 is_private: _,
             } => TypedStmtKind::ForeignFunc {
                 name: *name,
+                base_name: *base_name,
                 params: params.clone(),
                 return_type: return_type.clone(),
             },

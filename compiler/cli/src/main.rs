@@ -107,12 +107,7 @@ enum Commands {
     /// Remove the target directory and built artifacts
     Clean,
 
-    /// Run a .pace file directly via the Virtual Machine (development only)
-    DebugRun {
-        /// The .pace file to run
-        #[arg(value_name = "FILE")]
-        file: PathBuf,
-    },
+
 }
 
 fn main() {
@@ -155,9 +150,6 @@ fn main() {
         }
         Commands::Run { file, release } => {
             commands::run::execute(file.as_deref(), *release);
-        }
-        Commands::DebugRun { file } => {
-            commands::run::execute_debug(file);
         }
         Commands::Test => {
             println!("Not implemented yet");

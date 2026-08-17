@@ -7,7 +7,6 @@ members = [
     "compiler/typechecker",
     "compiler/mir",
     "compiler/lowering",
-    "compiler/vm",
     "compiler/cli",
     "compiler/linker",
     "compiler/codegen",

@@ -19,7 +19,6 @@ mir = { version = "0.2.0", path = "../mir" }
 parser = { version = "0.2.0", path = "../parser" }
 resolver = { version = "0.2.0", path = "../resolver" }
 typechecker = { version = "0.2.0", path = "../typechecker" }
-vm = { version = "0.2.0", path = "../vm" }
 arc = { version = "0.2.0", path = "../arc" }
 diagnostics = { path = "../diagnostics" }
 toml = "1.1.4"

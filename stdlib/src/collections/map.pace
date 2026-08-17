@@ -3,7 +3,7 @@ import "list.pace" show List;
 
 foreign func mapInit<K, V>(): Pointer<CChar>; // Opaque pointer to underlying map
 foreign func mapSet<K, V>(ptr: Pointer<CChar>, key: K, value: V);
-foreign func mapGet<K, V>(ptr: Pointer<CChar>, key: K): Option<V>;
+foreign func mapGetRaw<K, V>(ptr: Pointer<CChar>, key: K): V;
 foreign func mapRemove<K, V>(ptr: Pointer<CChar>, key: K);
 foreign func mapContains<K, V>(ptr: Pointer<CChar>, key: K): Boolean;
 foreign func mapClear<K, V>(ptr: Pointer<CChar>);
@@ -22,7 +22,11 @@ class Map<K, V> {
     }
 
     func get(key: K): Option<V> {
-        return mapGet<K, V>(self.ptr, key);
+        if self.contains(key) == false {
+            return Option.None();
+        }
+        let val = mapGetRaw<K, V>(self.ptr, key);
+        return Option.Some(val);
     }
 
     func remove(key: K) {

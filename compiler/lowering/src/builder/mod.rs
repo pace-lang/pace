@@ -297,6 +297,7 @@ impl<'a> ProgramBuilder<'a> {
                 );
             } else if let TypedStmtKind::ForeignFunc {
                 name,
+                base_name,
                 params,
                 return_type,
             } = &stmt.kind
@@ -308,10 +309,7 @@ impl<'a> ProgramBuilder<'a> {
                 let ret_ty = return_type
                     .as_ref()
                     .map(|t| type_expr_to_abi(t, self.session));
-                let mut symbol = self.session.interner.borrow().lookup(*name).to_string();
-                if symbol.starts_with("map") || symbol.starts_with("array") {
-                    symbol = symbol.split('_').next().unwrap().to_string();
-                }
+                let symbol = self.session.interner.borrow().lookup(*base_name).to_string();
 
                 self.program.foreign_functions.insert(
                     self.session.interner.borrow().lookup(*name).to_string(),

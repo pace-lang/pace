@@ -396,6 +396,7 @@ impl<'a> TypeChecker<'a> {
                 }
                 StmtKind::ForeignFunc {
                     name,
+                    base_name: _,
                     type_params,
                     params,
                     return_type,
