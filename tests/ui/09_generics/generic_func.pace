@@ -1,8 +1,8 @@
-func id<T>(val: T) -> T {
+func id<T>(val: T): T {
     return val;
 }
 
-func pair<A, B>(first: A, second: B) -> A {
+func pair<A, B>(first: A, second: B): A {
     return first;
 }
 

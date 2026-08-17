@@ -1,4 +1,4 @@
-foreign func putchar(c: Int) -> Int;
+foreign func putchar(c: Int): Int;
 
 func main() {
     putchar(72); // H

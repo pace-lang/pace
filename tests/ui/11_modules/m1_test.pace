@@ -1,5 +1,5 @@
 // skip-test
-func main() -> Int {
+func main(): Int {
     let a = 10;
     let b = 20;
     let c = a + b;

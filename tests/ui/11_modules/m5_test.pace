@@ -3,7 +3,7 @@ class User {
     var age: Int
 }
 
-func main() -> Int {
+func main(): Int {
     let u = User();
     u.age = 42;
     print(u.age);

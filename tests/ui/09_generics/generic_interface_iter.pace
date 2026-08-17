@@ -1,11 +1,11 @@
 class MyList<T> implements Iterable<T> {
-    func iter() -> Iterator<T> {
+    func iter(): Iterator<T> {
         return MyIterator<T>();
     }
 }
 
 class MyIterator<T> implements Iterator<T> {
-    func next() -> Option<T> {
+    func next(): Option<T> {
         let opt: Option<T>;
         return opt;
     }

@@ -2,28 +2,28 @@ enum Option<T> {
     Some(T),
     None
 
-    func isSome() -> Boolean {
+    func isSome(): Boolean {
         return match self {
             Option.Some(_) => true,
             Option.None() => false,
         };
     }
 
-    func isNone() -> Boolean {
+    func isNone(): Boolean {
         return match self {
             Option.Some(_) => false,
             Option.None() => true,
         };
     }
 
-    func unwrap() -> T {
+    func unwrap(): T {
         return match self {
             Option.Some(val) => val,
             Option.None() => self.unwrap(), // TODO: Replace with panic when available
         };
     }
 
-    func unwrapOr(defaultVal: T) -> T {
+    func unwrapOr(defaultVal: T): T {
         return match self {
             Option.Some(val) => val,
             Option.None() => defaultVal,

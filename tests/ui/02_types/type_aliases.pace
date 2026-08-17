@@ -1,7 +1,7 @@
 type StatusCode = Int;
 type Message = String;
 
-func testAlias(code: StatusCode, msg: Message) -> StatusCode {
+func testAlias(code: StatusCode, msg: Message): StatusCode {
     print(msg);
     return code;
 }

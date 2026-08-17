@@ -8,7 +8,7 @@ print(greeting);
 print("Pi is approximately", pi);
 
 // --- Functions and Control Flow ---
-func calculate_factorial(n: Int) -> Int {
+func calculate_factorial(n: Int): Int {
     var result = 1;
     var current = n;
     
@@ -83,7 +83,7 @@ print("String Box value:", stringBox.value);
 let explicitBox = Box<Int>(42); // Explicit Type Argument
 print("Explicit Box value:", explicitBox.value);
 
-func identity<T>(val: T) -> T {
+func identity<T>(val: T): T {
     return val;
 }
 

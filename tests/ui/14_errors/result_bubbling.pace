@@ -1,19 +1,19 @@
 
 
-func testErr() -> Result<Int, String> {
+func testErr(): Result<Int, String> {
     return Err("Failed to perform action");
 }
 
-func testOk() -> Result<Int, String> {
+func testOk(): Result<Int, String> {
     return Ok(42);
 }
 
-func mainOk() -> Result<Int, String> {
+func mainOk(): Result<Int, String> {
     let val = testOk()?;
     return Ok(val * 2);
 }
 
-func mainErr() -> Result<Int, String> {
+func mainErr(): Result<Int, String> {
     let val = testErr()?;
     return Ok(val * 2);
 }

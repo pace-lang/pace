@@ -2,7 +2,7 @@ class User {
     var id: Int;
 }
 
-func createUser() -> User {
+func createUser(): User {
     let u = User();
     u.id = 42;
     return u;

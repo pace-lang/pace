@@ -93,6 +93,22 @@ impl<'a> TypeChecker<'a> {
                     .borrow_mut()
                     .intern(Type::Array(inner_parsed))
             }
+            TypeExpr::Function(params, ret_ty) => {
+                let parsed_params = params
+                    .iter()
+                    .map(|p| self.parse_type(p, span))
+                    .collect::<Vec<_>>();
+                let parsed_ret = if let Some(rt) = ret_ty {
+                    self.parse_type(rt, span)
+                } else {
+                    self.session.types.borrow_mut().intern(Type::Void)
+                };
+                self.session.types.borrow_mut().intern(Type::Function(
+                    Vec::new(), // No generic params on first-class functions for now
+                    parsed_params,
+                    parsed_ret,
+                ))
+            }
         }
     }
 

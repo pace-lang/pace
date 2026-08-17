@@ -1,21 +1,21 @@
 
-foreign func stringLen(s: String) -> Int;
-foreign func stringConcat(a: String, b: String) -> String;
-foreign func stringSubstring(s: String, start: Int, end: Int) -> String;
-foreign func stringContains(s: String, sub: String) -> Boolean;
+foreign func stringLen(s: String): Int;
+foreign func stringConcat(a: String, b: String): String;
+foreign func stringSubstring(s: String, start: Int, end: Int): String;
+foreign func stringContains(s: String, sub: String): Boolean;
 
-func len(s: String) -> Int {
+func len(s: String): Int {
     return stringLen(s);
 }
 
-func concat(a: String, b: String) -> String {
+func concat(a: String, b: String): String {
     return stringConcat(a, b);
 }
 
-func substring(s: String, start: Int, end: Int) -> String {
+func substring(s: String, start: Int, end: Int): String {
     return stringSubstring(s, start, end);
 }
 
-func contains(s: String, sub: String) -> Boolean {
+func contains(s: String, sub: String): Boolean {
     return stringContains(s, sub);
 }

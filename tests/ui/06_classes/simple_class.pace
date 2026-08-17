@@ -9,7 +9,7 @@ class Counter {
         self.count = self.count + 1;
     }
 
-    func get() -> Int {
+    func get(): Int {
         return self.count;
     }
 }

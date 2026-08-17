@@ -1,11 +1,11 @@
 
 import "../core/result.pace";
 
-foreign func fileOpen(path: String, mode: String) -> Pointer<CChar>; // Opaque FILE*
-foreign func fileReadAll(ptr: Pointer<CChar>) -> String;
-foreign func fileWrite(ptr: Pointer<CChar>, data: String) -> Int;
+foreign func fileOpen(path: String, mode: String): Pointer<CChar>; // Opaque FILE*
+foreign func fileReadAll(ptr: Pointer<CChar>): String;
+foreign func fileWrite(ptr: Pointer<CChar>, data: String): Int;
 foreign func fileClose(ptr: Pointer<CChar>);
-foreign func fileIsValid(ptr: Pointer<CChar>) -> Boolean;
+foreign func fileIsValid(ptr: Pointer<CChar>): Boolean;
 
 class File {
     var ptr: Pointer<CChar>;
@@ -14,14 +14,14 @@ class File {
         self.ptr = ptr;
     }
 
-    func readAll() -> Result<String, String> {
+    func readAll(): Result<String, String> {
         if fileIsValid(self.ptr) == false {
             return Err("Invalid file handle");
         }
         return Ok(fileReadAll(self.ptr));
     }
 
-    func write(data: String) -> Result<Int, String> {
+    func write(data: String): Result<Int, String> {
         if fileIsValid(self.ptr) == false {
             return Err("Invalid file handle");
         }
@@ -35,7 +35,7 @@ class File {
     }
 }
 
-func open(path: String, mode: String) -> Result<File, String> {
+func open(path: String, mode: String): Result<File, String> {
     let ptr = fileOpen(path, mode);
     if fileIsValid(ptr) == false {
         return Err("Failed to open file");

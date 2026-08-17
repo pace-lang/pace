@@ -5,7 +5,7 @@ use lexer::*;
 #[cfg(test)]
 #[test]
 fn test_func_declaration() {
-    let source = "func add(a: Int, b: Int) -> Int { return a + b; }";
+    let source = "func add(a: Int, b: Int): Int { return a + b; }";
     let session = session::CompilerSession::new();
     let mut scanner = Scanner::new(0, source);
     let mut parser = Parser::new(scanner.scan_tokens(&session), &session);

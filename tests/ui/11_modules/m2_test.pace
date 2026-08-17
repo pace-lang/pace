@@ -1,5 +1,5 @@
 // skip-test
-func main() -> Int {
+func main(): Int {
     var i = 1;
     var result = 1;
     while i <= 5 {

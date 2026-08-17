@@ -120,7 +120,7 @@ impl<'a> Parser<'a> {
         }
 
         let mut return_type = None;
-        if self.match_token(&[TokenKind::Arrow]) {
+        if self.match_token(&[TokenKind::Colon]) {
             return_type = Some(self.parse_type_expr()?);
         }
 

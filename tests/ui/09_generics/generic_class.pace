@@ -5,7 +5,7 @@ class Box<T> {
         self.value = val;
     }
     
-    func get() -> T {
+    func get(): T {
         return self.value;
     }
 }
@@ -17,7 +17,7 @@ class ArrayWrapper<T> {
         self.items = arr;
     }
     
-    func getFirst() -> T {
+    func getFirst(): T {
         return self.items[0];
     }
 }

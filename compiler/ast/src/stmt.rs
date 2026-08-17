@@ -7,6 +7,7 @@ pub enum TypeExpr<'a> {
     GenericInstance(session::Symbol, Vec<TypeExpr<'a>>),
     Optional(&'a TypeExpr<'a>),
     Array(&'a TypeExpr<'a>),
+    Function(Vec<TypeExpr<'a>>, Option<&'a TypeExpr<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

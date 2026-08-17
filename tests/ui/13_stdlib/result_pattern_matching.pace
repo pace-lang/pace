@@ -1,6 +1,6 @@
 
 
-func test(value: Result<String, Int>) -> String {
+func test(value: Result<String, Int>): String {
     return match value {
         Ok(v) => v,
         Err(e) => "error"

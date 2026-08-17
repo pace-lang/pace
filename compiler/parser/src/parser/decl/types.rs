@@ -95,6 +95,37 @@ impl<'a> Parser<'a> {
             return Some(ty);
         }
 
+        if self.match_token(&[TokenKind::LeftParen]) {
+            let mut param_types = Vec::new();
+            if !self.check(&TokenKind::RightParen) {
+                loop {
+                    let ty = self.parse_type_expr()?;
+                    param_types.push(ty);
+                    if !self.match_token(&[TokenKind::Comma]) {
+                        break;
+                    }
+                }
+            }
+            if !self.match_token(&[TokenKind::RightParen]) {
+                self.error_at_current("Expected ')' after function parameter types.");
+                return None;
+            }
+            if !self.match_token(&[TokenKind::Arrow]) {
+                self.error_at_current("Expected '->' for function type.");
+                return None;
+            }
+            let return_type = self.parse_type_expr()?;
+            
+            let mut ty = TypeExpr::Function(
+                param_types,
+                Some(self.session.ast_arena.alloc(return_type)),
+            );
+            if self.match_token(&[TokenKind::Question]) {
+                ty = TypeExpr::Optional(self.session.ast_arena.alloc(ty));
+            }
+            return Some(ty);
+        }
+
         if let Some(Token {
             kind: TokenKind::Identifier(t),
             ..

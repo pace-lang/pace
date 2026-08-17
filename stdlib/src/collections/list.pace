@@ -1,13 +1,13 @@
 import "../core/option.pace";
 
-foreign func listInit<T>() -> Pointer<CChar>;
+foreign func listInit<T>(): Pointer<CChar>;
 foreign func listPush<T>(ptr: Pointer<CChar>, value: T);
-foreign func listPop<T>(ptr: Pointer<CChar>) -> Option<T>;
-foreign func listGet<T>(ptr: Pointer<CChar>, index: Int) -> Option<T>;
+foreign func listPop<T>(ptr: Pointer<CChar>): Option<T>;
+foreign func listGet<T>(ptr: Pointer<CChar>, index: Int): Option<T>;
 foreign func listSet<T>(ptr: Pointer<CChar>, index: Int, value: T);
-foreign func listLen<T>(ptr: Pointer<CChar>) -> Int;
+foreign func listLen<T>(ptr: Pointer<CChar>): Int;
 foreign func listClear<T>(ptr: Pointer<CChar>);
-foreign func listRemove<T>(ptr: Pointer<CChar>, index: Int) -> Option<T>;
+foreign func listRemove<T>(ptr: Pointer<CChar>, index: Int): Option<T>;
 
 class List<T> {
     var ptr: Pointer<CChar>;
@@ -20,11 +20,11 @@ class List<T> {
         listPush<T>(self.ptr, value);
     }
 
-    func pop() -> Option<T> {
+    func pop(): Option<T> {
         return listPop<T>(self.ptr);
     }
 
-    func get(index: Int) -> Option<T> {
+    func get(index: Int): Option<T> {
         return listGet<T>(self.ptr, index);
     }
 
@@ -32,7 +32,7 @@ class List<T> {
         listSet<T>(self.ptr, index, value);
     }
 
-    func len() -> Int {
+    func len(): Int {
         return listLen<T>(self.ptr);
     }
 
@@ -40,7 +40,7 @@ class List<T> {
         listClear<T>(self.ptr);
     }
 
-    func remove(index: Int) -> Option<T> {
+    func remove(index: Int): Option<T> {
         return listRemove<T>(self.ptr, index);
     }
 }

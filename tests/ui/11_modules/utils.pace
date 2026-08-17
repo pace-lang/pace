@@ -1,5 +1,5 @@
 // skip-test
-func get_value() -> Int {
+func get_value(): Int {
     return 42;
 }
 

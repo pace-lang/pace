@@ -1,5 +1,5 @@
-foreign func putchar(c: CInt) -> CInt;
-foreign func rand() -> CInt;
+foreign func putchar(c: CInt): CInt;
+foreign func rand(): CInt;
 
 func main() {
     // Print 'H', 'i', '\n'
