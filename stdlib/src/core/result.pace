@@ -1,4 +1,51 @@
+import "panic.pace";
+
 enum Result<T, E> {
     Ok(T),
     Err(E)
+
+    func isOk(): Boolean {
+        return match self {
+            Result.Ok(_) => true,
+            Result.Err(_) => false,
+        };
+    }
+
+    func isErr(): Boolean {
+        return match self {
+            Result.Ok(_) => false,
+            Result.Err(_) => true,
+        };
+    }
+
+    func panicUnwrap(): T {
+        pacePanic(3);
+        return self.unwrap();
+    }
+
+    func unwrap(): T {
+        return match self {
+            Result.Ok(val) => val,
+            Result.Err(_) => self.panicUnwrap(),
+        };
+    }
+
+    func panicUnwrapErr(): E {
+        pacePanic(3);
+        return self.unwrapErr();
+    }
+
+    func unwrapErr(): E {
+        return match self {
+            Result.Ok(_) => self.panicUnwrapErr(),
+            Result.Err(err) => err,
+        };
+    }
+
+    func unwrapOr(defaultVal: T): T {
+        return match self {
+            Result.Ok(val) => val,
+            Result.Err(_) => defaultVal,
+        };
+    }
 }

@@ -58,11 +58,13 @@ pub extern "C" fn printStr(str_ptr: *const c_char) -> i64 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pace_panic(code: i64) {
+pub extern "C" fn pacePanic(code: i64) {
     if code == 1 {
         println!("Pace Runtime Error: Attempted to unwrap a null Optional");
     } else if code == 2 {
         println!("Pace Runtime Error: Array index out of bounds");
+    } else if code == 3 {
+        println!("Pace Runtime Error: Attempted to unwrap an Err Result");
     } else {
         println!("Pace Runtime Error: Code {}", code);
     }

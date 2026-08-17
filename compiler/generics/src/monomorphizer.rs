@@ -46,6 +46,36 @@ impl<'a> Monomorphizer<'a> {
                     is_private: *is_private,
                 }
             }
+            StmtKind::Enum {
+                name: _,
+                type_params: _,
+                variants,
+                methods,
+                is_private,
+            } => {
+                let new_methods = methods.iter().map(|m| self.monomorphize_stmt(m)).collect();
+                
+                let new_variants = variants.iter().map(|v| {
+                    let new_fields = v.fields.as_ref().map(|fields| {
+                        fields.iter().map(|f| ast::stmt::EnumField {
+                            name: f.name,
+                            ty: self.subst.substitute(&f.ty),
+                        }).collect()
+                    });
+                    ast::stmt::EnumVariant {
+                        name: v.name,
+                        fields: new_fields,
+                    }
+                }).collect();
+
+                StmtKind::Enum {
+                    name: self.mangled_name,
+                    type_params: Vec::new(),
+                    variants: new_variants,
+                    methods: new_methods,
+                    is_private: *is_private,
+                }
+            }
             StmtKind::Func {
                 name,
                 type_params: _,

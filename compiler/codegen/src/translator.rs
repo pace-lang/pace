@@ -120,8 +120,8 @@ impl<'a, 'b> Translator<'a, 'b> {
         self.builder.switch_to_block(panic_block);
         let panic_func = self
             .func_ids
-            .get("pace_panic")
-            .expect("pace_panic not declared");
+            .get("pacePanic")
+            .expect("pacePanic not declared");
         let local_panic = self
             .module
             .declare_func_in_func(*panic_func, self.builder.func);

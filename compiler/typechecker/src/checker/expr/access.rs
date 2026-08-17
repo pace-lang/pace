@@ -327,19 +327,29 @@ impl<'a> TypeChecker<'a> {
         name: Symbol,
         span: Span,
     ) -> (TypedExprKind<'a>, TypeId) {
-        let typed_obj = self.check_expr(object);
+        let mut typed_obj = self.check_expr(object);
 
         let (class_name, instance_args) = match self.get_type(typed_obj.ty) {
             Type::Instance(n) => (n, Vec::new()),
             Type::GenericInstance(n, args) => {
                 let mut mangled_name = n;
+                let mut is_enum = false;
                 if let Some(stmt) = self.generic_registry.get_class(n).cloned() {
                     match &stmt.kind {
                         StmtKind::Class { type_params, .. } | StmtKind::Struct { type_params, .. } => {
                             mangled_name = self.instantiate_generic_class(n, type_params, &args);
                         }
+                        StmtKind::Enum { type_params, .. } => {
+                            mangled_name = self.instantiate_generic_class(n, type_params, &args);
+                            is_enum = true;
+                        }
                         _ => {}
                     }
+                }
+                if is_enum {
+                    typed_obj.ty = self.session.types.borrow_mut().intern(Type::Enum(mangled_name, Vec::new()));
+                } else {
+                    typed_obj.ty = self.session.types.borrow_mut().intern(Type::Instance(mangled_name));
                 }
                 (mangled_name, args.clone())
             }

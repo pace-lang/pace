@@ -1,3 +1,5 @@
+import "panic.pace";
+
 enum Option<T> {
     Some(T),
     None
@@ -16,10 +18,15 @@ enum Option<T> {
         };
     }
 
+    func panicUnwrap(): T {
+        pacePanic(1);
+        return self.unwrap();
+    }
+
     func unwrap(): T {
         return match self {
             Option.Some(val) => val,
-            Option.None() => self.unwrap(), // TODO: Replace with panic when available
+            Option.None() => self.panicUnwrap(),
         };
     }
 

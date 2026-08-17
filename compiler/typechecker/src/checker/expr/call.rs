@@ -553,6 +553,32 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
 
+                if !func_type_params.is_empty() {
+                    let resolved_type_args: Vec<_> = func_type_params.iter().map(|p| *inferred_map.get(p).unwrap_or(&self.session.types.borrow_mut().intern(Type::Error))).collect();
+                    let mangled_name = self.instantiate_generic_class(
+                        enum_name,
+                        &func_type_params,
+                        &resolved_type_args,
+                    );
+                    
+                    let new_ret_ty = self.session.types.borrow_mut().intern(Type::Enum(mangled_name, Vec::new()));
+                    return (
+                        TypedExprKind::Call {
+                            callee: self.alloc(TypedExpr {
+                                kind: TypedExprKind::EnumVariant {
+                                    enum_name: mangled_name,
+                                    variant_name,
+                                },
+                                ty: self.session.types.borrow_mut().intern(Type::BuiltinFunc),
+                                span: callee.span,
+                            }),
+                            type_args: Vec::new(),
+                            arguments: typed_args,
+                        },
+                        new_ret_ty,
+                    );
+                }
+
                 let new_ret_ty = if func_type_params.is_empty() {
                     ret_ty
                 } else {

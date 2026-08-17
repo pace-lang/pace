@@ -172,16 +172,25 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
                 // If target is a generic interface
-                if let Type::GenericInstance(interface_name, target_args) = target_ty {
+                if let Type::GenericInstance(interface_name, ref target_args) = target_ty {
                     for implemented_ty_id in implements {
                         if let Type::GenericInstance(impl_name, impl_args) =
                             self.get_type(*implemented_ty_id)
-                            && impl_name == interface_name && impl_args == target_args {
+                            && impl_name == interface_name && impl_args == *target_args {
                                 return true;
                             }
                     }
                 }
             }
+        
+        if let Type::Enum(mangled, _) = source_ty
+            && let Type::GenericInstance(enum_name, _) = target_ty
+        {
+            if self.session.interner.borrow().lookup(mangled).starts_with(self.session.interner.borrow().lookup(enum_name)) {
+                return true;
+            }
+        }
+
         false
     }
 
@@ -347,6 +356,7 @@ impl<'a> TypeChecker<'a> {
                 self.arena(),
                 &param_syms,
                 &type_arg_exprs,
+                &self.session.interner.borrow(),
             ));
             let monomorphizer =
                 generics::Monomorphizer::new(self.arena(), substitution, mangled_name);
@@ -398,6 +408,7 @@ impl<'a> TypeChecker<'a> {
                 self.arena(),
                 &param_syms,
                 &type_arg_exprs,
+                &self.session.interner.borrow(),
             ));
             let monomorphizer =
                 generics::Monomorphizer::new(self.arena(), substitution, mangled_name);

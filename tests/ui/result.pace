@@ -1,0 +1,17 @@
+
+
+func main() {
+    let okRes: Result<Int, String> = Result.Ok(42);
+    let errRes: Result<Int, String> = Result.Err("error");
+
+    if okRes.isOk() {
+        printInt(okRes.unwrap());
+    }
+
+    if errRes.isErr() {
+        printStr(errRes.unwrapErr());
+    }
+
+    let defaultVal = errRes.unwrapOr(100);
+    printInt(defaultVal);
+}

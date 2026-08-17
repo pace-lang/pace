@@ -43,7 +43,7 @@ impl<'a> MirBuilder<'a> {
             let obj_val = self.lower_expr(object);
             let temp = self.new_temp();
 
-            if let Type::Instance(class_name) | Type::GenericInstance(class_name, _) =
+            if let Type::Instance(class_name) | Type::GenericInstance(class_name, _) | Type::Enum(class_name, _) =
                 self.session.types.borrow().get(object.ty)
             {
                 let actual_name = format!(

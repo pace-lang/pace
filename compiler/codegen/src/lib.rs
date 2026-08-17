@@ -130,6 +130,13 @@ impl CraneliftGenerator {
             .map_err(|e| format!("Failed to declare pace_alloc_array_repeat: {}", e))?;
         func_ids.insert("pace_alloc_array_repeat".to_string(), alloc_repeat_id);
 
+        let mut panic_sig = module.make_signature();
+        panic_sig.params.push(AbiParam::new(types::I64));
+        let panic_id = module
+            .declare_function("pacePanic", Linkage::Import, &panic_sig)
+            .map_err(|e| format!("Failed to declare pacePanic: {}", e))?;
+        func_ids.insert("pacePanic".to_string(), panic_id);
+
         let mut retain_sig = module.make_signature();
         retain_sig.params.push(AbiParam::new(types::I64)); // obj pointer
         let retain_id = module
@@ -166,12 +173,7 @@ impl CraneliftGenerator {
             .unwrap();
         func_ids.insert("pace_weak_upgrade".to_string(), weak_upgrade_id);
 
-        let mut panic_sig = module.make_signature();
-        panic_sig.params.push(AbiParam::new(types::I64));
-        let panic_id = module
-            .declare_function("pace_panic", Linkage::Import, &panic_sig)
-            .unwrap();
-        func_ids.insert("pace_panic".to_string(), panic_id);
+
 
         let mut str_concat_sig = module.make_signature();
         str_concat_sig.params.push(AbiParam::new(types::I64));
