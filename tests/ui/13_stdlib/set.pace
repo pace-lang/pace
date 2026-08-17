@@ -1,0 +1,36 @@
+
+func main() {
+    let s = Set<Int>();
+    
+    print("Len before:");
+    print(s.len());
+
+    s.insert(10);
+    s.insert(20);
+    s.insert(10); // Duplicate, shouldn't increase size
+
+    print("Len after:");
+    print(s.len());
+
+    print("Contains 10?");
+    if s.contains(10) {
+        print(1);
+    } else {
+        print(0);
+    }
+
+    print("Contains 30?");
+    if s.contains(30) {
+        print(1);
+    } else {
+        print(0);
+    }
+
+    s.remove(10);
+    print("Len after remove:");
+    print(s.len());
+
+    s.clear();
+    print("Len after clear:");
+    print(s.len());
+}

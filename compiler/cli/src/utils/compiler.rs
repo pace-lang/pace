@@ -115,7 +115,7 @@ pub fn compile_to_mir(file: &Path) -> mir::Program {
     }
 
     // 5. Lowering (AST -> MIR)
-    let builder = ProgramBuilder::new(&session);
+    let builder = lowering::ProgramBuilder::new(&session);
     let mut mir_program = builder.build(&typed_ast);
 
     // 6. ARC Pass

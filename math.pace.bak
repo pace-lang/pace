@@ -1,0 +1,25 @@
+foreign func mathSqrt(x: Float): Float;
+foreign func mathPow(base: Float, exp: Float): Float;
+foreign func mathAbs(x: Float): Float;
+foreign func mathSin(x: Float): Float;
+foreign func mathCos(x: Float): Float;
+
+func sqrt(x: Float): Float {
+    return mathSqrt(x);
+}
+
+func pow(base: Float, exp: Float): Float {
+    return mathPow(base, exp);
+}
+
+func abs(x: Float): Float {
+    return mathAbs(x);
+}
+
+func sin(x: Float): Float {
+    return mathSin(x);
+}
+
+func cos(x: Float): Float {
+    return mathCos(x);
+}

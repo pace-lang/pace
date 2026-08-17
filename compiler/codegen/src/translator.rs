@@ -333,8 +333,22 @@ impl<'a, 'b> Translator<'a, 'b> {
                                 mir::ForeignAbiType::I8
                                 | mir::ForeignAbiType::I16
                                 | mir::ForeignAbiType::I32 => {
-                                    // Assume sign extension for now, a proper implementation would differentiate uextend/sextend
                                     result_val = self.builder.ins().sextend(types::I64, result_val);
+                                }
+                                mir::ForeignAbiType::F32 => {
+                                    let bitcast = self.builder.ins().bitcast(
+                                        types::I32,
+                                        cranelift_codegen::ir::MemFlagsData::new(),
+                                        result_val,
+                                    );
+                                    result_val = self.builder.ins().uextend(types::I64, bitcast);
+                                }
+                                mir::ForeignAbiType::F64 => {
+                                    result_val = self.builder.ins().bitcast(
+                                        types::I64,
+                                        cranelift_codegen::ir::MemFlagsData::new(),
+                                        result_val,
+                                    );
                                 }
                                 _ => {}
                             }

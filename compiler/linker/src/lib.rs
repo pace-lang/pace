@@ -80,6 +80,7 @@ impl Linker {
         command
             .arg(object_file)
             .arg(&runtime_lib)
+            .arg("-lm")
             .arg("-o")
             .arg(output_file);
 

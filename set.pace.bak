@@ -1,0 +1,41 @@
+import "list.pace" show List;
+
+foreign func setInit<T>(): Pointer<CChar>;
+foreign func setInsert<T>(ptr: Pointer<CChar>, value: T);
+foreign func setRemove<T>(ptr: Pointer<CChar>, value: T);
+foreign func setContains<T>(ptr: Pointer<CChar>, value: T): Boolean;
+foreign func setClear<T>(ptr: Pointer<CChar>);
+foreign func setLen<T>(ptr: Pointer<CChar>): Int;
+foreign func setValues<T>(ptr: Pointer<CChar>): List<T>;
+
+class Set<T> {
+    var ptr: Pointer<CChar>;
+
+    func init() {
+        self.ptr = setInit<T>();
+    }
+
+    func insert(value: T) {
+        setInsert<T>(self.ptr, value);
+    }
+
+    func remove(value: T) {
+        setRemove<T>(self.ptr, value);
+    }
+
+    func contains(value: T): Boolean {
+        return setContains<T>(self.ptr, value);
+    }
+
+    func clear() {
+        setClear<T>(self.ptr);
+    }
+
+    func len(): Int {
+        return setLen<T>(self.ptr);
+    }
+
+    func values(): List<T> {
+        return setValues<T>(self.ptr);
+    }
+}

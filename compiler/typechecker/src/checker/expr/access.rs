@@ -58,6 +58,41 @@ impl<'a> TypeChecker<'a> {
                         ret_ty,
                     )),
                 )
+            } else if let StmtKind::ForeignFunc {
+                type_params,
+                params,
+                return_type,
+                ..
+            } = &generic_stmt.kind
+            {
+                self.env.push_scope();
+                for tp in type_params {
+                    self.env.declare(
+                        *tp,
+                        self.session.types.borrow_mut().intern(Type::Generic(*tp)),
+                    );
+                }
+
+                let mut param_types = Vec::new();
+                for (_, ty) in params {
+                    param_types.push(self.parse_type(ty, span));
+                }
+                let ret_ty = if let Some(ty) = return_type {
+                    self.parse_type(ty, span)
+                } else {
+                    self.session.types.borrow_mut().intern(Type::Void)
+                };
+
+                self.env.pop_scope();
+
+                (
+                    TypedExprKind::Variable(name),
+                    self.session.types.borrow_mut().intern(Type::Function(
+                        type_params.clone(),
+                        param_types,
+                        ret_ty,
+                    )),
+                )
             } else {
                 unreachable!()
             }

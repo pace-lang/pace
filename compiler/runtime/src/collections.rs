@@ -79,6 +79,7 @@ pub extern "C" fn listRemoveRaw(ptr: *mut c_void, index: i64) -> *mut c_void {
     vec.remove(index as usize)
 }
 
+
 // MAP IMPLEMENTATION
 
 #[unsafe(no_mangle)]
@@ -161,3 +162,74 @@ pub extern "C" fn mapValues(ptr: *mut c_void) -> *mut c_void {
     }
     Box::into_raw(Box::new(vec)) as *mut c_void
 }
+
+// SET IMPLEMENTATION
+
+#[unsafe(no_mangle)]
+pub extern "C" fn setInit() -> *mut c_void {
+    let set: std::collections::HashSet<u64> = std::collections::HashSet::new();
+    Box::into_raw(Box::new(set)) as *mut c_void
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn setInsert(ptr: *mut c_void, val: u64) {
+    if ptr.is_null() {
+        return;
+    }
+    let set = unsafe { &mut *(ptr as *mut std::collections::HashSet<u64>) };
+    set.insert(val);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn setRemove(ptr: *mut c_void, val: u64) {
+    if ptr.is_null() {
+        return;
+    }
+    let set = unsafe { &mut *(ptr as *mut std::collections::HashSet<u64>) };
+    set.remove(&val);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn setContains(ptr: *mut c_void, val: u64) -> i64 {
+    if ptr.is_null() {
+        return 0;
+    }
+    let set = unsafe { &mut *(ptr as *mut std::collections::HashSet<u64>) };
+    if set.contains(&val) {
+        1
+    } else {
+        0
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn setClear(ptr: *mut c_void) {
+    if ptr.is_null() {
+        return;
+    }
+    let set = unsafe { &mut *(ptr as *mut std::collections::HashSet<u64>) };
+    set.clear();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn setLen(ptr: *mut c_void) -> i64 {
+    if ptr.is_null() {
+        return 0;
+    }
+    let set = unsafe { &mut *(ptr as *mut std::collections::HashSet<u64>) };
+    set.len() as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn setValues(ptr: *mut c_void) -> *mut c_void {
+    if ptr.is_null() {
+        return std::ptr::null_mut();
+    }
+    let set = unsafe { &mut *(ptr as *mut std::collections::HashSet<u64>) };
+    let mut vec: Vec<*mut c_void> = Vec::new();
+    for v in set.iter() {
+        vec.push(*v as *mut c_void);
+    }
+    Box::into_raw(Box::new(vec)) as *mut c_void
+}
+

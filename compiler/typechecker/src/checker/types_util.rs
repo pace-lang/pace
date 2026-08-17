@@ -190,6 +190,14 @@ impl<'a> TypeChecker<'a> {
                 return true;
             }
         }
+        
+        if let Type::Instance(mangled) = source_ty
+            && let Type::GenericInstance(class_name, _) = target_ty
+        {
+            if self.session.interner.borrow().lookup(mangled).starts_with(self.session.interner.borrow().lookup(class_name)) {
+                return true;
+            }
+        }
 
         false
     }
@@ -420,7 +428,7 @@ impl<'a> TypeChecker<'a> {
 
             self.spec_registry.mark_complete(key.clone());
 
-            self.collect_declarations(&[concrete_stmt.clone()]);
+            self.collect_declarations(std::slice::from_ref(&concrete_stmt));
 
             // Queue the typechecking for the MonomorphizePass to avoid recursion
             self.instantiation_queue

@@ -328,6 +328,87 @@ pub extern "C" fn stringContains(s_ptr: *const c_char, sub_ptr: *const c_char) -
     }
 }
 
+fn allocate_pace_string(s: &str) -> *const c_char {
+    let bytes = s.as_bytes();
+    let new_ptr = pace_alloc((24 + bytes.len() + 1) as i64, (-2isize) as *const ());
+    if new_ptr.is_null() {
+        println!("Pace Runtime Error: Out of memory in string allocation");
+        std::process::exit(1);
+    }
+    unsafe {
+        let payload_ptr = new_ptr.add(24);
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), payload_ptr, bytes.len());
+    }
+    new_ptr as *const c_char
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringSplitRaw(s_ptr: *const c_char, sub_ptr: *const c_char) -> *mut core::ffi::c_void {
+    if s_ptr.is_null() {
+        let vec: Vec<*mut core::ffi::c_void> = Vec::new();
+        return Box::into_raw(Box::new(vec)) as *mut core::ffi::c_void;
+    }
+    let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
+    let mut vec: Vec<*mut core::ffi::c_void> = Vec::new();
+    
+    if sub_ptr.is_null() {
+        vec.push(allocate_pace_string(s_str.as_ref()) as *mut core::ffi::c_void);
+    } else {
+        let sub_str = unsafe { CStr::from_ptr(sub_ptr.add(24)) }.to_string_lossy();
+        for part in s_str.split(sub_str.as_ref()) {
+            vec.push(allocate_pace_string(part) as *mut core::ffi::c_void);
+        }
+    }
+    Box::into_raw(Box::new(vec)) as *mut core::ffi::c_void
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringReplace(s_ptr: *const c_char, old_ptr: *const c_char, new_ptr: *const c_char) -> *const c_char {
+    if s_ptr.is_null() {
+        return std::ptr::null();
+    }
+    if old_ptr.is_null() || new_ptr.is_null() {
+        return s_ptr;
+    }
+    let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
+    let old_str = unsafe { CStr::from_ptr(old_ptr.add(24)) }.to_string_lossy();
+    let new_str = unsafe { CStr::from_ptr(new_ptr.add(24)) }.to_string_lossy();
+    
+    let replaced = s_str.replace(old_str.as_ref(), new_str.as_ref());
+    allocate_pace_string(&replaced)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringTrim(s_ptr: *const c_char) -> *const c_char {
+    if s_ptr.is_null() {
+        return std::ptr::null();
+    }
+    let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
+    let trimmed = s_str.trim();
+    allocate_pace_string(trimmed)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringToLower(s_ptr: *const c_char) -> *const c_char {
+    if s_ptr.is_null() {
+        return std::ptr::null();
+    }
+    let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
+    let lower = s_str.to_lowercase();
+    allocate_pace_string(&lower)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringToUpper(s_ptr: *const c_char) -> *const c_char {
+    if s_ptr.is_null() {
+        return std::ptr::null();
+    }
+    let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
+    let upper = s_str.to_uppercase();
+    allocate_pace_string(&upper)
+}
+
+
 #[unsafe(no_mangle)]
 pub extern "C" fn fileIsValid(_ptr: *mut u8) -> u8 {
     0 // false
@@ -432,4 +513,33 @@ pub extern "C" fn printEnum(val: *const u8) {
         };
         println!("<{} Variant {}>", enum_name, tag);
     }
+}
+
+// ---------------------------------------------------------
+// FFI Math Operations
+// ---------------------------------------------------------
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathSqrt(x: f64) -> f64 {
+    x.sqrt()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathPow(base: f64, exp: f64) -> f64 {
+    base.powf(exp)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathAbs(x: f64) -> f64 {
+    x.abs()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathSin(x: f64) -> f64 {
+    x.sin()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathCos(x: f64) -> f64 {
+    x.cos()
 }

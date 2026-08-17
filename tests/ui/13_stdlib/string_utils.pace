@@ -1,0 +1,49 @@
+
+func main() {
+    let s = "Hello World";
+    
+    print("toLower:");
+    print(toLower(s));
+
+    print("toUpper:");
+    print(toUpper(s));
+
+    let replaced = replace(s, "World", "Pace");
+    print("replace:");
+    print(replaced);
+
+    let spaced = "   Pace   ";
+    print("trim:");
+    print(trim(spaced));
+
+    let csv = "a,b,c";
+    let parts = split(csv, ",");
+    print("split len:");
+    print(parts.len());
+    let opt0 = parts.get(0);
+    if opt0.isSome() {
+        print(opt0.unwrap());
+    }
+    let opt1 = parts.get(1);
+    if opt1.isSome() {
+        print(opt1.unwrap());
+    }
+    let opt2 = parts.get(2);
+    if opt2.isSome() {
+        print(opt2.unwrap());
+    }
+
+    // Edge cases
+    let opt_out = parts.get(10);
+    if opt_out.isNone() {
+        print("out of bounds is None");
+    }
+
+    parts.remove(1);
+    print("after remove len:");
+    print(parts.len());
+
+    parts.clear();
+    print("after clear len:");
+    print(parts.len());
+}

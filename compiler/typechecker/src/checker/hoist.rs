@@ -419,6 +419,12 @@ impl<'a> TypeChecker<'a> {
                         param_types.push(self.parse_type(param_type_str, stmt.span));
                     }
                     self.env.pop_scope();
+                    
+                    if !type_params.is_empty() {
+                        self.generic_registry.register_function(*name, stmt.clone());
+                        continue;
+                    }
+
                     self.env.declare(
                         *name,
                         self.session.types.borrow_mut().intern(Type::Function(

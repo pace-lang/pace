@@ -1,8 +1,15 @@
 
+import "../collections/list.pace" show List;
+
 foreign func stringLen(s: String): Int;
 foreign func stringConcat(a: String, b: String): String;
 foreign func stringSubstring(s: String, start: Int, end: Int): String;
 foreign func stringContains(s: String, sub: String): Boolean;
+
+foreign func stringReplace(s: String, old: String, new: String): String;
+foreign func stringTrim(s: String): String;
+foreign func stringToLower(s: String): String;
+foreign func stringToUpper(s: String): String;
 
 func len(s: String): Int {
     return stringLen(s);
@@ -18,4 +25,28 @@ func substring(s: String, start: Int, end: Int): String {
 
 func contains(s: String, sub: String): Boolean {
     return stringContains(s, sub);
+}
+
+foreign func stringSplitRaw(s: String, sub: String): Pointer<CChar>;
+
+func split(s: String, sub: String): List<String> {
+    let list = List<String>();
+    list.ptr = stringSplitRaw(s, sub);
+    return list;
+}
+
+func replace(s: String, old: String, new: String): String {
+    return stringReplace(s, old, new);
+}
+
+func trim(s: String): String {
+    return stringTrim(s);
+}
+
+func toLower(s: String): String {
+    return stringToLower(s);
+}
+
+func toUpper(s: String): String {
+    return stringToUpper(s);
 }
