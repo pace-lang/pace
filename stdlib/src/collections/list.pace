@@ -8,12 +8,17 @@ foreign func listSet<T>(ptr: Pointer<CChar>, index: Int, value: T);
 foreign func listLen<T>(ptr: Pointer<CChar>): Int;
 foreign func listClear<T>(ptr: Pointer<CChar>);
 foreign func listRemoveRaw<T>(ptr: Pointer<CChar>, index: Int): T;
+foreign func listFree(ptr: Pointer<CChar>);
 
 class List<T> {
     var ptr: Pointer<CChar>;
 
     func init() {
         self.ptr = listInit<T>();
+    }
+
+    func deinit() {
+        listFree(self.ptr);
     }
 
     func push(value: T) {

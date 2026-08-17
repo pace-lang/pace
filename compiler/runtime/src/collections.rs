@@ -233,3 +233,30 @@ pub extern "C" fn setValuesRaw(ptr: *mut c_void) -> *mut c_void {
     Box::into_raw(Box::new(vec)) as *mut c_void
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn listFree(ptr: *mut c_void) {
+    if !ptr.is_null() {
+        unsafe {
+            drop(Box::from_raw(ptr as *mut Vec<*mut c_void>));
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mapFree(ptr: *mut c_void) {
+    if !ptr.is_null() {
+        unsafe {
+            drop(Box::from_raw(ptr as *mut std::collections::HashMap<u64, *mut c_void>));
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn setFree(ptr: *mut c_void) {
+    if !ptr.is_null() {
+        unsafe {
+            drop(Box::from_raw(ptr as *mut std::collections::HashSet<u64>));
+        }
+    }
+}
+

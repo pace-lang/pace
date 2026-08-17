@@ -7,12 +7,17 @@ foreign func setContains<T>(ptr: Pointer<CChar>, value: T): Boolean;
 foreign func setClear<T>(ptr: Pointer<CChar>);
 foreign func setLen<T>(ptr: Pointer<CChar>): Int;
 foreign func setValuesRaw<T>(ptr: Pointer<CChar>): Pointer<CChar>;
+foreign func setFree(ptr: Pointer<CChar>);
 
 class Set<T> {
     var ptr: Pointer<CChar>;
 
     func init() {
         self.ptr = setInit<T>();
+    }
+
+    func deinit() {
+        setFree(self.ptr);
     }
 
     func insert(value: T) {

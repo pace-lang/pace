@@ -43,7 +43,9 @@ fn is_ref_type_opt(te: &Option<ast::TypeExpr>, session: &session::CompilerSessio
         }
         Some(ast::TypeExpr::Optional(inner)) => is_ref_type_opt(&Some((**inner).clone()), session),
         Some(ast::TypeExpr::Array(_)) => true,
-        Some(ast::TypeExpr::GenericInstance(_, _)) => true,
+        Some(ast::TypeExpr::GenericInstance(name, _)) => {
+            session.interner.borrow().lookup(*name) != "Pointer"
+        }
         _ => false,
     }
 }
@@ -57,6 +59,7 @@ pub(crate) fn is_ref_type_id(ty: session::TypeId, session: &session::CompilerSes
         session::types::Type::Int
         | session::types::Type::Float
         | session::types::Type::Boolean
+        | session::types::Type::Pointer(_)
         | session::types::Type::Void
         | session::types::Type::Null
         | session::types::Type::Error
@@ -64,7 +67,6 @@ pub(crate) fn is_ref_type_id(ty: session::TypeId, session: &session::CompilerSes
         | session::types::Type::CUInt
         | session::types::Type::CChar
         | session::types::Type::CSize
-        | session::types::Type::Pointer(_)
         | session::types::Type::BuiltinFunc
         | session::types::Type::Function(..)
         | session::types::Type::OverloadedFunction(..)

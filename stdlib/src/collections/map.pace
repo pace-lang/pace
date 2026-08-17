@@ -9,12 +9,17 @@ foreign func mapContains<K, V>(ptr: Pointer<CChar>, key: K): Boolean;
 foreign func mapClear<K, V>(ptr: Pointer<CChar>);
 foreign func mapKeysRaw<K, V>(ptr: Pointer<CChar>): Pointer<CChar>;
 foreign func mapValuesRaw<K, V>(ptr: Pointer<CChar>): Pointer<CChar>;
+foreign func mapFree(ptr: Pointer<CChar>);
 
 class Map<K, V> {
     var ptr: Pointer<CChar>;
 
     func init() {
         self.ptr = mapInit<K, V>();
+    }
+
+    func deinit() {
+        mapFree(self.ptr);
     }
 
     func set(key: K, value: V) {

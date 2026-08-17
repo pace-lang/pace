@@ -338,6 +338,7 @@ fn allocate_pace_string(s: &str) -> *const c_char {
     unsafe {
         let payload_ptr = new_ptr.add(24);
         std::ptr::copy_nonoverlapping(bytes.as_ptr(), payload_ptr, bytes.len());
+        *payload_ptr.add(bytes.len()) = 0; // Null terminator
     }
     new_ptr as *const c_char
 }
