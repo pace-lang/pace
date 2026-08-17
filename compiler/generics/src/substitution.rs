@@ -12,7 +12,7 @@ impl<'a> TypeSubstitution<'a> {
         arena: &'a bumpalo::Bump,
         type_params: &[session::Symbol],
         type_args: &[TypeExpr<'a>],
-        interner: &session::Interner,
+        _interner: &session::Interner,
     ) -> Self {
         let mut map = HashMap::new();
         for (param, arg) in type_params.iter().zip(type_args.iter()) {

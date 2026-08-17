@@ -6,7 +6,7 @@ foreign func setRemove<T>(ptr: Pointer<CChar>, value: T);
 foreign func setContains<T>(ptr: Pointer<CChar>, value: T): Boolean;
 foreign func setClear<T>(ptr: Pointer<CChar>);
 foreign func setLen<T>(ptr: Pointer<CChar>): Int;
-foreign func setValues<T>(ptr: Pointer<CChar>): List<T>;
+foreign func setValuesRaw<T>(ptr: Pointer<CChar>): Pointer<CChar>;
 
 class Set<T> {
     var ptr: Pointer<CChar>;
@@ -36,6 +36,8 @@ class Set<T> {
     }
 
     func values(): List<T> {
-        return setValues<T>(self.ptr);
+        let list = List<T>();
+        list.ptr = setValuesRaw<T>(self.ptr);
+        return list;
     }
 }

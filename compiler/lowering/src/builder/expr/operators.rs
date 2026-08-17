@@ -190,6 +190,7 @@ impl<'a> MirBuilder<'a> {
                         obj_val,
                         self.session.interner.borrow().lookup(*name).to_string(),
                         right_val.clone(),
+                        super::super::is_ref_type_id(right.ty, self.session),
                     );
                     self.current().instructions.push(__inst)
                 };
@@ -280,12 +281,18 @@ impl<'a> MirBuilder<'a> {
             default: None,
         });
 
+        let (ok_ty, err_ty) = match self.session.types.borrow().get(inner.ty) {
+            session::types::Type::GenericInstance(sym, args) if args.len() == 2 => (args[0], args[1]),
+            _ => (session::TypeId(0), session::TypeId(0)),
+        };
+
         // Err branch
         self.current_block = else_block;
         let err_payload = self.new_temp();
+        let is_err_ref = super::super::is_ref_type_id(err_ty, self.session);
         self.current().instructions.push(Inst::Assign(
             err_payload.clone(),
-            RValue::ExtractPayload(inner_val.clone(), 1, 0),
+            RValue::ExtractPayload(inner_val.clone(), 1, 0, is_err_ref),
         ));
 
         let err_result = self.new_temp();
@@ -299,9 +306,10 @@ impl<'a> MirBuilder<'a> {
         // Ok branch
         self.current_block = then_block;
         let ok_payload = self.new_temp();
+        let is_ok_ref = super::super::is_ref_type_id(ok_ty, self.session);
         self.current().instructions.push(Inst::Assign(
             ok_payload.clone(),
-            RValue::ExtractPayload(inner_val, 0, 0),
+            RValue::ExtractPayload(inner_val, 0, 0, is_ok_ref),
         ));
 
         Value::Place(ok_payload)

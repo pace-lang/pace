@@ -37,14 +37,14 @@ pub enum RValue {
     ArrayLength(Value),
     IndexGet(Value, Value),
     ConstructVariant(String, usize, Vec<Value>),
-    ExtractPayload(Value, usize, usize),
+    ExtractPayload(Value, usize, usize, bool),
     GetVariantTag(Value),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inst {
     Assign(Place, RValue),
-    SetProperty(Value, String, Value),
+    SetProperty(Value, String, Value, bool),
     IndexSet(Value, Value, Value),
 
     Retain(Value),

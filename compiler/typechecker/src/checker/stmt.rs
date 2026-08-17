@@ -481,6 +481,7 @@ impl<'a> TypeChecker<'a> {
                     item_name: *item_name,
                     iterator: self.alloc(typed_iterator),
                     body: self.alloc(typed_body),
+                    item_ty: item_type,
                 }
             }
             StmtKind::Import { .. } | StmtKind::Export { .. } => ast::TypedStmtKind::Block(vec![]),

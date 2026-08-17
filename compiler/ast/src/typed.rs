@@ -127,6 +127,7 @@ pub enum TypedStmtKind<'a> {
         item_name: session::Symbol,
         iterator: &'a TypedExpr<'a>,
         body: &'a TypedStmt<'a>,
+        item_ty: session::TypeId,
     },
     Func {
         name: session::Symbol,

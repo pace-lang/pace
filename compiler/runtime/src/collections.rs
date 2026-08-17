@@ -138,7 +138,7 @@ pub extern "C" fn mapClear(ptr: *mut c_void) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mapKeys(ptr: *mut c_void) -> *mut c_void {
+pub extern "C" fn mapKeysRaw(ptr: *mut c_void) -> *mut c_void {
     if ptr.is_null() {
         return std::ptr::null_mut();
     }
@@ -151,7 +151,7 @@ pub extern "C" fn mapKeys(ptr: *mut c_void) -> *mut c_void {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mapValues(ptr: *mut c_void) -> *mut c_void {
+pub extern "C" fn mapValuesRaw(ptr: *mut c_void) -> *mut c_void {
     if ptr.is_null() {
         return std::ptr::null_mut();
     }
@@ -221,7 +221,7 @@ pub extern "C" fn setLen(ptr: *mut c_void) -> i64 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn setValues(ptr: *mut c_void) -> *mut c_void {
+pub extern "C" fn setValuesRaw(ptr: *mut c_void) -> *mut c_void {
     if ptr.is_null() {
         return std::ptr::null_mut();
     }

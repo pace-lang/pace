@@ -137,6 +137,7 @@ impl<'a> MirBuilder<'a> {
                 item_name,
                 iterator,
                 body,
+                item_ty,
             } => {
                 match &iterator.kind {
                     TypedExprKind::Range { start, end } => {
@@ -297,7 +298,7 @@ impl<'a> MirBuilder<'a> {
                             {
                                 let __inst = Inst::Assign(
                                     item_temp.clone(),
-                                    RValue::ExtractPayload(Value::Place(next_call.clone()), 0, 0),
+                                    RValue::ExtractPayload(Value::Place(next_call.clone()), 0, 0, crate::builder::is_ref_type_id(*item_ty, self.session)),
                                 );
                                 self.current().instructions.push(__inst);
                             }

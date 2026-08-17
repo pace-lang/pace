@@ -2,10 +2,15 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-[31m[P2001] Error:[0m Cannot find variable 'Set' in this scope.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/13_stdlib/set.pace:3:13 [38;5;246m][0m
-   [38;5;246m│[0m
- [38;5;246m3 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249ms[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[31mS[0m[31me[0m[31mt[0m[38;5;249m<[0m[38;5;249mI[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m>[0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m;[0m
- [38;5;240m  │[0m             [31m─[0m[31m┬[0m[31m─[0m  
- [38;5;240m  │[0m              [31m╰[0m[31m─[0m[31m─[0m[31m─[0m Cannot find variable 'Set' in this scope.
-[38;5;246m───╯[0m
+Len before:
+0
+Len after:
+2
+Contains 10?
+1
+Contains 30?
+0
+Len after remove:
+1
+Len after clear:
+0

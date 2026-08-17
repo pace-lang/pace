@@ -11,10 +11,12 @@ func main() {
     let len = list.len();
 
     let map = Map<String, Int>();
-    map.set("a", 1);
-    map.set("b", 2);
+    let keyA = "a";
+    let keyB = "b";
+    map.set(keyA, 1);
+    map.set(keyB, 2);
 
-    let b = map.get("a").unwrap();
+    let b = map.get(keyA).unwrap();
     let keys = map.keys();
     let keyLen = keys.len();
 }

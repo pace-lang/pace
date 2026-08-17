@@ -2,7 +2,6 @@ use std::path::Path;
 use std::process::exit;
 
 use diagnostics::{Severity, print_diagnostics};
-use lowering::ProgramBuilder;
 use resolver::Resolver;
 use typechecker::TypeChecker;
 

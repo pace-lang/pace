@@ -269,9 +269,25 @@ impl<'a, 'b> Translator<'a, 'b> {
                         }
                     }
                     RValue::UnaryOp(op, right) => {
-                        let cl_right = self.translate_value(right)?;
-                        match op {
-                            UnaryOp::Negate => self.builder.ins().ineg(cl_right),
+                        if let Value::Float(f) = right {
+                            if *op == UnaryOp::Negate {
+                                let f_val = self.builder.ins().f64const(-*f);
+                                self.builder.ins().bitcast(
+                                    types::I64,
+                                    cranelift_codegen::ir::MemFlagsData::new(),
+                                    f_val,
+                                )
+                            } else {
+                                let cl_right = self.translate_value(right)?;
+                                match op {
+                                    UnaryOp::Negate => self.builder.ins().ineg(cl_right),
+                                }
+                            }
+                        } else {
+                            let cl_right = self.translate_value(right)?;
+                            match op {
+                                UnaryOp::Negate => self.builder.ins().ineg(cl_right),
+                            }
                         }
                     }
                     RValue::Call(func_name, args) => {
@@ -575,7 +591,7 @@ impl<'a, 'b> Translator<'a, 'b> {
 
                         obj_ptr
                     }
-                    RValue::ExtractPayload(val, _variant_idx, field_idx) => {
+                    RValue::ExtractPayload(val, _variant_idx, field_idx, _is_ref) => {
                         let obj_ptr = self.translate_value(val)?;
                         let offset = 32 + (*field_idx as i32 * 8);
                         self.builder.ins().load(
@@ -612,7 +628,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                 self.builder.def_var(var, cl_val);
                 Ok(())
             }
-            Inst::SetProperty(obj_val, prop_name, val_val) => {
+            Inst::SetProperty(obj_val, prop_name, val_val, _is_ref) => {
                 let cl_obj = self.translate_value(obj_val)?;
                 let cl_val = self.translate_value(val_val)?;
 

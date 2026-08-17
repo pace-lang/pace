@@ -7,8 +7,8 @@ foreign func mapGetRaw<K, V>(ptr: Pointer<CChar>, key: K): V;
 foreign func mapRemove<K, V>(ptr: Pointer<CChar>, key: K);
 foreign func mapContains<K, V>(ptr: Pointer<CChar>, key: K): Boolean;
 foreign func mapClear<K, V>(ptr: Pointer<CChar>);
-foreign func mapKeys<K, V>(ptr: Pointer<CChar>): List<K>;
-foreign func mapValues<K, V>(ptr: Pointer<CChar>): List<V>;
+foreign func mapKeysRaw<K, V>(ptr: Pointer<CChar>): Pointer<CChar>;
+foreign func mapValuesRaw<K, V>(ptr: Pointer<CChar>): Pointer<CChar>;
 
 class Map<K, V> {
     var ptr: Pointer<CChar>;
@@ -42,10 +42,14 @@ class Map<K, V> {
     }
 
     func keys(): List<K> {
-        return mapKeys<K, V>(self.ptr);
+        let list = List<K>();
+        list.ptr = mapKeysRaw<K, V>(self.ptr);
+        return list;
     }
 
     func values(): List<V> {
-        return mapValues<K, V>(self.ptr);
+        let list = List<V>();
+        list.ptr = mapValuesRaw<K, V>(self.ptr);
+        return list;
     }
 }

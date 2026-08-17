@@ -52,6 +52,37 @@ fn is_ref_type(te: &ast::TypeExpr, session: &session::CompilerSession) -> bool {
     is_ref_type_opt(&Some(te.clone()), session)
 }
 
+pub(crate) fn is_ref_type_id(ty: session::TypeId, session: &session::CompilerSession) -> bool {
+    match session.types.borrow().get(ty) {
+        session::types::Type::Int
+        | session::types::Type::Float
+        | session::types::Type::Boolean
+        | session::types::Type::Void
+        | session::types::Type::Null
+        | session::types::Type::Error
+        | session::types::Type::CInt
+        | session::types::Type::CUInt
+        | session::types::Type::CChar
+        | session::types::Type::CSize
+        | session::types::Type::Pointer(_)
+        | session::types::Type::BuiltinFunc
+        | session::types::Type::Function(..)
+        | session::types::Type::OverloadedFunction(..)
+        | session::types::Type::EnumVariantConstructor(..)
+        | session::types::Type::Any
+        | session::types::Type::Range => false,
+        session::types::Type::String
+        | session::types::Type::Instance(_)
+        | session::types::Type::Array(_)
+        | session::types::Type::Class(..) => true,
+        session::types::Type::Optional(inner) => is_ref_type_id(*inner, session),
+        session::types::Type::GenericInstance(_, _)
+        | session::types::Type::Enum(..)
+        | session::types::Type::Struct(..) => true,
+        _ => true,
+    }
+}
+
 impl<'a> ProgramBuilder<'a> {
     pub fn new(session: &'a session::CompilerSession) -> Self {
         Self {

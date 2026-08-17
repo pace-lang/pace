@@ -19,8 +19,12 @@ impl<'a> MirBuilder<'a> {
         let mut default_block = None;
 
         let mut enum_name_opt = None;
+        let mut type_args = Vec::new();
         match self.session.types.borrow().get(value.ty) {
-            session::types::Type::GenericInstance(name, _) => enum_name_opt = Some(*name),
+            session::types::Type::GenericInstance(name, args) => {
+                enum_name_opt = Some(*name);
+                type_args = args.clone();
+            }
             session::types::Type::Instance(name) => enum_name_opt = Some(*name),
             _ => {}
         }
@@ -49,6 +53,28 @@ impl<'a> MirBuilder<'a> {
                     for (field_idx, bind) in binds.iter().enumerate() {
                         if self.session.interner.borrow().lookup(*bind) != "_" {
                             let field_temp = self.new_temp();
+                            let mut payload_is_ref = false;
+                            {
+                                let ty_arena = self.session.types.borrow();
+                                for ty in ty_arena.iter() {
+                                    if let session::types::Type::EnumVariantConstructor(e_name, v_name, func_type_params, param_types, _) = ty {
+                                        if *e_name == resolved_enum_name && *v_name == *variant_name {
+                                            if field_idx < param_types.len() {
+                                                let mut payload_ty = param_types[field_idx];
+                                                if let session::types::Type::Generic(sym) = ty_arena.get(payload_ty) {
+                                                    if let Some(idx) = func_type_params.iter().position(|p| p == sym) {
+                                                        if idx < type_args.len() {
+                                                            payload_ty = type_args[idx];
+                                                        }
+                                                    }
+                                                }
+                                                payload_is_ref = super::super::is_ref_type_id(payload_ty, self.session);
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
                             {
                                 let __inst = Inst::Assign(
                                     field_temp.clone(),
@@ -56,6 +82,7 @@ impl<'a> MirBuilder<'a> {
                                         match_val.clone(),
                                         variant_idx,
                                         field_idx,
+                                        payload_is_ref,
                                     ),
                                 );
                                 self.current().instructions.push(__inst)

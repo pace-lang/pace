@@ -77,6 +77,7 @@ impl<'a> MirBuilder<'a> {
                 obj_val,
                 self.session.interner.borrow().lookup(name).to_string(),
                 val_val.clone(),
+                crate::builder::is_ref_type_id(value.ty, self.session),
             );
             self.current().instructions.push(__inst)
         };

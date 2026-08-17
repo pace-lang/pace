@@ -78,16 +78,13 @@ impl ArcPass {
                             reference_places.insert(place.clone());
                             owned_places.insert(place.clone());
                         }
-                        Inst::Assign(_place, RValue::ExtractPayload(_val, _, _)) => {
-                            // ExtractPayload returns the payload directly.
-                            // However, we don't know if the payload is a reference statically here easily.
-                            // In Pace, we track if a place is a reference by AST types during Builder!
-                            // Actually, arc_pass only knows what it sees. Let's just push it.
+                        Inst::Assign(place, RValue::ExtractPayload(_val, _, _, is_ref)) => {
                             new_instructions.push(inst.clone());
-                            // Wait, if it IS a reference, we need to track it.
-                            // Let's add it to reference_places if it's assigned to a place that will later be retained.
-                            // But arc_pass is purely forward. We'll let Builder mark it if possible.
-                            // Actually, if we just let it fall through, the builder doesn't mark it.
+                            if *is_ref {
+                                new_instructions.push(Inst::Retain(Value::Place(place.clone())));
+                                reference_places.insert(place.clone());
+                                owned_places.insert(place.clone());
+                            }
                         }
                         Inst::Assign(place, RValue::Array(vals, is_ref)) => {
                             let mut is_ref_mut = *is_ref;
@@ -144,12 +141,8 @@ impl ArcPass {
                                 new_instructions.push(inst.clone());
                             }
                         }
-                        Inst::SetProperty(obj_val, prop_name, val_val) => {
-                            let is_ref = program
-                                .classes
-                                .values()
-                                .any(|c| c.reference_fields.contains(prop_name));
-                            if is_ref {
+                        Inst::SetProperty(obj_val, prop_name, val_val, is_ref) => {
+                            if *is_ref {
                                 let temp_place = Place::Temp(temp_counter);
                                 temp_counter += 1;
                                 new_instructions.push(Inst::Assign(

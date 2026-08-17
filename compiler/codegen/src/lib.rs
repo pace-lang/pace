@@ -81,8 +81,14 @@ impl CraneliftGenerator {
             }
             sig.returns.push(AbiParam::new(types::I64));
 
+            let symbol_name = if name == "main" {
+                name.clone()
+            } else {
+                format!("pace_func_{}", name)
+            };
+
             let func_id = module
-                .declare_function(name, Linkage::Export, &sig)
+                .declare_function(&symbol_name, Linkage::Export, &sig)
                 .map_err(|e| format!("Failed to declare {}: {}", name, e))?;
             func_ids.insert(name.clone(), func_id);
         }

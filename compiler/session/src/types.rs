@@ -69,4 +69,8 @@ impl TypeArena {
     pub fn get(&self, id: TypeId) -> &Type {
         &self.types[id.0 as usize]
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Type> {
+        self.types.iter()
+    }
 }
