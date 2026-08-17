@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-ast = { version = "0.2.0", path = "../ast" }
-mir = { version = "0.2.0", path = "../mir" }
+ast = { version = "0.3.0", path = "../ast" }
+mir = { version = "0.3.0", path = "../mir" }
 diagnostics = { path = "../diagnostics" }
 session = { path = "../session" }

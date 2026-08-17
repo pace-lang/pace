@@ -11,5 +11,5 @@ ast = { path = "../ast" }
 bumpalo = "3.14.0"
 diagnostics = { path = "../diagnostics" }
 generics = { path = "../generics" }
-module = { version = "0.2.0", path = "../module" }
+module = { version = "0.3.0", path = "../module" }
 session = { path = "../session" }

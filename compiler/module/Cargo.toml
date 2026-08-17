@@ -7,9 +7,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-ast = { version = "0.2.0", path = "../ast" }
-diagnostics = { version = "0.2.0", path = "../diagnostics" }
-lexer = { version = "0.2.0", path = "../lexer" }
-package = { version = "0.2.0", path = "../package" }
-parser = { version = "0.2.0", path = "../parser" }
-session = { version = "0.2.0", path = "../session" }
+ast = { version = "0.3.0", path = "../ast" }
+diagnostics = { version = "0.3.0", path = "../diagnostics" }
+lexer = { version = "0.3.0", path = "../lexer" }
+package = { version = "0.3.0", path = "../package" }
+parser = { version = "0.3.0", path = "../parser" }
+session = { version = "0.3.0", path = "../session" }
