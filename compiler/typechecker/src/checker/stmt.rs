@@ -61,15 +61,17 @@ impl<'a> TypeChecker<'a> {
                 }
 
                 // Note: Class implements validation is kept here since it emits diagnostics
-                if let Some(class_members) = self.classes.get(name).cloned() {
-                    if let Some(resolved_implements) = self.class_implements.get(name).cloned() {
+                if let Some(class_members) = self.classes.get(name).cloned()
+                    && let Some(resolved_implements) = self.class_implements.get(name).cloned() {
                         for imp_ty in resolved_implements {
                             let interface_name = match self.get_type(imp_ty) {
                                 Type::Interface(n, _) => n,
                                 Type::GenericInstance(n, _) => n,
                                 _ => continue,
                             };
-                            if let Some(interface_members) = self.interfaces.get(&interface_name).cloned() {
+                            if let Some(interface_members) =
+                                self.interfaces.get(&interface_name).cloned()
+                            {
                                 for (i_method_name, i_method_ty) in interface_members {
                                     if let Some(c_method_ty) = class_members.get(&i_method_name) {
                                         // Skip exact type check for generic interfaces for now to prevent false positives
@@ -95,7 +97,6 @@ impl<'a> TypeChecker<'a> {
                             }
                         }
                     }
-                }
 
                 let prev_class = self.current_class;
                 self.current_class = Some(*name);
@@ -408,14 +409,14 @@ impl<'a> TypeChecker<'a> {
                     Type::Instance(class_name) => {
                         let mut item_ty = None;
                         if let Some(implements) = self.class_implements.get(&class_name) {
-                            let iterable_sym = self.session.interner.borrow_mut().intern("Iterable");
+                            let iterable_sym =
+                                self.session.interner.borrow_mut().intern("Iterable");
                             for imp_ty in implements {
-                                if let Type::GenericInstance(name, args) = self.get_type(*imp_ty) {
-                                    if name == iterable_sym && args.len() == 1 {
+                                if let Type::GenericInstance(name, args) = self.get_type(*imp_ty)
+                                    && name == iterable_sym && args.len() == 1 {
                                         item_ty = Some(args[0]);
                                         break;
                                     }
-                                }
                             }
                         }
                         if let Some(ty) = item_ty {

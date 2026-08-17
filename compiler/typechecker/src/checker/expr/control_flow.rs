@@ -40,23 +40,21 @@ impl<'a> TypeChecker<'a> {
                         if let Some(enum_name) = enum_name_opt
                             && let Some(variants) = self.enums.get(&enum_name)
                         {
-                            let variant_name = path.last().copied().unwrap_or_else(|| {
-                                self.session.interner.borrow_mut().intern("")
-                            });
+                            let variant_name = path
+                                .last()
+                                .copied()
+                                .unwrap_or_else(|| self.session.interner.borrow_mut().intern(""));
                             if let Some(Type::EnumVariantConstructor(
                                 _,
                                 _,
                                 func_type_params,
                                 param_types,
                                 _,
-                            )) =
-                                variants.get(&variant_name).map(|v_ty| self.get_type(*v_ty))
+                            )) = variants.get(&variant_name).map(|v_ty| self.get_type(*v_ty))
                             {
                                 // Substitute generics
                                 let mut replacements = std::collections::HashMap::new();
-                                for (tp, actual) in
-                                    func_type_params.iter().zip(type_args.iter())
-                                {
+                                for (tp, actual) in func_type_params.iter().zip(type_args.iter()) {
                                     replacements.insert(*tp, *actual);
                                 }
                                 for pt in param_types {
@@ -68,9 +66,10 @@ impl<'a> TypeChecker<'a> {
 
                         for (i, bind) in binds.iter().enumerate() {
                             if self.session.interner.borrow().lookup(*bind) != "_" {
-                                let bind_ty = extracted_types.get(i).cloned().unwrap_or(
-                                    self.session.types.borrow_mut().intern(Type::Any),
-                                );
+                                let bind_ty = extracted_types
+                                    .get(i)
+                                    .cloned()
+                                    .unwrap_or(self.session.types.borrow_mut().intern(Type::Any));
                                 self.env.declare_var(*bind, bind_ty, false);
                             }
                         }
@@ -105,8 +104,7 @@ impl<'a> TypeChecker<'a> {
 
         // Exhaustiveness checking should happen here.
 
-        let ty = common_return_type
-            .unwrap_or(self.session.types.borrow_mut().intern(Type::Void));
+        let ty = common_return_type.unwrap_or(self.session.types.borrow_mut().intern(Type::Void));
         (
             TypedExprKind::Match {
                 value: self.alloc(typed_value),

@@ -1,7 +1,6 @@
 use super::*;
 
 impl<'a> MirBuilder<'a> {
-
     pub(crate) fn lower_stmt(&mut self, stmt: &TypedStmt) {
         match &stmt.kind {
             TypedStmtKind::Block(stmts) => {
@@ -229,15 +228,15 @@ impl<'a> MirBuilder<'a> {
                             let iter_obj = self.lower_expr(iterator);
                             let iter_call = self.new_temp();
                             let iter_sym = self.session.interner.borrow_mut().intern("iter");
-                            
+
                             {
                                 let __inst = Inst::Assign(
                                     iter_call.clone(),
                                     RValue::MethodCall(
                                         iter_obj,
                                         self.session.interner.borrow().lookup(iter_sym).to_string(),
-                                        vec![]
-                                    )
+                                        vec![],
+                                    ),
                                 );
                                 self.current().instructions.push(__inst);
                             }
@@ -251,15 +250,15 @@ impl<'a> MirBuilder<'a> {
 
                             let next_call = self.new_temp();
                             let next_sym = self.session.interner.borrow_mut().intern("next");
-                            
+
                             {
                                 let __inst = Inst::Assign(
                                     next_call.clone(),
                                     RValue::MethodCall(
                                         Value::Place(iter_call.clone()),
                                         self.session.interner.borrow().lookup(next_sym).to_string(),
-                                        vec![]
-                                    )
+                                        vec![],
+                                    ),
                                 );
                                 self.current().instructions.push(__inst);
                             }
@@ -268,7 +267,7 @@ impl<'a> MirBuilder<'a> {
                             {
                                 let __inst = Inst::Assign(
                                     tag_temp.clone(),
-                                    RValue::GetVariantTag(Value::Place(next_call.clone()))
+                                    RValue::GetVariantTag(Value::Place(next_call.clone())),
                                 );
                                 self.current().instructions.push(__inst);
                             }
@@ -280,8 +279,8 @@ impl<'a> MirBuilder<'a> {
                                     RValue::BinaryOp(
                                         ast::BinaryOp::Equal,
                                         Value::Place(tag_temp),
-                                        Value::Int(0)
-                                    )
+                                        Value::Int(0),
+                                    ),
                                 );
                                 self.current().instructions.push(__inst);
                             }
@@ -298,7 +297,7 @@ impl<'a> MirBuilder<'a> {
                             {
                                 let __inst = Inst::Assign(
                                     item_temp.clone(),
-                                    RValue::ExtractPayload(Value::Place(next_call.clone()), 0, 0)
+                                    RValue::ExtractPayload(Value::Place(next_call.clone()), 0, 0),
                                 );
                                 self.current().instructions.push(__inst);
                             }
@@ -325,94 +324,102 @@ impl<'a> MirBuilder<'a> {
                             // Array Iteration
                             let arr_val = self.lower_expr(iterator);
 
-                        let len_var = self.new_temp();
-                        {
-                            let __inst =
-                                Inst::Assign(len_var.clone(), RValue::ArrayLength(arr_val.clone()));
-                            self.current().instructions.push(__inst)
-                        };
+                            let len_var = self.new_temp();
+                            {
+                                let __inst = Inst::Assign(
+                                    len_var.clone(),
+                                    RValue::ArrayLength(arr_val.clone()),
+                                );
+                                self.current().instructions.push(__inst)
+                            };
 
-                        let idx_var = self.new_temp();
-                        {
-                            let __inst = Inst::Assign(idx_var.clone(), RValue::Use(Value::Int(0)));
-                            self.current().instructions.push(__inst)
-                        };
+                            let idx_var = self.new_temp();
+                            {
+                                let __inst =
+                                    Inst::Assign(idx_var.clone(), RValue::Use(Value::Int(0)));
+                                self.current().instructions.push(__inst)
+                            };
 
-                        let cond_block = self.new_block();
-                        let body_block = self.new_block();
-                        let merge_block = self.new_block();
+                            let cond_block = self.new_block();
+                            let body_block = self.new_block();
+                            let merge_block = self.new_block();
 
-                        self.current().terminator = Some(Terminator::Jump(cond_block));
+                            self.current().terminator = Some(Terminator::Jump(cond_block));
 
-                        // Condition Block
-                        self.current_block = cond_block;
-                        let cond_temp = self.new_temp();
-                        {
-                            let __inst = Inst::Assign(
-                                cond_temp.clone(),
-                                RValue::BinaryOp(
-                                    ast::BinaryOp::Less,
-                                    Value::Place(idx_var.clone()),
-                                    Value::Place(len_var.clone()),
-                                ),
-                            );
-                            self.current().instructions.push(__inst)
-                        };
-                        self.current().terminator = Some(Terminator::Branch {
-                            cond: Value::Place(cond_temp),
-                            then_block: body_block,
-                            else_block: merge_block,
-                        });
+                            // Condition Block
+                            self.current_block = cond_block;
+                            let cond_temp = self.new_temp();
+                            {
+                                let __inst = Inst::Assign(
+                                    cond_temp.clone(),
+                                    RValue::BinaryOp(
+                                        ast::BinaryOp::Less,
+                                        Value::Place(idx_var.clone()),
+                                        Value::Place(len_var.clone()),
+                                    ),
+                                );
+                                self.current().instructions.push(__inst)
+                            };
+                            self.current().terminator = Some(Terminator::Branch {
+                                cond: Value::Place(cond_temp),
+                                then_block: body_block,
+                                else_block: merge_block,
+                            });
 
-                        // Body Block
-                        self.current_block = body_block;
-                        let item_var = self.new_temp();
-                        {
-                            let __inst = Inst::Assign(
-                                item_var.clone(),
-                                RValue::IndexGet(arr_val.clone(), Value::Place(idx_var.clone())),
-                            );
-                            self.current().instructions.push(__inst)
-                        };
-                        {
-                            let __inst = Inst::Assign(
-                                Place::Var(
-                                    self.session
-                                        .interner
-                                        .borrow()
-                                        .lookup(*item_name)
-                                        .to_string(),
-                                ),
-                                RValue::Use(Value::Place(item_var.clone())),
-                            );
-                            self.current().instructions.push(__inst)
-                        };
-                        self.lower_stmt(body);
+                            // Body Block
+                            self.current_block = body_block;
+                            let item_var = self.new_temp();
+                            {
+                                let __inst = Inst::Assign(
+                                    item_var.clone(),
+                                    RValue::IndexGet(
+                                        arr_val.clone(),
+                                        Value::Place(idx_var.clone()),
+                                    ),
+                                );
+                                self.current().instructions.push(__inst)
+                            };
+                            {
+                                let __inst = Inst::Assign(
+                                    Place::Var(
+                                        self.session
+                                            .interner
+                                            .borrow()
+                                            .lookup(*item_name)
+                                            .to_string(),
+                                    ),
+                                    RValue::Use(Value::Place(item_var.clone())),
+                                );
+                                self.current().instructions.push(__inst)
+                            };
+                            self.lower_stmt(body);
 
-                        // Increment
-                        let inc_temp = self.new_temp();
-                        {
-                            let __inst = Inst::Assign(
-                                inc_temp.clone(),
-                                RValue::BinaryOp(
-                                    ast::BinaryOp::Add,
-                                    Value::Place(idx_var.clone()),
-                                    Value::Int(1),
-                                ),
-                            );
-                            self.current().instructions.push(__inst)
-                        };
-                        {
-                            let __inst =
-                                Inst::Assign(idx_var.clone(), RValue::Use(Value::Place(inc_temp)));
-                            self.current().instructions.push(__inst)
-                        };
+                            // Increment
+                            let inc_temp = self.new_temp();
+                            {
+                                let __inst = Inst::Assign(
+                                    inc_temp.clone(),
+                                    RValue::BinaryOp(
+                                        ast::BinaryOp::Add,
+                                        Value::Place(idx_var.clone()),
+                                        Value::Int(1),
+                                    ),
+                                );
+                                self.current().instructions.push(__inst)
+                            };
+                            {
+                                let __inst = Inst::Assign(
+                                    idx_var.clone(),
+                                    RValue::Use(Value::Place(inc_temp)),
+                                );
+                                self.current().instructions.push(__inst)
+                            };
 
-                        self.current().terminator = Some(Terminator::Jump(cond_block));
+                            self.current().terminator = Some(Terminator::Jump(cond_block));
 
-                        // Merge Block
-                        self.current_block = merge_block;
-                    }
+                            // Merge Block
+                            self.current_block = merge_block;
+                        }
                     }
                 }
             }
@@ -423,5 +430,4 @@ impl<'a> MirBuilder<'a> {
             }
         }
     }
-
 }

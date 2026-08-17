@@ -1,0 +1,3 @@
+func main() {
+    let opt: Option<Int> = Option.None();
+}

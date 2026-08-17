@@ -11,7 +11,9 @@ fn make_span() -> Span {
 #[test]
 fn test_valid_math() {
     let session = CompilerSession::new();
-    let mut checker = TypeChecker::new(&session);
+    let mut generic_registry = generics::GenericDefinitionRegistry::new();
+    let mut spec_registry = generics::SpecializationRegistry::new();
+    let mut checker = TypeChecker::new(&session, &mut generic_registry, &mut spec_registry);
     let sym_x = session.interner.borrow_mut().intern("x");
     // let x = 10 + 5;
     let stmt = Stmt::new(
@@ -42,7 +44,9 @@ fn test_valid_math() {
 #[test]
 fn test_type_mismatch() {
     let session = CompilerSession::new();
-    let mut checker = TypeChecker::new(&session);
+    let mut generic_registry = generics::GenericDefinitionRegistry::new();
+    let mut spec_registry = generics::SpecializationRegistry::new();
+    let mut checker = TypeChecker::new(&session, &mut generic_registry, &mut spec_registry);
     let sym_x = session.interner.borrow_mut().intern("x");
     let sym_hello = session.interner.borrow_mut().intern("hello");
     // let x = 10 + "hello";
@@ -75,7 +79,9 @@ fn test_type_mismatch() {
 #[test]
 fn test_if_condition_type() {
     let session = CompilerSession::new();
-    let mut checker = TypeChecker::new(&session);
+    let mut generic_registry = generics::GenericDefinitionRegistry::new();
+    let mut spec_registry = generics::SpecializationRegistry::new();
+    let mut checker = TypeChecker::new(&session, &mut generic_registry, &mut spec_registry);
     // if 10 { }
     let stmt = Stmt::new(
         StmtKind::If {
@@ -94,7 +100,9 @@ fn test_if_condition_type() {
 #[test]
 fn test_immutable_assignment() {
     let session = CompilerSession::new();
-    let mut checker = TypeChecker::new(&session);
+    let mut generic_registry = generics::GenericDefinitionRegistry::new();
+    let mut spec_registry = generics::SpecializationRegistry::new();
+    let mut checker = TypeChecker::new(&session, &mut generic_registry, &mut spec_registry);
     let sym_x = session.interner.borrow_mut().intern("x");
     // let x = 10;
     let stmt1 = Stmt::new(
@@ -131,7 +139,9 @@ fn test_immutable_assignment() {
 #[test]
 fn test_block_scope() {
     let session = CompilerSession::new();
-    let mut checker = TypeChecker::new(&session);
+    let mut generic_registry = generics::GenericDefinitionRegistry::new();
+    let mut spec_registry = generics::SpecializationRegistry::new();
+    let mut checker = TypeChecker::new(&session, &mut generic_registry, &mut spec_registry);
     let sym_x = session.interner.borrow_mut().intern("x");
     // let x = 10;
     let stmt1 = Stmt::new(

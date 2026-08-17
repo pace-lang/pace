@@ -1,12 +1,12 @@
 pub mod classes;
 pub mod enums;
-pub mod structs;
-pub mod interfaces;
-pub mod functions;
-pub mod variables;
-pub mod types;
-pub mod imports_exports;
 pub mod foreign;
+pub mod functions;
+pub mod imports_exports;
+pub mod interfaces;
+pub mod structs;
+pub mod types;
+pub mod variables;
 
 use super::Parser;
 use ast::*;

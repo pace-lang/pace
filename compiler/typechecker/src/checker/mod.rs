@@ -9,6 +9,7 @@ use session::TypeId;
 use session::types::Type;
 mod expr;
 mod hoist;
+mod monomorphize;
 mod stmt;
 mod types_util;
 
@@ -29,11 +30,17 @@ pub struct TypeChecker<'a> {
     pub enums: HashMap<Symbol, HashMap<Symbol, TypeId>>,
     pub class_implements: HashMap<Symbol, Vec<TypeId>>,
     current_class: Option<Symbol>,
-    pub generic_registry: generics::GenericDefinitionRegistry<'a>,
-    pub spec_registry: generics::SpecializationRegistry,
+    pub generic_registry: &'a mut generics::GenericDefinitionRegistry<'a>,
+    pub spec_registry: &'a mut generics::SpecializationRegistry,
     pub pending_instantiations: Vec<TypedStmt<'a>>,
     pub uninitialized_class_properties: HashMap<Symbol, Vec<Symbol>>,
     pub is_checking_method: bool,
+    pub instantiation_queue: Vec<(
+        generics::SpecializationKey,
+        Stmt<'a>,
+        &'a generics::TypeSubstitution<'a>,
+        Symbol,
+    )>,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -53,7 +60,11 @@ impl<'a> TypeChecker<'a> {
         self.arena().alloc(val)
     }
 
-    pub fn new(session: &'a session::CompilerSession) -> Self {
+    pub fn new(
+        session: &'a session::CompilerSession,
+        generic_registry: &'a mut generics::GenericDefinitionRegistry<'a>,
+        spec_registry: &'a mut generics::SpecializationRegistry,
+    ) -> Self {
         let print_sym = session.interner.borrow_mut().intern("print");
         let builtin_func_ty = session.types.borrow_mut().intern(Type::BuiltinFunc);
         Self {
@@ -67,11 +78,12 @@ impl<'a> TypeChecker<'a> {
             enums: HashMap::new(),
             class_implements: HashMap::new(),
             current_class: None,
-            generic_registry: generics::GenericDefinitionRegistry::new(),
-            spec_registry: generics::SpecializationRegistry::new(),
+            generic_registry,
+            spec_registry,
             pending_instantiations: Vec::new(),
             uninitialized_class_properties: HashMap::new(),
             is_checking_method: false,
+            instantiation_queue: Vec::new(),
         }
     }
 
@@ -86,7 +98,11 @@ impl<'a> TypeChecker<'a> {
             all_stmts.extend(typed_ast);
         }
 
-        // Also drain pending generic instantiations
+        // Run the dedicated monomorphization pass
+        let mut monomorphizer = monomorphize::MonomorphizePass::new(self);
+        monomorphizer.run();
+
+        // Drain pending generic instantiations
         let mut final_stmts = Vec::new();
         while !self.pending_instantiations.is_empty() {
             let pending: Vec<TypedStmt<'a>> = self.pending_instantiations.drain(..).collect();
@@ -100,6 +116,10 @@ impl<'a> TypeChecker<'a> {
     pub fn check_program(&mut self, statements: &[Stmt<'a>]) -> Vec<TypedStmt<'a>> {
         self.collect_declarations(statements);
         let typed_stmts = self.check(statements);
+
+        // Run the dedicated monomorphization pass
+        let mut monomorphizer = monomorphize::MonomorphizePass::new(self);
+        monomorphizer.run();
 
         let mut final_stmts = Vec::new();
         while !self.pending_instantiations.is_empty() {

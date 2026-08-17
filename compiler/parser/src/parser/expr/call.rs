@@ -137,7 +137,11 @@ impl<'a> Parser<'a> {
         Some(expr)
     }
 
-    pub(crate) fn finish_call(&mut self, callee: Expr<'a>, type_args: Vec<TypeExpr<'a>>) -> Option<Expr<'a>> {
+    pub(crate) fn finish_call(
+        &mut self,
+        callee: Expr<'a>,
+        type_args: Vec<TypeExpr<'a>>,
+    ) -> Option<Expr<'a>> {
         let mut arguments = Vec::new();
         if !self.check(&TokenKind::RightParen) {
             loop {
@@ -180,9 +184,10 @@ impl<'a> Parser<'a> {
                 TokenKind::Greater => {
                     depth -= 1;
                     if depth == 0 {
-                        // Check if the next token is '('
+                        // Check if the next token is '(' or '.'
                         return i + 1 < self.tokens.len()
-                            && self.tokens[i + 1].kind == TokenKind::LeftParen;
+                            && (self.tokens[i + 1].kind == TokenKind::LeftParen
+                                || self.tokens[i + 1].kind == TokenKind::Dot);
                     }
                 }
                 TokenKind::LeftParen

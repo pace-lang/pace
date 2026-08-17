@@ -294,7 +294,6 @@ impl<'a> Resolver<'a> {
                 is_private: _,
             } => {
                 if !type_params.is_empty() {
-                    return;
                 }
                 // Name declared in hoisting
             }

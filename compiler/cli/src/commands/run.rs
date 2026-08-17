@@ -32,7 +32,8 @@ pub fn execute_debug(file: &Path) {
     let mut vm = VirtualMachine::new(&ast_program);
     let result = vm.execute();
     if let Some(val) = result
-        && val != mir::Value::Void {
-            println!("Result: {:?}", val);
-        }
+        && val != mir::Value::Void
+    {
+        println!("Result: {:?}", val);
+    }
 }

@@ -1,6 +1,6 @@
 use super::super::*;
 use ast::TypedExpr;
-use mir::{Value, RValue, Inst};
+use mir::{Inst, RValue, Value};
 
 impl<'a> MirBuilder<'a> {
     pub(crate) fn lower_integer_expr(&mut self, i: i64) -> Value {
@@ -42,10 +42,7 @@ impl<'a> MirBuilder<'a> {
                     {
                         let __inst = Inst::Assign(
                             temp.clone(),
-                            RValue::Call(
-                                "pace_float_to_string".to_string(),
-                                vec![piece_val],
-                            ),
+                            RValue::Call("pace_float_to_string".to_string(), vec![piece_val]),
                         );
                         self.current().instructions.push(__inst)
                     };
@@ -56,10 +53,7 @@ impl<'a> MirBuilder<'a> {
                     {
                         let __inst = Inst::Assign(
                             temp.clone(),
-                            RValue::Call(
-                                "pace_bool_to_string".to_string(),
-                                vec![piece_val],
-                            ),
+                            RValue::Call("pace_bool_to_string".to_string(), vec![piece_val]),
                         );
                         self.current().instructions.push(__inst)
                     };
@@ -73,10 +67,7 @@ impl<'a> MirBuilder<'a> {
                 {
                     let __inst = Inst::Assign(
                         temp.clone(),
-                        RValue::Call(
-                            "pace_string_concat".to_string(),
-                            vec![current, piece_val],
-                        ),
+                        RValue::Call("pace_string_concat".to_string(), vec![current, piece_val]),
                     );
                     self.current().instructions.push(__inst)
                 };

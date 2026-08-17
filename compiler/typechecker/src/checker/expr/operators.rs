@@ -2,7 +2,11 @@ use super::super::*;
 use session::types::{Type, TypeId};
 
 impl<'a> TypeChecker<'a> {
-    pub(crate) fn check_force_unwrap_expr(&mut self, inner: &Expr<'a>, span: Span) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_force_unwrap_expr(
+        &mut self,
+        inner: &Expr<'a>,
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
         let typed_inner = self.check_expr(inner);
         let ty = match self.get_type(typed_inner.ty) {
             Type::Optional(inner_inner) => inner_inner,
@@ -30,15 +34,17 @@ impl<'a> TypeChecker<'a> {
         (TypedExprKind::ForceUnwrap(self.alloc(typed_inner)), ty)
     }
 
-    pub(crate) fn check_postfix_try_expr(&mut self, inner: &Expr<'a>, span: Span) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_postfix_try_expr(
+        &mut self,
+        inner: &Expr<'a>,
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
         let typed_inner = self.check_expr(inner);
         let result_sym = self.session.interner.borrow_mut().intern("Result");
         let inner_ty = self.get_type(typed_inner.ty);
 
         let (t_ty, e_ty) = match inner_ty {
-            Type::GenericInstance(sym, ref args)
-                if sym == result_sym && args.len() == 2 =>
-            {
+            Type::GenericInstance(sym, ref args) if sym == result_sym && args.len() == 2 => {
                 (args[0], args[1])
             }
             Type::Error => {
@@ -106,7 +112,12 @@ impl<'a> TypeChecker<'a> {
         (TypedExprKind::PostfixTry(self.alloc(typed_inner)), t_ty)
     }
 
-    pub(crate) fn check_null_coalesce_expr(&mut self, left: &Expr<'a>, right: &Expr<'a>, span: Span) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_null_coalesce_expr(
+        &mut self,
+        left: &Expr<'a>,
+        right: &Expr<'a>,
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
         let typed_left = self.check_expr(left);
         let typed_right = self.check_expr(right);
 
@@ -115,8 +126,7 @@ impl<'a> TypeChecker<'a> {
                 let expected = inner;
                 let is_valid = typed_right.ty == expected
                     || typed_right.ty == typed_left.ty
-                    || typed_right.ty
-                        == self.session.types.borrow_mut().intern(Type::Error)
+                    || typed_right.ty == self.session.types.borrow_mut().intern(Type::Error)
                     || typed_left.ty == self.session.types.borrow_mut().intern(Type::Error);
 
                 if !is_valid {
@@ -173,7 +183,12 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub(crate) fn check_null_coalesce_assign_expr(&mut self, left: &Expr<'a>, right: &Expr<'a>, span: Span) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_null_coalesce_assign_expr(
+        &mut self,
+        left: &Expr<'a>,
+        right: &Expr<'a>,
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
         let typed_left = self.check_expr(left);
         let typed_right = self.check_expr(right);
 
@@ -195,8 +210,7 @@ impl<'a> TypeChecker<'a> {
 
                 let is_valid = typed_right.ty == expected
                     || typed_right.ty == typed_left.ty
-                    || typed_right.ty
-                        == self.session.types.borrow_mut().intern(Type::Error)
+                    || typed_right.ty == self.session.types.borrow_mut().intern(Type::Error)
                     || typed_left.ty == self.session.types.borrow_mut().intern(Type::Error);
 
                 if !is_valid {
@@ -246,13 +260,22 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub(crate) fn check_grouping_expr(&mut self, inner: &Expr<'a>, _span: Span) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_grouping_expr(
+        &mut self,
+        inner: &Expr<'a>,
+        _span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
         let typed_inner = self.check_expr(inner);
         let ty = typed_inner.ty;
         (TypedExprKind::Grouping(self.alloc(typed_inner)), ty)
     }
 
-    pub(crate) fn check_unary_expr(&mut self, op: &UnaryOp, right: &Expr<'a>, span: Span) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_unary_expr(
+        &mut self,
+        op: &UnaryOp,
+        right: &Expr<'a>,
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
         let typed_right = self.check_expr(right);
         if typed_right.ty == self.session.types.borrow_mut().intern(Type::Error) {
             return (
@@ -286,7 +309,13 @@ impl<'a> TypeChecker<'a> {
         )
     }
 
-    pub(crate) fn check_binary_expr(&mut self, left: &Expr<'a>, op: &BinaryOp, right: &Expr<'a>, span: Span) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_binary_expr(
+        &mut self,
+        left: &Expr<'a>,
+        op: &BinaryOp,
+        right: &Expr<'a>,
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
         let typed_left = self.check_expr(left);
         let typed_right = self.check_expr(right);
 
@@ -294,11 +323,7 @@ impl<'a> TypeChecker<'a> {
             || typed_right.ty == self.session.types.borrow_mut().intern(Type::Error)
         {
             return (
-                TypedExprKind::Binary(
-                    self.alloc(typed_left),
-                    op.clone(),
-                    self.alloc(typed_right),
-                ),
+                TypedExprKind::Binary(self.alloc(typed_left), op.clone(), self.alloc(typed_right)),
                 self.session.types.borrow_mut().intern(Type::Error),
             );
         }
@@ -313,8 +338,7 @@ impl<'a> TypeChecker<'a> {
                     typed_left.ty
                 } else if *op == BinaryOp::Add
                     && typed_left.ty == self.session.types.borrow_mut().intern(Type::String)
-                    && typed_right.ty
-                        == self.session.types.borrow_mut().intern(Type::String)
+                    && typed_right.ty == self.session.types.borrow_mut().intern(Type::String)
                 {
                     self.session.types.borrow_mut().intern(Type::String)
                 } else {
@@ -348,10 +372,7 @@ impl<'a> TypeChecker<'a> {
                     self.session.types.borrow_mut().intern(Type::Boolean)
                 }
             }
-            BinaryOp::Less
-            | BinaryOp::LessEqual
-            | BinaryOp::Greater
-            | BinaryOp::GreaterEqual => {
+            BinaryOp::Less | BinaryOp::LessEqual | BinaryOp::Greater | BinaryOp::GreaterEqual => {
                 if !self.is_assignable(typed_left.ty, typed_right.ty)
                     && !self.is_assignable(typed_right.ty, typed_left.ty)
                 {
@@ -369,16 +390,17 @@ impl<'a> TypeChecker<'a> {
             }
         };
         (
-            TypedExprKind::Binary(
-                self.alloc(typed_left),
-                op.clone(),
-                self.alloc(typed_right),
-            ),
+            TypedExprKind::Binary(self.alloc(typed_left), op.clone(), self.alloc(typed_right)),
             ty,
         )
     }
 
-    pub(crate) fn check_range_expr(&mut self, start: &Expr<'a>, end: &Expr<'a>, span: Span) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_range_expr(
+        &mut self,
+        start: &Expr<'a>,
+        end: &Expr<'a>,
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
         let int_ty = self.session.types.borrow_mut().intern(Type::Int);
         let typed_start = self.check_expr_with_expected(start, Some(int_ty));
         let typed_end = self.check_expr_with_expected(end, Some(int_ty));

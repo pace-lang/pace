@@ -1,11 +1,7 @@
 ---
 source: compiler/cli/tests/golden_tests.rs
+assertion_line: 66
 expression: normalized_stderr
 ---
-Eagerly typechecking Box_Int
-Finished eagerly typechecking Box_Int
-Eagerly typechecking ArrayWrapper_Int
-Finished eagerly typechecking ArrayWrapper_Int
-
 100
 10

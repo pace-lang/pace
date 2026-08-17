@@ -3,7 +3,6 @@ use ast::*;
 use lexer::*;
 
 impl<'a> Parser<'a> {
-
     pub(crate) fn statement(&mut self) -> Option<Stmt<'a>> {
         if self.match_token(&[TokenKind::If]) {
             self.if_statement()
@@ -222,5 +221,4 @@ impl<'a> Parser<'a> {
             span,
         ))
     }
-
 }

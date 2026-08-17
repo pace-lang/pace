@@ -16,14 +16,20 @@ impl<'a> TypeChecker<'a> {
         )
     }
 
-    pub(crate) fn check_string_expr(&mut self, v: session::interner::Symbol) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_string_expr(
+        &mut self,
+        v: session::interner::Symbol,
+    ) -> (TypedExprKind<'a>, TypeId) {
         (
             TypedExprKind::String(v),
             self.session.types.borrow_mut().intern(Type::String),
         )
     }
 
-    pub(crate) fn check_interpolated_string_expr(&mut self, pieces: &[Expr<'a>]) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_interpolated_string_expr(
+        &mut self,
+        pieces: &[Expr<'a>],
+    ) -> (TypedExprKind<'a>, TypeId) {
         let mut typed_pieces = Vec::new();
         for piece in pieces {
             let typed_piece = self.check_expr(piece);

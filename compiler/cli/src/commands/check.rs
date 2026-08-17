@@ -1,10 +1,10 @@
+use diagnostics::{Severity, print_diagnostics};
 use std::path::PathBuf;
 use std::process::exit;
-use diagnostics::{Severity, print_diagnostics};
 
+use crate::utils::compiler::compile_to_mir;
 use crate::utils::errors::print_global_error;
 use crate::utils::workspace::find_package_root;
-use crate::utils::compiler::compile_to_mir;
 
 pub fn execute() -> Option<PathBuf> {
     let root = match find_package_root() {

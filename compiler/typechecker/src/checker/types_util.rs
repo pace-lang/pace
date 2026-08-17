@@ -57,7 +57,11 @@ impl<'a> TypeChecker<'a> {
                         .types
                         .borrow_mut()
                         .intern(Type::Pointer(parsed_args[0]))
-                } else if self.classes.contains_key(name) || self.enums.contains_key(name) || self.generic_registry.get_interface(*name).is_some() || self.generic_registry.get_class(*name).is_some() {
+                } else if self.classes.contains_key(name)
+                    || self.enums.contains_key(name)
+                    || self.generic_registry.get_interface(*name).is_some()
+                    || self.generic_registry.get_class(*name).is_some()
+                {
                     self.session
                         .types
                         .borrow_mut()
@@ -140,30 +144,28 @@ impl<'a> TypeChecker<'a> {
         if target == any_id {
             return true;
         }
-        if let Type::Instance(class_name) = source_ty {
-            if let Some(implements) = self.class_implements.get(&class_name) {
+        if let Type::Instance(class_name) = source_ty
+            && let Some(implements) = self.class_implements.get(&class_name) {
                 // If target is a non-generic interface
                 if let Type::Interface(interface_name, _) = target_ty {
                     for implemented_ty_id in implements {
-                        if let Type::Interface(impl_name, _) = self.get_type(*implemented_ty_id) {
-                            if impl_name == interface_name {
+                        if let Type::Interface(impl_name, _) = self.get_type(*implemented_ty_id)
+                            && impl_name == interface_name {
                                 return true;
                             }
-                        }
                     }
                 }
                 // If target is a generic interface
                 if let Type::GenericInstance(interface_name, target_args) = target_ty {
                     for implemented_ty_id in implements {
-                        if let Type::GenericInstance(impl_name, impl_args) = self.get_type(*implemented_ty_id) {
-                            if impl_name == interface_name && impl_args == target_args {
+                        if let Type::GenericInstance(impl_name, impl_args) =
+                            self.get_type(*implemented_ty_id)
+                            && impl_name == interface_name && impl_args == target_args {
                                 return true;
                             }
-                        }
                     }
                 }
             }
-        }
         false
     }
 
@@ -334,21 +336,13 @@ impl<'a> TypeChecker<'a> {
                 generics::Monomorphizer::new(self.arena(), substitution, mangled_name);
 
             let concrete_stmt = monomorphizer.monomorphize_stmt(&generic_stmt);
-            self.spec_registry.mark_complete(key);
+            self.spec_registry.mark_complete(key.clone());
 
             self.collect_declarations(std::slice::from_ref(&concrete_stmt));
 
-            // Eagerly typecheck the generated class so it's immediately available to the caller
-            eprintln!(
-                "Eagerly typechecking {}",
-                self.session.interner.borrow().lookup(mangled_name)
-            );
-            let typed_stmt = self.check_stmt(&concrete_stmt);
-            eprintln!(
-                "Finished eagerly typechecking {}",
-                self.session.interner.borrow().lookup(mangled_name)
-            );
-            self.pending_instantiations.push(typed_stmt);
+            // Queue the typechecking for the MonomorphizePass to avoid recursion
+            self.instantiation_queue
+                .push((key, concrete_stmt, substitution, mangled_name));
         }
 
         mangled_name
@@ -397,13 +391,13 @@ impl<'a> TypeChecker<'a> {
                 *name = mangled_name;
             }
 
-            self.spec_registry.mark_complete(key);
+            self.spec_registry.mark_complete(key.clone());
 
             self.collect_declarations(&[concrete_stmt.clone()]);
 
-            // Eagerly typecheck the generated function so it's immediately available to the caller
-            let typed_stmt = self.check_stmt(&concrete_stmt);
-            self.pending_instantiations.push(typed_stmt);
+            // Queue the typechecking for the MonomorphizePass to avoid recursion
+            self.instantiation_queue
+                .push((key, concrete_stmt, substitution, mangled_name));
         }
 
         mangled_name

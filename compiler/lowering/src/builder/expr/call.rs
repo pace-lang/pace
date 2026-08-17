@@ -1,6 +1,6 @@
 use super::super::*;
 use ast::{TypedExpr, TypedExprKind};
-use mir::{Value, RValue, Inst};
+use mir::{Inst, RValue, Value};
 use session::types::Type;
 
 impl<'a> MirBuilder<'a> {
@@ -23,11 +23,7 @@ impl<'a> MirBuilder<'a> {
             let __inst = Inst::Assign(
                 temp.clone(),
                 RValue::ConstructVariant(
-                    self.session
-                        .interner
-                        .borrow()
-                        .lookup(enum_name)
-                        .to_string(),
+                    self.session.interner.borrow().lookup(enum_name).to_string(),
                     variant_idx,
                     Vec::new(),
                 ),
@@ -37,11 +33,7 @@ impl<'a> MirBuilder<'a> {
         Value::Place(temp)
     }
 
-    pub(crate) fn lower_call_expr(
-        &mut self,
-        callee: &TypedExpr,
-        arguments: &[TypedExpr],
-    ) -> Value {
+    pub(crate) fn lower_call_expr(&mut self, callee: &TypedExpr, arguments: &[TypedExpr]) -> Value {
         let mut arg_values = Vec::new();
         for arg in arguments {
             arg_values.push(self.lower_expr(arg));
@@ -91,9 +83,9 @@ impl<'a> MirBuilder<'a> {
                 .enums_map
                 .get(self.session.interner.borrow().lookup(*enum_name))
                 .and_then(|variants| {
-                    variants.iter().position(|v| {
-                        v == self.session.interner.borrow().lookup(*variant_name)
-                    })
+                    variants
+                        .iter()
+                        .position(|v| v == self.session.interner.borrow().lookup(*variant_name))
                 })
                 .unwrap_or(0);
             {

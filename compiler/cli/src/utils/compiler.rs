@@ -95,7 +95,9 @@ pub fn compile_to_mir(file: &Path) -> mir::Program {
     }
 
     // 4. Type Checking
-    let mut typechecker = TypeChecker::new(&session);
+    let mut generic_registry = generics::GenericDefinitionRegistry::new();
+    let mut spec_registry = generics::SpecializationRegistry::new();
+    let mut typechecker = TypeChecker::new(&session, &mut generic_registry, &mut spec_registry);
     let typed_ast = typechecker.check_graph(&graph);
     if !typechecker.errors.is_empty() {
         print_diagnostics(&typechecker.errors, &source_map);

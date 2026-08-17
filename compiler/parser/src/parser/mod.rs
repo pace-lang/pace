@@ -106,5 +106,4 @@ impl<'a> Parser<'a> {
             self.advance();
         }
     }
-
 }

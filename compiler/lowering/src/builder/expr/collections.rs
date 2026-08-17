@@ -1,6 +1,6 @@
 use super::super::*;
 use ast::{TypedExpr, TypedExprKind};
-use mir::{Value, Place, RValue, Inst, Terminator};
+use mir::{Inst, Place, RValue, Terminator, Value};
 
 impl<'a> MirBuilder<'a> {
     pub(crate) fn lower_array_expr(&mut self, elements: &[TypedExpr]) -> Value {
@@ -16,13 +16,16 @@ impl<'a> MirBuilder<'a> {
         Value::Place(temp)
     }
 
-    pub(crate) fn lower_array_repeat_expr(&mut self, value: &TypedExpr, count: &TypedExpr) -> Value {
+    pub(crate) fn lower_array_repeat_expr(
+        &mut self,
+        value: &TypedExpr,
+        count: &TypedExpr,
+    ) -> Value {
         let val = self.lower_expr(value);
         let count_val = self.lower_expr(count);
         let temp = self.new_temp();
         {
-            let __inst =
-                Inst::Assign(temp.clone(), RValue::ArrayRepeat(val, count_val, false));
+            let __inst = Inst::Assign(temp.clone(), RValue::ArrayRepeat(val, count_val, false));
             self.current().instructions.push(__inst)
         };
         Value::Place(temp)
@@ -56,11 +59,7 @@ impl<'a> MirBuilder<'a> {
                 {
                     let __inst = Inst::Assign(
                         arr_var.clone(),
-                        RValue::ArrayRepeat(
-                            Value::Int(0),
-                            Value::Place(len_var.clone()),
-                            false,
-                        ),
+                        RValue::ArrayRepeat(Value::Int(0), Value::Place(len_var.clone()), false),
                     );
                     self.current().instructions.push(__inst)
                 };
@@ -105,13 +104,7 @@ impl<'a> MirBuilder<'a> {
                 self.current_block = body_block;
                 {
                     let __inst = Inst::Assign(
-                        Place::Var(
-                            self.session
-                                .interner
-                                .borrow()
-                                .lookup(item_name)
-                                .to_string(),
-                        ),
+                        Place::Var(self.session.interner.borrow().lookup(item_name).to_string()),
                         RValue::Use(Value::Place(current_var.clone())),
                     );
                     self.current().instructions.push(__inst)
@@ -182,11 +175,7 @@ impl<'a> MirBuilder<'a> {
                 {
                     let __inst = Inst::Assign(
                         arr_var.clone(),
-                        RValue::ArrayRepeat(
-                            Value::Int(0),
-                            Value::Place(len_var.clone()),
-                            false,
-                        ),
+                        RValue::ArrayRepeat(Value::Int(0), Value::Place(len_var.clone()), false),
                     );
                     self.current().instructions.push(__inst)
                 };
@@ -233,13 +222,7 @@ impl<'a> MirBuilder<'a> {
                 };
                 {
                     let __inst = Inst::Assign(
-                        Place::Var(
-                            self.session
-                                .interner
-                                .borrow()
-                                .lookup(item_name)
-                                .to_string(),
-                        ),
+                        Place::Var(self.session.interner.borrow().lookup(item_name).to_string()),
                         RValue::Use(Value::Place(item_var)),
                     );
                     self.current().instructions.push(__inst)

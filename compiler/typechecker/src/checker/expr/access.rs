@@ -1,6 +1,6 @@
 use super::super::*;
-use session::types::{Type, TypeId};
 use session::interner::Symbol;
+use session::types::{Type, TypeId};
 
 impl<'a> TypeChecker<'a> {
     pub(crate) fn check_variable_expr(
@@ -332,7 +332,13 @@ impl<'a> TypeChecker<'a> {
         let (class_name, instance_args) = match self.get_type(typed_obj.ty) {
             Type::Instance(n) => (n, Vec::new()),
             Type::GenericInstance(n, args) => (n, args.clone()),
-            Type::Interface(n, type_args) => (n, type_args.iter().map(|s| self.session.types.borrow_mut().intern(Type::Generic(*s))).collect()),
+            Type::Interface(n, type_args) => (
+                n,
+                type_args
+                    .iter()
+                    .map(|s| self.session.types.borrow_mut().intern(Type::Generic(*s)))
+                    .collect(),
+            ),
             Type::Enum(n, _args) => (n, Vec::new()),
             _ => {
                 if typed_obj.ty != self.session.types.borrow_mut().intern(Type::Error) {
@@ -402,8 +408,7 @@ impl<'a> TypeChecker<'a> {
             if let Some(variant_ty) = enum_variants.get(&name) {
                 let mut resolved_ty = *variant_ty;
                 // Instantiate generic arguments if present
-                if let Type::Enum(_, params) = self.session.types.borrow().get(typed_obj.ty)
-                {
+                if let Type::Enum(_, params) = self.session.types.borrow().get(typed_obj.ty) {
                     let mut inferred_map = std::collections::HashMap::new();
                     for (i, p) in params.iter().enumerate() {
                         if i < instance_args.len() {
@@ -411,14 +416,6 @@ impl<'a> TypeChecker<'a> {
                         }
                     }
                     resolved_ty = self.substitute_generics(*variant_ty, &inferred_map);
-                }
-
-                // If it's a unit variant (no params), it evaluates to the enum type directly
-                if let Type::EnumVariantConstructor(_, _, _, params, ret_ty) =
-                    self.session.types.borrow().get(resolved_ty)
-                    && params.is_empty()
-                {
-                    resolved_ty = *ret_ty;
                 }
 
                 return (
@@ -473,7 +470,13 @@ impl<'a> TypeChecker<'a> {
         let (class_name, instance_args) = match self.get_type(typed_obj.ty) {
             Type::Instance(n) => (n, Vec::new()),
             Type::GenericInstance(n, args) => (n, args.clone()),
-            Type::Interface(n, type_args) => (n, type_args.iter().map(|s| self.session.types.borrow_mut().intern(Type::Generic(*s))).collect()),
+            Type::Interface(n, type_args) => (
+                n,
+                type_args
+                    .iter()
+                    .map(|s| self.session.types.borrow_mut().intern(Type::Generic(*s)))
+                    .collect(),
+            ),
             _ => {
                 if typed_obj.ty != self.session.types.borrow_mut().intern(Type::Error) {
                     self.error(

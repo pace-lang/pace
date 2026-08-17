@@ -92,8 +92,7 @@ impl<'a> TypeChecker<'a> {
                 });
 
                 if constructor_ty.is_none()
-                    && let Some(generic_stmt) =
-                        self.generic_registry.get_class(class_name).cloned()
+                    && let Some(generic_stmt) = self.generic_registry.get_class(class_name).cloned()
                     && let StmtKind::Class {
                         type_params,
                         methods,
@@ -121,18 +120,61 @@ impl<'a> TypeChecker<'a> {
                                 param_types.push(self.parse_type(ty, span));
                             }
 
-                            let void_ty =
-                                self.session.types.borrow_mut().intern(Type::Void);
+                            let void_ty = self.session.types.borrow_mut().intern(Type::Void);
                             constructor_ty =
-                                Some(self.session.types.borrow_mut().intern(
-                                    Type::Function(Vec::new(), param_types, void_ty),
-                                ));
+                                Some(self.session.types.borrow_mut().intern(Type::Function(
+                                    Vec::new(),
+                                    param_types,
+                                    void_ty,
+                                )));
                         }
                     }
                     self.env.pop_scope();
                 }
 
                 let mut resolved_type_args = Vec::new();
+
+                if !class_type_params.is_empty() {
+                    if type_args.is_empty() {
+                        if let Some(Type::Function(_, param_types, _)) =
+                            constructor_ty.map(|id| self.get_type(id))
+                        {
+                            // Infer from arguments
+                            let mut inferred_map = std::collections::HashMap::new();
+                            for (expected, actual) in param_types.iter().zip(arg_types.iter()) {
+                                self.infer_generics(*expected, *actual, &mut inferred_map);
+                            }
+
+                            for tp in &class_type_params {
+                                if let Some(ty) = inferred_map.get(tp) {
+                                    resolved_type_args.push(*ty);
+                                } else {
+                                    self.error(span, DiagnosticCode::TypeMismatch, &format!("Cannot infer generic type '{}'. Please provide explicit type arguments.", self.session.interner.borrow().lookup(*tp)));
+                                    resolved_type_args
+                                        .push(self.session.types.borrow_mut().intern(Type::Error));
+                                }
+                            }
+                        } else {
+                            self.error(span, DiagnosticCode::TypeMismatch, "Cannot infer generic type. Please provide explicit type arguments.");
+                        }
+                    } else {
+                        // Explicit arguments provided
+                        if type_args.len() != class_type_params.len() {
+                            self.error(
+                                span,
+                                DiagnosticCode::TypeMismatch,
+                                &format!(
+                                    "Expected {} generic arguments, found {}.",
+                                    class_type_params.len(),
+                                    type_args.len()
+                                ),
+                            )
+                        }
+                        for arg_expr in type_args {
+                            resolved_type_args.push(self.parse_type(arg_expr, span));
+                        }
+                    }
+                }
 
                 if let Some(Type::Function(_, param_types, _)) =
                     constructor_ty.map(|id| self.get_type(id))
@@ -148,54 +190,6 @@ impl<'a> TypeChecker<'a> {
                             ),
                         )
                     } else {
-                        // Basic Local Inference & Checking
-                        if !class_type_params.is_empty() {
-                            if type_args.is_empty() {
-                                // Infer from arguments
-                                let mut inferred_map = std::collections::HashMap::new();
-                                for (expected, actual) in
-                                    param_types.iter().zip(arg_types.iter())
-                                {
-                                    self.infer_generics(
-                                        *expected,
-                                        *actual,
-                                        &mut inferred_map,
-                                    );
-                                }
-
-                                for tp in &class_type_params {
-                                    if let Some(ty) = inferred_map.get(tp) {
-                                        resolved_type_args.push(*ty);
-                                    } else {
-                                        self.error(span, DiagnosticCode::TypeMismatch, &format!("Cannot infer generic type '{}'. Please provide explicit type arguments.", self.session.interner.borrow().lookup(*tp)));
-                                        resolved_type_args.push(
-                                            self.session
-                                                .types
-                                                .borrow_mut()
-                                                .intern(Type::Error),
-                                        );
-                                    }
-                                }
-                            } else {
-                                // Explicit arguments provided
-                                if type_args.len() != class_type_params.len() {
-                                    self.error(
-                                        span,
-                                        DiagnosticCode::TypeMismatch,
-                                        &format!(
-                                            "Expected {} generic arguments, found {}.",
-                                            class_type_params.len(),
-                                            type_args.len()
-                                        ),
-                                    )
-                                }
-                                for arg_expr in type_args {
-                                    resolved_type_args
-                                        .push(self.parse_type(arg_expr, span));
-                                }
-                            }
-                        }
-
                         // Instantiate the generic class!
                         if !class_type_params.is_empty() {
                             let mangled_name = self.instantiate_generic_class(
@@ -274,12 +268,19 @@ impl<'a> TypeChecker<'a> {
                             };
 
                             if !self.is_assignable(*actual, expected_sub)
-                                && expected_sub
-                                    != self.session.types.borrow_mut().intern(Type::Any)
-                                && *actual
-                                    != self.session.types.borrow_mut().intern(Type::Error)
+                                && expected_sub != self.session.types.borrow_mut().intern(Type::Any)
+                                && *actual != self.session.types.borrow_mut().intern(Type::Error)
                             {
-                                self.error(span, DiagnosticCode::TypeMismatch, &format!("Argument {} to constructor expects '{}', found '{}'.", i + 1, self.session.format_type(expected_sub), self.session.format_type(*actual)))
+                                self.error(
+                                    span,
+                                    DiagnosticCode::TypeMismatch,
+                                    &format!(
+                                        "Argument {} to constructor expects '{}', found '{}'.",
+                                        i + 1,
+                                        self.session.format_type(expected_sub),
+                                        self.session.format_type(*actual)
+                                    ),
+                                )
                             }
                         }
                     }
@@ -398,10 +399,8 @@ impl<'a> TypeChecker<'a> {
                         };
 
                         if !self.is_assignable(*actual, expected_sub)
-                            && expected_sub
-                                != self.session.types.borrow_mut().intern(Type::Any)
-                            && *actual
-                                != self.session.types.borrow_mut().intern(Type::Error)
+                            && expected_sub != self.session.types.borrow_mut().intern(Type::Any)
+                            && *actual != self.session.types.borrow_mut().intern(Type::Error)
                         {
                             self.error(
                                 span,
@@ -422,9 +421,12 @@ impl<'a> TypeChecker<'a> {
                 } else {
                     let mut resolved_type_args = Vec::new();
                     for tp in &func_type_params {
-                        resolved_type_args.push(inferred_map.get(tp).copied().unwrap_or(
-                            self.session.types.borrow_mut().intern(Type::Error),
-                        ));
+                        resolved_type_args.push(
+                            inferred_map
+                                .get(tp)
+                                .copied()
+                                .unwrap_or(self.session.types.borrow_mut().intern(Type::Error)),
+                        );
                     }
 
                     if let TypedExprKind::Variable(func_name) = &typed_callee.kind {
@@ -434,8 +436,7 @@ impl<'a> TypeChecker<'a> {
                             .borrow()
                             .lookup(*func_name)
                             .to_string();
-                        let func_sym =
-                            self.session.interner.borrow_mut().intern(&func_name_str);
+                        let func_sym = self.session.interner.borrow_mut().intern(&func_name_str);
                         let mangled = self.instantiate_generic_function(
                             func_sym,
                             &func_type_params,
@@ -535,10 +536,8 @@ impl<'a> TypeChecker<'a> {
                         };
 
                         if !self.is_assignable(*actual, expected_sub)
-                            && expected_sub
-                                != self.session.types.borrow_mut().intern(Type::Any)
-                            && *actual
-                                != self.session.types.borrow_mut().intern(Type::Error)
+                            && expected_sub != self.session.types.borrow_mut().intern(Type::Any)
+                            && *actual != self.session.types.borrow_mut().intern(Type::Error)
                         {
                             self.error(
                                 span,

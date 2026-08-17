@@ -1,13 +1,9 @@
 use super::super::*;
 use ast::{TypedExpr, TypedMatchArm};
-use mir::{Value, Place, RValue, Inst, Terminator};
+use mir::{Inst, Place, RValue, Terminator, Value};
 
 impl<'a> MirBuilder<'a> {
-    pub(crate) fn lower_match_expr(
-        &mut self,
-        value: &TypedExpr,
-        arms: &[TypedMatchArm],
-    ) -> Value {
+    pub(crate) fn lower_match_expr(&mut self, value: &TypedExpr, arms: &[TypedMatchArm]) -> Value {
         let match_val = self.lower_expr(value);
         let tag_temp = self.new_temp();
         {
@@ -41,9 +37,9 @@ impl<'a> MirBuilder<'a> {
                     .enums_map
                     .get(self.session.interner.borrow().lookup(*enum_name))
                     .and_then(|variants| {
-                        variants.iter().position(|v| {
-                            v == self.session.interner.borrow().lookup(*variant_name)
-                        })
+                        variants
+                            .iter()
+                            .position(|v| v == self.session.interner.borrow().lookup(*variant_name))
                     })
                     .unwrap_or(0); // Fallback if enum not found
                 cases.push((variant_idx, arm_block));
@@ -67,11 +63,7 @@ impl<'a> MirBuilder<'a> {
                             {
                                 let __inst = Inst::Assign(
                                     Place::Var(
-                                        self.session
-                                            .interner
-                                            .borrow()
-                                            .lookup(*bind)
-                                            .to_string(),
+                                        self.session.interner.borrow().lookup(*bind).to_string(),
                                     ),
                                     RValue::Use(Value::Place(field_temp)),
                                 );

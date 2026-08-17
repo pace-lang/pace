@@ -4,9 +4,8 @@ use mir::{
     Terminator, Value,
 };
 
-
-pub mod stmt;
 pub mod expr;
+pub mod stmt;
 #[cfg(test)]
 mod tests;
 
@@ -260,11 +259,16 @@ impl<'a> ProgramBuilder<'a> {
                 let ret_ty = return_type
                     .as_ref()
                     .map(|t| type_expr_to_abi(t, self.session));
+                let mut symbol = self.session.interner.borrow().lookup(*name).to_string();
+                if symbol.starts_with("map") || symbol.starts_with("array") {
+                    symbol = symbol.split('_').next().unwrap().to_string();
+                }
+
                 self.program.foreign_functions.insert(
                     self.session.interner.borrow().lookup(*name).to_string(),
                     ForeignFunction {
                         name: self.session.interner.borrow().lookup(*name).to_string(),
-                        symbol: self.session.interner.borrow().lookup(*name).to_string(),
+                        symbol,
                         param_types,
                         return_type: ret_ty,
                     },
@@ -355,5 +359,4 @@ impl<'a> MirBuilder<'a> {
         }
         self.function
     }
-
 }

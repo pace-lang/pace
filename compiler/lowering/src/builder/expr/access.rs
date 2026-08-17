@@ -1,6 +1,6 @@
 use super::super::*;
 use ast::TypedExpr;
-use mir::{Value, Place, RValue, Inst, Terminator};
+use mir::{Inst, Place, RValue, Terminator, Value};
 
 impl<'a> MirBuilder<'a> {
     pub(crate) fn lower_variable_expr(&mut self, name: session::Symbol) -> Value {
@@ -9,11 +9,7 @@ impl<'a> MirBuilder<'a> {
         ))
     }
 
-    pub(crate) fn lower_assign_expr(
-        &mut self,
-        name: session::Symbol,
-        value: &TypedExpr,
-    ) -> Value {
+    pub(crate) fn lower_assign_expr(&mut self, name: session::Symbol, value: &TypedExpr) -> Value {
         let val = self.lower_expr(value);
         {
             let __inst = Inst::Assign(
@@ -25,11 +21,7 @@ impl<'a> MirBuilder<'a> {
         val
     }
 
-    pub(crate) fn lower_index_get_expr(
-        &mut self,
-        object: &TypedExpr,
-        index: &TypedExpr,
-    ) -> Value {
+    pub(crate) fn lower_index_get_expr(&mut self, object: &TypedExpr, index: &TypedExpr) -> Value {
         let obj_val = self.lower_expr(object);
         let idx_val = self.lower_expr(index);
         let temp = self.new_temp();
@@ -56,11 +48,7 @@ impl<'a> MirBuilder<'a> {
         val_val
     }
 
-    pub(crate) fn lower_get_expr(
-        &mut self,
-        object: &TypedExpr,
-        name: session::Symbol,
-    ) -> Value {
+    pub(crate) fn lower_get_expr(&mut self, object: &TypedExpr, name: session::Symbol) -> Value {
         let obj_val = self.lower_expr(object);
         let temp = self.new_temp();
         {

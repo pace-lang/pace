@@ -224,7 +224,8 @@ impl<'a> TypeChecker<'a> {
                     is_private: _,
                 } => {
                     if !type_params.is_empty() {
-                        self.generic_registry.register_interface(*name, stmt.clone());
+                        self.generic_registry
+                            .register_interface(*name, stmt.clone());
                         continue;
                     }
 

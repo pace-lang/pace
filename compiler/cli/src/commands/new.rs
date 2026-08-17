@@ -59,7 +59,10 @@ pub fn execute(path: &Path, name: &str) {
         }
     } else {
         if let Err(e) = fs::create_dir_all(path) {
-            crate::utils::errors::print_global_error(&format!("Failed to create directory {:?}: {}", path, e));
+            crate::utils::errors::print_global_error(&format!(
+                "Failed to create directory {:?}: {}",
+                path, e
+            ));
             exit(1);
         }
     }
@@ -122,12 +125,9 @@ pace build
         exit(1);
     }
     use colored::Colorize;
-    
+
     println!(" ");
-    println!(
-        "Created {} project successfully\n",
-        "pace".green().bold()
-    );
+    println!("Created {} project successfully\n", "pace".green().bold());
     println!("{}", "# To get started, run:\n".bright_black());
     println!("  cd {}", name.green().bold());
     println!("  pace run");

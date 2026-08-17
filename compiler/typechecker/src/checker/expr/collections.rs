@@ -1,9 +1,13 @@
 use super::super::*;
-use session::types::{Type, TypeId};
 use session::interner::Symbol;
+use session::types::{Type, TypeId};
 
 impl<'a> TypeChecker<'a> {
-    pub(crate) fn check_array_expr(&mut self, elements: &[Expr<'a>], span: Span) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_array_expr(
+        &mut self,
+        elements: &[Expr<'a>],
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
         if elements.is_empty() {
             self.error(
                 span,
@@ -26,7 +30,15 @@ impl<'a> TypeChecker<'a> {
                     && next_typed.ty != self.session.types.borrow_mut().intern(Type::Error)
                     && elem_type != self.session.types.borrow_mut().intern(Type::Error)
                 {
-                    self.error(span, DiagnosticCode::TypeMismatch, &format!("Array elements have inconsistent types: expected '{}', found '{}'.", self.session.format_type(elem_type), self.session.format_type(next_typed.ty)));
+                    self.error(
+                        span,
+                        DiagnosticCode::TypeMismatch,
+                        &format!(
+                            "Array elements have inconsistent types: expected '{}', found '{}'.",
+                            self.session.format_type(elem_type),
+                            self.session.format_type(next_typed.ty)
+                        ),
+                    );
                 }
                 typed_elements.push(next_typed);
             }
@@ -40,7 +52,12 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub(crate) fn check_array_repeat_expr(&mut self, value: &Expr<'a>, count: &Expr<'a>, span: Span) -> (TypedExprKind<'a>, TypeId) {
+    pub(crate) fn check_array_repeat_expr(
+        &mut self,
+        value: &Expr<'a>,
+        count: &Expr<'a>,
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
         let typed_value = self.check_expr(value);
         let typed_count = self.check_expr(count);
         if typed_count.ty != self.session.types.borrow_mut().intern(Type::Int)

@@ -1,6 +1,6 @@
 use super::super::*;
-use ast::{TypedExpr, TypedExprKind, UnaryOp, BinaryOp};
-use mir::{Value, Place, RValue, Inst, Terminator};
+use ast::{BinaryOp, TypedExpr, TypedExprKind, UnaryOp};
+use mir::{Inst, Place, RValue, Terminator, Value};
 
 impl<'a> MirBuilder<'a> {
     pub(crate) fn lower_unary_expr(&mut self, op: &UnaryOp, right: &TypedExpr) -> Value {
@@ -125,11 +125,7 @@ impl<'a> MirBuilder<'a> {
                 {
                     let __inst = Inst::Assign(
                         is_null_temp.clone(),
-                        RValue::BinaryOp(
-                            ast::BinaryOp::Equal,
-                            current_val.clone(),
-                            Value::Null,
-                        ),
+                        RValue::BinaryOp(ast::BinaryOp::Equal, current_val.clone(), Value::Null),
                     );
                     self.current().instructions.push(__inst)
                 };
@@ -176,11 +172,7 @@ impl<'a> MirBuilder<'a> {
                 {
                     let __inst = Inst::Assign(
                         is_null_temp.clone(),
-                        RValue::BinaryOp(
-                            ast::BinaryOp::Equal,
-                            current_val.clone(),
-                            Value::Null,
-                        ),
+                        RValue::BinaryOp(ast::BinaryOp::Equal, current_val.clone(), Value::Null),
                     );
                     self.current().instructions.push(__inst)
                 };
@@ -231,11 +223,7 @@ impl<'a> MirBuilder<'a> {
                 {
                     let __inst = Inst::Assign(
                         is_null_temp.clone(),
-                        RValue::BinaryOp(
-                            ast::BinaryOp::Equal,
-                            current_val.clone(),
-                            Value::Null,
-                        ),
+                        RValue::BinaryOp(ast::BinaryOp::Equal, current_val.clone(), Value::Null),
                     );
                     self.current().instructions.push(__inst)
                 };
@@ -279,8 +267,7 @@ impl<'a> MirBuilder<'a> {
         let inner_val = self.lower_expr(inner);
         let tag_temp = self.new_temp();
         {
-            let __inst =
-                Inst::Assign(tag_temp.clone(), RValue::GetVariantTag(inner_val.clone()));
+            let __inst = Inst::Assign(tag_temp.clone(), RValue::GetVariantTag(inner_val.clone()));
             self.current().instructions.push(__inst)
         };
 
@@ -304,15 +291,10 @@ impl<'a> MirBuilder<'a> {
         let err_result = self.new_temp();
         self.current().instructions.push(Inst::Assign(
             err_result.clone(),
-            RValue::ConstructVariant(
-                "Result".to_string(),
-                1,
-                vec![Value::Place(err_payload)],
-            ),
+            RValue::ConstructVariant("Result".to_string(), 1, vec![Value::Place(err_payload)]),
         ));
 
-        self.current().terminator =
-            Some(Terminator::Return(Some(Value::Place(err_result))));
+        self.current().terminator = Some(Terminator::Return(Some(Value::Place(err_result))));
 
         // Ok branch
         self.current_block = then_block;

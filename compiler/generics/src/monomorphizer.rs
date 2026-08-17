@@ -32,11 +32,15 @@ impl<'a> Monomorphizer<'a> {
             } => {
                 let new_methods = methods.iter().map(|m| self.monomorphize_stmt(m)).collect();
                 let new_fields = fields.iter().map(|f| self.monomorphize_stmt(f)).collect();
+                let new_implements = implements
+                    .iter()
+                    .map(|ty| self.subst.substitute(ty))
+                    .collect();
 
                 StmtKind::Class {
                     name: self.mangled_name,
                     type_params: Vec::new(), // Erase generic parameters
-                    implements: implements.clone(), // Ignore interfaces for now
+                    implements: new_implements,
                     methods: new_methods,
                     fields: new_fields,
                     is_private: *is_private,
@@ -55,7 +59,7 @@ impl<'a> Monomorphizer<'a> {
                 // Wait, if it's a method, we shouldn't rename it to the class's mangled name.
                 // For simplicity, we assume we only rename the top-level entity if it's a Func.
 
-                let new_params = params
+                let new_params: Vec<_> = params
                     .iter()
                     .map(|(n, t)| (*n, self.subst.substitute(t)))
                     .collect();

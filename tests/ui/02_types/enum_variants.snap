@@ -3,4 +3,4 @@ source: compiler/cli/tests/golden_tests.rs
 assertion_line: 66
 expression: normalized_stderr
 ---
-[31m[E001] Error:[0m Codegen failed: Function mapContains_String_Int not found
+
