@@ -43,7 +43,17 @@ fn run_ui_test(file_path: &Path) {
             {
                 return format!("thread 'main' {}", &line[idx..]);
             }
-            line.replace(&workspace_root, "$WORKSPACE").to_string()
+            
+            let mut normalized_line = line.replace(&workspace_root, "$WORKSPACE").to_string();
+            
+            // Normalize linker paths (e.g., /usr/bin/x86_64-linux-gnu-ld.bfd -> ld)
+            if normalized_line.starts_with("/usr/bin/") && normalized_line.contains("$WORKSPACE") {
+                if let Some(idx) = normalized_line.find("$WORKSPACE") {
+                    normalized_line = format!("ld: {}", &normalized_line[idx..]);
+                }
+            }
+            
+            normalized_line
         })
         .collect::<Vec<_>>()
         .join("\n")

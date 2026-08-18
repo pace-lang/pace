@@ -3,14 +3,14 @@ source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
 [31m[E001] Error:[0m Linker failed: Linker failed:
-/usr/bin/x86_64-linux-gnu-ld.bfd: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::get':
+ld: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::get':
 pace_module:(.text+0x1845): undefined reference to `arrayGet'
-/usr/bin/x86_64-linux-gnu-ld.bfd: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::len':
+ld: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::len':
 pace_module:(.text+0x1858): undefined reference to `arrayLen'
-/usr/bin/x86_64-linux-gnu-ld.bfd: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::pop':
+ld: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::pop':
 pace_module:(.text+0x186a): undefined reference to `arrayPop'
-/usr/bin/x86_64-linux-gnu-ld.bfd: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::push':
+ld: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::push':
 pace_module:(.text+0x187c): undefined reference to `arrayPush'
-/usr/bin/x86_64-linux-gnu-ld.bfd: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::set':
+ld: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::set':
 pace_module:(.text+0x1892): undefined reference to `arraySet'
 collect2: error: ld returned 1 exit status
