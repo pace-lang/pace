@@ -122,15 +122,18 @@ fn main() {
             let current_dir = match std::env::current_dir() {
                 Ok(dir) => dir,
                 Err(e) => {
-                    eprintln!("[E002] Error: Failed to determine current directory: {}", e);
+                    utils::errors::print_global_error(&format!(
+                        "Failed to determine current directory: {}",
+                        e
+                    ));
                     std::process::exit(1);
                 }
             };
             let name = match current_dir.file_name().and_then(|n| n.to_str()) {
                 Some(n) => n,
                 None => {
-                    eprintln!(
-                        "[E002] Error: Cannot determine package name from current directory. Please use `pace new <name>` instead."
+                    utils::errors::print_global_error(
+                        "Cannot determine package name from current directory. Please use `pace new <name>` instead.",
                     );
                     std::process::exit(1);
                 }
@@ -146,30 +149,35 @@ fn main() {
         Commands::Build { file, release } => {
             use colored::Colorize;
             let out_file = commands::build::execute(file.as_deref(), *release);
-            println!("{}", out_file.display().to_string().green().bold());
+            let display_path = std::env::current_dir()
+                .ok()
+                .and_then(|cwd| out_file.strip_prefix(&cwd).ok())
+                .unwrap_or(&out_file);
+            println!("{}", display_path.display().to_string().green().bold());
         }
         Commands::Run { file, release } => {
             commands::run::execute(file.as_deref(), *release);
         }
-        Commands::Test => {
-            println!("Not implemented yet");
+        Commands::Test
+        | Commands::Fmt
+        | Commands::Add { .. }
+        | Commands::Remove { .. }
+        | Commands::Install
+        | Commands::Update
+        | Commands::Tree
+        | Commands::Package
+        | Commands::Publish => {
+            use colored::Colorize;
+            println!("{} command not implemented yet", "Warning:".yellow().bold());
         }
-        Commands::Fmt => {
-            println!("Not implemented yet");
-        }
-        Commands::Add { .. } => println!("Not implemented yet"),
-        Commands::Remove { .. } => println!("Not implemented yet"),
-        Commands::Install => println!("Not implemented yet"),
-        Commands::Update => println!("Not implemented yet"),
         Commands::Upgrade => {
             commands::upgrade::execute();
         }
         Commands::Version => {
             commands::version::execute();
         }
-        Commands::Tree => println!("Not implemented yet"),
-        Commands::Package => println!("Not implemented yet"),
-        Commands::Publish => println!("Not implemented yet"),
-        Commands::Clean => println!("Not implemented yet"),
+        Commands::Clean => {
+            commands::clean::execute();
+        }
     }
 }
