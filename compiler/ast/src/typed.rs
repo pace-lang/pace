@@ -57,6 +57,11 @@ pub enum TypedExprKind<'a> {
         left: &'a TypedExpr<'a>,
         right: &'a TypedExpr<'a>,
     },
+    Ternary {
+        condition: &'a TypedExpr<'a>,
+        true_expr: &'a TypedExpr<'a>,
+        false_expr: &'a TypedExpr<'a>,
+    },
     Array(Vec<TypedExpr<'a>>),
     ListComprehension {
         expr: &'a TypedExpr<'a>,

@@ -122,4 +122,46 @@ impl<'a> MirBuilder<'a> {
         self.current_block = end_block;
         Value::Place(result_temp)
     }
+
+    pub(crate) fn lower_ternary_expr(
+        &mut self,
+        condition: &TypedExpr,
+        true_expr: &TypedExpr,
+        false_expr: &TypedExpr,
+    ) -> Value {
+        let cond_val = self.lower_expr(condition);
+
+        let then_block = self.new_block();
+        let else_block = self.new_block();
+        let end_block = self.new_block();
+        let result_temp = self.new_temp();
+
+        // Branch
+        self.current().terminator = Some(Terminator::Branch {
+            cond: cond_val,
+            then_block,
+            else_block,
+        });
+
+        // True branch
+        self.current_block = then_block;
+        let true_val = self.lower_expr(true_expr);
+        {
+            let __inst = Inst::Assign(result_temp.clone(), RValue::Use(true_val));
+            self.current().instructions.push(__inst)
+        };
+        self.current().terminator = Some(Terminator::Jump(end_block));
+
+        // False branch
+        self.current_block = else_block;
+        let false_val = self.lower_expr(false_expr);
+        {
+            let __inst = Inst::Assign(result_temp.clone(), RValue::Use(false_val));
+            self.current().instructions.push(__inst)
+        };
+        self.current().terminator = Some(Terminator::Jump(end_block));
+
+        self.current_block = end_block;
+        Value::Place(result_temp)
+    }
 }

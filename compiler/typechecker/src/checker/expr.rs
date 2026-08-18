@@ -38,6 +38,9 @@ impl<'a> TypeChecker<'a> {
             ExprKind::NullCoalesceAssign { left, right } => {
                 self.check_null_coalesce_assign_expr(left, right, expr.span)
             }
+            ExprKind::Ternary { condition, true_expr, false_expr } => {
+                self.check_ternary_expr(condition, true_expr, false_expr, expr.span)
+            }
             ExprKind::Array(elements) => self.check_array_expr(elements, expr.span),
             ExprKind::ArrayRepeat { value, count } => {
                 self.check_array_repeat_expr(value, count, expr.span)

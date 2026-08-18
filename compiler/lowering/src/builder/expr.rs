@@ -51,6 +51,11 @@ impl<'a> MirBuilder<'a> {
             TypedExprKind::NullCoalesce { left, right } => {
                 self.lower_null_coalesce_expr(left, right)
             }
+            TypedExprKind::Ternary {
+                condition,
+                true_expr,
+                false_expr,
+            } => self.lower_ternary_expr(condition, true_expr, false_expr),
             TypedExprKind::NullCoalesceAssign { left, right } => {
                 self.lower_null_coalesce_assign_expr(left, right)
             }

@@ -111,6 +111,12 @@ pub enum ExprKind<'a> {
         left: &'a Expr<'a>,
         right: &'a Expr<'a>,
     },
+    /// Ternary conditional: `condition ? true_expr : false_expr`
+    Ternary {
+        condition: &'a Expr<'a>,
+        true_expr: &'a Expr<'a>,
+        false_expr: &'a Expr<'a>,
+    },
     /// Array literal: `[1, 2, 3]`
     Array(Vec<Expr<'a>>),
     /// List comprehension: `[expr for item in iterator]`

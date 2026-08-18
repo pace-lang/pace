@@ -98,7 +98,11 @@ impl<'a> Parser<'a> {
                     ExprKind::ForceUnwrap(self.session.ast_arena.alloc(expr)),
                     span,
                 );
-            } else if self.match_token(&[TokenKind::Question]) {
+            } else if self.check(&TokenKind::Question) {
+                if self.is_ternary_question() {
+                    break;
+                }
+                self.advance(); // consume '?'
                 let span = Span::new(
                     expr.span.file_id,
                     expr.span.start,
@@ -195,6 +199,47 @@ impl<'a> Parser<'a> {
                 | TokenKind::Semicolon
                 | TokenKind::Equal => {
                     return false; // Definitely not generic type args
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        false
+    }
+
+    pub(crate) fn is_ternary_question(&self) -> bool {
+        let mut depth = 0;
+        let mut i = self.current + 1; // start after '?'
+        
+        while i < self.tokens.len() {
+            match self.tokens[i].kind {
+                TokenKind::Question => depth += 1,
+                TokenKind::Colon => {
+                    if depth == 0 {
+                        return true;
+                    }
+                    depth -= 1;
+                }
+                TokenKind::LeftParen | TokenKind::LeftBrace | TokenKind::LeftBracket => {
+                    // skip over matched delimiters to avoid counting inner colons (e.g. in dicts/closures if any)
+                    let mut delim_depth = 1;
+                    let open_kind = self.tokens[i].kind.clone();
+                    let close_kind = match open_kind {
+                        TokenKind::LeftParen => TokenKind::RightParen,
+                        TokenKind::LeftBrace => TokenKind::RightBrace,
+                        TokenKind::LeftBracket => TokenKind::RightBracket,
+                        _ => unreachable!(),
+                    };
+                    i += 1;
+                    while i < self.tokens.len() && delim_depth > 0 {
+                        if self.tokens[i].kind == open_kind { delim_depth += 1; }
+                        else if self.tokens[i].kind == close_kind { delim_depth -= 1; }
+                        i += 1;
+                    }
+                    continue;
+                }
+                TokenKind::Semicolon | TokenKind::Comma | TokenKind::Eof => {
+                    return false;
                 }
                 _ => {}
             }

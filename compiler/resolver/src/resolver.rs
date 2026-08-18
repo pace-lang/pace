@@ -524,6 +524,11 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(left);
                 self.resolve_expr(right);
             }
+            ExprKind::Ternary { condition, true_expr, false_expr } => {
+                self.resolve_expr(condition);
+                self.resolve_expr(true_expr);
+                self.resolve_expr(false_expr);
+            }
             ExprKind::Match { value, arms } => {
                 self.resolve_expr(value);
                 for arm in arms {

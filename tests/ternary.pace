@@ -1,0 +1,6 @@
+func main() {
+    let condition = true;
+    let result1 = condition ? 10 : 20;
+    
+    let result2 = false ? "Hello" : "World";
+}

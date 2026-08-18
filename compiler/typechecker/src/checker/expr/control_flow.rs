@@ -113,4 +113,57 @@ impl<'a> TypeChecker<'a> {
             ty,
         )
     }
+
+    pub(crate) fn check_ternary_expr(
+        &mut self,
+        condition: &Expr<'a>,
+        true_expr: &Expr<'a>,
+        false_expr: &Expr<'a>,
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
+        let typed_condition = self.check_expr(condition);
+        
+        let bool_ty = self.session.types.borrow_mut().intern(Type::Boolean);
+        if typed_condition.ty != bool_ty && typed_condition.ty != self.session.types.borrow_mut().intern(Type::Error) {
+            self.error(
+                condition.span,
+                DiagnosticCode::TypeMismatch,
+                &format!("Ternary condition must evaluate to 'bool', found '{}'.", self.session.format_type(typed_condition.ty)),
+            );
+        }
+
+        let typed_true = self.check_expr(true_expr);
+        let typed_false = self.check_expr(false_expr);
+
+        let mut return_type = typed_true.ty;
+
+        if !self.is_assignable(typed_false.ty, return_type)
+            && typed_false.ty != self.session.types.borrow_mut().intern(Type::Error)
+            && return_type != self.session.types.borrow_mut().intern(Type::Error)
+        {
+            if self.is_assignable(return_type, typed_false.ty) {
+                return_type = typed_false.ty;
+            } else {
+                self.error(
+                    span,
+                    DiagnosticCode::TypeMismatch,
+                    &format!(
+                        "Ternary branches have incompatible types. Expected '{}', found '{}'.",
+                        self.session.format_type(return_type),
+                        self.session.format_type(typed_false.ty)
+                    ),
+                );
+                return_type = self.session.types.borrow_mut().intern(Type::Error);
+            }
+        }
+
+        (
+            TypedExprKind::Ternary {
+                condition: self.alloc(typed_condition),
+                true_expr: self.alloc(typed_true),
+                false_expr: self.alloc(typed_false),
+            },
+            return_type,
+        )
+    }
 }
