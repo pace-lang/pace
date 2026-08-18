@@ -7,10 +7,10 @@ REPO="pace-lang/pace"
 INSTALL_DIR="$HOME/.pace"
 BIN_DIR="$INSTALL_DIR/bin"
 
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m' # No Color
+GREEN=$(printf '\033[0;32m')
+CYAN=$(printf '\033[0;36m')
+BOLD=$(printf '\033[1m')
+NC=$(printf '\033[0m') # No Color
 
 echo "${CYAN}${BOLD}✨ Installing Pace Toolchain...${NC}"
 
