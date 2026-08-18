@@ -161,40 +161,56 @@ impl<'a> TypeChecker<'a> {
             return true;
         }
         if let Type::Instance(class_name) = source_ty
-            && let Some(implements) = self.class_implements.get(&class_name) {
-                // If target is a non-generic interface
-                if let Type::Interface(interface_name, _) = target_ty {
-                    for implemented_ty_id in implements {
-                        if let Type::Interface(impl_name, _) = self.get_type(*implemented_ty_id)
-                            && impl_name == interface_name {
-                                return true;
-                            }
-                    }
-                }
-                // If target is a generic interface
-                if let Type::GenericInstance(interface_name, ref target_args) = target_ty {
-                    for implemented_ty_id in implements {
-                        if let Type::GenericInstance(impl_name, impl_args) =
-                            self.get_type(*implemented_ty_id)
-                            && impl_name == interface_name && impl_args == *target_args {
-                                return true;
-                            }
+            && let Some(implements) = self.class_implements.get(&class_name)
+        {
+            // If target is a non-generic interface
+            if let Type::Interface(interface_name, _) = target_ty {
+                for implemented_ty_id in implements {
+                    if let Type::Interface(impl_name, _) = self.get_type(*implemented_ty_id)
+                        && impl_name == interface_name
+                    {
+                        return true;
                     }
                 }
             }
-        
+            // If target is a generic interface
+            if let Type::GenericInstance(interface_name, ref target_args) = target_ty {
+                for implemented_ty_id in implements {
+                    if let Type::GenericInstance(impl_name, impl_args) =
+                        self.get_type(*implemented_ty_id)
+                        && impl_name == interface_name
+                        && impl_args == *target_args
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
         if let Type::Enum(mangled, _) = source_ty
             && let Type::GenericInstance(enum_name, _) = target_ty
         {
-            if self.session.interner.borrow().lookup(mangled).starts_with(self.session.interner.borrow().lookup(enum_name)) {
+            if self
+                .session
+                .interner
+                .borrow()
+                .lookup(mangled)
+                .starts_with(self.session.interner.borrow().lookup(enum_name))
+            {
                 return true;
             }
         }
-        
+
         if let Type::Instance(mangled) = source_ty
             && let Type::GenericInstance(class_name, _) = target_ty
         {
-            if self.session.interner.borrow().lookup(mangled).starts_with(self.session.interner.borrow().lookup(class_name)) {
+            if self
+                .session
+                .interner
+                .borrow()
+                .lookup(mangled)
+                .starts_with(self.session.interner.borrow().lookup(class_name))
+            {
                 return true;
             }
         }
@@ -326,6 +342,7 @@ impl<'a> TypeChecker<'a> {
                 ast::TypeExpr::Optional(self.alloc(self.type_to_type_expr(inner)))
             }
             Type::Array(inner) => ast::TypeExpr::Array(self.alloc(self.type_to_type_expr(inner))),
+            Type::Generic(name) => ast::TypeExpr::Named(name),
             _ => ast::TypeExpr::Named(self.session.interner.borrow_mut().intern("Any")),
         }
     }
@@ -375,8 +392,44 @@ impl<'a> TypeChecker<'a> {
             self.collect_declarations(std::slice::from_ref(&concrete_stmt));
 
             // Queue the typechecking for the MonomorphizePass to avoid recursion
-            self.instantiation_queue
-                .push((key, concrete_stmt, substitution, mangled_name));
+            let mut is_concrete = true;
+            for ty in type_args {
+                if let Type::Generic(_) = self.get_type(*ty) {
+                    is_concrete = false;
+                    break;
+                }
+            }
+            if is_concrete {
+                self.instantiation_queue.push((
+                    key.clone(),
+                    concrete_stmt,
+                    substitution,
+                    mangled_name,
+                ));
+            }
+
+            // Monomorphize extensions
+            if let Some(extensions) = self.generic_registry.get_extensions(class_name).cloned() {
+                for ext_stmt in extensions {
+                    let mut concrete_ext = monomorphizer.monomorphize_stmt(&ext_stmt);
+
+                    // The generic extension's target_type needs to be updated to mangled_name
+                    if let ast::StmtKind::Extension { target_type, .. } = &mut concrete_ext.kind {
+                        *target_type = ast::TypeExpr::Named(mangled_name);
+                    }
+
+                    self.collect_declarations(std::slice::from_ref(&concrete_ext));
+
+                    if is_concrete {
+                        self.instantiation_queue.push((
+                            key.clone(),
+                            concrete_ext,
+                            substitution,
+                            mangled_name,
+                        ));
+                    }
+                }
+            }
         }
 
         mangled_name
@@ -431,8 +484,17 @@ impl<'a> TypeChecker<'a> {
             self.collect_declarations(std::slice::from_ref(&concrete_stmt));
 
             // Queue the typechecking for the MonomorphizePass to avoid recursion
-            self.instantiation_queue
-                .push((key, concrete_stmt, substitution, mangled_name));
+            let mut is_concrete = true;
+            for ty in type_args {
+                if let Type::Generic(_) = self.get_type(*ty) {
+                    is_concrete = false;
+                    break;
+                }
+            }
+            if is_concrete {
+                self.instantiation_queue
+                    .push((key, concrete_stmt, substitution, mangled_name));
+            }
         }
 
         mangled_name

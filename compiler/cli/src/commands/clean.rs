@@ -25,6 +25,9 @@ pub fn execute() {
         }
         println!("{} target directory", "Cleaned".green().bold());
     } else {
-        println!("{} target directory (already clean)", "Cleaned".green().bold());
+        println!(
+            "{} target directory (already clean)",
+            "Cleaned".green().bold()
+        );
     }
 }

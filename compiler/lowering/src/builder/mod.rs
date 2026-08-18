@@ -293,6 +293,64 @@ impl<'a> ProgramBuilder<'a> {
                 }
 
                 self.current_class = prev_class;
+            } else if let TypedStmtKind::Extension {
+                target_type,
+                methods,
+            } = &stmt.kind
+            {
+                let target_name_raw = self.session.format_type(*target_type);
+                let target_name = target_name_raw
+                    .replace("<", "_")
+                    .replace(">", "")
+                    .replace(" ", "")
+                    .replace(",", "_");
+                let prev_class = self.current_class.clone();
+                self.current_class = Some(target_name.clone());
+
+                for method in methods {
+                    if let TypedStmtKind::Func {
+                        name: m_name,
+                        params,
+                        return_type,
+                        body,
+                        ..
+                    } = &method.kind
+                    {
+                        let mut param_names = vec!["self".to_string()];
+                        let mut ref_params = std::collections::HashSet::new();
+                        ref_params.insert("self".to_string());
+                        for (p, ty) in params {
+                            param_names.push(self.session.interner.borrow().lookup(*p).to_string());
+                            if is_ref_type(ty, self.session) {
+                                ref_params
+                                    .insert(self.session.interner.borrow().lookup(*p).to_string());
+                            }
+                        }
+                        let returns_ref = return_type
+                            .as_ref()
+                            .is_some_and(|t| is_ref_type(t, self.session));
+                        let actual_name = format!(
+                            "{}::{}",
+                            target_name,
+                            self.session.interner.borrow().lookup(*m_name)
+                        );
+                        let builder = MirBuilder::new(
+                            actual_name.clone(),
+                            param_names,
+                            ref_params,
+                            returns_ref,
+                            enums_map.clone(),
+                            self.session,
+                        );
+                        let mir_func = match &body.kind {
+                            TypedStmtKind::Block(stmts) => builder.build(stmts),
+                            _ => builder.build(std::slice::from_ref(body)),
+                        };
+                        self.program.functions.insert(actual_name, mir_func);
+                    }
+                }
+
+                self.current_class = prev_class;
             } else if let TypedStmtKind::Func {
                 name,
                 params,
@@ -342,7 +400,12 @@ impl<'a> ProgramBuilder<'a> {
                 let ret_ty = return_type
                     .as_ref()
                     .map(|t| type_expr_to_abi(t, self.session));
-                let symbol = self.session.interner.borrow().lookup(*base_name).to_string();
+                let symbol = self
+                    .session
+                    .interner
+                    .borrow()
+                    .lookup(*base_name)
+                    .to_string();
 
                 self.program.foreign_functions.insert(
                     self.session.interner.borrow().lookup(*name).to_string(),

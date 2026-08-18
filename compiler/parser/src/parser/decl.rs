@@ -1,5 +1,6 @@
 pub mod classes;
 pub mod enums;
+pub mod extensions;
 pub mod foreign;
 pub mod functions;
 pub mod imports_exports;
@@ -35,6 +36,11 @@ impl<'a> Parser<'a> {
             self.class_declaration(is_private)
         } else if self.match_token(&[TokenKind::Enum]) {
             self.enum_declaration(is_private)
+        } else if self.match_token(&[TokenKind::Extend]) {
+            if is_private {
+                self.error_at_current("Visibility modifiers are not allowed on extensions.");
+            }
+            self.extension_declaration()
         } else if self.match_token(&[TokenKind::Func]) {
             self.function_declaration(is_private)
         } else if self.match_token(&[TokenKind::Let]) {

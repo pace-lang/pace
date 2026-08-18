@@ -40,7 +40,8 @@ impl<'a> TypeSubstitution<'a> {
             TypeExpr::Array(inner) => TypeExpr::Array(self.arena.alloc(self.substitute(inner))),
             TypeExpr::Function(params, ret_ty) => {
                 let sub_params = params.iter().map(|p| self.substitute(p)).collect();
-                let sub_ret = ret_ty.map(|rt| self.arena.alloc(self.substitute(rt)) as &TypeExpr<'a>);
+                let sub_ret =
+                    ret_ty.map(|rt| self.arena.alloc(self.substitute(rt)) as &TypeExpr<'a>);
                 TypeExpr::Function(sub_params, sub_ret)
             }
         }

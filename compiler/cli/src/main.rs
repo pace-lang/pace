@@ -106,8 +106,6 @@ enum Commands {
     Publish,
     /// Remove the target directory and built artifacts
     Clean,
-
-
 }
 
 fn main() {

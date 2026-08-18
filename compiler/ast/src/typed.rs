@@ -179,6 +179,10 @@ pub enum TypedStmtKind<'a> {
         variants: Vec<EnumVariant<'a>>,
         methods: Vec<TypedStmt<'a>>,
     },
+    Extension {
+        target_type: session::TypeId,
+        methods: Vec<TypedStmt<'a>>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -130,6 +130,7 @@ impl<'a> MirBuilder<'a> {
             | TypedStmtKind::Interface { .. }
             | TypedStmtKind::ForeignFunc { .. }
             | TypedStmtKind::TypeAlias { .. }
+            | TypedStmtKind::Extension { .. }
             | TypedStmtKind::Enum { .. } => {
                 // Declarations are already processed during `collect_items`
             }
@@ -298,7 +299,12 @@ impl<'a> MirBuilder<'a> {
                             {
                                 let __inst = Inst::Assign(
                                     item_temp.clone(),
-                                    RValue::ExtractPayload(Value::Place(next_call.clone()), 0, 0, crate::builder::is_ref_type_id(*item_ty, self.session)),
+                                    RValue::ExtractPayload(
+                                        Value::Place(next_call.clone()),
+                                        0,
+                                        0,
+                                        crate::builder::is_ref_type_id(*item_ty, self.session),
+                                    ),
                                 );
                                 self.current().instructions.push(__inst);
                             }

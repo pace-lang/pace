@@ -363,28 +363,61 @@ impl<'a> TypeChecker<'a> {
         span: Span,
     ) -> (TypedExprKind<'a>, TypeId) {
         let mut typed_obj = self.check_expr(object);
+        let base_sym = match self.session.types.borrow().get(typed_obj.ty).clone() {
+            Type::Class(sym, _)
+            | Type::Struct(sym, _)
+            | Type::Instance(sym)
+            | Type::GenericInstance(sym, _)
+            | Type::Enum(sym, _) => sym,
+            _ => self
+                .session
+                .interner
+                .borrow_mut()
+                .intern(&self.session.format_type(typed_obj.ty)),
+        };
 
         let (class_name, instance_args) = match self.get_type(typed_obj.ty) {
             Type::Instance(n) => (n, Vec::new()),
             Type::GenericInstance(n, args) => {
                 let mut mangled_name = n;
+                let mut is_concrete = true;
                 let mut is_enum = false;
-                if let Some(stmt) = self.generic_registry.get_class(n).cloned() {
-                    match &stmt.kind {
-                        StmtKind::Class { type_params, .. } | StmtKind::Struct { type_params, .. } => {
-                            mangled_name = self.instantiate_generic_class(n, type_params, &args);
-                        }
-                        StmtKind::Enum { type_params, .. } => {
-                            mangled_name = self.instantiate_generic_class(n, type_params, &args);
-                            is_enum = true;
-                        }
-                        _ => {}
+                for ty in &args {
+                    if let Type::Generic(_) = self.get_type(*ty) {
+                        is_concrete = false;
+                        break;
                     }
                 }
-                if is_enum {
-                    typed_obj.ty = self.session.types.borrow_mut().intern(Type::Enum(mangled_name, Vec::new()));
-                } else {
-                    typed_obj.ty = self.session.types.borrow_mut().intern(Type::Instance(mangled_name));
+
+                if is_concrete {
+                    if let Some(stmt) = self.generic_registry.get_class(n).cloned() {
+                        match &stmt.kind {
+                            StmtKind::Class { type_params, .. }
+                            | StmtKind::Struct { type_params, .. } => {
+                                mangled_name =
+                                    self.instantiate_generic_class(n, type_params, &args);
+                            }
+                            StmtKind::Enum { type_params, .. } => {
+                                mangled_name =
+                                    self.instantiate_generic_class(n, type_params, &args);
+                                is_enum = true;
+                            }
+                            _ => {}
+                        }
+                    }
+                    if is_enum {
+                        typed_obj.ty = self
+                            .session
+                            .types
+                            .borrow_mut()
+                            .intern(Type::Enum(mangled_name, Vec::new()));
+                    } else {
+                        typed_obj.ty = self
+                            .session
+                            .types
+                            .borrow_mut()
+                            .intern(Type::Instance(mangled_name));
+                    }
                 }
                 (mangled_name, args.clone())
             }
@@ -397,6 +430,18 @@ impl<'a> TypeChecker<'a> {
             ),
             Type::Enum(n, _args) => (n, Vec::new()),
             _ => {
+                if let Some(ext_methods) = self.extensions.get(&base_sym) {
+                    if let Some(ext_method_ty) = ext_methods.get(&name) {
+                        return (
+                            TypedExprKind::Get {
+                                object: self.alloc(typed_obj),
+                                name,
+                            },
+                            *ext_method_ty,
+                        );
+                    }
+                }
+
                 if typed_obj.ty != self.session.types.borrow_mut().intern(Type::Error) {
                     self.error(
                         span,
@@ -469,42 +514,147 @@ impl<'a> TypeChecker<'a> {
                     self.session.types.borrow_mut().intern(Type::Error)
                 }
             } else {
-                self.error(
-                    span,
-                    DiagnosticCode::UnknownType,
-                    &format!(
-                        "Property '{}' not found on class '{}'.",
-                        self.session.interner.borrow().lookup(name),
-                        self.session.interner.borrow().lookup(class_name)
-                    ),
-                );
-                self.session.types.borrow_mut().intern(Type::Error)
+                if let Some(ext_methods) = self.extensions.get(&base_sym) {
+                    if let Some(ext_method_ty) = ext_methods.get(&name) {
+                        let mut resolved_ty = *ext_method_ty;
+                        let mut inferred_map = None;
+                        if let Some(Type::Class(_, class_params))
+                        | Some(Type::Struct(_, class_params))
+                        | Some(Type::Enum(_, class_params)) =
+                            self.env.resolve(base_sym).map(|id| self.get_type(id))
+                        {
+                            let mut map = std::collections::HashMap::new();
+                            for (i, p) in class_params.iter().enumerate() {
+                                if i < instance_args.len() {
+                                    map.insert(*p, instance_args[i]);
+                                }
+                            }
+                            inferred_map = Some(map);
+                        }
+                        if let Some(map) = inferred_map {
+                            resolved_ty = self.substitute_generics(resolved_ty, &map);
+                        }
+                        resolved_ty
+                    } else {
+                        self.error(
+                            span,
+                            DiagnosticCode::UnknownType,
+                            &format!(
+                                "Property '{}' not found on class '{}' or its extensions.",
+                                self.session.interner.borrow().lookup(name),
+                                self.session.interner.borrow().lookup(class_name)
+                            ),
+                        );
+                        self.session.types.borrow_mut().intern(Type::Error)
+                    }
+                } else {
+                    self.error(
+                        span,
+                        DiagnosticCode::UnknownType,
+                        &format!(
+                            "Property '{}' not found on class '{}'.",
+                            self.session.interner.borrow().lookup(name),
+                            self.session.interner.borrow().lookup(class_name)
+                        ),
+                    );
+                    self.session.types.borrow_mut().intern(Type::Error)
+                }
             }
         } else if let Some(interface_props) = self.interfaces.get(&class_name) {
             if let Some(prop_ty) = interface_props.get(&name) {
                 *prop_ty
             } else {
+                if let Some(ext_methods) = self.extensions.get(&base_sym) {
+                    if let Some(ext_method_ty) = ext_methods.get(&name) {
+                        let mut resolved_ty = *ext_method_ty;
+                        let mut inferred_map = None;
+                        if let Some(Type::Class(_, class_params))
+                        | Some(Type::Struct(_, class_params))
+                        | Some(Type::Enum(_, class_params)) =
+                            self.env.resolve(base_sym).map(|id| self.get_type(id))
+                        {
+                            let mut map = std::collections::HashMap::new();
+                            for (i, p) in class_params.iter().enumerate() {
+                                if i < instance_args.len() {
+                                    map.insert(*p, instance_args[i]);
+                                }
+                            }
+                            inferred_map = Some(map);
+                        }
+                        if let Some(map) = inferred_map {
+                            resolved_ty = self.substitute_generics(resolved_ty, &map);
+                        }
+                        resolved_ty
+                    } else {
+                        self.error(
+                            span,
+                            DiagnosticCode::UnknownType,
+                            &format!(
+                                "Property '{}' not found on interface '{}' or its extensions.",
+                                self.session.interner.borrow().lookup(name),
+                                self.session.interner.borrow().lookup(class_name)
+                            ),
+                        );
+                        self.session.types.borrow_mut().intern(Type::Error)
+                    }
+                } else {
+                    self.error(
+                        span,
+                        DiagnosticCode::UnknownType,
+                        &format!(
+                            "Property '{}' not found on interface '{}'.",
+                            self.session.interner.borrow().lookup(name),
+                            self.session.interner.borrow().lookup(class_name)
+                        ),
+                    );
+                    self.session.types.borrow_mut().intern(Type::Error)
+                }
+            }
+        } else {
+            if let Some(ext_methods) = self.extensions.get(&base_sym) {
+                if let Some(ext_method_ty) = ext_methods.get(&name) {
+                    let mut resolved_ty = *ext_method_ty;
+                    let mut inferred_map = None;
+                    if let Some(Type::Class(_, class_params))
+                    | Some(Type::Struct(_, class_params))
+                    | Some(Type::Enum(_, class_params)) =
+                        self.env.resolve(base_sym).map(|id| self.get_type(id))
+                    {
+                        let mut map = std::collections::HashMap::new();
+                        for (i, p) in class_params.iter().enumerate() {
+                            if i < instance_args.len() {
+                                map.insert(*p, instance_args[i]);
+                            }
+                        }
+                        inferred_map = Some(map);
+                    }
+                    if let Some(map) = inferred_map {
+                        resolved_ty = self.substitute_generics(resolved_ty, &map);
+                    }
+                    resolved_ty
+                } else {
+                    self.error(
+                        span,
+                        DiagnosticCode::UnknownType,
+                        &format!(
+                            "Property '{}' not found on type '{}' or its extensions.",
+                            self.session.interner.borrow().lookup(name),
+                            self.session.interner.borrow().lookup(class_name)
+                        ),
+                    );
+                    self.session.types.borrow_mut().intern(Type::Error)
+                }
+            } else {
                 self.error(
                     span,
                     DiagnosticCode::UnknownType,
                     &format!(
-                        "Property '{}' not found on interface '{}'.",
-                        self.session.interner.borrow().lookup(name),
+                        "Type '{}' not found.",
                         self.session.interner.borrow().lookup(class_name)
                     ),
                 );
                 self.session.types.borrow_mut().intern(Type::Error)
             }
-        } else {
-            self.error(
-                span,
-                DiagnosticCode::UnknownType,
-                &format!(
-                    "Type '{}' not found.",
-                    self.session.interner.borrow().lookup(class_name)
-                ),
-            );
-            self.session.types.borrow_mut().intern(Type::Error)
         };
         (
             TypedExprKind::Get {

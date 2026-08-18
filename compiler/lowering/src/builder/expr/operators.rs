@@ -282,7 +282,9 @@ impl<'a> MirBuilder<'a> {
         });
 
         let (ok_ty, err_ty) = match self.session.types.borrow().get(inner.ty) {
-            session::types::Type::GenericInstance(sym, args) if args.len() == 2 => (args[0], args[1]),
+            session::types::Type::GenericInstance(sym, args) if args.len() == 2 => {
+                (args[0], args[1])
+            }
             _ => (session::TypeId(0), session::TypeId(0)),
         };
 

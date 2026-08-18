@@ -11,6 +11,7 @@ pub enum TokenKind {
     Class,
     Struct,
     Interface,
+    Extend,
     Implements,
     Type,
     If,

@@ -192,29 +192,49 @@ impl<'a> TypeChecker<'a> {
                     } else {
                         // Instantiate the generic class!
                         if !class_type_params.is_empty() {
-                            let mangled_name = self.instantiate_generic_class(
-                                class_name,
-                                &class_type_params,
-                                &resolved_type_args,
-                            );
+                            let mut is_concrete = true;
+                            for ty in &resolved_type_args {
+                                if let Type::Generic(_) = self.get_type(*ty) {
+                                    is_concrete = false;
+                                    break;
+                                }
+                            }
 
-                            // Rewrite the callee to point to the mangled name!
-                            let new_callee = TypedExpr {
-                                kind: TypedExprKind::Variable(mangled_name),
-                                ty: self
-                                    .session
-                                    .types
-                                    .borrow_mut()
-                                    .intern(Type::Class(mangled_name, Vec::new())),
-                                span: callee.span,
-                            };
+                            let (new_callee, new_ty) =
+                                if is_concrete {
+                                    let mangled_name = self.instantiate_generic_class(
+                                        class_name,
+                                        &class_type_params,
+                                        &resolved_type_args,
+                                    );
 
-                            // We must update ty to be Instance(mangled_name) instead of GenericInstance.
-                            let new_ty = self
-                                .session
-                                .types
-                                .borrow_mut()
-                                .intern(Type::Instance(mangled_name));
+                                    // Rewrite the callee to point to the mangled name!
+                                    let new_callee = TypedExpr {
+                                        kind: TypedExprKind::Variable(mangled_name),
+                                        ty: self
+                                            .session
+                                            .types
+                                            .borrow_mut()
+                                            .intern(Type::Class(mangled_name, Vec::new())),
+                                        span: callee.span,
+                                    };
+
+                                    // We must update ty to be Instance(mangled_name) instead of GenericInstance.
+                                    let new_ty = self
+                                        .session
+                                        .types
+                                        .borrow_mut()
+                                        .intern(Type::Instance(mangled_name));
+                                    (new_callee, new_ty)
+                                } else {
+                                    let new_ty = self.session.types.borrow_mut().intern(
+                                        Type::GenericInstance(
+                                            class_name,
+                                            resolved_type_args.clone(),
+                                        ),
+                                    );
+                                    (typed_callee.clone(), new_ty)
+                                };
 
                             let mut replacements = std::collections::HashMap::new();
                             for (tp, resolved) in
@@ -296,27 +316,48 @@ impl<'a> TypeChecker<'a> {
                 }
 
                 if !class_type_params.is_empty() {
-                    let mangled_name = self.instantiate_generic_class(
-                        class_name,
-                        &class_type_params,
-                        &resolved_type_args,
-                    );
+                    let mut is_concrete = true;
+                    for ty in &resolved_type_args {
+                        if let Type::Generic(_) = self.get_type(*ty) {
+                            is_concrete = false;
+                            break;
+                        }
+                    }
 
-                    let new_callee = TypedExpr {
-                        kind: TypedExprKind::Variable(mangled_name),
-                        ty: self
+                    let (new_callee, new_ty) = if is_concrete {
+                        let mangled_name = self.instantiate_generic_class(
+                            class_name,
+                            &class_type_params,
+                            &resolved_type_args,
+                        );
+
+                        let new_callee = TypedExpr {
+                            kind: TypedExprKind::Variable(mangled_name),
+                            ty: self
+                                .session
+                                .types
+                                .borrow_mut()
+                                .intern(Type::Class(mangled_name, Vec::new())),
+                            span: callee.span,
+                        };
+
+                        let new_ty = self
                             .session
                             .types
                             .borrow_mut()
-                            .intern(Type::Class(mangled_name, Vec::new())),
-                        span: callee.span,
+                            .intern(Type::Instance(mangled_name));
+                        (new_callee, new_ty)
+                    } else {
+                        let new_ty = self
+                            .session
+                            .types
+                            .borrow_mut()
+                            .intern(Type::GenericInstance(
+                                class_name,
+                                resolved_type_args.clone(),
+                            ));
+                        (typed_callee.clone(), new_ty)
                     };
-
-                    let new_ty = self
-                        .session
-                        .types
-                        .borrow_mut()
-                        .intern(Type::Instance(mangled_name));
 
                     return (
                         TypedExprKind::Call {
@@ -554,29 +595,64 @@ impl<'a> TypeChecker<'a> {
                 }
 
                 if !func_type_params.is_empty() {
-                    let resolved_type_args: Vec<_> = func_type_params.iter().map(|p| *inferred_map.get(p).unwrap_or(&self.session.types.borrow_mut().intern(Type::Error))).collect();
-                    let mangled_name = self.instantiate_generic_class(
-                        enum_name,
-                        &func_type_params,
-                        &resolved_type_args,
-                    );
-                    
-                    let new_ret_ty = self.session.types.borrow_mut().intern(Type::Enum(mangled_name, Vec::new()));
-                    return (
-                        TypedExprKind::Call {
-                            callee: self.alloc(TypedExpr {
-                                kind: TypedExprKind::EnumVariant {
-                                    enum_name: mangled_name,
-                                    variant_name,
-                                },
-                                ty: self.session.types.borrow_mut().intern(Type::BuiltinFunc),
-                                span: callee.span,
-                            }),
-                            type_args: Vec::new(),
-                            arguments: typed_args,
-                        },
-                        new_ret_ty,
-                    );
+                    let resolved_type_args: Vec<_> = func_type_params
+                        .iter()
+                        .map(|p| {
+                            *inferred_map
+                                .get(p)
+                                .unwrap_or(&self.session.types.borrow_mut().intern(Type::Error))
+                        })
+                        .collect();
+                    let mut is_concrete = true;
+                    for ty in &resolved_type_args {
+                        if let Type::Generic(_) = self.get_type(*ty) {
+                            is_concrete = false;
+                            break;
+                        }
+                    }
+
+                    if is_concrete {
+                        let mangled_name = self.instantiate_generic_class(
+                            enum_name,
+                            &func_type_params,
+                            &resolved_type_args,
+                        );
+
+                        let new_ret_ty = self
+                            .session
+                            .types
+                            .borrow_mut()
+                            .intern(Type::Enum(mangled_name, Vec::new()));
+                        return (
+                            TypedExprKind::Call {
+                                callee: self.alloc(TypedExpr {
+                                    kind: TypedExprKind::EnumVariant {
+                                        enum_name: mangled_name,
+                                        variant_name,
+                                    },
+                                    ty: self.session.types.borrow_mut().intern(Type::BuiltinFunc),
+                                    span: callee.span,
+                                }),
+                                type_args: Vec::new(),
+                                arguments: typed_args,
+                            },
+                            new_ret_ty,
+                        );
+                    } else {
+                        let new_ret_ty = self
+                            .session
+                            .types
+                            .borrow_mut()
+                            .intern(Type::GenericInstance(enum_name, resolved_type_args.clone()));
+                        return (
+                            TypedExprKind::Call {
+                                callee: self.alloc(typed_callee),
+                                type_args: Vec::new(),
+                                arguments: typed_args,
+                            },
+                            new_ret_ty,
+                        );
+                    }
                 }
 
                 let new_ret_ty = if func_type_params.is_empty() {

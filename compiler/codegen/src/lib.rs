@@ -179,8 +179,6 @@ impl CraneliftGenerator {
             .unwrap();
         func_ids.insert("pace_weak_upgrade".to_string(), weak_upgrade_id);
 
-
-
         let mut str_concat_sig = module.make_signature();
         str_concat_sig.params.push(AbiParam::new(types::I64));
         str_concat_sig.params.push(AbiParam::new(types::I64));

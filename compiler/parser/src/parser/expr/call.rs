@@ -210,7 +210,7 @@ impl<'a> Parser<'a> {
     pub(crate) fn is_ternary_question(&self) -> bool {
         let mut depth = 0;
         let mut i = self.current + 1; // start after '?'
-        
+
         while i < self.tokens.len() {
             match self.tokens[i].kind {
                 TokenKind::Question => depth += 1,
@@ -232,8 +232,11 @@ impl<'a> Parser<'a> {
                     };
                     i += 1;
                     while i < self.tokens.len() && delim_depth > 0 {
-                        if self.tokens[i].kind == open_kind { delim_depth += 1; }
-                        else if self.tokens[i].kind == close_kind { delim_depth -= 1; }
+                        if self.tokens[i].kind == open_kind {
+                            delim_depth += 1;
+                        } else if self.tokens[i].kind == close_kind {
+                            delim_depth -= 1;
+                        }
                         i += 1;
                     }
                     continue;

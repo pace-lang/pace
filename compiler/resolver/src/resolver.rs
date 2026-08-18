@@ -287,14 +287,28 @@ impl<'a> Resolver<'a> {
 
                 self.scopes.pop_scope();
             }
+            StmtKind::Extension {
+                target_type: _,
+                type_params: _,
+                methods,
+            } => {
+                self.scopes.push_scope();
+                self.scopes
+                    .declare(self.session.interner.borrow_mut().intern("self"));
+
+                for method in methods {
+                    self.resolve_stmt(method);
+                }
+
+                self.scopes.pop_scope();
+            }
             StmtKind::Interface {
                 name: _,
                 type_params,
                 methods: _,
                 is_private: _,
             } => {
-                if !type_params.is_empty() {
-                }
+                if !type_params.is_empty() {}
                 // Name declared in hoisting
             }
             StmtKind::Enum {
@@ -524,7 +538,11 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(left);
                 self.resolve_expr(right);
             }
-            ExprKind::Ternary { condition, true_expr, false_expr } => {
+            ExprKind::Ternary {
+                condition,
+                true_expr,
+                false_expr,
+            } => {
                 self.resolve_expr(condition);
                 self.resolve_expr(true_expr);
                 self.resolve_expr(false_expr);

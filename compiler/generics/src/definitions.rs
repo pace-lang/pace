@@ -6,6 +6,7 @@ pub struct GenericDefinitionRegistry<'a> {
     classes: HashMap<session::Symbol, Stmt<'a>>,
     functions: HashMap<session::Symbol, Stmt<'a>>,
     interfaces: HashMap<session::Symbol, Stmt<'a>>,
+    extensions: HashMap<session::Symbol, Vec<Stmt<'a>>>,
 }
 
 impl<'a> GenericDefinitionRegistry<'a> {
@@ -25,6 +26,10 @@ impl<'a> GenericDefinitionRegistry<'a> {
         self.interfaces.insert(name, stmt);
     }
 
+    pub fn register_extension(&mut self, target_name: session::Symbol, stmt: Stmt<'a>) {
+        self.extensions.entry(target_name).or_default().push(stmt);
+    }
+
     pub fn get_class(&self, name: session::Symbol) -> Option<&Stmt<'a>> {
         self.classes.get(&name)
     }
@@ -35,5 +40,9 @@ impl<'a> GenericDefinitionRegistry<'a> {
 
     pub fn get_interface(&self, name: session::Symbol) -> Option<&Stmt<'a>> {
         self.interfaces.get(&name)
+    }
+
+    pub fn get_extensions(&self, target_name: session::Symbol) -> Option<&Vec<Stmt<'a>>> {
+        self.extensions.get(&target_name)
     }
 }

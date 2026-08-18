@@ -1,0 +1,27 @@
+extend String {
+    func shout(): String {
+        return self + "!!!";
+    }
+}
+
+class MyBox<T> {
+    var item: T;
+    func init(val: T) {
+        self.item = val;
+    }
+}
+
+extend<T> MyBox<T> {
+    func duplicate(): MyBox<T> {
+        return MyBox<T>(self.item);
+    }
+}
+
+func main() {
+    let s = "Hello";
+    print(s.shout());
+
+    let l = MyBox<Int>(42);
+    let l2 = l.duplicate();
+    print(l2.item);
+}

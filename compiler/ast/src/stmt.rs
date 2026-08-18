@@ -32,6 +32,11 @@ pub enum StmtKind<'a> {
         methods: Vec<Stmt<'a>>,
         is_private: bool,
     },
+    Extension {
+        target_type: TypeExpr<'a>,
+        type_params: Vec<session::Symbol>,
+        methods: Vec<Stmt<'a>>,
+    },
     /// An import statement: `import "path" [as alias] [show a, b] [hide x, y]`
     Import {
         path: session::Symbol,

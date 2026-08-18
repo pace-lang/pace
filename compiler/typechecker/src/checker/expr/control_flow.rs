@@ -122,13 +122,18 @@ impl<'a> TypeChecker<'a> {
         span: Span,
     ) -> (TypedExprKind<'a>, TypeId) {
         let typed_condition = self.check_expr(condition);
-        
+
         let bool_ty = self.session.types.borrow_mut().intern(Type::Boolean);
-        if typed_condition.ty != bool_ty && typed_condition.ty != self.session.types.borrow_mut().intern(Type::Error) {
+        if typed_condition.ty != bool_ty
+            && typed_condition.ty != self.session.types.borrow_mut().intern(Type::Error)
+        {
             self.error(
                 condition.span,
                 DiagnosticCode::TypeMismatch,
-                &format!("Ternary condition must evaluate to 'bool', found '{}'.", self.session.format_type(typed_condition.ty)),
+                &format!(
+                    "Ternary condition must evaluate to 'bool', found '{}'.",
+                    self.session.format_type(typed_condition.ty)
+                ),
             );
         }
 

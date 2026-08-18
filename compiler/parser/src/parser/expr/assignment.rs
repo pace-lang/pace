@@ -103,7 +103,7 @@ impl<'a> Parser<'a> {
                 self.error_at_current("Expected ':' after true branch of ternary operator.");
             }
             let false_expr = self.ternary()?;
-            
+
             let span = Span::new(
                 expr.span.file_id,
                 expr.span.start,
@@ -111,7 +111,7 @@ impl<'a> Parser<'a> {
                 expr.span.start_loc,
                 false_expr.span.end_loc,
             );
-            
+
             expr = Expr::new(
                 ExprKind::Ternary {
                     condition: self.session.ast_arena.alloc(expr),

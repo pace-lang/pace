@@ -115,11 +115,9 @@ impl<'a> Parser<'a> {
                 return None;
             }
             let return_type = self.parse_type_expr()?;
-            
-            let mut ty = TypeExpr::Function(
-                param_types,
-                Some(self.session.ast_arena.alloc(return_type)),
-            );
+
+            let mut ty =
+                TypeExpr::Function(param_types, Some(self.session.ast_arena.alloc(return_type)));
             if self.match_token(&[TokenKind::Question]) {
                 ty = TypeExpr::Optional(self.session.ast_arena.alloc(ty));
             }

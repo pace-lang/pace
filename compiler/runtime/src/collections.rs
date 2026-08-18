@@ -79,7 +79,6 @@ pub extern "C" fn listRemoveRaw(ptr: *mut c_void, index: i64) -> *mut c_void {
     vec.remove(index as usize)
 }
 
-
 // MAP IMPLEMENTATION
 
 #[unsafe(no_mangle)]
@@ -121,11 +120,7 @@ pub extern "C" fn mapContains(ptr: *mut c_void, key: u64) -> i64 {
         return 0;
     }
     let map = unsafe { &mut *(ptr as *mut std::collections::HashMap<u64, *mut c_void>) };
-    if map.contains_key(&key) {
-        1
-    } else {
-        0
-    }
+    if map.contains_key(&key) { 1 } else { 0 }
 }
 
 #[unsafe(no_mangle)]
@@ -195,11 +190,7 @@ pub extern "C" fn setContains(ptr: *mut c_void, val: u64) -> i64 {
         return 0;
     }
     let set = unsafe { &mut *(ptr as *mut std::collections::HashSet<u64>) };
-    if set.contains(&val) {
-        1
-    } else {
-        0
-    }
+    if set.contains(&val) { 1 } else { 0 }
 }
 
 #[unsafe(no_mangle)]
@@ -246,7 +237,9 @@ pub extern "C" fn listFree(ptr: *mut c_void) {
 pub extern "C" fn mapFree(ptr: *mut c_void) {
     if !ptr.is_null() {
         unsafe {
-            drop(Box::from_raw(ptr as *mut std::collections::HashMap<u64, *mut c_void>));
+            drop(Box::from_raw(
+                ptr as *mut std::collections::HashMap<u64, *mut c_void>,
+            ));
         }
     }
 }
@@ -259,4 +252,3 @@ pub extern "C" fn setFree(ptr: *mut c_void) {
         }
     }
 }
-

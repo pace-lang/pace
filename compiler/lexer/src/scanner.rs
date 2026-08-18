@@ -430,6 +430,7 @@ impl<'a> Scanner<'a> {
             "enum" => TokenKind::Enum,
             "match" => TokenKind::Match,
             "interface" => TokenKind::Interface,
+            "extend" => TokenKind::Extend,
             "implements" => TokenKind::Implements,
             "type" => TokenKind::Type,
             "if" => TokenKind::If,

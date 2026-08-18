@@ -329,7 +329,7 @@ impl<'a> TypeChecker<'a> {
                                 ));
                         enum_variants.insert(variant.name, variant_ty);
                     }
-                    
+
                     let mut enum_methods = std::collections::HashMap::new();
                     for method in methods {
                         if let StmtKind::Func {
@@ -419,7 +419,7 @@ impl<'a> TypeChecker<'a> {
                         param_types.push(self.parse_type(param_type_str, stmt.span));
                     }
                     self.env.pop_scope();
-                    
+
                     if !type_params.is_empty() {
                         self.generic_registry.register_function(*name, stmt.clone());
                         continue;
@@ -499,6 +499,69 @@ impl<'a> TypeChecker<'a> {
                     } else {
                         self.env.declare(*name, func_ty);
                     }
+                }
+                StmtKind::Extension {
+                    target_type,
+                    type_params,
+                    methods,
+                } => {
+                    let target_sym = match target_type {
+                        TypeExpr::Named(sym) | TypeExpr::GenericInstance(sym, _) => *sym,
+                        _ => {
+                            let target_id = self.parse_type(target_type, stmt.span);
+                            let type_str = self.session.format_type(target_id);
+                            self.session.interner.borrow_mut().intern(&type_str)
+                        }
+                    };
+
+                    if !type_params.is_empty() {
+                        self.generic_registry
+                            .register_extension(target_sym, stmt.clone());
+                    }
+
+                    self.env.push_scope();
+                    for tp in type_params {
+                        self.env.declare(
+                            *tp,
+                            self.session.types.borrow_mut().intern(Type::Generic(*tp)),
+                        );
+                    }
+
+                    let _target_id = self.parse_type(target_type, stmt.span);
+
+                    let mut ext_methods = self.extensions.remove(&target_sym).unwrap_or_default();
+                    for method in methods {
+                        if let StmtKind::Func {
+                            name,
+                            type_params: method_type_params,
+                            params,
+                            return_type,
+                            ..
+                        } = &method.kind
+                        {
+                            let ret_ty = if let Some(rt) = return_type {
+                                self.parse_type(rt, method.span)
+                            } else {
+                                self.session.types.borrow_mut().intern(Type::Void)
+                            };
+                            let mut param_types = Vec::new();
+                            for (_, pt) in params {
+                                param_types.push(self.parse_type(pt, method.span));
+                            }
+
+                            ext_methods.insert(
+                                *name,
+                                self.session.types.borrow_mut().intern(Type::Function(
+                                    method_type_params.clone(),
+                                    param_types,
+                                    ret_ty,
+                                )),
+                            );
+                        }
+                    }
+
+                    self.extensions.insert(target_sym, ext_methods);
+                    self.env.pop_scope();
                 }
                 _ => {}
             }

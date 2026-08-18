@@ -56,4 +56,17 @@ impl SpecializationRegistry {
     pub fn get_state(&self, key: &SpecializationKey) -> Option<&SpecializationState> {
         self.states.get(key)
     }
+
+    pub fn get_original_name(
+        &self,
+        mangled_name: &str,
+        interner: &session::Interner,
+    ) -> Option<session::Symbol> {
+        for key in self.states.keys() {
+            if key.mangled_name(interner) == mangled_name {
+                return Some(key.definition_name);
+            }
+        }
+        None
+    }
 }

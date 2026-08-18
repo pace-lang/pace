@@ -43,34 +43,52 @@ impl<'a> MirBuilder<'a> {
             let obj_val = self.lower_expr(object);
             let temp = self.new_temp();
 
-            if let Type::Instance(class_name) | Type::GenericInstance(class_name, _) | Type::Enum(class_name, _) =
-                self.session.types.borrow().get(object.ty)
-            {
-                let actual_name = format!(
-                    "{}::{}",
-                    self.session.interner.borrow().lookup(*class_name),
-                    self.session.interner.borrow().lookup(*name)
-                );
-                arg_values.insert(0, obj_val);
-                {
-                    let __inst = Inst::Assign(temp.clone(), RValue::Call(actual_name, arg_values));
-                    self.current().instructions.push(__inst)
-                };
-                return Value::Place(temp);
+            match self.session.types.borrow().get(object.ty) {
+                Type::Interface(_, _) | Type::Any => {
+                    // Dynamic dispatch
+                    let __inst = Inst::Assign(
+                        temp.clone(),
+                        RValue::MethodCall(
+                            obj_val.clone(),
+                            self.session.interner.borrow().lookup(*name).to_string(),
+                            arg_values,
+                        ),
+                    );
+                    self.current().instructions.push(__inst);
+                    return Value::Place(temp);
+                }
+                _ => {
+                    // Static dispatch for Instances, Enums, Primitives (extensions)
+                    let target_name = match self.session.types.borrow().get(object.ty) {
+                        Type::Enum(n, _)
+                        | Type::Instance(n)
+                        | Type::Struct(n, _)
+                        | Type::Class(n, _) => {
+                            self.session.interner.borrow().lookup(*n).to_string()
+                        }
+                        _ => {
+                            let target_name_raw = self.session.format_type(object.ty);
+                            target_name_raw
+                                .replace("<", "_")
+                                .replace(">", "")
+                                .replace(" ", "")
+                                .replace(",", "_")
+                        }
+                    };
+                    let actual_name = format!(
+                        "{}::{}",
+                        target_name,
+                        self.session.interner.borrow().lookup(*name)
+                    );
+                    arg_values.insert(0, obj_val);
+                    {
+                        let __inst =
+                            Inst::Assign(temp.clone(), RValue::Call(actual_name, arg_values));
+                        self.current().instructions.push(__inst)
+                    };
+                    return Value::Place(temp);
+                }
             }
-
-            {
-                let __inst = Inst::Assign(
-                    temp.clone(),
-                    RValue::MethodCall(
-                        obj_val.clone(),
-                        self.session.interner.borrow().lookup(*name).to_string(),
-                        arg_values,
-                    ),
-                );
-                self.current().instructions.push(__inst)
-            };
-            return Value::Place(temp);
         }
 
         if let TypedExprKind::EnumVariant {

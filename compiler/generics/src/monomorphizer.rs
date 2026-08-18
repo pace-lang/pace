@@ -54,19 +54,25 @@ impl<'a> Monomorphizer<'a> {
                 is_private,
             } => {
                 let new_methods = methods.iter().map(|m| self.monomorphize_stmt(m)).collect();
-                
-                let new_variants = variants.iter().map(|v| {
-                    let new_fields = v.fields.as_ref().map(|fields| {
-                        fields.iter().map(|f| ast::stmt::EnumField {
-                            name: f.name,
-                            ty: self.subst.substitute(&f.ty),
-                        }).collect()
-                    });
-                    ast::stmt::EnumVariant {
-                        name: v.name,
-                        fields: new_fields,
-                    }
-                }).collect();
+
+                let new_variants = variants
+                    .iter()
+                    .map(|v| {
+                        let new_fields = v.fields.as_ref().map(|fields| {
+                            fields
+                                .iter()
+                                .map(|f| ast::stmt::EnumField {
+                                    name: f.name,
+                                    ty: self.subst.substitute(&f.ty),
+                                })
+                                .collect()
+                        });
+                        ast::stmt::EnumVariant {
+                            name: v.name,
+                            fields: new_fields,
+                        }
+                    })
+                    .collect();
 
                 StmtKind::Enum {
                     name: self.mangled_name,
@@ -180,6 +186,15 @@ impl<'a> Monomorphizer<'a> {
                 value: value
                     .as_ref()
                     .map(|e| &*self.subst.arena.alloc(self.monomorphize_expr(e))),
+            },
+            StmtKind::Extension {
+                target_type,
+                type_params: _,
+                methods,
+            } => StmtKind::Extension {
+                target_type: self.subst.substitute(target_type),
+                type_params: Vec::new(),
+                methods: methods.iter().map(|m| self.monomorphize_stmt(m)).collect(),
             },
             _ => stmt.kind.clone(), // Fallback for Interface, ForeignFunc which shouldn't have generics inside
         };

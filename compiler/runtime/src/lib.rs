@@ -344,14 +344,17 @@ fn allocate_pace_string(s: &str) -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn stringSplitRaw(s_ptr: *const c_char, sub_ptr: *const c_char) -> *mut core::ffi::c_void {
+pub extern "C" fn stringSplitRaw(
+    s_ptr: *const c_char,
+    sub_ptr: *const c_char,
+) -> *mut core::ffi::c_void {
     if s_ptr.is_null() {
         let vec: Vec<*mut core::ffi::c_void> = Vec::new();
         return Box::into_raw(Box::new(vec)) as *mut core::ffi::c_void;
     }
     let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
     let mut vec: Vec<*mut core::ffi::c_void> = Vec::new();
-    
+
     if sub_ptr.is_null() {
         vec.push(allocate_pace_string(s_str.as_ref()) as *mut core::ffi::c_void);
     } else {
@@ -364,7 +367,11 @@ pub extern "C" fn stringSplitRaw(s_ptr: *const c_char, sub_ptr: *const c_char) -
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn stringReplace(s_ptr: *const c_char, old_ptr: *const c_char, new_ptr: *const c_char) -> *const c_char {
+pub extern "C" fn stringReplace(
+    s_ptr: *const c_char,
+    old_ptr: *const c_char,
+    new_ptr: *const c_char,
+) -> *const c_char {
     if s_ptr.is_null() {
         return std::ptr::null();
     }
@@ -374,7 +381,7 @@ pub extern "C" fn stringReplace(s_ptr: *const c_char, old_ptr: *const c_char, ne
     let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
     let old_str = unsafe { CStr::from_ptr(old_ptr.add(24)) }.to_string_lossy();
     let new_str = unsafe { CStr::from_ptr(new_ptr.add(24)) }.to_string_lossy();
-    
+
     let replaced = s_str.replace(old_str.as_ref(), new_str.as_ref());
     allocate_pace_string(&replaced)
 }
@@ -408,7 +415,6 @@ pub extern "C" fn stringToUpper(s_ptr: *const c_char) -> *const c_char {
     let upper = s_str.to_uppercase();
     allocate_pace_string(&upper)
 }
-
 
 #[unsafe(no_mangle)]
 pub extern "C" fn fileIsValid(_ptr: *mut u8) -> u8 {
