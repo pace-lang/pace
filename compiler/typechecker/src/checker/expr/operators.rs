@@ -329,7 +329,11 @@ impl<'a> TypeChecker<'a> {
         }
 
         let ty = match op {
-            BinaryOp::Add | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide => {
+            BinaryOp::Add
+            | BinaryOp::Subtract
+            | BinaryOp::Multiply
+            | BinaryOp::Divide
+            | BinaryOp::Modulo => {
                 let int_ty = self.session.types.borrow_mut().intern(Type::Int);
                 if (self.is_assignable(typed_left.ty, int_ty)
                     || typed_left.ty == self.session.types.borrow_mut().intern(Type::Float))

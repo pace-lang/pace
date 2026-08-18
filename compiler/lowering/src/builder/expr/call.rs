@@ -208,12 +208,18 @@ impl<'a> MirBuilder<'a> {
             }
         }
 
+        let mut actual_name = self.session.interner.borrow().lookup(func_name).to_string();
+        if actual_name == "hash" || actual_name == "equals" {
+            let type_name = self.session.format_type(arguments[0].ty);
+            actual_name = format!("{}_{}", actual_name, type_name);
+        }
+
         let temp = self.new_temp();
         {
             let __inst = Inst::Assign(
                 temp.clone(),
                 RValue::Call(
-                    self.session.interner.borrow().lookup(func_name).to_string(),
+                    actual_name,
                     arg_values,
                 ),
             );

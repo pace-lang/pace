@@ -50,6 +50,29 @@ impl<'a> MirBuilder<'a> {
 
     pub(crate) fn lower_get_expr(&mut self, object: &TypedExpr, name: session::Symbol) -> Value {
         let obj_val = self.lower_expr(object);
+        
+        let class_name = match self.session.types.borrow().get(object.ty).clone() {
+            session::types::Type::Class(class_name, _) => {
+                self.session.interner.borrow().lookup(class_name).to_string()
+            }
+            session::types::Type::Struct(struct_name, _) => {
+                self.session.interner.borrow().lookup(struct_name).to_string()
+            }
+            session::types::Type::Instance(name) => {
+                self.session.interner.borrow().lookup(name).to_string()
+            }
+            session::types::Type::Pointer(inner) => {
+                // If it's a pointer to an instance (e.g. self inside methods sometimes)
+                match self.session.types.borrow().get(inner).clone() {
+                    session::types::Type::Instance(name) | session::types::Type::Class(name, _) | session::types::Type::Struct(name, _) => {
+                        self.session.interner.borrow().lookup(name).to_string()
+                    }
+                    t => panic!("GetProperty on pointer to non-class/struct: {:?}", t),
+                }
+            }
+            t => panic!("GetProperty on non-class/struct: {:?}", t),
+        };
+
         let temp = self.new_temp();
         {
             let __inst = Inst::Assign(
@@ -57,6 +80,7 @@ impl<'a> MirBuilder<'a> {
                 RValue::GetProperty(
                     obj_val,
                     self.session.interner.borrow().lookup(name).to_string(),
+                    class_name,
                 ),
             );
             self.current().instructions.push(__inst)
@@ -72,10 +96,33 @@ impl<'a> MirBuilder<'a> {
     ) -> Value {
         let obj_val = self.lower_expr(object);
         let val_val = self.lower_expr(value);
+        
+        let class_name = match self.session.types.borrow().get(object.ty).clone() {
+            session::types::Type::Class(class_name, _) => {
+                self.session.interner.borrow().lookup(class_name).to_string()
+            }
+            session::types::Type::Struct(struct_name, _) => {
+                self.session.interner.borrow().lookup(struct_name).to_string()
+            }
+            session::types::Type::Instance(name) => {
+                self.session.interner.borrow().lookup(name).to_string()
+            }
+            session::types::Type::Pointer(inner) => {
+                match self.session.types.borrow().get(inner).clone() {
+                    session::types::Type::Instance(name) | session::types::Type::Class(name, _) | session::types::Type::Struct(name, _) => {
+                        self.session.interner.borrow().lookup(name).to_string()
+                    }
+                    t => panic!("SetProperty on pointer to non-class/struct: {:?}", t),
+                }
+            }
+            t => panic!("SetProperty on non-class/struct: {:?}", t),
+        };
+
         {
             let __inst = Inst::SetProperty(
                 obj_val,
                 self.session.interner.borrow().lookup(name).to_string(),
+                class_name,
                 val_val.clone(),
                 crate::builder::is_ref_type_id(value.ty, self.session),
             );
@@ -94,23 +141,46 @@ impl<'a> MirBuilder<'a> {
         name: session::Symbol,
     ) -> Value {
         let obj_val = self.lower_expr(object);
+        
+        let class_name = match self.session.types.borrow().get(object.ty).clone() {
+            session::types::Type::Class(class_name, _) => {
+                self.session.interner.borrow().lookup(class_name).to_string()
+            }
+            session::types::Type::Struct(struct_name, _) => {
+                self.session.interner.borrow().lookup(struct_name).to_string()
+            }
+            session::types::Type::Instance(name) => {
+                self.session.interner.borrow().lookup(name).to_string()
+            }
+            session::types::Type::Pointer(inner) => {
+                // If it's a pointer to an instance (e.g. self inside methods sometimes)
+                match self.session.types.borrow().get(inner).clone() {
+                    session::types::Type::Instance(name) | session::types::Type::Class(name, _) | session::types::Type::Struct(name, _) => {
+                        self.session.interner.borrow().lookup(name).to_string()
+                    }
+                    t => panic!("GetProperty on pointer to non-class/struct: {:?}", t),
+                }
+            }
+            t => panic!("GetProperty on non-class/struct: {:?}", t),
+        };
+
         let temp = self.new_temp();
 
         let then_block = self.new_block();
         let else_block = self.new_block();
         let merge_block = self.new_block();
 
-        let is_null_temp = self.new_temp();
+        let is_null = self.new_temp();
         {
             let __inst = Inst::Assign(
-                is_null_temp.clone(),
+                is_null.clone(),
                 RValue::BinaryOp(ast::BinaryOp::Equal, obj_val.clone(), Value::Null),
             );
-            self.current().instructions.push(__inst)
-        };
+            self.current().instructions.push(__inst);
+        }
 
         self.current().terminator = Some(Terminator::Branch {
-            cond: Value::Place(is_null_temp),
+            cond: Value::Place(is_null),
             then_block,
             else_block,
         });
@@ -118,8 +188,8 @@ impl<'a> MirBuilder<'a> {
         self.current_block = then_block;
         {
             let __inst = Inst::Assign(temp.clone(), RValue::Use(Value::Null));
-            self.current().instructions.push(__inst)
-        };
+            self.current().instructions.push(__inst);
+        }
         self.current().terminator = Some(Terminator::Jump(merge_block));
 
         self.current_block = else_block;
@@ -129,13 +199,15 @@ impl<'a> MirBuilder<'a> {
                 RValue::GetProperty(
                     obj_val,
                     self.session.interner.borrow().lookup(name).to_string(),
+                    class_name,
                 ),
             );
-            self.current().instructions.push(__inst)
-        };
+            self.current().instructions.push(__inst);
+        }
         self.current().terminator = Some(Terminator::Jump(merge_block));
 
         self.current_block = merge_block;
+
         Value::Place(temp)
     }
 }

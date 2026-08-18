@@ -143,6 +143,23 @@ impl CraneliftGenerator {
             .map_err(|e| format!("Failed to declare pacePanic: {}", e))?;
         func_ids.insert("pacePanic".to_string(), panic_id);
 
+        let mut hash_str_sig = module.make_signature();
+        hash_str_sig.params.push(AbiParam::new(types::I64));
+        hash_str_sig.returns.push(AbiParam::new(types::I64));
+        let hash_str_id = module
+            .declare_function("hash_String", Linkage::Import, &hash_str_sig)
+            .unwrap();
+        func_ids.insert("hash_String".to_string(), hash_str_id);
+
+        let mut equals_str_sig = module.make_signature();
+        equals_str_sig.params.push(AbiParam::new(types::I64));
+        equals_str_sig.params.push(AbiParam::new(types::I64));
+        equals_str_sig.returns.push(AbiParam::new(types::I64));
+        let equals_str_id = module
+            .declare_function("equals_String", Linkage::Import, &equals_str_sig)
+            .unwrap();
+        func_ids.insert("equals_String".to_string(), equals_str_id);
+
         let mut retain_sig = module.make_signature();
         retain_sig.params.push(AbiParam::new(types::I64)); // obj pointer
         let retain_id = module

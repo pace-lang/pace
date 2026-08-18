@@ -151,10 +151,11 @@ impl<'a> Parser<'a> {
     pub(crate) fn factor(&mut self) -> Option<Expr<'a>> {
         let mut expr = self.unary()?;
 
-        while self.match_token(&[TokenKind::Star, TokenKind::Slash]) {
+        while self.match_token(&[TokenKind::Star, TokenKind::Slash, TokenKind::Percent]) {
             let operator = match self.previous().kind {
                 TokenKind::Star => BinaryOp::Multiply,
                 TokenKind::Slash => BinaryOp::Divide,
+                TokenKind::Percent => BinaryOp::Modulo,
                 _ => unreachable!(),
             };
             let right = self.unary()?;

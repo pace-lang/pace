@@ -344,7 +344,7 @@ fn allocate_pace_string(s: &str) -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn stringSplitRaw(
+pub extern "C" fn stringSplit(
     s_ptr: *const c_char,
     sub_ptr: *const c_char,
 ) -> *mut core::ffi::c_void {
@@ -364,6 +364,34 @@ pub extern "C" fn stringSplitRaw(
         }
     }
     Box::into_raw(Box::new(vec)) as *mut core::ffi::c_void
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringSplitLen(ptr: *mut core::ffi::c_void) -> i64 {
+    if ptr.is_null() {
+        return 0;
+    }
+    let vec = unsafe { &mut *(ptr as *mut Vec<*mut core::ffi::c_void>) };
+    vec.len() as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringSplitAt(ptr: *mut core::ffi::c_void, index: i64) -> *mut core::ffi::c_void {
+    if ptr.is_null() {
+        return std::ptr::null_mut();
+    }
+    let vec = unsafe { &mut *(ptr as *mut Vec<*mut core::ffi::c_void>) };
+    if index < 0 || index as usize >= vec.len() {
+        return std::ptr::null_mut();
+    }
+    vec[index as usize]
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringSplitFree(ptr: *mut core::ffi::c_void) {
+    if !ptr.is_null() {
+        unsafe { drop(Box::from_raw(ptr as *mut Vec<*mut core::ffi::c_void>)) };
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -404,6 +432,35 @@ pub extern "C" fn stringToLower(s_ptr: *const c_char) -> *const c_char {
     let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
     let lower = s_str.to_lowercase();
     allocate_pace_string(&lower)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn hash_String(s_ptr: *const c_char) -> i64 {
+    if s_ptr.is_null() {
+        return 0;
+    }
+    let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
+    
+    // FNV-1a hash algorithm
+    let mut hash: u64 = 14695981039346656037;
+    for byte in s_str.as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(1099511628211);
+    }
+    hash as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn equals_String(a_ptr: *const c_char, b_ptr: *const c_char) -> i64 {
+    if a_ptr == b_ptr {
+        return 1;
+    }
+    if a_ptr.is_null() || b_ptr.is_null() {
+        return 0;
+    }
+    let a_str = unsafe { CStr::from_ptr(a_ptr.add(24)) }.to_string_lossy();
+    let b_str = unsafe { CStr::from_ptr(b_ptr.add(24)) }.to_string_lossy();
+    if a_str == b_str { 1 } else { 0 }
 }
 
 #[unsafe(no_mangle)]

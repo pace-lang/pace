@@ -1,58 +1,189 @@
 import "../core/option.pace" show Option;
 import "list.pace" show List;
 
-foreign func mapInit<K, V>(): Pointer<CChar>; // Opaque pointer to underlying map
-foreign func mapSet<K, V>(ptr: Pointer<CChar>, key: K, value: V);
-foreign func mapGetRaw<K, V>(ptr: Pointer<CChar>, key: K): V;
-foreign func mapRemove<K, V>(ptr: Pointer<CChar>, key: K);
-foreign func mapContains<K, V>(ptr: Pointer<CChar>, key: K): Boolean;
-foreign func mapClear<K, V>(ptr: Pointer<CChar>);
-foreign func mapKeysLen<K, V>(ptr: Pointer<CChar>): Int;
-foreign func mapKeyAt<K, V>(ptr: Pointer<CChar>, index: Int): K;
-foreign func mapValueAt<K, V>(ptr: Pointer<CChar>, index: Int): V;
-foreign func mapFree(ptr: Pointer<CChar>);
+foreign func malloc(size: Int): Pointer<CChar>;
+foreign func free(ptr: Pointer<CChar>);
+foreign func ptrRead<T>(ptr: Pointer<CChar>, offset: Int): T;
+foreign func ptrWrite<T>(ptr: Pointer<CChar>, offset: Int, val: T);
+
+foreign func hash<T>(val: T): Int;
+foreign func equals<T>(a: T, b: T): Boolean;
 
 class Map<K, V> {
-    var ptr: Pointer<CChar>;
+    var keyPtr: Pointer<CChar>;
+    var valuePtr: Pointer<CChar>;
+    var statePtr: Pointer<CChar>;
+    var capacity: Int;
+    var length: Int;
 
     func init() {
-        self.ptr = mapInit<K, V>();
+        self.capacity = 16;
+        self.length = 0;
+        self.keyPtr = malloc(self.capacity * 8);
+        self.valuePtr = malloc(self.capacity * 8);
+        self.statePtr = malloc(self.capacity * 8);
+        var i = 0;
+        while i < self.capacity {
+            ptrWrite<Int>(self.statePtr, i, 0);
+            i = i + 1;
+        }
     }
 
     func deinit() {
-        mapFree(self.ptr);
+        if self.capacity > 0 {
+            free(self.keyPtr);
+            free(self.valuePtr);
+            free(self.statePtr);
+            self.capacity = 0;
+        }
+    }
+
+    func resize(newCapacity: Int) {
+        let oldKeys = self.keyPtr;
+        let oldValues = self.valuePtr;
+        let oldStates = self.statePtr;
+        let oldCapacity = self.capacity;
+
+        self.capacity = newCapacity;
+        self.length = 0;
+        self.keyPtr = malloc(self.capacity * 8);
+        self.valuePtr = malloc(self.capacity * 8);
+        self.statePtr = malloc(self.capacity * 8);
+
+        var i = 0;
+        while i < self.capacity {
+            ptrWrite<Int>(self.statePtr, i, 0);
+            i = i + 1;
+        }
+
+        i = 0;
+        while i < oldCapacity {
+            let state = ptrRead<Int>(oldStates, i);
+            if state == 1 {
+                let k = ptrRead<K>(oldKeys, i);
+                let v = ptrRead<V>(oldValues, i);
+                self.set(k, v);
+            }
+            i = i + 1;
+        }
+
+        free(oldKeys);
+        free(oldValues);
+        free(oldStates);
     }
 
     func set(key: K, value: V) {
-        mapSet<K, V>(self.ptr, key, value);
+        if self.length * 2 >= self.capacity {
+            self.resize(self.capacity * 2);
+        }
+
+        var h = hash<K>(key);
+        if h < 0 {
+            h = 0 - h;
+        }
+        var index = h % self.capacity;
+
+        while true {
+            let state = ptrRead<Int>(self.statePtr, index);
+            if state == 0 {
+                ptrWrite<K>(self.keyPtr, index, key);
+                ptrWrite<V>(self.valuePtr, index, value);
+                ptrWrite<Int>(self.statePtr, index, 1);
+                self.length = self.length + 1;
+                return;
+            } else if state == 2 {
+                ptrWrite<K>(self.keyPtr, index, key);
+                ptrWrite<V>(self.valuePtr, index, value);
+                ptrWrite<Int>(self.statePtr, index, 1);
+                self.length = self.length + 1;
+                return;
+            } else if state == 1 {
+                let existingKey = ptrRead<K>(self.keyPtr, index);
+                if equals<K>(existingKey, key) {
+                    ptrWrite<V>(self.valuePtr, index, value);
+                    return;
+                }
+            }
+            index = (index + 1) % self.capacity;
+        }
     }
 
     func get(key: K): Option<V> {
-        if self.contains(key) == false {
-            return Option.None();
+        var h = hash<K>(key);
+        if h < 0 {
+            h = 0 - h;
         }
-        let val = mapGetRaw<K, V>(self.ptr, key);
-        return Option.Some(val);
-    }
+        var index = h % self.capacity;
+        var startIndex = index;
 
-    func remove(key: K) {
-        mapRemove<K, V>(self.ptr, key);
+        while true {
+            let state = ptrRead<Int>(self.statePtr, index);
+            if state == 0 {
+                return Option.None();
+            } else if state == 1 {
+                let existingKey = ptrRead<K>(self.keyPtr, index);
+                if equals<K>(existingKey, key) {
+                    let v = ptrRead<V>(self.valuePtr, index);
+                    return Option.Some(v);
+                }
+            }
+            index = (index + 1) % self.capacity;
+            if index == startIndex {
+                return Option.None();
+            }
+        }
+        return Option.None();
     }
 
     func contains(key: K): Boolean {
-        return mapContains<K, V>(self.ptr, key);
+        let opt = self.get(key);
+        return opt.isSome();
+    }
+
+    func remove(key: K) {
+        var h = hash<K>(key);
+        if h < 0 {
+            h = 0 - h;
+        }
+        var index = h % self.capacity;
+        var startIndex = index;
+
+        while true {
+            let state = ptrRead<Int>(self.statePtr, index);
+            if state == 0 {
+                return;
+            } else if state == 1 {
+                let existingKey = ptrRead<K>(self.keyPtr, index);
+                if equals<K>(existingKey, key) {
+                    ptrWrite<Int>(self.statePtr, index, 2);
+                    self.length = self.length - 1;
+                    return;
+                }
+            }
+            index = (index + 1) % self.capacity;
+            if index == startIndex {
+                return;
+            }
+        }
     }
 
     func clear() {
-        mapClear<K, V>(self.ptr);
+        var i = 0;
+        while i < self.capacity {
+            ptrWrite<Int>(self.statePtr, i, 0);
+            i = i + 1;
+        }
+        self.length = 0;
     }
 
     func keys(): List<K> {
         let list = List<K>();
-        let len = mapKeysLen<K, V>(self.ptr);
         var i = 0;
-        while i < len {
-            list.push(mapKeyAt<K, V>(self.ptr, i));
+        while i < self.capacity {
+            let state = ptrRead<Int>(self.statePtr, i);
+            if state == 1 {
+                list.push(ptrRead<K>(self.keyPtr, i));
+            }
             i = i + 1;
         }
         return list;
@@ -60,10 +191,12 @@ class Map<K, V> {
 
     func values(): List<V> {
         let list = List<V>();
-        let len = mapKeysLen<K, V>(self.ptr);
         var i = 0;
-        while i < len {
-            list.push(mapValueAt<K, V>(self.ptr, i));
+        while i < self.capacity {
+            let state = ptrRead<Int>(self.statePtr, i);
+            if state == 1 {
+                list.push(ptrRead<V>(self.valuePtr, i));
+            }
             i = i + 1;
         }
         return list;

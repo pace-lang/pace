@@ -141,13 +141,13 @@ impl ArcPass {
                                 new_instructions.push(inst.clone());
                             }
                         }
-                        Inst::SetProperty(obj_val, prop_name, val_val, is_ref) => {
+                        Inst::SetProperty(obj_val, prop_name, class_name, val_val, is_ref) => {
                             if *is_ref {
                                 let temp_place = Place::Temp(temp_counter);
                                 temp_counter += 1;
                                 new_instructions.push(Inst::Assign(
                                     temp_place.clone(),
-                                    RValue::GetProperty(obj_val.clone(), prop_name.clone()),
+                                    RValue::GetProperty(obj_val.clone(), prop_name.clone(), class_name.clone()),
                                 ));
                                 new_instructions.push(Inst::Release(Value::Place(temp_place)));
                                 new_instructions.push(Inst::Retain(val_val.clone()));

@@ -152,6 +152,28 @@ impl<'a> MirBuilder<'a> {
             }
             TypedExprKind::Get { object, name } => {
                 let obj_val = self.lower_expr(object);
+                
+                let class_name = match self.session.types.borrow().get(object.ty).clone() {
+                    session::types::Type::Class(class_name, _) => {
+                        self.session.interner.borrow().lookup(class_name).to_string()
+                    }
+                    session::types::Type::Struct(struct_name, _) => {
+                        self.session.interner.borrow().lookup(struct_name).to_string()
+                    }
+                    session::types::Type::Instance(name) => {
+                        self.session.interner.borrow().lookup(name).to_string()
+                    }
+                    session::types::Type::Pointer(inner) => {
+                        match self.session.types.borrow().get(inner).clone() {
+                            session::types::Type::Instance(name) | session::types::Type::Class(name, _) | session::types::Type::Struct(name, _) => {
+                                self.session.interner.borrow().lookup(name).to_string()
+                            }
+                            t => panic!("GetProperty on pointer to non-class/struct: {:?}", t),
+                        }
+                    }
+                    t => panic!("GetProperty on non-class/struct: {:?}", t),
+                };
+
                 let current_temp = self.new_temp();
                 {
                     let __inst = Inst::Assign(
@@ -159,6 +181,7 @@ impl<'a> MirBuilder<'a> {
                         RValue::GetProperty(
                             obj_val.clone(),
                             self.session.interner.borrow().lookup(*name).to_string(),
+                            class_name.clone(),
                         ),
                     );
                     self.current().instructions.push(__inst)
@@ -189,6 +212,7 @@ impl<'a> MirBuilder<'a> {
                     let __inst = Inst::SetProperty(
                         obj_val,
                         self.session.interner.borrow().lookup(*name).to_string(),
+                        class_name,
                         right_val.clone(),
                         super::super::is_ref_type_id(right.ty, self.session),
                     );

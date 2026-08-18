@@ -10,7 +10,10 @@ foreign func stringReplace(s: String, old: String, new: String): String;
 foreign func stringTrim(s: String): String;
 foreign func stringToLower(s: String): String;
 foreign func stringToUpper(s: String): String;
-foreign func stringSplitRaw(s: String, sub: String): Pointer<CChar>;
+foreign func stringSplit(s: String, sub: String): Pointer<CChar>;
+foreign func stringSplitLen(ptr: Pointer<CChar>): Int;
+foreign func stringSplitAt(ptr: Pointer<CChar>, index: Int): String;
+foreign func stringSplitFree(ptr: Pointer<CChar>);
 
 extend String {
     public func len(): Int {
@@ -31,7 +34,14 @@ extend String {
 
     public func split(sub: String): List<String> {
         let list = List<String>();
-        list.ptr = stringSplitRaw(self, sub);
+        let ptr = stringSplit(self, sub);
+        let len = stringSplitLen(ptr);
+        var i = 0;
+        while i < len {
+            list.push(stringSplitAt(ptr, i));
+            i = i + 1;
+        }
+        stringSplitFree(ptr);
         return list;
     }
 

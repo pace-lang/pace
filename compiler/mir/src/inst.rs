@@ -29,7 +29,7 @@ pub enum RValue {
     MethodCall(Value, String, Vec<Value>),
     AllocateObject(String),
     AllocateStruct(String),
-    GetProperty(Value, String),
+    GetProperty(Value, String, String),
     WeakUpgrade(Value),
     ForceUnwrap(Value),
     Array(Vec<Value>, bool),
@@ -44,7 +44,7 @@ pub enum RValue {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inst {
     Assign(Place, RValue),
-    SetProperty(Value, String, Value, bool),
+    SetProperty(Value, String, String, Value, bool),
     IndexSet(Value, Value, Value),
 
     Retain(Value),

@@ -218,6 +218,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                             BinaryOp::Subtract => self.builder.ins().isub(cl_left, cl_right),
                             BinaryOp::Multiply => self.builder.ins().imul(cl_left, cl_right),
                             BinaryOp::Divide => self.builder.ins().sdiv(cl_left, cl_right),
+                            BinaryOp::Modulo => self.builder.ins().srem(cl_left, cl_right),
                             BinaryOp::Equal => {
                                 let c = self.builder.ins().icmp(
                                     ir::condcodes::IntCC::Equal,
@@ -314,6 +315,15 @@ impl<'a, 'b> Translator<'a, 'b> {
                             
                             self.builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), val, addr, 0);
                             self.builder.ins().iconst(types::I64, 0)
+                        } else if target_func_name == "hash_Int" || target_func_name == "hash_Boolean" {
+                            // Simple identity hash for primitives
+                            self.translate_value(&args[0])?
+                        } else if target_func_name == "equals_Int" || target_func_name == "equals_Boolean" {
+                            // Native equality for primitives
+                            let left = self.translate_value(&args[0])?;
+                            let right = self.translate_value(&args[1])?;
+                            let c = self.builder.ins().icmp(ir::condcodes::IntCC::Equal, left, right);
+                            self.builder.ins().uextend(types::I64, c)
                         } else {
                             let func_id = self
                                 .func_ids
@@ -444,20 +454,16 @@ impl<'a, 'b> Translator<'a, 'b> {
                         ));
                         self.builder.ins().stack_addr(types::I64, ss, 0)
                     }
-                    RValue::GetProperty(obj_val, prop_name) => {
+                    RValue::GetProperty(obj_val, prop_name, class_name) => {
                         let cl_obj = self.translate_value(obj_val)?;
 
-                        // Find field offset by searching all classes
-                        let mut offset = None;
-                        for class_def in self.program.classes.values() {
-                            if let Some(idx) = class_def.fields.iter().position(|f| f == prop_name)
-                            {
-                                offset = Some(24 + (idx as i32 * 8));
-                                break;
-                            }
-                        }
-                        let offset =
-                            offset.unwrap_or_else(|| panic!("Property {} not found", prop_name));
+                        let class_def = self.program.classes.get(class_name)
+                            .unwrap_or_else(|| panic!("Class {} not found in program", class_name));
+                            
+                        let idx = class_def.fields.iter().position(|f| f == prop_name)
+                            .unwrap_or_else(|| panic!("Property {} not found in class {}", prop_name, class_name));
+                            
+                        let offset = 24 + (idx as i32 * 8);
 
                         self.builder
                             .ins()
@@ -652,19 +658,17 @@ impl<'a, 'b> Translator<'a, 'b> {
                 self.builder.def_var(var, cl_val);
                 Ok(())
             }
-            Inst::SetProperty(obj_val, prop_name, val_val, _is_ref) => {
+            Inst::SetProperty(obj_val, prop_name, class_name, val_val, _is_ref) => {
                 let cl_obj = self.translate_value(obj_val)?;
                 let cl_val = self.translate_value(val_val)?;
 
-                // Find field offset
-                let mut offset = None;
-                for class_def in self.program.classes.values() {
-                    if let Some(idx) = class_def.fields.iter().position(|f| f == prop_name) {
-                        offset = Some(24 + (idx as i32 * 8));
-                        break;
-                    }
-                }
-                let offset = offset.unwrap_or_else(|| panic!("Property {} not found", prop_name));
+                let class_def = self.program.classes.get(class_name)
+                    .unwrap_or_else(|| panic!("Class {} not found in program", class_name));
+                    
+                let idx = class_def.fields.iter().position(|f| f == prop_name)
+                    .unwrap_or_else(|| panic!("Property {} not found in class {}", prop_name, class_name));
+                    
+                let offset = 24 + (idx as i32 * 8);
 
                 self.builder
                     .ins()

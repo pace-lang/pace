@@ -143,6 +143,7 @@ impl<'a> Scanner<'a> {
                 }
             }
             '*' => TokenKind::Star,
+            '%' => TokenKind::Percent,
             '/' => {
                 if self.match_char('/') {
                     // A comment goes until the end of the line.
