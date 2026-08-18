@@ -1,83 +1,6 @@
 use std::ffi::c_void;
 
-// LIST IMPLEMENTATION
-
-#[unsafe(no_mangle)]
-pub extern "C" fn listInit() -> *mut c_void {
-    let vec: Vec<*mut c_void> = Vec::new();
-    Box::into_raw(Box::new(vec)) as *mut c_void
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn listPush(ptr: *mut c_void, val: *mut c_void) {
-    if ptr.is_null() {
-        return;
-    }
-    let vec = unsafe { &mut *(ptr as *mut Vec<*mut c_void>) };
-    vec.push(val);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn listPopRaw(ptr: *mut c_void) -> *mut c_void {
-    if ptr.is_null() {
-        return std::ptr::null_mut();
-    }
-    let vec = unsafe { &mut *(ptr as *mut Vec<*mut c_void>) };
-    vec.pop().unwrap_or(std::ptr::null_mut())
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn listGetRaw(ptr: *mut c_void, index: i64) -> *mut c_void {
-    if ptr.is_null() {
-        return std::ptr::null_mut();
-    }
-    let vec = unsafe { &mut *(ptr as *mut Vec<*mut c_void>) };
-    if index < 0 || index as usize >= vec.len() {
-        return std::ptr::null_mut();
-    }
-    vec[index as usize]
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn listSet(ptr: *mut c_void, index: i64, val: *mut c_void) {
-    if ptr.is_null() {
-        return;
-    }
-    let vec = unsafe { &mut *(ptr as *mut Vec<*mut c_void>) };
-    if index >= 0 && (index as usize) < vec.len() {
-        vec[index as usize] = val;
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn listLen(ptr: *mut c_void) -> i64 {
-    if ptr.is_null() {
-        return 0;
-    }
-    let vec = unsafe { &mut *(ptr as *mut Vec<*mut c_void>) };
-    vec.len() as i64
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn listClear(ptr: *mut c_void) {
-    if ptr.is_null() {
-        return;
-    }
-    let vec = unsafe { &mut *(ptr as *mut Vec<*mut c_void>) };
-    vec.clear();
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn listRemoveRaw(ptr: *mut c_void, index: i64) -> *mut c_void {
-    if ptr.is_null() {
-        return std::ptr::null_mut();
-    }
-    let vec = unsafe { &mut *(ptr as *mut Vec<*mut c_void>) };
-    if index < 0 || index as usize >= vec.len() {
-        return std::ptr::null_mut();
-    }
-    vec.remove(index as usize)
-}
+// LIST IMPLEMENTATION DELETED (Now fully native in Pace)
 
 // MAP IMPLEMENTATION
 
@@ -133,29 +56,37 @@ pub extern "C" fn mapClear(ptr: *mut c_void) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mapKeysRaw(ptr: *mut c_void) -> *mut c_void {
+pub extern "C" fn mapKeysLen(ptr: *mut c_void) -> i64 {
     if ptr.is_null() {
-        return std::ptr::null_mut();
+        return 0;
     }
     let map = unsafe { &mut *(ptr as *mut std::collections::HashMap<u64, *mut c_void>) };
-    let mut vec: Vec<*mut c_void> = Vec::new();
-    for k in map.keys() {
-        vec.push(*k as *mut c_void);
-    }
-    Box::into_raw(Box::new(vec)) as *mut c_void
+    map.len() as i64
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mapValuesRaw(ptr: *mut c_void) -> *mut c_void {
+pub extern "C" fn mapKeyAt(ptr: *mut c_void, index: i64) -> *mut c_void {
     if ptr.is_null() {
         return std::ptr::null_mut();
     }
     let map = unsafe { &mut *(ptr as *mut std::collections::HashMap<u64, *mut c_void>) };
-    let mut vec: Vec<*mut c_void> = Vec::new();
-    for v in map.values() {
-        vec.push(*v);
+    if index < 0 || index as usize >= map.len() {
+        return std::ptr::null_mut();
     }
-    Box::into_raw(Box::new(vec)) as *mut c_void
+    let key = *map.keys().nth(index as usize).unwrap();
+    key as *mut c_void
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mapValueAt(ptr: *mut c_void, index: i64) -> *mut c_void {
+    if ptr.is_null() {
+        return std::ptr::null_mut();
+    }
+    let map = unsafe { &mut *(ptr as *mut std::collections::HashMap<u64, *mut c_void>) };
+    if index < 0 || index as usize >= map.len() {
+        return std::ptr::null_mut();
+    }
+    *map.values().nth(index as usize).unwrap()
 }
 
 // SET IMPLEMENTATION
@@ -212,27 +143,28 @@ pub extern "C" fn setLen(ptr: *mut c_void) -> i64 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn setValuesRaw(ptr: *mut c_void) -> *mut c_void {
+pub extern "C" fn setValuesLen(ptr: *mut c_void) -> i64 {
+    if ptr.is_null() {
+        return 0;
+    }
+    let set = unsafe { &mut *(ptr as *mut std::collections::HashSet<u64>) };
+    set.len() as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn setValueAt(ptr: *mut c_void, index: i64) -> *mut c_void {
     if ptr.is_null() {
         return std::ptr::null_mut();
     }
     let set = unsafe { &mut *(ptr as *mut std::collections::HashSet<u64>) };
-    let mut vec: Vec<*mut c_void> = Vec::new();
-    for v in set.iter() {
-        vec.push(*v as *mut c_void);
+    if index < 0 || index as usize >= set.len() {
+        return std::ptr::null_mut();
     }
-    Box::into_raw(Box::new(vec)) as *mut c_void
+    let val = *set.iter().nth(index as usize).unwrap();
+    val as *mut c_void
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn listFree(ptr: *mut c_void) {
-    if !ptr.is_null() {
-        unsafe {
-            drop(Box::from_raw(ptr as *mut Vec<*mut c_void>));
-        }
-    }
-}
-
+// listFree DELETED
 #[unsafe(no_mangle)]
 pub extern "C" fn mapFree(ptr: *mut c_void) {
     if !ptr.is_null() {

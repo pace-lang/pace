@@ -1,35 +1,45 @@
 import "../core/option.pace";
+// Raw C-runtime allocation bindings
+foreign func malloc(size: Int): Pointer<CChar>;
+foreign func realloc(ptr: Pointer<CChar>, newSize: Int): Pointer<CChar>;
+foreign func free(ptr: Pointer<CChar>);
 
-foreign func listInit<T>(): Pointer<CChar>;
-foreign func listPush<T>(ptr: Pointer<CChar>, value: T);
-foreign func listPopRaw<T>(ptr: Pointer<CChar>): T;
-foreign func listGetRaw<T>(ptr: Pointer<CChar>, index: Int): T;
-foreign func listSet<T>(ptr: Pointer<CChar>, index: Int, value: T);
-foreign func listLen<T>(ptr: Pointer<CChar>): Int;
-foreign func listClear<T>(ptr: Pointer<CChar>);
-foreign func listRemoveRaw<T>(ptr: Pointer<CChar>, index: Int): T;
-foreign func listFree(ptr: Pointer<CChar>);
+// Compiler Intrinsics (Zero FFI)
+foreign func ptrRead<T>(ptr: Pointer<CChar>, offset: Int): T;
+foreign func ptrWrite<T>(ptr: Pointer<CChar>, offset: Int, val: T);
 
 class List<T> {
     var ptr: Pointer<CChar>;
+    var length: Int;
+    var capacity: Int;
 
     func init() {
-        self.ptr = listInit<T>();
+        self.capacity = 8;
+        self.length = 0;
+        self.ptr = malloc(self.capacity * 8); // 8 bytes per item
     }
 
     func deinit() {
-        listFree(self.ptr);
+        if self.capacity > 0 {
+            free(self.ptr);
+        }
     }
 
     func push(value: T) {
-        listPush<T>(self.ptr, value);
+        if self.length >= self.capacity {
+            self.capacity = self.capacity * 2;
+            self.ptr = realloc(self.ptr, self.capacity * 8);
+        }
+        ptrWrite<T>(self.ptr, self.length, value);
+        self.length = self.length + 1;
     }
 
     func pop(): Option<T> {
-        if self.len() == 0 {
+        if self.length == 0 {
             return Option.None();
         }
-        let val = listPopRaw<T>(self.ptr);
+        self.length = self.length - 1;
+        let val = ptrRead<T>(self.ptr, self.length);
         return Option.Some(val);
     }
 
@@ -37,33 +47,49 @@ class List<T> {
         if index < 0 {
             return Option.None();
         }
-        if index >= self.len() {
+        if index >= self.length {
             return Option.None();
         }
-        let val = listGetRaw<T>(self.ptr, index);
+        let val = ptrRead<T>(self.ptr, index);
         return Option.Some(val);
     }
 
     func set(index: Int, value: T) {
-        listSet<T>(self.ptr, index, value);
+        if index >= 0 {
+            if index < self.length {
+                ptrWrite<T>(self.ptr, index, value);
+            }
+        }
     }
 
     func len(): Int {
-        return listLen<T>(self.ptr);
+        return self.length;
     }
 
     func clear() {
-        listClear<T>(self.ptr);
+        self.length = 0;
     }
 
     func remove(index: Int): Option<T> {
         if index < 0 {
             return Option.None();
         }
-        if index >= self.len() {
+        if index >= self.length {
             return Option.None();
         }
-        let val = listRemoveRaw<T>(self.ptr, index);
+        
+        let val = ptrRead<T>(self.ptr, index);
+        
+        // Shift elements to the left
+        var i = index;
+        while i < self.length - 1 {
+            let nextVal = ptrRead<T>(self.ptr, i + 1);
+            ptrWrite<T>(self.ptr, i, nextVal);
+            i = i + 1;
+        }
+        
+        self.length = self.length - 1;
         return Option.Some(val);
     }
 }
+

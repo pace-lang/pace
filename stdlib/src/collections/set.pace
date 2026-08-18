@@ -1,12 +1,13 @@
 import "list.pace" show List;
 
 foreign func setInit<T>(): Pointer<CChar>;
-foreign func setInsert<T>(ptr: Pointer<CChar>, value: T);
-foreign func setRemove<T>(ptr: Pointer<CChar>, value: T);
-foreign func setContains<T>(ptr: Pointer<CChar>, value: T): Boolean;
+foreign func setInsert<T>(ptr: Pointer<CChar>, val: T);
+foreign func setRemove<T>(ptr: Pointer<CChar>, val: T);
+foreign func setContains<T>(ptr: Pointer<CChar>, val: T): Boolean;
 foreign func setClear<T>(ptr: Pointer<CChar>);
 foreign func setLen<T>(ptr: Pointer<CChar>): Int;
-foreign func setValuesRaw<T>(ptr: Pointer<CChar>): Pointer<CChar>;
+foreign func setValuesLen<T>(ptr: Pointer<CChar>): Int;
+foreign func setValueAt<T>(ptr: Pointer<CChar>, index: Int): T;
 foreign func setFree(ptr: Pointer<CChar>);
 
 class Set<T> {
@@ -20,16 +21,16 @@ class Set<T> {
         setFree(self.ptr);
     }
 
-    func insert(value: T) {
-        setInsert<T>(self.ptr, value);
+    func insert(val: T) {
+        setInsert<T>(self.ptr, val);
     }
 
-    func remove(value: T) {
-        setRemove<T>(self.ptr, value);
+    func remove(val: T) {
+        setRemove<T>(self.ptr, val);
     }
 
-    func contains(value: T): Boolean {
-        return setContains<T>(self.ptr, value);
+    func contains(val: T): Boolean {
+        return setContains<T>(self.ptr, val);
     }
 
     func clear() {
@@ -42,7 +43,12 @@ class Set<T> {
 
     func values(): List<T> {
         let list = List<T>();
-        list.ptr = setValuesRaw<T>(self.ptr);
+        let len = setValuesLen<T>(self.ptr);
+        var i = 0;
+        while i < len {
+            list.push(setValueAt<T>(self.ptr, i));
+            i = i + 1;
+        }
         return list;
     }
 }

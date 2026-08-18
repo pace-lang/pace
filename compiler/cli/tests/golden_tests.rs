@@ -52,6 +52,13 @@ fn run_ui_test(file_path: &Path) {
                     normalized_line = format!("ld: {}", &normalized_line[idx..]);
                 }
             }
+
+            // Normalize pace_module text offsets (e.g., pace_module:(.text+0x1845): -> pace_module:(.text+0x[OFFSET]):)
+            if normalized_line.starts_with("pace_module:(.text+0x") {
+                if let Some(end_idx) = normalized_line.find("):") {
+                    normalized_line = format!("pace_module:(.text+0x[OFFSET]):{}", &normalized_line[end_idx + 2..]);
+                }
+            }
             
             normalized_line
         })

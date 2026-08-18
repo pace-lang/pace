@@ -292,13 +292,36 @@ impl<'a, 'b> Translator<'a, 'b> {
                     }
                     RValue::Call(func_name, args) => {
                         let target_func_name = func_name.as_str();
-                        let func_id = self
-                            .func_ids
-                            .get(target_func_name)
-                            .ok_or_else(|| format!("Function {} not found", target_func_name))?;
-                        let local_callee = self
-                            .module
-                            .declare_func_in_func(*func_id, self.builder.func);
+
+                        // Intercept Compiler Intrinsics (ptrRead, ptrWrite)
+                        if target_func_name.starts_with("ptrRead_") {
+                            let ptr_val = self.translate_value(&args[0])?;
+                            let index_val = self.translate_value(&args[1])?;
+                            
+                            // Calculate byte offset: offset = index * 8 (since all Pace types are 64-bit currently)
+                            let byte_offset = self.builder.ins().imul_imm_s(index_val, 8);
+                            let addr = self.builder.ins().iadd(ptr_val, byte_offset);
+                            
+                            let loaded = self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlagsData::new(), addr, 0);
+                            loaded
+                        } else if target_func_name.starts_with("ptrWrite_") {
+                            let ptr_val = self.translate_value(&args[0])?;
+                            let index_val = self.translate_value(&args[1])?;
+                            let val = self.translate_value(&args[2])?;
+                            
+                            let byte_offset = self.builder.ins().imul_imm_s(index_val, 8);
+                            let addr = self.builder.ins().iadd(ptr_val, byte_offset);
+                            
+                            self.builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), val, addr, 0);
+                            self.builder.ins().iconst(types::I64, 0)
+                        } else {
+                            let func_id = self
+                                .func_ids
+                                .get(target_func_name)
+                                .ok_or_else(|| format!("Function {} not found", target_func_name))?;
+                            let local_callee = self
+                                .module
+                                .declare_func_in_func(*func_id, self.builder.func);
 
                         let mut arg_vals = Vec::new();
 
@@ -371,6 +394,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                         }
 
                         result_val
+                        }
                     }
                     RValue::AllocateObject(class_name) => {
                         let class_def = self

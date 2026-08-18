@@ -4,13 +4,13 @@ expression: normalized_stderr
 ---
 [31m[E001] Error:[0m Linker failed: Linker failed:
 ld: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::get':
-pace_module:(.text+0x1845): undefined reference to `arrayGet'
+pace_module:(.text+0x[OFFSET]): undefined reference to `arrayGet'
 ld: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::len':
-pace_module:(.text+0x1858): undefined reference to `arrayLen'
+pace_module:(.text+0x[OFFSET]): undefined reference to `arrayLen'
 ld: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::pop':
-pace_module:(.text+0x186a): undefined reference to `arrayPop'
+pace_module:(.text+0x[OFFSET]): undefined reference to `arrayPop'
 ld: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::push':
-pace_module:(.text+0x187c): undefined reference to `arrayPush'
+pace_module:(.text+0x[OFFSET]): undefined reference to `arrayPush'
 ld: $WORKSPACE/compiler/cli/../../tests/ui/13_stdlib/target/debug/out.o: in function `pace_func_[Int]::set':
-pace_module:(.text+0x1892): undefined reference to `arraySet'
+pace_module:(.text+0x[OFFSET]): undefined reference to `arraySet'
 collect2: error: ld returned 1 exit status

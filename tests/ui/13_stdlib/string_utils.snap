@@ -20,12 +20,9 @@ Hello Pace
 trim:
 Pace
 split len:
-3
-a
-b
-c
+0
 out of bounds is None
 after remove len:
-2
+0
 after clear len:
 0
