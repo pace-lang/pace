@@ -3,21 +3,21 @@ func main() {
     let s = "Hello World";
     
     print("toLower:");
-    print(toLower(s));
+    print(s.toLower());
 
     print("toUpper:");
-    print(toUpper(s));
+    print(s.toUpper());
 
-    let replaced = replace(s, "World", "Pace");
+    let replaced = s.replace("World", "Pace");
     print("replace:");
     print(replaced);
 
     let spaced = "   Pace   ";
     print("trim:");
-    print(trim(spaced));
+    print(spaced.trim());
 
     let csv = "a,b,c";
-    let parts = split(csv, ",");
+    let parts = csv.split(",");
     print("split len:");
     print(parts.len());
     let opt0 = parts.get(0);

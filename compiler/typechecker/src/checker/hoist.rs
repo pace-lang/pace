@@ -505,8 +505,17 @@ impl<'a> TypeChecker<'a> {
                     type_params,
                     methods,
                 } => {
+                    self.env.push_scope();
+                    for tp in type_params {
+                        self.env.declare(
+                            *tp,
+                            self.session.types.borrow_mut().intern(Type::Generic(*tp)),
+                        );
+                    }
+
                     let target_sym = match target_type {
                         TypeExpr::Named(sym) | TypeExpr::GenericInstance(sym, _) => *sym,
+                        TypeExpr::Array(_) => self.session.interner.borrow_mut().intern("$ArrayExtension"),
                         _ => {
                             let target_id = self.parse_type(target_type, stmt.span);
                             let type_str = self.session.format_type(target_id);
@@ -517,14 +526,6 @@ impl<'a> TypeChecker<'a> {
                     if !type_params.is_empty() {
                         self.generic_registry
                             .register_extension(target_sym, stmt.clone());
-                    }
-
-                    self.env.push_scope();
-                    for tp in type_params {
-                        self.env.declare(
-                            *tp,
-                            self.session.types.borrow_mut().intern(Type::Generic(*tp)),
-                        );
                     }
 
                     let _target_id = self.parse_type(target_type, stmt.span);

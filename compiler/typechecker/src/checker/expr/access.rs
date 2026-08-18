@@ -429,6 +429,58 @@ impl<'a> TypeChecker<'a> {
                     .collect(),
             ),
             Type::Enum(n, _args) => (n, Vec::new()),
+            Type::Array(inner) => {
+                let array_sym = self.session.interner.borrow_mut().intern("$ArrayExtension");
+                let mut type_params = Vec::new();
+                if let Some(exts) = self.generic_registry.get_extensions(array_sym) {
+                    if let Some(ext) = exts.first() {
+                        if let ast::StmtKind::Extension { type_params: tps, .. } = &ext.kind {
+                            type_params = tps.clone();
+                        }
+                    }
+                }
+                
+                let mangled_name = if !type_params.is_empty() {
+                    self.instantiate_generic_class(
+                        array_sym,
+                        &type_params,
+                        &[inner],
+                    )
+                } else {
+                    array_sym
+                };
+
+                if let Some(ext_methods) = self.extensions.get(&mangled_name) {
+                    if let Some(ext_method_ty) = ext_methods.get(&name) {
+                        return (
+                            TypedExprKind::Get {
+                                object: self.alloc(typed_obj),
+                                name,
+                            },
+                            *ext_method_ty,
+                        );
+                    }
+                }
+
+                if typed_obj.ty != self.session.types.borrow_mut().intern(Type::Error) {
+                    self.error(
+                        span,
+                        DiagnosticCode::TypeMismatch,
+                        &format!(
+                            "Cannot get property '{}' on non-instance type '{}'.",
+                            self.session.interner.borrow().lookup(name),
+                            self.session.format_type(typed_obj.ty)
+                        ),
+                    )
+                }
+                return (
+                    TypedExprKind::Get {
+                        object: self.alloc(typed_obj),
+                        name,
+                    },
+                    self.session.types.borrow_mut().intern(Type::Error),
+                );
+            }
             _ => {
                 if let Some(ext_methods) = self.extensions.get(&base_sym) {
                     if let Some(ext_method_ty) = ext_methods.get(&name) {

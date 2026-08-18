@@ -15,6 +15,10 @@ impl<'a> TypeChecker<'a> {
                 "CChar" => self.session.types.borrow_mut().intern(Type::CChar),
                 "CSize" => self.session.types.borrow_mut().intern(Type::CSize),
                 _ => {
+                    if let Some(ty_id) = self.array_extension_mapping.get(name) {
+                        return *ty_id;
+                    }
+
                     if let Some(ty_id) = self.env.resolve(*name) {
                         let ty = self.session.types.borrow().get(ty_id).clone();
                         if matches!(ty, Type::Generic(_) | Type::TypeAlias(..)) {
@@ -370,35 +374,41 @@ impl<'a> TypeChecker<'a> {
 
         self.spec_registry.mark_pending(key.clone());
 
-        if let Some(generic_stmt) = self.generic_registry.get_class(class_name).cloned() {
-            let mut type_arg_exprs = Vec::new();
-            for ty in type_args {
-                type_arg_exprs.push(self.type_to_type_expr(*ty));
+        let is_array_ext = self.session.interner.borrow().lookup(class_name).starts_with("$ArrayExtension");
+        if is_array_ext && !type_args.is_empty() {
+            let inner = type_args[0];
+            self.array_extension_mapping.insert(mangled_name, self.session.types.borrow_mut().intern(Type::Array(inner)));
+        }
+
+        let mut type_arg_exprs = Vec::new();
+        for ty in type_args {
+            type_arg_exprs.push(self.type_to_type_expr(*ty));
+        }
+
+        let param_syms: Vec<session::Symbol> = type_params.to_vec();
+        let substitution = self.alloc(generics::TypeSubstitution::new(
+            self.arena(),
+            &param_syms,
+            &type_arg_exprs,
+            &self.session.interner.borrow(),
+        ));
+        let monomorphizer = generics::Monomorphizer::new(self.arena(), substitution, mangled_name);
+
+        let mut is_concrete = true;
+        for ty in type_args {
+            if let Type::Generic(_) = self.get_type(*ty) {
+                is_concrete = false;
+                break;
             }
+        }
 
-            let param_syms: Vec<session::Symbol> = type_params.to_vec();
-            let substitution = self.alloc(generics::TypeSubstitution::new(
-                self.arena(),
-                &param_syms,
-                &type_arg_exprs,
-                &self.session.interner.borrow(),
-            ));
-            let monomorphizer =
-                generics::Monomorphizer::new(self.arena(), substitution, mangled_name);
-
+        if let Some(generic_stmt) = self.generic_registry.get_class(class_name).cloned() {
             let concrete_stmt = monomorphizer.monomorphize_stmt(&generic_stmt);
             self.spec_registry.mark_complete(key.clone());
 
             self.collect_declarations(std::slice::from_ref(&concrete_stmt));
 
             // Queue the typechecking for the MonomorphizePass to avoid recursion
-            let mut is_concrete = true;
-            for ty in type_args {
-                if let Type::Generic(_) = self.get_type(*ty) {
-                    is_concrete = false;
-                    break;
-                }
-            }
             if is_concrete {
                 self.instantiation_queue.push((
                     key.clone(),
@@ -407,27 +417,30 @@ impl<'a> TypeChecker<'a> {
                     mangled_name,
                 ));
             }
+        } else {
+            // Mark complete even if no class, so we don't keep trying
+            self.spec_registry.mark_complete(key.clone());
+        }
 
-            // Monomorphize extensions
-            if let Some(extensions) = self.generic_registry.get_extensions(class_name).cloned() {
-                for ext_stmt in extensions {
-                    let mut concrete_ext = monomorphizer.monomorphize_stmt(&ext_stmt);
+        // Monomorphize extensions (even if there is no base class, e.g. Arrays)
+        if let Some(extensions) = self.generic_registry.get_extensions(class_name).cloned() {
+            for ext_stmt in extensions {
+                let mut concrete_ext = monomorphizer.monomorphize_stmt(&ext_stmt);
 
-                    // The generic extension's target_type needs to be updated to mangled_name
-                    if let ast::StmtKind::Extension { target_type, .. } = &mut concrete_ext.kind {
-                        *target_type = ast::TypeExpr::Named(mangled_name);
-                    }
+                // The generic extension's target_type needs to be updated to mangled_name
+                if let ast::StmtKind::Extension { target_type, .. } = &mut concrete_ext.kind {
+                    *target_type = ast::TypeExpr::Named(mangled_name);
+                }
 
-                    self.collect_declarations(std::slice::from_ref(&concrete_ext));
+                self.collect_declarations(std::slice::from_ref(&concrete_ext));
 
-                    if is_concrete {
-                        self.instantiation_queue.push((
-                            key.clone(),
-                            concrete_ext,
-                            substitution,
-                            mangled_name,
-                        ));
-                    }
+                if is_concrete {
+                    self.instantiation_queue.push((
+                        key.clone(),
+                        concrete_ext,
+                        substitution,
+                        mangled_name,
+                    ));
                 }
             }
         }

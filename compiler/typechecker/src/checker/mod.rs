@@ -35,6 +35,7 @@ pub struct TypeChecker<'a> {
     pub spec_registry: &'a mut generics::SpecializationRegistry,
     pub pending_instantiations: Vec<TypedStmt<'a>>,
     pub uninitialized_class_properties: HashMap<Symbol, Vec<Symbol>>,
+    pub array_extension_mapping: HashMap<Symbol, TypeId>,
     pub is_checking_method: bool,
     pub instantiation_queue: Vec<(
         generics::SpecializationKey,
@@ -84,6 +85,7 @@ impl<'a> TypeChecker<'a> {
             spec_registry,
             pending_instantiations: Vec::new(),
             uninitialized_class_properties: HashMap::new(),
+            array_extension_mapping: HashMap::new(),
             is_checking_method: false,
             instantiation_queue: Vec::new(),
         }

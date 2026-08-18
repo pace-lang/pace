@@ -10,43 +10,44 @@ foreign func stringReplace(s: String, old: String, new: String): String;
 foreign func stringTrim(s: String): String;
 foreign func stringToLower(s: String): String;
 foreign func stringToUpper(s: String): String;
-
-func len(s: String): Int {
-    return stringLen(s);
-}
-
-func concat(a: String, b: String): String {
-    return stringConcat(a, b);
-}
-
-func substring(s: String, start: Int, end: Int): String {
-    return stringSubstring(s, start, end);
-}
-
-func contains(s: String, sub: String): Boolean {
-    return stringContains(s, sub);
-}
-
 foreign func stringSplitRaw(s: String, sub: String): Pointer<CChar>;
 
-func split(s: String, sub: String): List<String> {
-    let list = List<String>();
-    list.ptr = stringSplitRaw(s, sub);
-    return list;
-}
+extend String {
+    public func len(): Int {
+        return stringLen(self);
+    }
 
-func replace(s: String, old: String, new: String): String {
-    return stringReplace(s, old, new);
-}
+    public func concat(b: String): String {
+        return stringConcat(self, b);
+    }
 
-func trim(s: String): String {
-    return stringTrim(s);
-}
+    public func substring(start: Int, end: Int): String {
+        return stringSubstring(self, start, end);
+    }
 
-func toLower(s: String): String {
-    return stringToLower(s);
-}
+    public func contains(sub: String): Boolean {
+        return stringContains(self, sub);
+    }
 
-func toUpper(s: String): String {
-    return stringToUpper(s);
+    public func split(sub: String): List<String> {
+        let list = List<String>();
+        list.ptr = stringSplitRaw(self, sub);
+        return list;
+    }
+
+    public func replace(old: String, new: String): String {
+        return stringReplace(self, old, new);
+    }
+
+    public func trim(): String {
+        return stringTrim(self);
+    }
+
+    public func toLower(): String {
+        return stringToLower(self);
+    }
+
+    public func toUpper(): String {
+        return stringToUpper(self);
+    }
 }
