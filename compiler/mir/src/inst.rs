@@ -37,7 +37,7 @@ pub enum RValue {
     ArrayLength(Value),
     IndexGet(Value, Value),
     ConstructVariant(String, usize, Vec<Value>),
-    ExtractPayload(Value, usize, usize, bool),
+    ExtractPayload(String, Value, usize, usize, bool),
     GetVariantTag(Value),
 }
 

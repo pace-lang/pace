@@ -54,6 +54,7 @@ impl<'a> MirBuilder<'a> {
                         if self.session.interner.borrow().lookup(*bind) != "_" {
                             let field_temp = self.new_temp();
                             let mut payload_is_ref = false;
+                            let mut payload_is_ref = false;
                             {
                                 let ty_arena = self.session.types.borrow();
                                 for ty in ty_arena.iter() {
@@ -96,6 +97,7 @@ impl<'a> MirBuilder<'a> {
                                 let __inst = Inst::Assign(
                                     field_temp.clone(),
                                     RValue::ExtractPayload(
+                                        self.session.interner.borrow().lookup(resolved_enum_name).to_string(),
                                         match_val.clone(),
                                         variant_idx,
                                         field_idx,

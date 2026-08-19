@@ -33,6 +33,7 @@ pub struct ForeignFunction {
 pub struct EnumVariantDef {
     pub name: String,
     pub reference_payloads: std::collections::HashSet<usize>,
+    pub struct_payloads: std::collections::HashMap<usize, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

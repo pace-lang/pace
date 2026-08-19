@@ -316,9 +316,13 @@ impl<'a> MirBuilder<'a> {
         self.current_block = else_block;
         let err_payload = self.new_temp();
         let is_err_ref = super::super::is_ref_type_id(err_ty, self.session, &self.struct_names);
+        let ok_str = self.session.format_type(ok_ty).replace("<", "_").replace(">", "").replace(" ", "").replace(",", "_");
+        let err_str = self.session.format_type(err_ty).replace("<", "_").replace(">", "").replace(" ", "").replace(",", "_");
+        let result_enum_name = format!("Result_{}_{}", ok_str, err_str);
+        
         self.current().instructions.push(Inst::Assign(
             err_payload.clone(),
-            RValue::ExtractPayload(inner_val.clone(), 1, 0, is_err_ref),
+            RValue::ExtractPayload(result_enum_name.clone(), inner_val.clone(), 1, 0, is_err_ref),
         ));
 
         let err_result = self.new_temp();
@@ -335,7 +339,7 @@ impl<'a> MirBuilder<'a> {
         let is_ok_ref = super::super::is_ref_type_id(ok_ty, self.session, &self.struct_names);
         self.current().instructions.push(Inst::Assign(
             ok_payload.clone(),
-            RValue::ExtractPayload(inner_val, 0, 0, is_ok_ref),
+            RValue::ExtractPayload(result_enum_name, inner_val, 0, 0, is_ok_ref),
         ));
 
         Value::Place(ok_payload)

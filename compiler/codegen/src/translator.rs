@@ -335,7 +335,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                                 let ss = self.builder.create_sized_stack_slot(ir::StackSlotData::new(
                                     ir::StackSlotKind::ExplicitSlot,
                                     size_bytes,
-                                    3,
+                                    4,
                                 ));
                                 let dest_addr = self.builder.ins().stack_addr(types::I64, ss, 0);
                                 let size_val = self.builder.ins().iconst(types::I64, size_bytes as i64);
@@ -467,6 +467,11 @@ impl<'a, 'b> Translator<'a, 'b> {
                             }
                         }
 
+                        if target_func_name == "Option_Point_unwrap" {
+                            let debug_func = self.func_ids.get("debug_ptr").unwrap();
+                            let local_debug = self.module.declare_func_in_func(*debug_func, self.builder.func);
+                            self.builder.ins().call(local_debug, &[result_val]);
+                        }
                         result_val
                         }
                     }
@@ -514,7 +519,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let ss = self.builder.create_sized_stack_slot(ir::StackSlotData::new(
                             ir::StackSlotKind::ExplicitSlot,
                             total_size,
-                            3, // 8-byte alignment
+                            4,
                         ));
                         self.builder.ins().stack_addr(types::I64, ss, 0)
                     }
@@ -676,28 +681,67 @@ impl<'a, 'b> Translator<'a, 'b> {
                             .ins()
                             .store(ir::MemFlagsData::new(), cl_tag, obj_ptr, 24);
 
+                        let enum_def = self.program.enums.get(_name).unwrap();
+                        let variant_def = &enum_def.variants[*variant_idx];
+
                         for (i, p) in payloads.iter().enumerate() {
                             let cl_p = self.translate_value(p)?;
                             let offset = 32 + (i as i32 * 8);
-                            self.builder.ins().store(
-                                ir::MemFlagsData::new(),
-                                cl_p,
-                                obj_ptr,
-                                offset,
-                            );
+
+                            if let Some(struct_name) = variant_def.struct_payloads.get(&i) {
+                                let class_def = self.program.classes.get(struct_name).unwrap();
+                                let struct_size = class_def.fields.len() as u32 * 8;
+
+                                let struct_metadata_id = *self.class_metadata_ids.get(struct_name).unwrap();
+                                let local_struct_metadata_id = self.module.declare_data_in_func(struct_metadata_id, self.builder.func);
+                                let struct_metadata_ptr = self.builder.ins().symbol_value(types::I64, local_struct_metadata_id);
+                                let struct_size_val = self.builder.ins().iconst(types::I64, struct_size as i64);
+                                let alloc_size_val = self.builder.ins().iconst(types::I64, (struct_size + 32) as i64);
+
+                                let struct_alloc_call = self.builder.ins().call(local_alloc, &[alloc_size_val, struct_metadata_ptr]);
+                                let struct_obj_ptr = self.builder.inst_results(struct_alloc_call)[0];
+                                let struct_payload_ptr = self.builder.ins().iadd_imm(struct_obj_ptr, 32);
+                                self.builder.call_memcpy(self.module.target_config(), struct_payload_ptr, cl_p, struct_size_val);
+
+                                self.builder.ins().store(
+                                    ir::MemFlagsData::new(),
+                                    struct_obj_ptr,
+                                    obj_ptr,
+                                    offset,
+                                );
+                            } else {
+                                self.builder.ins().store(
+                                    ir::MemFlagsData::new(),
+                                    cl_p,
+                                    obj_ptr,
+                                    offset,
+                                );
+                            }
                         }
 
                         obj_ptr
                     }
-                    RValue::ExtractPayload(val, _variant_idx, field_idx, _is_ref) => {
+                    RValue::ExtractPayload(enum_name, val, _variant_idx, field_idx, _is_ref) => {
                         let obj_ptr = self.translate_value(val)?;
                         let offset = 32 + (*field_idx as i32 * 8);
-                        self.builder.ins().load(
+                        let extracted_val = self.builder.ins().load(
                             types::I64,
                             ir::MemFlagsData::new(),
                             obj_ptr,
                             offset,
-                        )
+                        );
+
+                        let enum_def = self.program.enums.get(enum_name).unwrap_or_else(|| {
+                            panic!("Enum {} not found in program.enums!", enum_name);
+                        });
+                        let variant_def = &enum_def.variants[*_variant_idx];
+
+                        if let Some(_struct_name) = variant_def.struct_payloads.get(field_idx) {
+                            let extracted_payload_ptr = self.builder.ins().iadd_imm_s(extracted_val, 32);
+                            extracted_payload_ptr
+                        } else {
+                            extracted_val
+                        }
                     }
                     RValue::GetVariantTag(val) => {
                         let obj_ptr = self.translate_value(val)?;

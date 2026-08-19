@@ -78,7 +78,7 @@ impl ArcPass {
                             reference_places.insert(place.clone());
                             owned_places.insert(place.clone());
                         }
-                        Inst::Assign(place, RValue::ExtractPayload(_val, _, _, is_ref)) => {
+                        Inst::Assign(place, RValue::ExtractPayload(_, _val, _, _, is_ref)) => {
                             new_instructions.push(inst.clone());
                             if *is_ref {
                                 new_instructions.push(Inst::Retain(Value::Place(place.clone())));

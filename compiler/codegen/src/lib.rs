@@ -143,6 +143,13 @@ impl CraneliftGenerator {
             .map_err(|e| format!("Failed to declare pacePanic: {}", e))?;
         func_ids.insert("pacePanic".to_string(), panic_id);
 
+        let mut debug_ptr_sig = module.make_signature();
+        debug_ptr_sig.params.push(AbiParam::new(types::I64));
+        let debug_ptr_id = module
+            .declare_function("debug_ptr", Linkage::Import, &debug_ptr_sig)
+            .map_err(|e| format!("Failed to declare debug_ptr: {}", e))?;
+        func_ids.insert("debug_ptr".to_string(), debug_ptr_id);
+
         let mut hash_str_sig = module.make_signature();
         hash_str_sig.params.push(AbiParam::new(types::I64));
         hash_str_sig.returns.push(AbiParam::new(types::I64));
@@ -286,13 +293,17 @@ impl CraneliftGenerator {
                 // 0: deinit_fn (Enums don't have deinit, so it's always 0)
                 metadata_bytes.extend_from_slice(&0u64.to_le_bytes());
 
+                let mut all_refs: std::collections::HashSet<usize> = variant_def.reference_payloads.clone();
+                for &idx in variant_def.struct_payloads.keys() {
+                    all_refs.insert(idx);
+                }
+                
                 // 8: field_count (uint64_t)
                 metadata_bytes.extend_from_slice(
-                    &(variant_def.reference_payloads.len() as u64).to_le_bytes(),
+                    &(all_refs.len() as u64).to_le_bytes(),
                 );
 
-                let mut sorted_refs: Vec<usize> =
-                    variant_def.reference_payloads.iter().cloned().collect();
+                let mut sorted_refs: Vec<usize> = all_refs.into_iter().collect();
                 sorted_refs.sort();
 
                 for idx in sorted_refs {

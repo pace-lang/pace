@@ -54,6 +54,24 @@ fn is_ref_type(te: &ast::TypeExpr, session: &session::CompilerSession) -> bool {
     is_ref_type_opt(&Some(te.clone()), session)
 }
 
+pub(crate) fn get_struct_name(
+    ty: session::TypeId,
+    session: &session::CompilerSession,
+    struct_names: &std::collections::HashSet<String>,
+) -> Option<String> {
+    match session.types.borrow().get(ty) {
+        session::types::Type::Instance(sym) => {
+            let name = session.interner.borrow().lookup(*sym).to_string();
+            if struct_names.contains(&name) {
+                Some(name)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 pub(crate) fn is_ref_type_id(
     ty: session::TypeId,
     session: &session::CompilerSession,
@@ -108,21 +126,35 @@ impl<'a> ProgramBuilder<'a> {
     }
 
     pub fn build(mut self, statements: &[TypedStmt]) -> Program {
+        let mut struct_names = std::collections::HashSet::new();
+        for stmt in statements {
+            if let TypedStmtKind::Struct { name, .. } = &stmt.kind {
+                struct_names.insert(self.session.interner.borrow().lookup(*name).to_string());
+            }
+        }
         for stmt in statements {
             if let TypedStmtKind::Enum { name, variants, .. } = &stmt.kind {
                 let mut variant_defs = Vec::new();
                 for v in variants {
                     let mut reference_payloads = std::collections::HashSet::new();
+                    let mut struct_payloads = std::collections::HashMap::new();
                     if let Some(fields) = &v.fields {
                         for (idx, field) in fields.iter().enumerate() {
                             if is_ref_type(&field.ty, self.session) {
                                 reference_payloads.insert(idx);
+                            }
+                            if let ast::TypeExpr::Named(n) = &field.ty {
+                                let n_str = self.session.interner.borrow().lookup(*n).to_string();
+                                if struct_names.contains(&n_str) {
+                                    struct_payloads.insert(idx, n_str);
+                                }
                             }
                         }
                     }
                     variant_defs.push(mir::EnumVariantDef {
                         name: self.session.interner.borrow().lookup(v.name).to_string(),
                         reference_payloads,
+                        struct_payloads,
                     });
                 }
                 self.program.enums.insert(

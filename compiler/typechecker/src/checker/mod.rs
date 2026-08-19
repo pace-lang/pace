@@ -107,13 +107,12 @@ impl<'a> TypeChecker<'a> {
         monomorphizer.run();
 
         // Drain pending generic instantiations
-        let mut final_stmts = Vec::new();
+        let mut final_stmts = all_stmts;
         while !self.pending_instantiations.is_empty() {
             let pending: Vec<TypedStmt<'a>> = self.pending_instantiations.drain(..).collect();
             final_stmts.extend(pending);
         }
 
-        final_stmts.extend(all_stmts);
         final_stmts
     }
 
@@ -125,13 +124,12 @@ impl<'a> TypeChecker<'a> {
         let mut monomorphizer = monomorphize::MonomorphizePass::new(self);
         monomorphizer.run();
 
-        let mut final_stmts = Vec::new();
+        let mut final_stmts = typed_stmts;
         while !self.pending_instantiations.is_empty() {
             let pending: Vec<TypedStmt<'a>> = self.pending_instantiations.drain(..).collect();
             final_stmts.extend(pending);
         }
 
-        final_stmts.extend(typed_stmts);
         final_stmts
     }
 

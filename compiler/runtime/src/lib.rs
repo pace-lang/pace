@@ -56,7 +56,19 @@ pub extern "C" fn printStr(str_ptr: *const c_char) -> i64 {
     0
 }
 
-
+#[unsafe(no_mangle)]
+pub extern "C" fn debug_ptr(ptr: *mut u64) {
+    if ptr.is_null() {
+        println!("debug_ptr: NULL");
+        return;
+    }
+    unsafe {
+        println!("debug_ptr: {:p}", ptr);
+        for i in 0..10 {
+            println!("  offset {}: {}", i * 8, *ptr.add(i));
+        }
+    }
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pacePanic(code: i64) {
@@ -80,9 +92,9 @@ pub extern "C" fn pace_alloc(size: i64, metadata_ptr: *const ()) -> *mut u8 {
         std::process::exit(1);
     }
 
-    // Set strong reference count to 1 (offset 0)
+    // Initialize header
     unsafe {
-        *(ptr as *mut u64) = 1;
+        *(ptr as *mut i64) = 1; // strong count
     }
     // Set weak reference count to 1 (offset 8)
     unsafe {
