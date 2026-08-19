@@ -1,0 +1,10 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+null
+true
+123
+"hello"
+[1,2]
+{"a":1}

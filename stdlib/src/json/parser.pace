@@ -1,0 +1,244 @@
+import "json.pace" show JsonValue;
+import "../core/result.pace" show Result;
+import "../core/string.pace" show String, stringSkipWhitespace, stringFindStringEnd;
+import "../collections/map.pace" show Map;
+import "../collections/list.pace" show List;
+
+foreign func retainJsonValue(val: JsonValue);
+foreign func retainString(val: String);
+
+class JsonParser {
+    var source: String;
+    var pos: Int;
+    var len: Int;
+
+    func init(source: String) {
+        self.source = source;
+        self.pos = 0;
+        self.len = source.len();
+    }
+
+    func parse(): Result<JsonValue, String> {
+        self.skipWhitespace();
+        if self.pos >= self.len {
+            return Result.Err("Empty JSON");
+        }
+        let value = self.parseValue();
+        self.skipWhitespace();
+        if self.pos < self.len {
+            return Result.Err("Unexpected trailing characters");
+        }
+        return Result.Ok(value);
+    }
+
+    func peek(): Int {
+        return self.source.charCodeAt(self.pos);
+    }
+
+    func consume(): Int {
+        let c = self.peek();
+        self.pos = self.pos + 1;
+        return c;
+    }
+
+    func skipWhitespace() {
+        self.pos = stringSkipWhitespace(self.source, self.pos);
+    }
+
+    func parseValue(): JsonValue {
+        self.skipWhitespace();
+        let c = self.peek();
+        
+        if c == 123 { // '{'
+            return self.parseObject();
+        }
+        if c == 91 { // '['
+            return self.parseArray();
+        }
+        if c == 34 { // '"'
+            return self.parseString();
+        }
+        if c == 116 { // 't'
+            self.matchKeyword("true");
+            return JsonValue.Boolean(true);
+        }
+        if c == 102 { // 'f'
+            self.matchKeyword("false");
+            return JsonValue.Boolean(false);
+        }
+        if c == 110 { // 'n'
+            self.matchKeyword("null");
+            return JsonValue.Null();
+        }
+        
+        var isNum = false;
+        if c >= 48 {
+            if c <= 57 {
+                isNum = true;
+            }
+        }
+        if c == 45 {
+            isNum = true;
+        }
+
+        if isNum { // '0'-'9' or '-'
+            return self.parseNumber();
+        }
+        
+        return JsonValue.Null();
+    }
+
+    func matchKeyword(expected: String) {
+        let expectedLen = expected.len();
+        var i = 0;
+        while i < expectedLen {
+            let c = self.consume();
+            if c != expected.charCodeAt(i) {
+                // Invalid keyword, ignoring for simplicity
+            }
+            i = i + 1;
+        }
+    }
+
+    func parseString(): JsonValue {
+        self.consume(); // skip '"'
+        let start = self.pos;
+        
+        let end = stringFindStringEnd(self.source, self.pos);
+        if end == -1 {
+            return JsonValue.String("");
+        }
+        
+        self.pos = end;
+        self.consume(); // skip ending '"'
+        
+        let str = self.source.substring(start, end);
+        return JsonValue.String(str);
+    }
+
+    func parseNumber(): JsonValue {
+        let start = self.pos;
+        var hasDecimal = false;
+        var c = self.peek();
+        
+        if c == 45 { // '-'
+            self.consume();
+            c = self.peek();
+        }
+        
+        var isNumChar = false;
+        if c >= 48 { if c <= 57 { isNumChar = true; } }
+        if c == 46 { isNumChar = true; }
+        if c == 101 { isNumChar = true; }
+        if c == 69 { isNumChar = true; }
+        if c == 43 { isNumChar = true; }
+        if c == 45 { isNumChar = true; }
+
+        while isNumChar {
+            if c == 46 { // '.'
+                hasDecimal = true;
+            }
+            self.consume();
+            c = self.peek();
+            
+            isNumChar = false;
+            if c >= 48 { if c <= 57 { isNumChar = true; } }
+            if c == 46 { isNumChar = true; }
+            if c == 101 { isNumChar = true; }
+            if c == 69 { isNumChar = true; }
+            if c == 43 { isNumChar = true; }
+            if c == 45 { isNumChar = true; }
+        }
+        
+        let end = self.pos;
+        let str = self.source.substring(start, end);
+        
+        if hasDecimal {
+            return JsonValue.NumberFloat(str.toFloat());
+        } else {
+            return JsonValue.NumberInt(str.toInt());
+        }
+    }
+
+    func parseArray(): JsonValue {
+        self.consume(); // skip '['
+        let list = List<JsonValue>();
+        self.skipWhitespace();
+        
+        if self.peek() == 93 { // ']'
+            self.consume();
+            return JsonValue.Array(list);
+        }
+        
+        var parseMore = true;
+        while parseMore {
+            let val = self.parseValue();
+            retainJsonValue(val);
+            list.push(val);
+            
+            self.skipWhitespace();
+            let c = self.peek();
+            if c == 44 { // ','
+                self.consume();
+            } else {
+                parseMore = false;
+            }
+        }
+        
+        if self.peek() == 93 {
+            self.consume();
+        }
+        
+        return JsonValue.Array(list);
+    }
+
+    func parseObject(): JsonValue {
+        self.consume(); // skip '{'
+        let map = Map<String, JsonValue>();
+        self.skipWhitespace();
+        
+        if self.peek() == 125 { // '}'
+            self.consume();
+            return JsonValue.Object(map);
+        }
+        
+        var parseMore = true;
+        while parseMore {
+            self.skipWhitespace();
+            let keyNode = self.parseString();
+            let keyStr = match keyNode {
+                JsonValue.String(s) => s,
+                _ => "",
+            };
+            
+            self.skipWhitespace();
+            if self.peek() == 58 { // ':'
+                self.consume();
+            }
+            
+            let valNode = self.parseValue();
+            retainJsonValue(valNode);
+            retainString(keyStr);
+            map.set(keyStr, valNode);
+            
+            self.skipWhitespace();
+            let c = self.peek();
+            if c == 44 { // ','
+                self.consume();
+            } else {
+                parseMore = false;
+            }
+        }
+        
+        if self.peek() == 125 {
+            self.consume();
+        }
+        
+        return JsonValue.Object(map);
+    }
+}
+
+public func parseJson(source: String): Result<JsonValue, String> {
+    let parser = JsonParser(source);
+    return parser.parse();
+}

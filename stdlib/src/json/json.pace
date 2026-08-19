@@ -1,0 +1,12 @@
+import "../collections/map.pace" show Map;
+import "../collections/list.pace" show List;
+
+enum JsonValue {
+    Null,
+    Boolean(Boolean),
+    NumberInt(Int),
+    NumberFloat(Float),
+    String(String),
+    Array(List<JsonValue>),
+    Object(Map<String, JsonValue>)
+}

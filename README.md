@@ -30,6 +30,37 @@ Pace uses deterministic Automatic Reference Counting (ARC) instead of a tracing 
 - **Weak References**: Built-in support for `weak` variables to safely break reference cycles in complex data structures. 
 - **Thread Safety**: ARC operations are designed to be thread-safe from day one, laying the structural groundwork for future concurrency features.
 
+## Benchmarks
+
+Pace includes several benchmarks to compare performance against other languages:
+
+- **Fibonacci**: Measures recursive function call overhead.
+- **JSON Parsing**: Measures string manipulation, heap allocation, and ARC performance.
+
+To run the Fibonacci benchmark:
+
+```bash
+# Requires Python, Node, Dart, Go, Zig, Rust, Java, C
+cd benchmarks/fibonacci
+./run_benchmarks.sh
+```
+
+To run the JSON parse benchmark, you can use the scripts provided in the `benchmarks/json_parse` directory for various languages (Python, Dart, Java, etc.).
+
+```bash
+# Build and run Pace JSON benchmark (Compiles to native machine code)
+cli build benchmarks/json_parse/json.pace
+time benchmarks/json_parse/target/debug/json_parse
+
+# Run Python JSON benchmark (Uses native C extension)
+python3 benchmarks/json_parse/bench.py
+
+# Run Dart JSON benchmark (JIT compiled)
+dart run benchmarks/json_parse/json.dart
+```
+
+These files are provided directly in the repository so you can independently verify our performance claims.
+
 ## Raw Performance
 
 Because Pace compiles directly into native machine code (using Cranelift) rather than running in an interpreter or JIT VM, it boasts extreme execution speeds on par with C and Rust. 

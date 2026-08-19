@@ -290,6 +290,7 @@ impl<'a> TypeChecker<'a> {
                             self.session.types.borrow_mut().intern(Type::Generic(*tp)),
                         );
                     }
+                    self.enums.insert(*name, std::collections::HashMap::new());
                     let mut enum_variants = std::collections::HashMap::new();
                     for variant in variants {
                         let mut param_types = Vec::new();

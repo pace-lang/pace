@@ -1,0 +1,21 @@
+import "../../../stdlib/src/json/json.pace" show JsonValue;
+import "../../../stdlib/src/json/parser.pace" show parseJson;
+import "../../../stdlib/src/json/stringify.pace" show stringifyJson;
+
+func testCase(source: String) {
+    let result = parseJson(source);
+    if result.isOk() {
+        print(stringifyJson(result.unwrap()));
+    } else {
+        print("Failed");
+    }
+}
+
+func main() {
+    testCase("null");
+    testCase("true");
+    testCase("123");
+    testCase("\"hello\"");
+    testCase("[1, 2]");
+    testCase("{\"a\": 1}");
+}

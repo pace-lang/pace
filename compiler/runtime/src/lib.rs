@@ -273,26 +273,14 @@ pub extern "C" fn stringConcat(a_ptr: *const c_char, b_ptr: *const c_char) -> *c
 
 #[unsafe(no_mangle)]
 pub extern "C" fn stringSubstring(s_ptr: *const c_char, start: i64, end: i64) -> *const c_char {
-    if s_ptr.is_null() {
-        return std::ptr::null();
+    if s_ptr.is_null() || start < 0 || end < start {
+        return allocate_pace_string("");
     }
-    let s_bytes = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_bytes();
-
-    let len = s_bytes.len() as i64;
+    
     let mut safe_start = start;
     let mut safe_end = end;
-
-    if safe_start < 0 {
-        safe_start = 0;
-    }
-    if safe_end > len {
-        safe_end = len;
-    }
-    if safe_start > safe_end {
-        safe_start = safe_end;
-    }
-
     let slice_len = (safe_end - safe_start) as usize;
+    
     let new_ptr = pace_alloc((24 + slice_len + 1) as i64, (-2isize) as *const ());
     if new_ptr.is_null() {
         println!("Pace Runtime Error: Out of memory in stringSubstring");
@@ -301,11 +289,19 @@ pub extern "C" fn stringSubstring(s_ptr: *const c_char, start: i64, end: i64) ->
 
     unsafe {
         let payload_ptr = new_ptr.add(24);
-        std::ptr::copy_nonoverlapping(
-            s_bytes.as_ptr().add(safe_start as usize),
-            payload_ptr,
-            slice_len,
-        );
+        let src_ptr = s_ptr.add(24);
+        
+        let mut actual_len = 0;
+        for i in 0..slice_len {
+            let b = *(src_ptr.add(safe_start as usize + i) as *const u8);
+            if b == 0 {
+                break;
+            }
+            *(payload_ptr.add(i)) = b;
+            actual_len += 1;
+        }
+        
+        *(payload_ptr.add(actual_len)) = 0;
     }
 
     new_ptr as *const c_char
@@ -426,11 +422,83 @@ pub extern "C" fn stringTrim(s_ptr: *const c_char) -> *const c_char {
 #[unsafe(no_mangle)]
 pub extern "C" fn stringToLower(s_ptr: *const c_char) -> *const c_char {
     if s_ptr.is_null() {
-        return std::ptr::null();
+        return allocate_pace_string("");
     }
     let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
     let lower = s_str.to_lowercase();
     allocate_pace_string(&lower)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringCharAt(s: *const c_char, index: i64) -> i64 {
+    if s.is_null() || index < 0 {
+        return 0;
+    }
+    unsafe {
+        let str_ptr = s.add(24);
+        let b = *(str_ptr.add(index as usize) as *const u8);
+        if b == 0 {
+            return 0;
+        }
+        b as i64
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringSkipWhitespace(s: *const c_char, start: i64) -> i64 {
+    if s.is_null() || start < 0 { return start; }
+    unsafe {
+        let mut i = start as usize;
+        let str_ptr = s.add(24);
+        loop {
+            let b = *(str_ptr.add(i) as *const u8);
+            if b == b' ' || b == b'\n' || b == b'\r' || b == b'\t' {
+                i += 1;
+            } else {
+                return i as i64;
+            }
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringFindStringEnd(s: *const c_char, start: i64) -> i64 {
+    if s.is_null() || start < 0 { return -1; }
+    unsafe {
+        let mut i = start as usize;
+        let str_ptr = s.add(24);
+        loop {
+            let b = *(str_ptr.add(i) as *const u8);
+            if b == 0 { break; }
+            if b == b'\\' {
+                i += 2;
+                continue;
+            }
+            if b == b'"' {
+                return i as i64;
+            }
+            i += 1;
+        }
+        -1
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringToInt(s_ptr: *const c_char) -> i64 {
+    if s_ptr.is_null() {
+        return 0;
+    }
+    let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
+    s_str.trim().parse::<i64>().unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringToFloat(s_ptr: *const c_char) -> f64 {
+    if s_ptr.is_null() {
+        return 0.0;
+    }
+    let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
+    s_str.trim().parse::<f64>().unwrap_or(0.0)
 }
 
 #[unsafe(no_mangle)]
@@ -523,7 +591,7 @@ pub extern "C" fn pace_string_concat(s1: *const c_char, s2: *const c_char) -> *c
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pace_int_to_string(value: i64) -> *const c_char {
+pub extern "C" fn paceIntToString(value: i64) -> *const c_char {
     let s = format!("{}", value);
     let ptr = pace_alloc((24 + s.len() + 1) as i64, !1_u64 as *const ());
     unsafe {
@@ -535,7 +603,7 @@ pub extern "C" fn pace_int_to_string(value: i64) -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pace_float_to_string(value: f64) -> *const c_char {
+pub extern "C" fn paceFloatToString(value: f64) -> *const c_char {
     let s = format!("{}", value);
     let ptr = pace_alloc((24 + s.len() + 1) as i64, !1_u64 as *const ());
     unsafe {
@@ -547,7 +615,7 @@ pub extern "C" fn pace_float_to_string(value: f64) -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pace_bool_to_string(value: i64) -> *const c_char {
+pub extern "C" fn paceBoolToString(value: i64) -> *const c_char {
     let s = if value != 0 { "true" } else { "false" };
     let ptr = pace_alloc((24 + s.len() + 1) as i64, !1_u64 as *const ());
     unsafe {
@@ -605,4 +673,18 @@ pub extern "C" fn mathSin(x: f64) -> f64 {
 #[unsafe(no_mangle)]
 pub extern "C" fn mathCos(x: f64) -> f64 {
     x.cos()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn retainJsonValue(val: *mut u8) {
+    if !val.is_null() {
+        pace_retain(val);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn retainString(val: *mut u8) {
+    if !val.is_null() {
+        pace_retain(val);
+    }
 }

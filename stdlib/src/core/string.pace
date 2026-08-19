@@ -14,8 +14,45 @@ foreign func stringSplit(s: String, sub: String): Pointer<CChar>;
 foreign func stringSplitLen(ptr: Pointer<CChar>): Int;
 foreign func stringSplitAt(ptr: Pointer<CChar>, index: Int): String;
 foreign func stringSplitFree(ptr: Pointer<CChar>);
+foreign func stringCharAt(s: String, index: Int): Int;
+foreign func stringSkipWhitespace(s: String, start: Int): Int;
+foreign func stringFindStringEnd(s: String, start: Int): Int;
+foreign func stringToInt(s: String): Int;
+foreign func stringToFloat(s: String): Float;
+foreign func paceIntToString(value: Int): String;
+foreign func paceFloatToString(value: Float): String;
+foreign func paceBoolToString(value: Boolean): String;
+
+extend Int {
+    public func toString(): String {
+        return paceIntToString(self);
+    }
+}
+
+extend Float {
+    public func toString(): String {
+        return paceFloatToString(self);
+    }
+}
+
+extend Boolean {
+    public func toString(): String {
+        return paceBoolToString(self);
+    }
+}
 
 extend String {
+    public func charCodeAt(index: Int): Int {
+        return stringCharAt(self, index);
+    }
+
+    public func toInt(): Int {
+        return stringToInt(self);
+    }
+
+    public func toFloat(): Float {
+        return stringToFloat(self);
+    }
     public func len(): Int {
         return stringLen(self);
     }

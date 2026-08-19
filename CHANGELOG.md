@@ -5,6 +5,9 @@ All notable changes to the Pace language will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **JSON Standard Library**: Implemented a pure recursive descent JSON parser (`parseJson`) inside Pace.
+- **JSON Micro-benchmarks**: Added comprehensive JSON parsing benchmarks in `benchmarks/json_parse/` to track performance against Python and Dart.
+- **Native String Scanning Helpers**: Added `stringSkipWhitespace` and `stringFindStringEnd` to the native runtime to provide O(1) loop speedups for string operations, greatly optimizing JSON parsing performance.
 - **Struct Value Semantics**: Structs are now treated strictly as deep-copied value types. Updating properties of a copied struct variable no longer incorrectly shares memory with the original instance.
 - **Micro-benchmarks**: Added native performance benchmarks for `Map` insertions, recursive functions (Fibonacci), `Struct` deep copies, and Sieve of Eratosthenes. 
 - **Memory Leak Test Suite**: Created a Valgrind test wrapper (`tests/memory_leak_test.sh`) to guarantee zero memory leaks across new native collections.
