@@ -1,0 +1,14 @@
+import "../../../stdlib/src/net/http.pace" show httpGetRequest, HttpResponse;
+import "../../../stdlib/src/core/string.pace" show String;
+
+func main() {
+    let url = "https://jsonplaceholder.typicode.com/todos/1";
+    let result = httpGetRequest(url);
+    
+    if result.isOk() {
+        let resp = result.unwrap();
+        print(resp.status);
+    } else {
+        print("Error");
+    }
+}

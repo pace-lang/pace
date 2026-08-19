@@ -1,0 +1,20 @@
+import "../../stdlib/src/net/http.pace" show HttpServer, bindHttpServer, HttpServerResponse;
+import "../../stdlib/src/core/string.pace" show String;
+
+func main() {
+    let server = bindHttpServer("127.0.0.1:3000");
+    print("Pace HTTP server listening on http://127.0.0.1:3000");
+    
+    while true {
+        let req = server.accept();
+        if req.path == "/json" {
+            let resp = HttpServerResponse(200, "{\"status\": \"ok\", \"language\": \"pace\"}");
+            resp.addHeader("Content-Type", "application/json");
+            req.respondWith(resp);
+        } else {
+            let resp = HttpServerResponse(200, "Hello from Pace Server!");
+            resp.addHeader("Content-Type", "text/plain");
+            req.respondWith(resp);
+        }
+    }
+}

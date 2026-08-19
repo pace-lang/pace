@@ -56,6 +56,8 @@ pub extern "C" fn printStr(str_ptr: *const c_char) -> i64 {
     0
 }
 
+
+
 #[unsafe(no_mangle)]
 pub extern "C" fn pacePanic(code: i64) {
     if code == 1 {
@@ -686,5 +688,314 @@ pub extern "C" fn retainJsonValue(val: *mut u8) {
 pub extern "C" fn retainString(val: *mut u8) {
     if !val.is_null() {
         pace_retain(val);
+    }
+}
+
+// ---------------------------------------------------------
+// HTTP
+// ---------------------------------------------------------
+
+struct PaceHttpRequest {
+    method: String,
+    url: String,
+    headers: Vec<(String, String)>,
+    body: Option<String>,
+}
+
+struct PaceHttpResponse {
+    status: u16,
+    body: String,
+    headers: Vec<(String, String)>,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpClientCreate() -> *mut core::ffi::c_void {
+    let agent = ureq::builder().build();
+    Box::into_raw(Box::new(agent)) as *mut core::ffi::c_void
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpClientFree(ptr: *mut core::ffi::c_void) {
+    if !ptr.is_null() {
+        unsafe {
+            let _ = Box::from_raw(ptr as *mut ureq::Agent);
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpRequestCreate(method_ptr: *const c_char, url_ptr: *const c_char) -> *mut core::ffi::c_void {
+    unsafe {
+        let method = if method_ptr.is_null() { "GET".to_string() } else { std::ffi::CStr::from_ptr(method_ptr.add(24)).to_string_lossy().into_owned() };
+        let url = if url_ptr.is_null() { "".to_string() } else { std::ffi::CStr::from_ptr(url_ptr.add(24)).to_string_lossy().into_owned() };
+        
+        let req = Box::new(PaceHttpRequest {
+            method,
+            url,
+            headers: Vec::new(),
+            body: None,
+        });
+        Box::into_raw(req) as *mut core::ffi::c_void
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpRequestAddHeader(req_ptr: *mut core::ffi::c_void, key_ptr: *const c_char, val_ptr: *const c_char) {
+    if req_ptr.is_null() || key_ptr.is_null() || val_ptr.is_null() { return; }
+    unsafe {
+        let req = &mut *(req_ptr as *mut PaceHttpRequest);
+        let key = std::ffi::CStr::from_ptr(key_ptr.add(24)).to_string_lossy().into_owned();
+        let val = std::ffi::CStr::from_ptr(val_ptr.add(24)).to_string_lossy().into_owned();
+        req.headers.push((key, val));
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpRequestSetBody(req_ptr: *mut core::ffi::c_void, body_ptr: *const c_char) {
+    if req_ptr.is_null() { return; }
+    unsafe {
+        let req = &mut *(req_ptr as *mut PaceHttpRequest);
+        let body = if body_ptr.is_null() { "".to_string() } else { std::ffi::CStr::from_ptr(body_ptr.add(24)).to_string_lossy().into_owned() };
+        req.body = Some(body);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpRequestFree(ptr: *mut core::ffi::c_void) {
+    if !ptr.is_null() {
+        unsafe {
+            let _ = Box::from_raw(ptr as *mut PaceHttpRequest);
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpClientSend(agent_ptr: *mut core::ffi::c_void, req_ptr: *mut core::ffi::c_void) -> *mut core::ffi::c_void {
+    if agent_ptr.is_null() || req_ptr.is_null() {
+        return core::ptr::null_mut();
+    }
+    unsafe {
+        let agent = &*(agent_ptr as *const ureq::Agent);
+        let req = &*(req_ptr as *const PaceHttpRequest);
+        
+        let mut request = agent.request(&req.method, &req.url);
+        for (k, v) in &req.headers {
+            request = request.set(k, v);
+        }
+        
+        let response_result = if let Some(body) = &req.body {
+            request.send_string(body)
+        } else {
+            request.call()
+        };
+        
+        let (status, body, headers) = match response_result {
+            Ok(response) => {
+                let status = response.status();
+                let mut headers = Vec::new();
+                for name in response.headers_names() {
+                    if let Some(val) = response.header(&name) {
+                        headers.push((name, val.to_string()));
+                    }
+                }
+                let body = response.into_string().unwrap_or_default();
+                (status, body, headers)
+            }
+            Err(ureq::Error::Status(code, response)) => {
+                let mut headers = Vec::new();
+                for name in response.headers_names() {
+                    if let Some(val) = response.header(&name) {
+                        headers.push((name, val.to_string()));
+                    }
+                }
+                let body = response.into_string().unwrap_or_default();
+                (code, body, headers)
+            }
+            Err(_) => {
+                return core::ptr::null_mut();
+            }
+        };
+
+        let pace_resp = Box::new(PaceHttpResponse { status, body, headers });
+        Box::into_raw(pace_resp) as *mut core::ffi::c_void
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpResponseIsValid(ptr: *mut core::ffi::c_void) -> i64 {
+    if ptr.is_null() { 0 } else { 1 }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpResponseGetStatus(ptr: *mut core::ffi::c_void) -> i64 {
+    if ptr.is_null() { return 0; }
+    unsafe {
+        let response = &*(ptr as *const PaceHttpResponse);
+        response.status as i64
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpResponseGetBody(ptr: *mut core::ffi::c_void) -> *const c_char {
+    if ptr.is_null() { return allocate_pace_string("") as *const c_char; }
+    unsafe {
+        let response = &*(ptr as *const PaceHttpResponse);
+        allocate_pace_string(&response.body) as *const c_char
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpResponseGetHeader(ptr: *mut core::ffi::c_void, key_ptr: *const c_char) -> *const c_char {
+    if ptr.is_null() || key_ptr.is_null() { return std::ptr::null(); }
+    unsafe {
+        let response = &*(ptr as *const PaceHttpResponse);
+        let search_key = std::ffi::CStr::from_ptr(key_ptr.add(24)).to_string_lossy().into_owned().to_lowercase();
+        
+        for (k, v) in &response.headers {
+            if k.to_lowercase() == search_key {
+                return allocate_pace_string(v) as *const c_char;
+            }
+        }
+        std::ptr::null()
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpResponseFree(ptr: *mut core::ffi::c_void) {
+    if ptr.is_null() { return; }
+    unsafe {
+        let _ = Box::from_raw(ptr as *mut PaceHttpResponse);
+    }
+}
+
+// ---------------------------------------------------------
+// HTTP SERVER
+// ---------------------------------------------------------
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpServerBind(addr_ptr: *const c_char) -> *mut core::ffi::c_void {
+    if addr_ptr.is_null() {
+        return core::ptr::null_mut();
+    }
+    unsafe {
+        let addr = std::ffi::CStr::from_ptr(addr_ptr.add(24)).to_string_lossy();
+        match tiny_http::Server::http(addr.as_ref()) {
+            Ok(server) => Box::into_raw(Box::new(server)) as *mut core::ffi::c_void,
+            Err(_) => core::ptr::null_mut(),
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpServerAccept(server_ptr: *mut core::ffi::c_void) -> *mut core::ffi::c_void {
+    if server_ptr.is_null() {
+        return core::ptr::null_mut();
+    }
+    unsafe {
+        let server = &*(server_ptr as *const tiny_http::Server);
+        match server.recv() {
+            Ok(request) => Box::into_raw(Box::new(request)) as *mut core::ffi::c_void,
+            Err(_) => core::ptr::null_mut(),
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpServerFree(server_ptr: *mut core::ffi::c_void) {
+    if server_ptr.is_null() {
+        return;
+    }
+    unsafe {
+        let _ = Box::from_raw(server_ptr as *mut tiny_http::Server);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpRequestGetPath(req_ptr: *mut core::ffi::c_void) -> *const c_char {
+    if req_ptr.is_null() {
+        return allocate_pace_string("") as *const c_char;
+    }
+    unsafe {
+        let request = &*(req_ptr as *const tiny_http::Request);
+        allocate_pace_string(request.url()) as *const c_char
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpRequestMethod(req_ptr: *mut core::ffi::c_void) -> *const c_char {
+    if req_ptr.is_null() {
+        return allocate_pace_string("") as *const c_char;
+    }
+    unsafe {
+        let request = &*(req_ptr as *const tiny_http::Request);
+        allocate_pace_string(request.method().as_str()) as *const c_char
+    }
+}
+
+struct PaceHttpServerResponse {
+    status: u16,
+    body: String,
+    headers: Vec<(String, String)>,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpServerResponseCreate(status: i64, body_ptr: *const c_char) -> *mut core::ffi::c_void {
+    let body = if body_ptr.is_null() {
+        String::new()
+    } else {
+        unsafe { std::ffi::CStr::from_ptr(body_ptr.add(24)).to_string_lossy().into_owned() }
+    };
+    let resp = Box::new(PaceHttpServerResponse {
+        status: status as u16,
+        body,
+        headers: Vec::new(),
+    });
+    Box::into_raw(resp) as *mut core::ffi::c_void
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpServerResponseAddHeader(resp_ptr: *mut core::ffi::c_void, key_ptr: *const c_char, val_ptr: *const c_char) {
+    if resp_ptr.is_null() || key_ptr.is_null() || val_ptr.is_null() { return; }
+    unsafe {
+        let resp = &mut *(resp_ptr as *mut PaceHttpServerResponse);
+        let key = std::ffi::CStr::from_ptr(key_ptr.add(24)).to_string_lossy().into_owned();
+        let val = std::ffi::CStr::from_ptr(val_ptr.add(24)).to_string_lossy().into_owned();
+        resp.headers.push((key, val));
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpRequestRespond(req_ptr: *mut core::ffi::c_void, resp_ptr: *mut core::ffi::c_void) {
+    if req_ptr.is_null() || resp_ptr.is_null() { return; }
+    unsafe {
+        let request = *Box::from_raw(req_ptr as *mut tiny_http::Request);
+        let resp_data = *Box::from_raw(resp_ptr as *mut PaceHttpServerResponse);
+        
+        let mut response = tiny_http::Response::from_string(resp_data.body)
+            .with_status_code(resp_data.status);
+            
+        for (k, v) in resp_data.headers {
+            if let Ok(header) = tiny_http::Header::from_bytes(k.as_bytes(), v.as_bytes()) {
+                response.add_header(header);
+            }
+        }
+            
+        let _ = request.respond(response);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpRequestGetHeader(req_ptr: *mut core::ffi::c_void, key_ptr: *const c_char) -> *const c_char {
+    if req_ptr.is_null() || key_ptr.is_null() { return std::ptr::null(); }
+    unsafe {
+        let request = &*(req_ptr as *const tiny_http::Request);
+        let search_key = std::ffi::CStr::from_ptr(key_ptr.add(24)).to_string_lossy().into_owned().to_lowercase();
+        
+        for header in request.headers() {
+            if header.field.as_str().to_string().to_lowercase() == search_key {
+                return allocate_pace_string(header.value.as_str()) as *const c_char;
+            }
+        }
+        std::ptr::null()
     }
 }

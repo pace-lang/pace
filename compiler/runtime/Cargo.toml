@@ -8,6 +8,8 @@ license.workspace = true
 
 [dependencies]
 libc = "0.2.189"
+ureq = { version = "2.9", features = ["tls"] }
+tiny_http = "0.12"
 
 [lib]
 name = "pace_runtime"

@@ -1,0 +1,15 @@
+import "../../stdlib/src/net/http.pace" show HttpServer, bindHttpServer;
+import "../../stdlib/src/core/string.pace" show String;
+
+func main() {
+    let server = bindHttpServer("127.0.0.1:3000");
+    
+    // Only process 1 request then exit to allow valgrind to check for leaks
+    let req = server.accept();
+    if req.path == "/json" {
+        req.respond(200, "{\"status\": \"ok\", \"language\": \"pace\"}");
+    } else {
+        req.respond(200, "Hello from Pace Server!");
+    }
+    server.close();
+}

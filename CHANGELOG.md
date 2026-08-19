@@ -5,6 +5,9 @@ All notable changes to the Pace language will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **HTTP Client**: Added a new `HttpClient` and `HttpRequest` architecture that supports HTTP methods, headers, request bodies, and connection pooling (HTTP Keep-Alive) for massive performance gains.
+- **HTTP Server**: Added `HttpServerResponse` class to the `HttpServer` to allow customizing HTTP response headers and status codes dynamically. Added support for extracting request headers.
+- **HTTP Benchmarks**: Added `benchmarks/http_req` benchmarking suite for network tests, alongside the existing `http_server` benchmark. Pace HTTP Server now comfortably achieves ~4,800 RPS, beating Python and Dart.
 - **JSON Standard Library**: Implemented a pure recursive descent JSON parser (`parseJson`) inside Pace.
 - **JSON Micro-benchmarks**: Added comprehensive JSON parsing benchmarks in `benchmarks/json_parse/` to track performance against Python and Dart.
 - **Native String Scanning Helpers**: Added `stringSkipWhitespace` and `stringFindStringEnd` to the native runtime to provide O(1) loop speedups for string operations, greatly optimizing JSON parsing performance.

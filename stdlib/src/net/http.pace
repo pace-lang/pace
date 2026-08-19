@@ -1,0 +1,169 @@
+import "../core/string.pace" show String;
+import "../core/result.pace" show Result;
+
+// Client FFI
+foreign func httpClientCreate(): Pointer<CChar>;
+foreign func httpClientFree(ptr: Pointer<CChar>);
+foreign func httpRequestCreate(method: String, url: String): Pointer<CChar>;
+foreign func httpRequestAddHeader(req: Pointer<CChar>, key: String, val: String);
+foreign func httpRequestSetBody(req: Pointer<CChar>, body: String);
+foreign func httpRequestFree(ptr: Pointer<CChar>);
+foreign func httpClientSend(agent: Pointer<CChar>, req: Pointer<CChar>): Pointer<CChar>;
+
+foreign func httpResponseGetStatus(ptr: Pointer<CChar>): Int;
+foreign func httpResponseGetBody(ptr: Pointer<CChar>): String;
+foreign func httpResponseGetHeader(ptr: Pointer<CChar>, key: String): String;
+foreign func httpResponseFree(ptr: Pointer<CChar>);
+foreign func httpResponseIsValid(ptr: Pointer<CChar>): Boolean;
+
+public class HttpResponse {
+    public var status: Int;
+    public var body: String;
+    public var ptr: Pointer<CChar>;
+    
+    public func init(status: Int, body: String, ptr: Pointer<CChar>) {
+        self.status = status;
+        self.body = body;
+        self.ptr = ptr;
+    }
+
+    public func getHeader(key: String): String {
+        return httpResponseGetHeader(self.ptr, key);
+    }
+
+    public func free() {
+        httpResponseFree(self.ptr);
+    }
+}
+
+public class HttpRequest {
+    public var ptr: Pointer<CChar>;
+
+    public func init(method: String, url: String) {
+        self.ptr = httpRequestCreate(method, url);
+    }
+
+    public func addHeader(key: String, value: String): HttpRequest {
+        httpRequestAddHeader(self.ptr, key, value);
+        return self;
+    }
+
+    public func setBody(body: String): HttpRequest {
+        httpRequestSetBody(self.ptr, body);
+        return self;
+    }
+
+    public func free() {
+        httpRequestFree(self.ptr);
+    }
+}
+
+public class HttpClient {
+    public var ptr: Pointer<CChar>;
+
+    public func init() {
+        self.ptr = httpClientCreate();
+    }
+
+    public func send(req: HttpRequest): Result<HttpResponse, String> {
+        let respPtr = httpClientSend(self.ptr, req.ptr);
+        
+        if httpResponseIsValid(respPtr) == false {
+            return Result.Err("HTTP Request Failed or Network Error");
+        }
+        
+        let status = httpResponseGetStatus(respPtr);
+        let body = httpResponseGetBody(respPtr);
+        
+        let resp = HttpResponse(status, body, respPtr);
+        return Result.Ok(resp);
+    }
+
+    public func close() {
+        httpClientFree(self.ptr);
+    }
+}
+
+public func httpGetRequest(url: String): Result<HttpResponse, String> {
+    let client = HttpClient();
+    let req = HttpRequest("GET", url);
+    let result = client.send(req);
+    // Don't free the req here as it gets consumed/kept by FFI logic or should be freed explicitly by user.
+    return result;
+}
+
+// ---------------------------------------------------------
+// HTTP SERVER
+// ---------------------------------------------------------
+
+foreign func httpServerBind(addr: String): Pointer<CChar>;
+foreign func httpServerAccept(serverPtr: Pointer<CChar>): Pointer<CChar>;
+foreign func httpServerFree(serverPtr: Pointer<CChar>);
+foreign func httpRequestGetPath(reqPtr: Pointer<CChar>): String;
+foreign func httpRequestMethod(reqPtr: Pointer<CChar>): String;
+foreign func httpRequestGetHeader(reqPtr: Pointer<CChar>, key: String): String;
+foreign func httpRequestRespond(reqPtr: Pointer<CChar>, respPtr: Pointer<CChar>);
+foreign func httpServerResponseCreate(status: Int, body: String): Pointer<CChar>;
+foreign func httpServerResponseAddHeader(respPtr: Pointer<CChar>, key: String, val: String);
+
+public class HttpServerResponse {
+    public var ptr: Pointer<CChar>;
+    
+    public func init(status: Int, body: String) {
+        self.ptr = httpServerResponseCreate(status, body);
+    }
+    
+    public func addHeader(key: String, value: String): HttpServerResponse {
+        httpServerResponseAddHeader(self.ptr, key, value);
+        return self;
+    }
+}
+
+public class HttpServerRequest {
+    public var method: String;
+    public var path: String;
+    public var ptr: Pointer<CChar>;
+    
+    public func init(method: String, path: String, ptr: Pointer<CChar>) {
+        self.method = method;
+        self.path = path;
+        self.ptr = ptr;
+    }
+
+    public func getHeader(key: String): String {
+        return httpRequestGetHeader(self.ptr, key);
+    }
+    
+    public func respond(status: Int, body: String) {
+        let resp = HttpServerResponse(status, body);
+        httpRequestRespond(self.ptr, resp.ptr);
+    }
+
+    public func respondWith(resp: HttpServerResponse) {
+        httpRequestRespond(self.ptr, resp.ptr);
+    }
+}
+
+public class HttpServer {
+    public var ptr: Pointer<CChar>;
+    
+    public func init(ptr: Pointer<CChar>) {
+        self.ptr = ptr;
+    }
+    
+    public func accept(): HttpServerRequest {
+        let reqPtr = httpServerAccept(self.ptr);
+        let path = httpRequestGetPath(reqPtr);
+        let method = httpRequestMethod(reqPtr);
+        return HttpServerRequest(method, path, reqPtr);
+    }
+    
+    public func close() {
+        httpServerFree(self.ptr);
+    }
+}
+
+public func bindHttpServer(addr: String): HttpServer {
+    let ptr = httpServerBind(addr);
+    return HttpServer(ptr);
+}
