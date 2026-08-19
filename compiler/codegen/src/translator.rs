@@ -700,7 +700,7 @@ impl<'a, 'b> Translator<'a, 'b> {
 
                                 let struct_alloc_call = self.builder.ins().call(local_alloc, &[alloc_size_val, struct_metadata_ptr]);
                                 let struct_obj_ptr = self.builder.inst_results(struct_alloc_call)[0];
-                                let struct_payload_ptr = self.builder.ins().iadd_imm(struct_obj_ptr, 32);
+                                let struct_payload_ptr = self.builder.ins().iadd_imm_s(struct_obj_ptr, 32);
                                 self.builder.call_memcpy(self.module.target_config(), struct_payload_ptr, cl_p, struct_size_val);
 
                                 self.builder.ins().store(

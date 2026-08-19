@@ -1,0 +1,18 @@
+import "../../stdlib/src/net/http.pace" show bindHttpServer;
+public func main(): Int {
+    print("Server started on 8085...");
+    let server = bindHttpServer("127.0.0.1:8085");
+    
+    let req = server.accept();
+    print("Received request: " + req.method + " " + req.path);
+    
+    let q = req.getQuery("name");
+    let body = req.getBody();
+    
+    let respStr = "Hello " + q + "! Body was: " + body;
+    req.respond(200, respStr);
+    
+    server.close();
+    print("Server shut down cleanly.");
+    return 0;
+}

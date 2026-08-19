@@ -2,7 +2,7 @@ import "../core/string.pace" show String;
 import "../core/result.pace" show Result;
 
 // Client FFI
-foreign func httpClientCreate(): Pointer<CChar>;
+foreign func httpClientCreateWithOptions(timeoutSecs: Int, userAgent: String): Pointer<CChar>;
 foreign func httpClientFree(ptr: Pointer<CChar>);
 foreign func httpRequestCreate(method: String, url: String): Pointer<CChar>;
 foreign func httpRequestAddHeader(req: Pointer<CChar>, key: String, val: String);
@@ -58,12 +58,23 @@ public class HttpRequest {
     }
 }
 
+public class HttpClientOptions {
+    public var timeoutSecs: Int;
+    public var userAgent: String;
+
+    public func init(timeoutSecs: Int, userAgent: String) {
+        self.timeoutSecs = timeoutSecs;
+        self.userAgent = userAgent;
+    }
+}
+
 public class HttpClient {
     public var ptr: Pointer<CChar>;
 
-    public func init() {
-        self.ptr = httpClientCreate();
+    public func init(options: HttpClientOptions) {
+        self.ptr = httpClientCreateWithOptions(options.timeoutSecs, options.userAgent);
     }
+
 
     public func send(req: HttpRequest): Result<HttpResponse, String> {
         let respPtr = httpClientSend(self.ptr, req.ptr);
@@ -85,7 +96,7 @@ public class HttpClient {
 }
 
 public func httpGetRequest(url: String): Result<HttpResponse, String> {
-    let client = HttpClient();
+    let client = HttpClient(HttpClientOptions(30, "pace-http-client"));
     let req = HttpRequest("GET", url);
     let result = client.send(req);
     // Don't free the req here as it gets consumed/kept by FFI logic or should be freed explicitly by user.
@@ -102,6 +113,8 @@ foreign func httpServerFree(serverPtr: Pointer<CChar>);
 foreign func httpRequestGetPath(reqPtr: Pointer<CChar>): String;
 foreign func httpRequestMethod(reqPtr: Pointer<CChar>): String;
 foreign func httpRequestGetHeader(reqPtr: Pointer<CChar>, key: String): String;
+foreign func httpRequestGetBody(reqPtr: Pointer<CChar>): String;
+foreign func httpRequestGetQuery(reqPtr: Pointer<CChar>, key: String): String;
 foreign func httpRequestRespond(reqPtr: Pointer<CChar>, respPtr: Pointer<CChar>);
 foreign func httpServerResponseCreate(status: Int, body: String): Pointer<CChar>;
 foreign func httpServerResponseAddHeader(respPtr: Pointer<CChar>, key: String, val: String);
@@ -132,6 +145,14 @@ public class HttpServerRequest {
 
     public func getHeader(key: String): String {
         return httpRequestGetHeader(self.ptr, key);
+    }
+    
+    public func getBody(): String {
+        return httpRequestGetBody(self.ptr);
+    }
+    
+    public func getQuery(key: String): String {
+        return httpRequestGetQuery(self.ptr, key);
     }
     
     public func respond(status: Int, body: String) {

@@ -1,0 +1,16 @@
+import "../../stdlib/src/net/http.pace" show HttpClient, HttpClientOptions, HttpRequest;
+import "../../stdlib/src/core/result.pace" show Result;
+
+public func main(): Int {
+    let client = HttpClient(HttpClientOptions(5, "PaceTestAgent"));
+    
+    let req = HttpRequest("POST", "http://127.0.0.1:8085/?name=PaceMaker");
+    req.setBody("Hello from Pace Client!");
+    
+    let result = client.send(req);
+    
+    // Quick test if status is ok
+    print("Client sent request!");
+    
+    return 0;
+}

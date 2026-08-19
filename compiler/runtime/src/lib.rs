@@ -291,8 +291,8 @@ pub extern "C" fn stringSubstring(s_ptr: *const c_char, start: i64, end: i64) ->
         return allocate_pace_string("");
     }
     
-    let mut safe_start = start;
-    let mut safe_end = end;
+    let safe_start = start;
+    let safe_end = end;
     let slice_len = (safe_end - safe_start) as usize;
     
     let new_ptr = pace_alloc((24 + slice_len + 1) as i64, (-2isize) as *const ());
@@ -721,8 +721,21 @@ struct PaceHttpResponse {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn httpClientCreate() -> *mut core::ffi::c_void {
-    let agent = ureq::builder().build();
+pub extern "C" fn httpClientCreateWithOptions(timeout_secs: i64, user_agent_ptr: *const c_char) -> *mut core::ffi::c_void {
+    let mut builder = ureq::builder();
+    
+    if timeout_secs > 0 {
+        builder = builder.timeout(std::time::Duration::from_secs(timeout_secs as u64));
+    }
+    
+    if !user_agent_ptr.is_null() {
+        let ua = unsafe { std::ffi::CStr::from_ptr(user_agent_ptr.add(24)).to_string_lossy().into_owned() };
+        if !ua.is_empty() {
+            builder = builder.user_agent(&ua);
+        }
+    }
+
+    let agent = builder.build();
     Box::into_raw(Box::new(agent)) as *mut core::ffi::c_void
 }
 
@@ -1006,6 +1019,44 @@ pub extern "C" fn httpRequestGetHeader(req_ptr: *mut core::ffi::c_void, key_ptr:
         for header in request.headers() {
             if header.field.as_str().to_string().to_lowercase() == search_key {
                 return allocate_pace_string(header.value.as_str()) as *const c_char;
+            }
+        }
+        std::ptr::null()
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpRequestGetBody(req_ptr: *mut core::ffi::c_void) -> *const c_char {
+    if req_ptr.is_null() { return allocate_pace_string("") as *const c_char; }
+    unsafe {
+        let request = &mut *(req_ptr as *mut tiny_http::Request);
+        let mut body = String::new();
+        if let Err(_) = std::io::Read::read_to_string(request.as_reader(), &mut body) {
+            return allocate_pace_string("") as *const c_char;
+        }
+        allocate_pace_string(&body) as *const c_char
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn httpRequestGetQuery(req_ptr: *mut core::ffi::c_void, key_ptr: *const c_char) -> *const c_char {
+    if req_ptr.is_null() || key_ptr.is_null() { return std::ptr::null(); }
+    unsafe {
+        let request = &*(req_ptr as *const tiny_http::Request);
+        let search_key = std::ffi::CStr::from_ptr(key_ptr.add(24)).to_string_lossy();
+        
+        let url = request.url();
+        if let Some(query_str) = url.splitn(2, '?').nth(1) {
+            for pair in query_str.split('&') {
+                let mut parts = pair.splitn(2, '=');
+                let k = parts.next().unwrap_or("");
+                let v = parts.next().unwrap_or("");
+                if k == search_key {
+                    // Quick decode for simple cases (e.g. + to space). Note: Full URL decode isn't strictly required here for basic support but it's helpful
+                    let decoded_v = v.replace("+", " ");
+                    // Simple percent decoding could be added later, keep it basic for now
+                    return allocate_pace_string(&decoded_v) as *const c_char;
+                }
             }
         }
         std::ptr::null()

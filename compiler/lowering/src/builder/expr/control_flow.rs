@@ -54,7 +54,6 @@ impl<'a> MirBuilder<'a> {
                         if self.session.interner.borrow().lookup(*bind) != "_" {
                             let field_temp = self.new_temp();
                             let mut payload_is_ref = false;
-                            let mut payload_is_ref = false;
                             {
                                 let ty_arena = self.session.types.borrow();
                                 for ty in ty_arena.iter() {

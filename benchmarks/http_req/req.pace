@@ -1,4 +1,4 @@
-import "../../stdlib/src/net/http.pace" show HttpClient, HttpRequest, HttpResponse;
+import "../../stdlib/src/net/http.pace" show HttpClient, HttpClientOptions, HttpRequest, HttpResponse;
 import "../../stdlib/src/core/string.pace" show String;
 
 func main() {
@@ -10,7 +10,7 @@ func main() {
     let iterations = 10;
     var successCount = 0;
     
-    let client = HttpClient();
+    let client = HttpClient(HttpClientOptions(30, "pace-benchmark"));
     
     var i = 0;
     while i < iterations {

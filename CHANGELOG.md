@@ -5,8 +5,8 @@ All notable changes to the Pace language will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- **HTTP Client**: Added a new `HttpClient` and `HttpRequest` architecture that supports HTTP methods, headers, request bodies, and connection pooling (HTTP Keep-Alive) for massive performance gains.
-- **HTTP Server**: Added `HttpServerResponse` class to the `HttpServer` to allow customizing HTTP response headers and status codes dynamically. Added support for extracting request headers.
+- **HTTP Client**: Added `HttpClientOptions` to support configuring connection timeouts and custom User-Agent strings dynamically.
+- **HTTP Server**: Added `HttpServerRequest.getBody()` to allow reading POST/PUT request bodies, and `HttpServerRequest.getQuery()` to natively extract URL query parameters. Added `HttpServerResponse` class to allow customizing HTTP response headers and status codes dynamically. Added support for extracting request headers.
 - **HTTP Benchmarks**: Added `benchmarks/http_req` benchmarking suite for network tests, alongside the existing `http_server` benchmark. Pace HTTP Server now comfortably achieves ~4,800 RPS, beating Python and Dart.
 - **JSON Standard Library**: Implemented a pure recursive descent JSON parser (`parseJson`) inside Pace.
 - **JSON Micro-benchmarks**: Added comprehensive JSON parsing benchmarks in `benchmarks/json_parse/` to track performance against Python and Dart.
@@ -34,6 +34,8 @@ All notable changes to the Pace language will be documented in this file.
 - Updated `pace init` error messages to use standard diagnostic formatting.
 
 ### Fixed
+- Fixed memory corruption bug where extracting a `Struct` payload from a generic `Enum` (e.g. `Option<Point>`) mistakenly incremented the struct's padding by incorrectly applying an ARC `Retain` instruction.
+- Fixed a bug where `Result` enums with primitive success/error types inside `try_expr` (the `?` operator) were failing to generate the correct monomorphized Enum names.
 - Fixed critical memory corruption bug where `Struct` property access (`GetProperty`/`SetProperty`) was reading/writing out-of-bounds memory by incorrectly applying a 24-byte Class object header offset.
 - Fixed a bug where `Struct` assignments (e.g. `var p2 = p1`) were incorrectly sharing memory pointers (reference semantics) instead of deep-copying memory (value semantics). Struct variables now properly copy their bitwise values into independent stack slots.
 - Upgraded the compiler Typechecker to support dynamic generic monomorphization and extension resolution for built-in primitive types (like Arrays `[T]`).

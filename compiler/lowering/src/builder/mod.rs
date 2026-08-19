@@ -54,23 +54,7 @@ fn is_ref_type(te: &ast::TypeExpr, session: &session::CompilerSession) -> bool {
     is_ref_type_opt(&Some(te.clone()), session)
 }
 
-pub(crate) fn get_struct_name(
-    ty: session::TypeId,
-    session: &session::CompilerSession,
-    struct_names: &std::collections::HashSet<String>,
-) -> Option<String> {
-    match session.types.borrow().get(ty) {
-        session::types::Type::Instance(sym) => {
-            let name = session.interner.borrow().lookup(*sym).to_string();
-            if struct_names.contains(&name) {
-                Some(name)
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
+
 
 pub(crate) fn is_ref_type_id(
     ty: session::TypeId,
