@@ -86,6 +86,9 @@ impl<'a> TypeChecker<'a> {
                                     self.error(stmt.span, DiagnosticCode::TypeMismatch, &format!("Class '{}' does not implement required method '{}' of interface '{}'.", self.session.interner.borrow().lookup(*name), self.session.interner.borrow().lookup(i_method_name), self.session.interner.borrow().lookup(interface_name)))
                                 }
                             }
+                        } else if self.generic_registry.get_interface(interface_name).is_some() {
+                            // Skip checking methods for generic interfaces for now
+                            continue;
                         } else {
                             self.error(
                                 stmt.span,
@@ -268,7 +271,7 @@ impl<'a> TypeChecker<'a> {
                 body,
                 is_private: _,
             } => {
-                if !type_params.is_empty() {
+                if !type_params.is_empty() || self.generic_registry.get_function(*name).is_some() {
                     return TypedStmt {
                         kind: TypedStmtKind::Block(Vec::new()),
                         span: stmt.span,

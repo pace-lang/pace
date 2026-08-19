@@ -10,6 +10,8 @@ impl<'a> TypeChecker<'a> {
                 "String" => self.session.types.borrow_mut().intern(Type::String),
                 "Boolean" => self.session.types.borrow_mut().intern(Type::Boolean),
                 "Void" => self.session.types.borrow_mut().intern(Type::Void),
+                "Any" => self.session.types.borrow_mut().intern(Type::Any),
+                "Error" => self.session.types.borrow_mut().intern(Type::Error),
                 "CInt" => self.session.types.borrow_mut().intern(Type::CInt),
                 "CUInt" => self.session.types.borrow_mut().intern(Type::CUInt),
                 "CChar" => self.session.types.borrow_mut().intern(Type::CChar),
@@ -25,12 +27,12 @@ impl<'a> TypeChecker<'a> {
                             return ty_id;
                         }
                     }
-                    if self.classes.contains_key(name) || self.enums.contains_key(name) {
+                    if self.classes.contains_key(name) || self.enums.contains_key(name) || self.generic_registry.get_class(*name).is_some() {
                         self.session
                             .types
                             .borrow_mut()
                             .intern(Type::Instance(*name))
-                    } else if self.interfaces.contains_key(name) {
+                    } else if self.interfaces.contains_key(name) || self.generic_registry.get_interface(*name).is_some() {
                         self.session
                             .types
                             .borrow_mut()
@@ -347,6 +349,7 @@ impl<'a> TypeChecker<'a> {
             }
             Type::Array(inner) => ast::TypeExpr::Array(self.alloc(self.type_to_type_expr(inner))),
             Type::Generic(name) => ast::TypeExpr::Named(name),
+            Type::Error => ast::TypeExpr::Named(self.session.interner.borrow_mut().intern("Error")),
             _ => ast::TypeExpr::Named(self.session.interner.borrow_mut().intern("Any")),
         }
     }

@@ -369,11 +369,10 @@ impl<'a> TypeChecker<'a> {
             | Type::Instance(sym)
             | Type::GenericInstance(sym, _)
             | Type::Enum(sym, _) => sym,
-            _ => self
-                .session
-                .interner
-                .borrow_mut()
-                .intern(&self.session.format_type(typed_obj.ty)),
+            _ => {
+                let formatted = self.session.format_type(typed_obj.ty);
+                self.session.interner.borrow_mut().intern(&formatted)
+            }
         };
 
         let (class_name, instance_args) = match self.get_type(typed_obj.ty) {

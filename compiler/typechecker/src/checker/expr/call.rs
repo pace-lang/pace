@@ -399,12 +399,12 @@ impl<'a> TypeChecker<'a> {
                             }
                         }
                     } else {
-                        if type_args.len() != func_type_params.len() {
+                        if type_args.len() > func_type_params.len() {
                             self.error(
                                 span,
                                 DiagnosticCode::TypeMismatch,
                                 &format!(
-                                    "Expected {} generic arguments, found {}.",
+                                    "Expected at most {} generic arguments, found {}.",
                                     func_type_params.len(),
                                     type_args.len()
                                 ),
@@ -414,6 +414,23 @@ impl<'a> TypeChecker<'a> {
                             let ty = self.parse_type(arg_expr, span);
                             if i < func_type_params.len() {
                                 inferred_map.insert(func_type_params[i], ty);
+                            }
+                        }
+                        if type_args.len() < func_type_params.len() {
+                            for (expected, actual) in param_types.iter().zip(arg_types.iter()) {
+                                self.infer_generics(*expected, *actual, &mut inferred_map);
+                            }
+                            if let Some(expected_result) = expected_ty {
+                                self.infer_generics(ret_ty, expected_result, &mut inferred_map);
+                            }
+                        }
+                        for tp in &func_type_params {
+                            if !inferred_map.contains_key(tp) {
+                                self.error(span, DiagnosticCode::TypeMismatch, &format!("Cannot infer generic type '{}'. Please provide explicit type arguments.", self.session.interner.borrow().lookup(*tp)));
+                                inferred_map.insert(
+                                    *tp,
+                                    self.session.types.borrow_mut().intern(Type::Error),
+                                );
                             }
                         }
                     }

@@ -1,0 +1,41 @@
+interface Processor<T> {
+    func process(item: T);
+}
+
+class IntProcessor implements Processor<Int> {
+    public func init() {}
+    public func process(item: Int) {
+        if item == 42 {
+            print("Processed 42");
+        } else {
+            print("Processed other Int");
+        }
+    }
+}
+
+class StringProcessor implements Processor<String> {
+    public func init() {}
+    public func process(item: String) {
+        if item == "Hello" {
+            print("Processed Hello");
+        } else {
+            print("Processed other String");
+        }
+    }
+}
+
+func runProcess<T>(proc: Processor<T>, item: T) {
+    proc.process(item);
+}
+
+public func main(): Int {
+    let p1 = IntProcessor();
+    runProcess<Int>(p1, 42);
+    runProcess<Int>(p1, 99);
+
+    let p2 = StringProcessor();
+    runProcess<String>(p2, "Hello");
+    runProcess<String>(p2, "World");
+
+    return 0;
+}

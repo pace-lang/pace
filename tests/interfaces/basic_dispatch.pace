@@ -1,0 +1,30 @@
+interface Animal {
+    func speak();
+}
+
+class Dog implements Animal {
+    public func init() {}
+    public func speak() {
+        print("Woof!");
+    }
+}
+
+class Cat implements Animal {
+    public func init() {}
+    public func speak() {
+        print("Meow!");
+    }
+}
+
+func makeSpeak(animal: Animal) {
+    animal.speak();
+}
+
+public func main(): Int {
+    let dog = Dog();
+    makeSpeak(dog);
+    
+    let cat = Cat();
+    makeSpeak(cat);
+    return 0;
+}

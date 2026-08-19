@@ -443,8 +443,55 @@ impl<'a> TypeChecker<'a> {
                     body: _,
                     is_private: _,
                 } => {
+                    self.env.push_scope();
+                    for tp in type_params {
+                        self.env.declare(*tp, self.session.types.borrow_mut().intern(Type::Generic(*tp)));
+                    }
+
+                    let mut has_interface = false;
+                    let mut param_types = Vec::new();
+                    for (_, param_type_str) in params {
+                        let pt = self.parse_type(param_type_str, stmt.span);
+                        param_types.push(pt);
+                        if let Type::Interface(_, _) = self.get_type(pt) {
+                            has_interface = true;
+                        } else if let Type::GenericInstance(base, _) = self.get_type(pt) {
+                            if self.interfaces.contains_key(&base) || self.generic_registry.get_interface(base).is_some() {
+                                has_interface = true;
+                            }
+                        }
+                    }
+
+                    if has_interface {
+                        let mut new_stmt = stmt.clone();
+                        if let StmtKind::Func { type_params: tps, params: ast_params, .. } = &mut new_stmt.kind {
+                            let mut gen_idx = tps.len();
+                            for (i, (_, _)) in params.iter().enumerate() {
+                                if let Type::Interface(_, _) = self.get_type(param_types[i]) {
+                                    let gen_name = format!("__T_{}", gen_idx);
+                                    let gen_sym = self.session.interner.borrow_mut().intern(&gen_name);
+                                    tps.push(gen_sym);
+                                    ast_params[i].1 = ast::TypeExpr::Named(gen_sym);
+                                    gen_idx += 1;
+                                } else if let Type::GenericInstance(base, _) = self.get_type(param_types[i]) {
+                                    if self.interfaces.contains_key(&base) || self.generic_registry.get_interface(base).is_some() {
+                                        let gen_name = format!("__T_{}", gen_idx);
+                                        let gen_sym = self.session.interner.borrow_mut().intern(&gen_name);
+                                        tps.push(gen_sym);
+                                        ast_params[i].1 = ast::TypeExpr::Named(gen_sym);
+                                        gen_idx += 1;
+                                    }
+                                }
+                            }
+                        }
+                        self.generic_registry.register_function(*name, new_stmt);
+                        self.env.pop_scope();
+                        continue;
+                    }
+
                     if !type_params.is_empty() {
                         self.generic_registry.register_function(*name, stmt.clone());
+                        self.env.pop_scope();
                         continue;
                     }
                     let ret_ty = if let Some(rt) = return_type {
@@ -452,10 +499,7 @@ impl<'a> TypeChecker<'a> {
                     } else {
                         self.session.types.borrow_mut().intern(Type::Void)
                     };
-                    let mut param_types = Vec::new();
-                    for (_, param_type_str) in params {
-                        param_types.push(self.parse_type(param_type_str, stmt.span));
-                    }
+                    self.env.pop_scope();
 
                     let func_ty = self.session.types.borrow_mut().intern(Type::Function(
                         type_params.clone(),
