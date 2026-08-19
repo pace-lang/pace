@@ -1,0 +1,21 @@
+func main() {
+    var list = [1, 2, 3];
+    list.push(4);
+    list.push(5);
+    
+    printStr("List Length:");
+    print(list.len());
+    
+    // Using string arrays
+    var str_list = ["hello", "world"];
+    str_list.push("pace");
+    
+    printStr("String List Length:");
+    print(str_list.len());
+    
+    var last = str_list.pop();
+    if last != null {
+        printStr("Popped:");
+        printStr(last);
+    }
+}

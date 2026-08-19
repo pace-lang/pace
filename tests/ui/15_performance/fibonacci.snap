@@ -2,5 +2,6 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-100000
-Done with heavy loop
+Calculating fib(35)...
+Result:
+9227465

@@ -1,0 +1,46 @@
+struct Point {
+    var x: Int;
+    var y: Int;
+    func init(x: Int, y: Int) {
+        self.x = x;
+        self.y = y;
+    }
+}
+
+struct Rect {
+    var top_left: Point;
+    var bottom_right: Point;
+    func init(top_left: Point, bottom_right: Point) {
+        self.top_left = top_left;
+        self.bottom_right = bottom_right;
+    }
+}
+
+func main() {
+    var p1 = Point(10, 20);
+    var p2 = p1;
+    
+    // Modifying p2 should NOT modify p1
+    p2.x = 100;
+    p2.y = 200;
+    
+    printStr("Point p1:");
+    print(p1.x);
+    print(p1.y);
+    
+    printStr("Point p2:");
+    print(p2.x);
+    print(p2.y);
+    
+    var rect1 = Rect(p1, p2);
+    var rect2 = rect1;
+    
+    // Modifying deeply nested field
+    rect2.top_left.x = 999;
+    
+    printStr("Rect1 top_left.x:");
+    print(rect1.top_left.x);
+    
+    printStr("Rect2 top_left.x:");
+    print(rect2.top_left.x);
+}

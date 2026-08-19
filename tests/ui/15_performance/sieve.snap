@@ -2,5 +2,6 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-100000
-Done with heavy loop
+Calculating primes up to 100,000...
+Number of primes found:
+9592

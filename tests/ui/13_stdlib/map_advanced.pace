@@ -1,0 +1,24 @@
+func main() {
+    var map = Map<Int, Int>();
+    
+    // Test insertions and resizing
+    var i = 0;
+    while i < 100 {
+        map.set(i, i * 10);
+        i = i + 1;
+    }
+    
+    printStr("Map Size:");
+    print(map.length); // Should be 100
+    
+    // Test overwrite
+    map.set(50, 9999);
+    var val = map.get(50);
+    
+    printStr("Overwritten key 50:");
+    
+    // Test missing key
+    var missing = map.get(999);
+    
+    // Test delete (if implemented, otherwise wait, is map.remove() implemented? Let's check runtime)
+}

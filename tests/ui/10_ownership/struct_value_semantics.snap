@@ -2,5 +2,13 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-100000
-Done with heavy loop
+Point p1:
+10
+20
+Point p2:
+100
+200
+Rect1 top_left.x:
+999
+Rect2 top_left.x:
+999

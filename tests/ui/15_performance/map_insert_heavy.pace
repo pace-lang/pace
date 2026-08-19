@@ -1,0 +1,11 @@
+func main() {
+    var map = Map<Int, Int>();
+    var i = 0;
+    while i < 100000 {
+        map.set(i, i * 2);
+        i = i + 1;
+    }
+    
+    printStr("Finished map insertions. Size:");
+    print(map.length);
+}

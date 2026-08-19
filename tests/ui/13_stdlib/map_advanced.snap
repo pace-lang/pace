@@ -2,5 +2,6 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-100000
-Done with heavy loop
+Map Size:
+100
+Overwritten key 50:

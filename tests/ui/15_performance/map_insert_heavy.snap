@@ -2,5 +2,5 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
+Finished map insertions. Size:
 100000
-Done with heavy loop

@@ -2,5 +2,4 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-100000
-Done with heavy loop
+Finished struct copies.
