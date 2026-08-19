@@ -5,6 +5,7 @@ foreign func malloc(size: Int): Pointer<CChar>;
 foreign func free(ptr: Pointer<CChar>);
 foreign func ptrRead<T>(ptr: Pointer<CChar>, offset: Int): T;
 foreign func ptrWrite<T>(ptr: Pointer<CChar>, offset: Int, val: T);
+foreign func sizeof<T>(): Int;
 
 foreign func hash<T>(val: T): Int;
 foreign func equals<T>(a: T, b: T): Boolean;
@@ -19,9 +20,9 @@ class Map<K, V> {
     func init() {
         self.capacity = 16;
         self.length = 0;
-        self.keyPtr = malloc(self.capacity * 8);
-        self.valuePtr = malloc(self.capacity * 8);
-        self.statePtr = malloc(self.capacity * 8);
+        self.keyPtr = malloc(self.capacity * sizeof<K>());
+        self.valuePtr = malloc(self.capacity * sizeof<V>());
+        self.statePtr = malloc(self.capacity * sizeof<Int>());
         var i = 0;
         while i < self.capacity {
             ptrWrite<Int>(self.statePtr, i, 0);
@@ -46,9 +47,9 @@ class Map<K, V> {
 
         self.capacity = newCapacity;
         self.length = 0;
-        self.keyPtr = malloc(self.capacity * 8);
-        self.valuePtr = malloc(self.capacity * 8);
-        self.statePtr = malloc(self.capacity * 8);
+        self.keyPtr = malloc(self.capacity * sizeof<K>());
+        self.valuePtr = malloc(self.capacity * sizeof<V>());
+        self.statePtr = malloc(self.capacity * sizeof<Int>());
 
         var i = 0;
         while i < self.capacity {

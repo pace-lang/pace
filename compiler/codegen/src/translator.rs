@@ -314,25 +314,71 @@ impl<'a, 'b> Translator<'a, 'b> {
 
                         // Intercept Compiler Intrinsics (ptrRead, ptrWrite)
                         if target_func_name.starts_with("ptrRead_") {
+                            let type_name = &target_func_name[8..];
                             let ptr_val = self.translate_value(&args[0])?;
                             let index_val = self.translate_value(&args[1])?;
                             
-                            // Calculate byte offset: offset = index * 8 (since all Pace types are 64-bit currently)
-                            let byte_offset = self.builder.ins().imul_imm_s(index_val, 8);
+                            let mut is_struct = false;
+                            let mut size_bytes = 8;
+                            
+                            if let Some(class_def) = self.program.classes.get(type_name) {
+                                if class_def.is_struct {
+                                    is_struct = true;
+                                    size_bytes = class_def.fields.len() as u32 * 8;
+                                }
+                            }
+                            
+                            let byte_offset = self.builder.ins().imul_imm_s(index_val, size_bytes as i64);
                             let addr = self.builder.ins().iadd(ptr_val, byte_offset);
                             
-                            let loaded = self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlagsData::new(), addr, 0);
-                            loaded
+                            if is_struct {
+                                let ss = self.builder.create_sized_stack_slot(ir::StackSlotData::new(
+                                    ir::StackSlotKind::ExplicitSlot,
+                                    size_bytes,
+                                    3,
+                                ));
+                                let dest_addr = self.builder.ins().stack_addr(types::I64, ss, 0);
+                                let size_val = self.builder.ins().iconst(types::I64, size_bytes as i64);
+                                self.builder.call_memcpy(self.module.target_config(), dest_addr, addr, size_val);
+                                dest_addr
+                            } else {
+                                self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlagsData::new(), addr, 0)
+                            }
                         } else if target_func_name.starts_with("ptrWrite_") {
+                            let type_name = &target_func_name[9..];
                             let ptr_val = self.translate_value(&args[0])?;
                             let index_val = self.translate_value(&args[1])?;
                             let val = self.translate_value(&args[2])?;
                             
-                            let byte_offset = self.builder.ins().imul_imm_s(index_val, 8);
+                            let mut is_struct = false;
+                            let mut size_bytes = 8;
+                            
+                            if let Some(class_def) = self.program.classes.get(type_name) {
+                                if class_def.is_struct {
+                                    is_struct = true;
+                                    size_bytes = class_def.fields.len() as u32 * 8;
+                                }
+                            }
+                            
+                            let byte_offset = self.builder.ins().imul_imm_s(index_val, size_bytes as i64);
                             let addr = self.builder.ins().iadd(ptr_val, byte_offset);
                             
-                            self.builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), val, addr, 0);
+                            if is_struct {
+                                let size_val = self.builder.ins().iconst(types::I64, size_bytes as i64);
+                                self.builder.call_memcpy(self.module.target_config(), addr, val, size_val);
+                            } else {
+                                self.builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), val, addr, 0);
+                            }
                             self.builder.ins().iconst(types::I64, 0)
+                        } else if target_func_name.starts_with("sizeof_") {
+                            let type_name = &target_func_name[7..];
+                            let mut size_bytes = 8;
+                            if let Some(class_def) = self.program.classes.get(type_name) {
+                                if class_def.is_struct {
+                                    size_bytes = class_def.fields.len() as u32 * 8;
+                                }
+                            }
+                            self.builder.ins().iconst(types::I64, size_bytes as i64)
                         } else if target_func_name == "hash_Int" || target_func_name == "hash_Boolean" {
                             // Simple identity hash for primitives
                             self.translate_value(&args[0])?

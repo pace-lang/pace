@@ -5,6 +5,7 @@ foreign func malloc(size: Int): Pointer<CChar>;
 foreign func free(ptr: Pointer<CChar>);
 foreign func ptrRead<T>(ptr: Pointer<CChar>, offset: Int): T;
 foreign func ptrWrite<T>(ptr: Pointer<CChar>, offset: Int, val: T);
+foreign func sizeof<T>(): Int;
 
 foreign func hash<T>(val: T): Int;
 foreign func equals<T>(a: T, b: T): Boolean;
@@ -18,8 +19,8 @@ class Set<T> {
     func init() {
         self.capacity = 16;
         self.length = 0;
-        self.itemPtr = malloc(self.capacity * 8);
-        self.statePtr = malloc(self.capacity * 8);
+        self.itemPtr = malloc(self.capacity * sizeof<T>());
+        self.statePtr = malloc(self.capacity * sizeof<Int>());
         var i = 0;
         while i < self.capacity {
             ptrWrite<Int>(self.statePtr, i, 0);
@@ -42,8 +43,8 @@ class Set<T> {
 
         self.capacity = newCapacity;
         self.length = 0;
-        self.itemPtr = malloc(self.capacity * 8);
-        self.statePtr = malloc(self.capacity * 8);
+        self.itemPtr = malloc(self.capacity * sizeof<T>());
+        self.statePtr = malloc(self.capacity * sizeof<Int>());
 
         var i = 0;
         while i < self.capacity {
