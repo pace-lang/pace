@@ -30,6 +30,12 @@ Pace uses deterministic Automatic Reference Counting (ARC) instead of a tracing 
 - **Weak References**: Built-in support for `weak` variables to safely break reference cycles in complex data structures. 
 - **Thread Safety**: ARC operations are designed to be thread-safe from day one, laying the structural groundwork for future concurrency features.
 
+## Raw Performance
+
+Because Pace compiles directly into native machine code (using Cranelift) rather than running in an interpreter or JIT VM, it boasts extreme execution speeds on par with C and Rust. 
+
+For full details and scripts on our recursive `fib(35)` and prime sieving benchmarks comparing Pace to Rust, C, Dart, Java, and Python, see the [Benchmarks Suite](./benchmarks/README.md).
+
 ## Compiler Architecture
 
 The Pace compiler is a multi-pass, modern architecture built in Rust, heavily inspired by industry-leading compiler designs:
