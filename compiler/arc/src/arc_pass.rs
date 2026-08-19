@@ -193,6 +193,20 @@ impl ArcPass {
                             }
                         }
                     }
+
+                    let mut sorted_struct_places: Vec<_> = func.struct_places.iter().collect();
+                    sorted_struct_places.sort_by_key(|(k, _)| (*k).clone());
+                    for (place, struct_name) in sorted_struct_places {
+                        let is_returned = match ret_val {
+                            Some(Value::Place(p)) => p == place,
+                            _ => false,
+                        };
+                        if !is_returned {
+                            block
+                                .instructions
+                                .push(Inst::DropStruct(Value::Place(place.clone()), struct_name.clone()));
+                        }
+                    }
                 }
             }
         }

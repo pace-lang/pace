@@ -51,6 +51,9 @@ pub enum Inst {
     Release(Value),
     WeakRetain(Value),
     WeakRelease(Value),
+
+    MemCopy(Value, Value, String), // dest, src, struct_name
+    DropStruct(Value, String), // ptr, struct_name
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

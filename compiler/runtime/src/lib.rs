@@ -1,6 +1,5 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
-pub mod collections;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::sync::atomic::{AtomicU64, Ordering};

@@ -60,6 +60,24 @@ impl<'a, 'b> Translator<'a, 'b> {
                 let var = self.get_or_create_var(param_name);
                 self.builder.def_var(var, block_params[i]);
             }
+
+            // Pre-allocate stack slots for all struct variables and temporaries
+            for (place, struct_name) in &function.struct_places {
+                let class_def = self.program.classes.get(struct_name).unwrap();
+                let total_size = class_def.fields.len() as u32 * 8;
+                let ss = self.builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                    cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                    total_size,
+                    3, // 8-byte alignment
+                ));
+                let ptr = self.builder.ins().stack_addr(types::I64, ss, 0);
+                
+                let var = match place {
+                    mir::Place::Var(name) => self.get_or_create_var(name),
+                    mir::Place::Temp(id) => self.get_or_create_temp(*id),
+                };
+                self.builder.def_var(var, ptr);
+            }
         }
 
         // Translate each block
@@ -463,7 +481,11 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let idx = class_def.fields.iter().position(|f| f == prop_name)
                             .unwrap_or_else(|| panic!("Property {} not found in class {}", prop_name, class_name));
                             
-                        let offset = 24 + (idx as i32 * 8);
+                        let offset = if class_def.is_struct {
+                            idx as i32 * 8
+                        } else {
+                            24 + (idx as i32 * 8)
+                        };
 
                         self.builder
                             .ins()
@@ -668,7 +690,11 @@ impl<'a, 'b> Translator<'a, 'b> {
                 let idx = class_def.fields.iter().position(|f| f == prop_name)
                     .unwrap_or_else(|| panic!("Property {} not found in class {}", prop_name, class_name));
                     
-                let offset = 24 + (idx as i32 * 8);
+                let offset = if class_def.is_struct {
+                    idx as i32 * 8
+                } else {
+                    24 + (idx as i32 * 8)
+                };
 
                 self.builder
                     .ins()
@@ -741,6 +767,43 @@ impl<'a, 'b> Translator<'a, 'b> {
                     .module
                     .declare_func_in_func(*release_func, self.builder.func);
                 self.builder.ins().call(local_release, &[cl_val]);
+                Ok(())
+            }
+            Inst::MemCopy(dest, src, struct_name) => {
+                let dest_ptr = self.translate_value(dest)?;
+                let src_ptr = self.translate_value(src)?;
+                let class_def = self.program.classes.get(struct_name).unwrap();
+                let size = class_def.fields.len() as u32 * 8;
+                
+                let size_val = self.builder.ins().iconst(types::I64, size as i64);
+                self.builder.call_memcpy(self.module.target_config(), dest_ptr, src_ptr, size_val);
+                
+                let retain_func = self.func_ids.get("pace_retain").unwrap();
+                let local_retain = self.module.declare_func_in_func(*retain_func, self.builder.func);
+                
+                for (idx, field) in class_def.fields.iter().enumerate() {
+                    if class_def.reference_fields.contains(field) {
+                        let offset = idx as i32 * 8;
+                        let field_ptr = self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlagsData::new(), dest_ptr, offset);
+                        self.builder.ins().call(local_retain, &[field_ptr]);
+                    }
+                }
+                Ok(())
+            }
+            Inst::DropStruct(ptr_val, struct_name) => {
+                let struct_ptr = self.translate_value(ptr_val)?;
+                let class_def = self.program.classes.get(struct_name).unwrap();
+                
+                let release_func = self.func_ids.get("pace_release").unwrap();
+                let local_release = self.module.declare_func_in_func(*release_func, self.builder.func);
+                
+                for (idx, field) in class_def.fields.iter().enumerate() {
+                    if class_def.reference_fields.contains(field) {
+                        let offset = idx as i32 * 8;
+                        let field_ptr = self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlagsData::new(), struct_ptr, offset);
+                        self.builder.ins().call(local_release, &[field_ptr]);
+                    }
+                }
                 Ok(())
             }
         }

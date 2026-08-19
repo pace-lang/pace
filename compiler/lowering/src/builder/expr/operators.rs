@@ -214,7 +214,7 @@ impl<'a> MirBuilder<'a> {
                         self.session.interner.borrow().lookup(*name).to_string(),
                         class_name,
                         right_val.clone(),
-                        super::super::is_ref_type_id(right.ty, self.session),
+                        super::super::is_ref_type_id(right.ty, self.session, &self.struct_names),
                     );
                     self.current().instructions.push(__inst)
                 };
@@ -315,7 +315,7 @@ impl<'a> MirBuilder<'a> {
         // Err branch
         self.current_block = else_block;
         let err_payload = self.new_temp();
-        let is_err_ref = super::super::is_ref_type_id(err_ty, self.session);
+        let is_err_ref = super::super::is_ref_type_id(err_ty, self.session, &self.struct_names);
         self.current().instructions.push(Inst::Assign(
             err_payload.clone(),
             RValue::ExtractPayload(inner_val.clone(), 1, 0, is_err_ref),
@@ -332,7 +332,7 @@ impl<'a> MirBuilder<'a> {
         // Ok branch
         self.current_block = then_block;
         let ok_payload = self.new_temp();
-        let is_ok_ref = super::super::is_ref_type_id(ok_ty, self.session);
+        let is_ok_ref = super::super::is_ref_type_id(ok_ty, self.session, &self.struct_names);
         self.current().instructions.push(Inst::Assign(
             ok_payload.clone(),
             RValue::ExtractPayload(inner_val, 0, 0, is_ok_ref),

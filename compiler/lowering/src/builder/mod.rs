@@ -54,7 +54,11 @@ fn is_ref_type(te: &ast::TypeExpr, session: &session::CompilerSession) -> bool {
     is_ref_type_opt(&Some(te.clone()), session)
 }
 
-pub(crate) fn is_ref_type_id(ty: session::TypeId, session: &session::CompilerSession) -> bool {
+pub(crate) fn is_ref_type_id(
+    ty: session::TypeId,
+    session: &session::CompilerSession,
+    struct_names: &std::collections::HashSet<String>,
+) -> bool {
     match session.types.borrow().get(ty) {
         session::types::Type::Int
         | session::types::Type::Float
@@ -74,13 +78,22 @@ pub(crate) fn is_ref_type_id(ty: session::TypeId, session: &session::CompilerSes
         | session::types::Type::Any
         | session::types::Type::Range => false,
         session::types::Type::String
-        | session::types::Type::Instance(_)
         | session::types::Type::Array(_)
         | session::types::Type::Class(..) => true,
-        session::types::Type::Optional(inner) => is_ref_type_id(*inner, session),
-        session::types::Type::GenericInstance(_, _)
-        | session::types::Type::Enum(..)
-        | session::types::Type::Struct(..) => true,
+        session::types::Type::Instance(sym) => {
+            let interner = session.interner.borrow();
+            let name = interner.lookup(*sym).to_string();
+            if name == "String" || name.starts_with("Array") {
+                true
+            } else if struct_names.contains(&name) {
+                false // Struct instances are not reference types!
+            } else {
+                true
+            }
+        }
+        session::types::Type::Optional(inner) => is_ref_type_id(*inner, session, struct_names),
+        session::types::Type::GenericInstance(_, _) => true,
+        session::types::Type::Enum(..) | session::types::Type::Struct(..) => false,
         _ => true,
     }
 }
@@ -234,6 +247,7 @@ impl<'a> ProgramBuilder<'a> {
                             returns_ref,
                             enums_map.clone(),
                             self.session,
+                            self.program.classes.iter().filter_map(|(k, v)| if v.is_struct { Some(k.clone()) } else { None }).collect(),
                         );
                         let mir_func = match &body.kind {
                             TypedStmtKind::Block(stmts) => builder.build(stmts),
@@ -283,6 +297,7 @@ impl<'a> ProgramBuilder<'a> {
                             returns_ref,
                             enums_map.clone(),
                             self.session,
+                            self.program.classes.iter().filter_map(|(k, v)| if v.is_struct { Some(k.clone()) } else { None }).collect(),
                         );
                         let mir_func = match &body.kind {
                             TypedStmtKind::Block(stmts) => builder.build(stmts),
@@ -341,6 +356,7 @@ impl<'a> ProgramBuilder<'a> {
                             returns_ref,
                             enums_map.clone(),
                             self.session,
+                            self.program.classes.iter().filter_map(|(k, v)| if v.is_struct { Some(k.clone()) } else { None }).collect(),
                         );
                         let mir_func = match &body.kind {
                             TypedStmtKind::Block(stmts) => builder.build(stmts),
@@ -377,6 +393,7 @@ impl<'a> ProgramBuilder<'a> {
                     returns_ref,
                     enums_map.clone(),
                     self.session,
+                    self.program.classes.iter().filter_map(|(k, v)| if v.is_struct { Some(k.clone()) } else { None }).collect(),
                 );
                 let mir_func = match &body.kind {
                     TypedStmtKind::Block(stmts) => builder.build(stmts),
@@ -437,6 +454,7 @@ impl<'a> ProgramBuilder<'a> {
                 false,
                 enums_map.clone(),
                 self.session,
+                self.program.classes.iter().filter_map(|(k, v)| if v.is_struct { Some(k.clone()) } else { None }).collect(),
             );
             let main_func = builder.build(&main_stmts);
             self.program.functions.insert("main".into(), main_func);
@@ -452,18 +470,20 @@ pub struct MirBuilder<'a> {
     current_block: BlockId,
     temp_counter: usize,
     enums_map: std::collections::HashMap<String, Vec<String>>,
+    struct_names: std::collections::HashSet<String>,
 }
 
 impl<'a> MirBuilder<'a> {
     pub fn new(
         name: String,
         parameters: Vec<String>,
-        reference_parameters: std::collections::HashSet<String>,
+        weak_vars: std::collections::HashSet<String>,
         returns_reference: bool,
         enums_map: std::collections::HashMap<String, Vec<String>>,
         session: &'a session::CompilerSession,
+        struct_names: std::collections::HashSet<String>,
     ) -> Self {
-        let mut function = Function::new(name, parameters, reference_parameters, returns_reference);
+        let mut function = Function::new(name, parameters, weak_vars, returns_reference);
         let start_block = BlockId(0);
         function.blocks.push(BasicBlock::new(start_block));
 
@@ -473,7 +493,38 @@ impl<'a> MirBuilder<'a> {
             current_block: start_block,
             temp_counter: 0,
             enums_map,
+            struct_names,
         }
+    }
+
+    pub fn get_struct_name(&self, ty: session::TypeId) -> Option<String> {
+        match self.session.types.borrow().get(ty) {
+            session::types::Type::Struct(sym, _) => Some(self.session.interner.borrow().lookup(*sym).to_string()),
+            session::types::Type::Instance(sym) => {
+                let name = self.session.interner.borrow().lookup(*sym).to_string();
+                if self.struct_names.contains(&name) {
+                    Some(name)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn emit_assignment(&mut self, place: Place, ty: session::TypeId, rvalue: RValue) {
+        if let Some(struct_name) = self.get_struct_name(ty) {
+            self.function.struct_places.insert(place.clone(), struct_name.clone());
+            if let RValue::Use(val) = &rvalue {
+                let inst = Inst::MemCopy(Value::Place(place), val.clone(), struct_name);
+                self.current().instructions.push(inst);
+                return;
+            } else if let RValue::Call(..) = &rvalue {
+                // For calls, we handle sret elsewhere, so we just emit assign and let sret translation handle it.
+                // Wait, if it's a Call, we emit Assign.
+            }
+        }
+        self.current().instructions.push(Inst::Assign(place, rvalue));
     }
 
     fn new_block(&mut self) -> BlockId {

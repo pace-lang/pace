@@ -84,6 +84,7 @@ impl<'a> MirBuilder<'a> {
                                                 payload_is_ref = super::super::is_ref_type_id(
                                                     payload_ty,
                                                     self.session,
+                                                    &self.struct_names,
                                                 );
                                             }
                                             break;

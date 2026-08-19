@@ -13,21 +13,13 @@ impl<'a> MirBuilder<'a> {
             } => {
                 if let Some(init) = initializer {
                     let val = self.lower_expr(init);
-                    {
-                        let __inst = Inst::Assign(
-                            Place::Var(self.session.interner.borrow().lookup(*name).to_string()),
-                            RValue::Use(val),
-                        );
-                        self.current().instructions.push(__inst)
-                    };
+                    self.emit_assignment(Place::Var(self.session.interner.borrow().lookup(*name).to_string()), init.ty, RValue::Use(val));
                 } else {
-                    {
-                        let __inst = Inst::Assign(
-                            Place::Var(self.session.interner.borrow().lookup(*name).to_string()),
-                            RValue::Use(Value::Void),
-                        );
-                        self.current().instructions.push(__inst)
-                    };
+                    let __inst = Inst::Assign(
+                        Place::Var(self.session.interner.borrow().lookup(*name).to_string()),
+                        RValue::Use(Value::Void),
+                    );
+                    self.current().instructions.push(__inst);
                 }
             }
             TypedStmtKind::Var {
@@ -43,21 +35,13 @@ impl<'a> MirBuilder<'a> {
                 }
                 if let Some(init) = initializer {
                     let val = self.lower_expr(init);
-                    {
-                        let __inst = Inst::Assign(
-                            Place::Var(self.session.interner.borrow().lookup(*name).to_string()),
-                            RValue::Use(val),
-                        );
-                        self.current().instructions.push(__inst)
-                    };
+                    self.emit_assignment(Place::Var(self.session.interner.borrow().lookup(*name).to_string()), init.ty, RValue::Use(val));
                 } else {
-                    {
-                        let __inst = Inst::Assign(
-                            Place::Var(self.session.interner.borrow().lookup(*name).to_string()),
-                            RValue::Use(Value::Void),
-                        );
-                        self.current().instructions.push(__inst)
-                    };
+                    let __inst = Inst::Assign(
+                        Place::Var(self.session.interner.borrow().lookup(*name).to_string()),
+                        RValue::Use(Value::Void),
+                    );
+                    self.current().instructions.push(__inst);
                 }
             }
             TypedStmtKind::Expression(expr) => {
@@ -303,7 +287,7 @@ impl<'a> MirBuilder<'a> {
                                         Value::Place(next_call.clone()),
                                         0,
                                         0,
-                                        crate::builder::is_ref_type_id(*item_ty, self.session),
+                                        crate::builder::is_ref_type_id(*item_ty, self.session, &self.struct_names),
                                     ),
                                 );
                                 self.current().instructions.push(__inst);
