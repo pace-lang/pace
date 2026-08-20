@@ -1,20 +1,54 @@
-foreign func paceStringBuilderNew(): Pointer<CChar>;
-foreign func paceStringBuilderAppend(builder: Pointer<CChar>, s: String);
-foreign func paceStringBuilderToString(builder: Pointer<CChar>): String;
-foreign func paceStringBuilderDrop(builder: Pointer<CChar>);
+import "string.pace";
+
+foreign func paceStringFromBytes(ptr: Pointer<CChar>, len: Int): String;
+foreign func malloc(size: Int): Pointer<CChar>;
+foreign func realloc(ptr: Pointer<CChar>, newSize: Int): Pointer<CChar>;
+foreign func free(ptr: Pointer<CChar>);
+foreign func ptrWriteByte(ptr: Pointer<CChar>, offset: Int, val: Int);
+
 
 class StringBuilder {
     var ptr: Pointer<CChar>;
+    var length: Int;
+    var capacity: Int;
 
     func init() {
-        self.ptr = paceStringBuilderNew();
+        self.capacity = 16;
+        self.length = 0;
+        self.ptr = malloc(self.capacity);
+    }
+
+    func deinit() {
+        if self.capacity > 0 {
+            free(self.ptr);
+        }
     }
 
     func append(s: String) {
-        paceStringBuilderAppend(self.ptr, s);
+        var sLen = stringLen(s);
+        if sLen == 0 {
+            return;
+        }
+
+        var newLen = self.length + sLen;
+        if newLen > self.capacity {
+            while self.capacity < newLen {
+                self.capacity = self.capacity * 2;
+            }
+            self.ptr = realloc(self.ptr, self.capacity);
+        }
+
+        var i = 0;
+        while i < sLen {
+            var charCode = stringCharAt(s, i);
+            ptrWriteByte(self.ptr, self.length + i, charCode);
+            i = i + 1;
+        }
+        
+        self.length = newLen;
     }
 
     func toString(): String {
-        return paceStringBuilderToString(self.ptr);
+        return paceStringFromBytes(self.ptr, self.length);
     }
 }

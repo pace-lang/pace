@@ -2,7 +2,6 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 pub mod async_rt;
 pub mod actor;
-pub mod string_builder;
 use std::ffi::{c_void, c_char, CStr};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -57,6 +56,17 @@ pub extern "C" fn printStr(str_ptr: *const c_char) -> i64 {
         }
     }
     0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn paceStringFromBytes(bytes: *const u8, len: i64) -> *const c_char {
+    let new_ptr = pace_alloc(24 + len + 1, (-2isize) as *const ());
+    unsafe {
+        let payload_ptr = new_ptr.add(24);
+        std::ptr::copy_nonoverlapping(bytes, payload_ptr, len as usize);
+        *payload_ptr.add(len as usize) = 0; // null terminator
+    }
+    new_ptr as *const c_char
 }
 
 #[unsafe(no_mangle)]

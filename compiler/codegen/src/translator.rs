@@ -338,7 +338,21 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let target_func_name = func_name.as_str();
 
                         // Intercept Compiler Intrinsics (ptrRead, ptrWrite)
-                        if target_func_name.starts_with("ptrRead_") {
+                        if target_func_name == "ptrReadByte" {
+                            let ptr_val = self.translate_value(&args[0])?;
+                            let index_val = self.translate_value(&args[1])?;
+                            let addr = self.builder.ins().iadd(ptr_val, index_val);
+                            let val = self.builder.ins().load(types::I8, cranelift_codegen::ir::MemFlagsData::new(), addr, 0);
+                            self.builder.ins().uextend(types::I64, val)
+                        } else if target_func_name == "ptrWriteByte" {
+                            let ptr_val = self.translate_value(&args[0])?;
+                            let index_val = self.translate_value(&args[1])?;
+                            let val = self.translate_value(&args[2])?;
+                            let val_i8 = self.builder.ins().ireduce(types::I8, val);
+                            let addr = self.builder.ins().iadd(ptr_val, index_val);
+                            self.builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), val_i8, addr, 0);
+                            self.builder.ins().iconst(types::I64, 0)
+                        } else if target_func_name.starts_with("ptrRead_") {
                             let type_name = &target_func_name[8..];
                             let ptr_val = self.translate_value(&args[0])?;
                             let index_val = self.translate_value(&args[1])?;
