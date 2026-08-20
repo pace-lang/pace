@@ -6,7 +6,7 @@ use std::ffi::c_void;
 type PacePollFn = extern "C" fn(*mut c_void, *mut Waker) -> i32;
 
 pub struct PaceTask {
-    task_ptr: *mut c_void,
+    pub task_ptr: *mut c_void,
 }
 
 unsafe impl Send for PaceTask {}

@@ -143,6 +143,30 @@ impl CraneliftGenerator {
             .unwrap();
         func_ids.insert("pace_spawn_task".to_string(), spawn_id);
 
+        let mut actor_mb_create_sig = module.make_signature();
+        actor_mb_create_sig.params.push(AbiParam::new(types::I64));
+        actor_mb_create_sig.returns.push(AbiParam::new(types::I64));
+        let actor_mb_create_id = module
+            .declare_function(
+                "pace_actor_mailbox_create",
+                Linkage::Import,
+                &actor_mb_create_sig,
+            )
+            .unwrap();
+        func_ids.insert("pace_actor_mailbox_create".to_string(), actor_mb_create_id);
+
+        let mut actor_mb_push_sig = module.make_signature();
+        actor_mb_push_sig.params.push(AbiParam::new(types::I64));
+        actor_mb_push_sig.params.push(AbiParam::new(types::I64));
+        let actor_mb_push_id = module
+            .declare_function(
+                "pace_actor_mailbox_push",
+                Linkage::Import,
+                &actor_mb_push_sig,
+            )
+            .unwrap();
+        func_ids.insert("pace_actor_mailbox_push".to_string(), actor_mb_push_id);
+
         let mut panic_sig = module.make_signature();
         panic_sig.params.push(AbiParam::new(types::I64));
         let panic_id = module

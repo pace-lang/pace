@@ -84,6 +84,17 @@ impl<'a> TypeChecker<'a> {
                         class_mutables_map.insert(*f_name, is_mutable);
                     }
 
+                    if matches!(stmt.kind, StmtKind::Actor { .. }) {
+                        class_members.insert(
+                            self.session.interner.borrow_mut().intern("__mailbox"),
+                            self.session.types.borrow_mut().intern(Type::Int)
+                        );
+                        class_mutables_map.insert(
+                            self.session.interner.borrow_mut().intern("__mailbox"),
+                            false
+                        );
+                    }
+
                     self.uninitialized_class_properties
                         .insert(*name, uninit_props);
 

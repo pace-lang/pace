@@ -331,6 +331,10 @@ impl<'a> ProgramBuilder<'a> {
                         _ => {}
                     }
                 }
+                if is_actor {
+                    field_names.push("__mailbox".to_string());
+                }
+
                 let class_def = mir::ClassDef {
                     name: self.session.interner.borrow().lookup(*name).to_string(),
                     is_struct,

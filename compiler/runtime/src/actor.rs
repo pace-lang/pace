@@ -1,6 +1,7 @@
 use std::ffi::c_void;
 use tokio::sync::mpsc;
 use std::sync::Arc;
+use crate::async_rt::PaceTask;
 
 #[derive(Clone, Copy)]
 pub struct ActorMailboxMessage(*mut c_void);
@@ -15,7 +16,6 @@ pub struct PaceActorMailbox {
 pub struct PaceActorState {
     receiver: mpsc::UnboundedReceiver<ActorMailboxMessage>,
     actor_instance_ptr: *mut c_void,
-    process_message_fn: extern "C" fn(*mut c_void, *mut c_void),
 }
 
 unsafe impl Send for PaceActorMailbox {}
@@ -25,7 +25,6 @@ unsafe impl Send for PaceActorState {}
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_actor_mailbox_create(
     actor_instance_ptr: *mut c_void,
-    process_message_fn: extern "C" fn(*mut c_void, *mut c_void),
 ) -> *mut PaceActorMailbox {
     let (tx, rx) = mpsc::unbounded_channel();
     
@@ -33,7 +32,6 @@ pub extern "C" fn pace_actor_mailbox_create(
     let state = PaceActorState {
         receiver: rx,
         actor_instance_ptr,
-        process_message_fn,
     };
     
     // Spawn the background task to drain the mailbox
@@ -41,7 +39,8 @@ pub extern "C" fn pace_actor_mailbox_create(
         handle.spawn(async move {
             let mut state = state;
             while let Some(msg) = state.receiver.recv().await {
-                (state.process_message_fn)(state.actor_instance_ptr, msg.0);
+                let task = PaceTask { task_ptr: msg.0 };
+                task.await;
             }
         });
     } else {
@@ -50,7 +49,8 @@ pub extern "C" fn pace_actor_mailbox_create(
             rt.block_on(async move {
                 let mut state = state;
                 while let Some(msg) = state.receiver.recv().await {
-                    (state.process_message_fn)(state.actor_instance_ptr, msg.0);
+                    let task = PaceTask { task_ptr: msg.0 };
+                    task.await;
                 }
             });
         });

@@ -83,9 +83,13 @@ impl<'a> MirBuilder<'a> {
                         self.session.interner.borrow().lookup(*name)
                     );
                     
+                    let obj_val_for_push = obj_val.clone();
                     arg_values.insert(0, obj_val);
-                    let __inst =
-                        Inst::Assign(temp.clone(), RValue::Call(actual_name, arg_values));
+                    let __inst = if is_actor && self.session.interner.borrow().lookup(*name) != "init" {
+                        Inst::Assign(temp.clone(), RValue::ActorMailboxPush(obj_val_for_push, actual_name, arg_values))
+                    } else {
+                        Inst::Assign(temp.clone(), RValue::Call(actual_name, arg_values))
+                    };
                     self.current().instructions.push(__inst);
                     
                     return Value::Place(temp);

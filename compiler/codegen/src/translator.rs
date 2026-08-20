@@ -505,7 +505,20 @@ impl<'a, 'b> Translator<'a, 'b> {
                             .builder
                             .ins()
                             .call(local_alloc, &[size_val, metadata_ptr]);
-                        self.builder.inst_results(call_inst)[0]
+                        let obj_ptr = self.builder.inst_results(call_inst)[0];
+
+                        if class_def.is_actor {
+                            let mailbox_create = self.func_ids.get("pace_actor_mailbox_create").unwrap();
+                            let local_mailbox_create = self.module.declare_func_in_func(*mailbox_create, self.builder.func);
+                            let mailbox_call = self.builder.ins().call(local_mailbox_create, &[obj_ptr]);
+                            let mailbox_ptr = self.builder.inst_results(mailbox_call)[0];
+                            
+                            let mb_idx = class_def.fields.iter().position(|f| f == "__mailbox").unwrap();
+                            let mb_offset = 24 + (mb_idx as i32 * 8);
+                            self.builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), mailbox_ptr, obj_ptr, mb_offset);
+                        }
+
+                        obj_ptr
                     }
                     RValue::AllocateTask(poll_name) => {
                         let class_name = "Task";
@@ -546,7 +559,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let poll_ptr = self.builder.ins().func_addr(types::I64, local_poll);
 
                         // Store at offset 32 (poll_fn)
-                        let poll_offset = self.builder.ins().iadd_imm(obj_ptr, 32);
+                        let poll_offset = self.builder.ins().iadd_imm_s(obj_ptr, 32);
                         self.builder.ins().store(ir::MemFlagsData::new(), poll_ptr, poll_offset, 0);
 
                         obj_ptr
@@ -793,6 +806,51 @@ impl<'a, 'b> Translator<'a, 'b> {
                             .ins()
                             .load(types::I64, ir::MemFlagsData::new(), obj_ptr, 24)
                     }
+                    RValue::ActorMailboxPush(obj, method, args) => {
+                        // 1. Call the method synchronously to obtain the Task object
+                        let target_func_name = method.as_str();
+                        let func_id = self
+                            .func_ids
+                            .get(target_func_name)
+                            .unwrap_or_else(|| panic!("Function {} not found for ActorMailboxPush", target_func_name));
+                        let local_callee = self
+                            .module
+                            .declare_func_in_func(*func_id, self.builder.func);
+
+                        let mut arg_vals = Vec::new();
+                        for arg in args {
+                            arg_vals.push(self.translate_value(arg)?);
+                        }
+
+                        let call_inst = self.builder.ins().call(local_callee, &arg_vals);
+                        let task_ptr = self.builder.inst_results(call_inst)[0];
+
+                        // 2. Extract __mailbox pointer from obj
+                        let cl_obj = self.translate_value(obj)?;
+                        // We need the class definition to find the offset
+                        // Wait, we don't know the exact class name here easily if it's dynamic...
+                        // But wait! Actor classes are statically typed at the call site.
+                        // Wait, the RValue::ActorMailboxPush does not have the class_name!
+                        // Let's look at get_struct_name or we can just extract it from method name?
+                        // method name is like "MyActor::my_method". So class name is before "::".
+                        let class_name = target_func_name.split("::").next()
+                            .ok_or_else(|| format!("Invalid method name format for ActorMailboxPush: {}", target_func_name))?;
+                        let class_def = self.program.classes.get(class_name)
+                            .ok_or_else(|| format!("Class {} not found for ActorMailboxPush", class_name))?;
+                        let mb_idx = class_def.fields.iter().position(|f| f == "__mailbox")
+                            .ok_or_else(|| format!("Actor class {} is missing the __mailbox field", class_name))?;
+                        let mb_offset = 24 + (mb_idx as i32 * 8);
+                        
+                        let mailbox_ptr = self.builder.ins().load(types::I64, cranelift_codegen::ir::MemFlagsData::new(), cl_obj, mb_offset);
+
+                        // 3. Call pace_actor_mailbox_push(mailbox, task_ptr)
+                        let push_func = self.func_ids.get("pace_actor_mailbox_push").unwrap();
+                        let local_push = self.module.declare_func_in_func(*push_func, self.builder.func);
+                        self.builder.ins().call(local_push, &[mailbox_ptr, task_ptr]);
+
+                        // 4. Return the Task object
+                        task_ptr
+                    }
                     RValue::MethodCall(_, _, _) => {
                         return Err(
                             "Dynamic method calls not supported (Statically dispatched instead)"
@@ -820,14 +878,14 @@ impl<'a, 'b> Translator<'a, 'b> {
                     RValue::GetTaskResult(task_val) => {
                         let cl_task = self.translate_value(task_val)?;
                         // Context is at offset 24
-                        let ctx_offset = self.builder.ins().iadd_imm(cl_task, 24);
+                        let ctx_offset = self.builder.ins().iadd_imm_s(cl_task, 24);
                         let ctx_ptr = self.builder.ins().load(types::I64, ir::MemFlagsData::new(), ctx_offset, 0);
                         // Result is at offset 32 in Context (_state is at 24, _result is at 32)
-                        let result_offset = self.builder.ins().iadd_imm(ctx_ptr, 32);
+                        let result_offset = self.builder.ins().iadd_imm_s(ctx_ptr, 32);
                         self.builder.ins().load(types::I64, ir::MemFlagsData::new(), result_offset, 0)
                     }
-                    RValue::Await(_) | RValue::ActorMailboxPush(_, _, _) => {
-                        unimplemented!("Await and ActorMailboxPush should be transformed away by MIR lowering or have specific implementations.")
+                    RValue::Await(_) => {
+                        unimplemented!("Await should be transformed away by MIR lowering or have specific implementations.")
                     }
                 };
 
@@ -838,7 +896,7 @@ impl<'a, 'b> Translator<'a, 'b> {
             Inst::RegisterWaker(task_val, waker_val) => {
                 let cl_task = self.translate_value(task_val)?;
                 let cl_waker = self.translate_value(waker_val)?;
-                let waker_offset = self.builder.ins().iadd_imm(cl_task, 40);
+                let waker_offset = self.builder.ins().iadd_imm_s(cl_task, 40);
                 self.builder.ins().store(ir::MemFlagsData::new(), cl_waker, waker_offset, 0);
                 Ok(())
             }
