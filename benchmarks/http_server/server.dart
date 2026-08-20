@@ -1,8 +1,8 @@
 import 'dart:io';
 
 void main() async {
-  var server = await HttpServer.bind('127.0.0.1', 3002);
-  print('Dart HTTP server listening on http://127.0.0.1:3002');
+  var server = await HttpServer.bind('127.0.0.1', 3000);
+  print('Dart HTTP server listening on http://127.0.0.1:3000');
   
   await for (HttpRequest request in server) {
     if (request.uri.path == '/json') {

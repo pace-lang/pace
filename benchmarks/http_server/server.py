@@ -20,9 +20,9 @@ class SimpleHandler(BaseHTTPRequestHandler):
         pass
 
 def run(server_class=HTTPServer, handler_class=SimpleHandler):
-    server_address = ('127.0.0.1', 3001)
+    server_address = ('127.0.0.1', 3000)
     httpd = server_class(server_address, handler_class)
-    print("Python HTTP server listening on http://127.0.0.1:3001")
+    print("Python HTTP server listening on http://127.0.0.1:3000")
     httpd.serve_forever()
 
 if __name__ == '__main__':

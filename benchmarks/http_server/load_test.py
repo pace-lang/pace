@@ -14,11 +14,11 @@ def fetch(_):
     except Exception as e:
         return False
 
-def run_benchmark():
-    total_requests = 2000
-    threads = 20
+def run_benchmark(mode):
+    total_requests = 2000 if mode == "multi" else 500
+    threads = 20 if mode == "multi" else 1
     
-    print(f"Sending {total_requests} requests with {threads} threads...")
+    print(f"Sending {total_requests} requests with {threads} threads ({mode} mode)...")
     
     start_time = time.time()
     
@@ -36,4 +36,5 @@ def run_benchmark():
     print(f"Requests per second (RPS): {rps:.2f}")
 
 if __name__ == "__main__":
-    run_benchmark()
+    mode = sys.argv[2] if len(sys.argv) > 2 else "multi"
+    run_benchmark(mode)

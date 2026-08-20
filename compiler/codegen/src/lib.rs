@@ -281,11 +281,20 @@ impl CraneliftGenerator {
             // 0: deinit_fn (8 bytes, set via relocation later if exists)
             metadata_bytes.extend_from_slice(&0u64.to_le_bytes());
 
-            // 8: field_count (uint64_t)
+            // 8: mailbox_offset (uint64_t)
+            let mailbox_offset: u64 = if class_def.is_actor {
+                let mb_idx = class_def.fields.iter().position(|f| f == "__mailbox").unwrap();
+                24 + mb_idx as u64 * 8
+            } else {
+                0
+            };
+            metadata_bytes.extend_from_slice(&mailbox_offset.to_le_bytes());
+
+            // 16: field_count (uint64_t)
             metadata_bytes
                 .extend_from_slice(&(class_def.reference_fields.len() as u64).to_le_bytes());
 
-            // 16+: field_offsets (uint64_t[])
+            // 24+: field_offsets (uint64_t[])
             for (idx, field_name) in class_def.fields.iter().enumerate() {
                 if class_def.reference_fields.contains(field_name) {
                     let offset = 24 + idx * 8; // 24 bytes header + index * 8
@@ -329,7 +338,10 @@ impl CraneliftGenerator {
                     all_refs.insert(idx);
                 }
                 
-                // 8: field_count (uint64_t)
+                // 8: mailbox_offset (uint64_t) - Enums are never actors
+                metadata_bytes.extend_from_slice(&0u64.to_le_bytes());
+
+                // 16: field_count (uint64_t)
                 metadata_bytes.extend_from_slice(
                     &(all_refs.len() as u64).to_le_bytes(),
                 );

@@ -1,0 +1,14 @@
+actor DummyActor {
+    var id: Int;
+
+    func init(id: Int) {
+        self.id = id;
+    }
+}
+
+func main() {
+    var a = DummyActor(1);
+    var b = DummyActor(2);
+    var c = DummyActor(3);
+    printStr("Created 3 actors without loops.");
+}
