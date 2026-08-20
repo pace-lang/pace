@@ -1,11 +1,11 @@
-import "../stdlib/src/collections/list.pace" show List, sizeof;
+import "../stdlib/src/collections/list.pace";
 
-public struct Point {
-    public var padding: Int;
-    public var x: Int;
-    public var y: Int;
+struct Point {
+    var padding: Int;
+    var x: Int;
+    var y: Int;
     
-    public func init(padding: Int, x: Int, y: Int) {
+    func init(padding: Int, x: Int, y: Int) {
         self.padding = padding;
         self.x = x;
         self.y = y;

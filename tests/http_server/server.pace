@@ -1,5 +1,5 @@
-import "../../stdlib/src/net/http.pace" show bindHttpServer;
-public func main(): Int {
+import "../../stdlib/src/net/http.pace";
+func main(): Int {
     print("Server started on 8085...");
     let server = bindHttpServer("127.0.0.1:8085");
     

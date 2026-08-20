@@ -1,7 +1,7 @@
-import "json.pace" show JsonValue;
-import "../core/string.pace" show String;
+import "json.pace";
+import "../core/string.pace";
 
-public func stringifyJson(value: JsonValue): String {
+func stringifyJson(value: JsonValue): String {
     return match value {
         JsonValue.Null() => "null",
         JsonValue.Boolean(b) => b.toString(),

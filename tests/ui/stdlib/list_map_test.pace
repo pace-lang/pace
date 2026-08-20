@@ -1,5 +1,5 @@
-import "../../../stdlib/src/collections/list.pace" show List;
-import "../../../stdlib/src/collections/map.pace" show Map;
+import "../../../stdlib/src/collections/list.pace";
+import "../../../stdlib/src/collections/map.pace";
 
 func main() {
     let list = List<Int>();

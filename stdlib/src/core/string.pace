@@ -1,5 +1,5 @@
 
-import "../collections/list.pace" show List;
+import "../collections/list.pace";
 
 foreign func stringLen(s: String): Int;
 foreign func stringConcat(a: String, b: String): String;
@@ -24,52 +24,52 @@ foreign func paceFloatToString(value: Float): String;
 foreign func paceBoolToString(value: Boolean): String;
 
 extend Int {
-    public func toString(): String {
+    func toString(): String {
         return paceIntToString(self);
     }
 }
 
 extend Float {
-    public func toString(): String {
+    func toString(): String {
         return paceFloatToString(self);
     }
 }
 
 extend Boolean {
-    public func toString(): String {
+    func toString(): String {
         return paceBoolToString(self);
     }
 }
 
 extend String {
-    public func charCodeAt(index: Int): Int {
+    func charCodeAt(index: Int): Int {
         return stringCharAt(self, index);
     }
 
-    public func toInt(): Int {
+    func toInt(): Int {
         return stringToInt(self);
     }
 
-    public func toFloat(): Float {
+    func toFloat(): Float {
         return stringToFloat(self);
     }
-    public func len(): Int {
+    func len(): Int {
         return stringLen(self);
     }
 
-    public func concat(b: String): String {
+    func concat(b: String): String {
         return stringConcat(self, b);
     }
 
-    public func substring(start: Int, end: Int): String {
+    func substring(start: Int, end: Int): String {
         return stringSubstring(self, start, end);
     }
 
-    public func contains(sub: String): Boolean {
+    func contains(sub: String): Boolean {
         return stringContains(self, sub);
     }
 
-    public func split(sub: String): List<String> {
+    func split(sub: String): List<String> {
         let list = List<String>();
         let ptr = stringSplit(self, sub);
         let len = stringSplitLen(ptr);
@@ -82,19 +82,19 @@ extend String {
         return list;
     }
 
-    public func replace(old: String, new: String): String {
+    func replace(old: String, new: String): String {
         return stringReplace(self, old, new);
     }
 
-    public func trim(): String {
+    func trim(): String {
         return stringTrim(self);
     }
 
-    public func toLower(): String {
+    func toLower(): String {
         return stringToLower(self);
     }
 
-    public func toUpper(): String {
+    func toUpper(): String {
         return stringToUpper(self);
     }
 }

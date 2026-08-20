@@ -1,7 +1,7 @@
-import "../../stdlib/src/net/http.pace" show HttpClient, HttpClientOptions, HttpRequest;
-import "../../stdlib/src/core/result.pace" show Result;
+import "../../stdlib/src/net/http.pace";
+import "../../stdlib/src/core/result.pace";
 
-public func main(): Int {
+func main(): Int {
     let client = HttpClient(HttpClientOptions(5, "PaceTestAgent"));
     
     let req = HttpRequest("POST", "http://127.0.0.1:8085/?name=PaceMaker");

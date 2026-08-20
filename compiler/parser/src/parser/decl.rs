@@ -18,7 +18,6 @@ impl<'a> Parser<'a> {
         if self.match_token(&[TokenKind::Private]) {
             true
         } else {
-            let _ = self.match_token(&[TokenKind::Public]);
             false
         }
     }

@@ -3,15 +3,15 @@ interface Animal {
 }
 
 class Dog implements Animal {
-    public func init() {}
-    public func speak() {
+    func init() {}
+    func speak() {
         print("Woof!");
     }
 }
 
 class Cat implements Animal {
-    public func init() {}
-    public func speak() {
+    func init() {}
+    func speak() {
         print("Meow!");
     }
 }
@@ -20,7 +20,7 @@ func makeSpeak(animal: Animal) {
     animal.speak();
 }
 
-public func main(): Int {
+func main(): Int {
     let dog = Dog();
     makeSpeak(dog);
     

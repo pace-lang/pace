@@ -73,7 +73,7 @@ impl ArcPass {
                             reference_places.insert(place.clone());
                             owned_places.insert(place.clone());
                         }
-                        Inst::Assign(place, RValue::ConstructVariant(name, variant, payloads)) => {
+                        Inst::Assign(place, RValue::ConstructVariant(_name, _variant, payloads)) => {
                             for payload in payloads {
                                 if let Value::Place(p) = payload
                                     && reference_places.contains(p)
@@ -86,7 +86,7 @@ impl ArcPass {
                             reference_places.insert(place.clone());
                             owned_places.insert(place.clone());
                         }
-                        Inst::Assign(place, RValue::ExtractPayload(a, b, c, d, is_ref)) => {
+                        Inst::Assign(place, RValue::ExtractPayload(_a, _b, _c, _d, is_ref)) => {
                             if *is_ref {
                                 new_instructions.push(Inst::Release(Value::Place(place.clone())));
                             }

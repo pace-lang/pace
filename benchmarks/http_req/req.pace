@@ -1,5 +1,5 @@
-import "../../stdlib/src/net/http.pace" show HttpClient, HttpClientOptions, HttpRequest, HttpResponse;
-import "../../stdlib/src/core/string.pace" show String;
+import "../../stdlib/src/net/http.pace";
+import "../../stdlib/src/core/string.pace";
 
 func main() {
     let url = "https://jsonplaceholder.typicode.com/todos/1";

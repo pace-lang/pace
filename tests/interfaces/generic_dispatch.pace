@@ -3,8 +3,8 @@ interface Processor<T> {
 }
 
 class IntProcessor implements Processor<Int> {
-    public func init() {}
-    public func process(item: Int) {
+    func init() {}
+    func process(item: Int) {
         if item == 42 {
             print("Processed 42");
         } else {
@@ -14,8 +14,8 @@ class IntProcessor implements Processor<Int> {
 }
 
 class StringProcessor implements Processor<String> {
-    public func init() {}
-    public func process(item: String) {
+    func init() {}
+    func process(item: String) {
         if item == "Hello" {
             print("Processed Hello");
         } else {
@@ -28,7 +28,7 @@ func runProcess<T>(proc: Processor<T>, item: T) {
     proc.process(item);
 }
 
-public func main(): Int {
+func main(): Int {
     let p1 = IntProcessor();
     runProcess<Int>(p1, 42);
     runProcess<Int>(p1, 99);

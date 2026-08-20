@@ -34,7 +34,7 @@ fn test_func_declaration() {
 
 #[test]
 fn test_visibility_modifiers() {
-    let source = "private func hidden() {} public class Visible {} var unadorned = 1;";
+    let source = "private func hidden() {} class Visible {} var unadorned = 1;";
     let session = session::CompilerSession::new();
     let mut scanner = Scanner::new(0, source);
     let mut parser = Parser::new(scanner.scan_tokens(&session), &session);

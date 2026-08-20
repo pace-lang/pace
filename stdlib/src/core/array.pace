@@ -7,23 +7,23 @@ foreign func arrayGet<T>(arr: [T], index: Int): Option<T>;
 foreign func arraySet<T>(arr: [T], index: Int, item: T);
 
 extend<T> [T] {
-    public func len(): Int {
+    func len(): Int {
         return arrayLen<T>(self);
     }
 
-    public func push(item: T) {
+    func push(item: T) {
         arrayPush<T>(self, item);
     }
 
-    public func pop(): Option<T> {
+    func pop(): Option<T> {
         return arrayPop<T>(self);
     }
 
-    public func get(index: Int): Option<T> {
+    func get(index: Int): Option<T> {
         return arrayGet<T>(self, index);
     }
 
-    public func set(index: Int, item: T) {
+    func set(index: Int, item: T) {
         arraySet<T>(self, index, item);
     }
 }

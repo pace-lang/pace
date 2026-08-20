@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 use std::os::raw::c_char;
-use crate::{pace_alloc, pace_release};
+use crate::pace_alloc;
 use std::ptr;
 
 // Pace string header size is 24 bytes (strong count + weak count + metadata)

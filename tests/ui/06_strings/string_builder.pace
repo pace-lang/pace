@@ -1,4 +1,4 @@
-import "../../../stdlib/src/core/string_builder.pace" show StringBuilder;
+import "../../../stdlib/src/core/string_builder.pace";
 
 func main() {
     let builder = StringBuilder();

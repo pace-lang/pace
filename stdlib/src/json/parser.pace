@@ -1,8 +1,8 @@
-import "json.pace" show JsonValue;
-import "../core/result.pace" show Result;
-import "../core/string.pace" show String, stringSkipWhitespace, stringFindStringEnd;
-import "../collections/map.pace" show Map;
-import "../collections/list.pace" show List;
+import "json.pace";
+import "../core/result.pace";
+import "../core/string.pace";
+import "../collections/map.pace";
+import "../collections/list.pace";
 
 foreign func retainJsonValue(val: JsonValue);
 foreign func retainString(val: String);
@@ -238,7 +238,7 @@ class JsonParser {
     }
 }
 
-public func parseJson(source: String): Result<JsonValue, String> {
+func parseJson(source: String): Result<JsonValue, String> {
     let parser = JsonParser(source);
     return parser.parse();
 }
