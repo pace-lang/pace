@@ -1,6 +1,6 @@
 use std::ffi::c_void;
 use tokio::sync::mpsc;
-use std::sync::Arc;
+
 use crate::async_rt::PaceTask;
 
 #[derive(Clone, Copy)]
@@ -15,7 +15,7 @@ pub struct PaceActorMailbox {
 
 pub struct PaceActorState {
     receiver: mpsc::UnboundedReceiver<ActorMailboxMessage>,
-    actor_instance_ptr: *mut c_void,
+
 }
 
 unsafe impl Send for PaceActorMailbox {}
@@ -24,14 +24,13 @@ unsafe impl Send for PaceActorState {}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_actor_mailbox_create(
-    actor_instance_ptr: *mut c_void,
+    _actor_instance_ptr: *mut c_void,
 ) -> *mut PaceActorMailbox {
     let (tx, rx) = mpsc::unbounded_channel();
     
     let mailbox = Box::new(PaceActorMailbox { sender: tx });
     let state = PaceActorState {
         receiver: rx,
-        actor_instance_ptr,
     };
     
     // Spawn the background task to drain the mailbox

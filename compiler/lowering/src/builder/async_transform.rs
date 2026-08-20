@@ -5,7 +5,7 @@ use mir::{
 pub fn lower_async_to_poll(
     original_mir: &Function,
     context_name: &str,
-    temp_count: usize,
+    _temp_count: usize,
 ) -> Function {
     let mut poll_func = Function::new(
         format!("{}_poll", original_mir.name),

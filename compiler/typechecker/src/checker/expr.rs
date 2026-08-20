@@ -111,7 +111,7 @@ impl<'a> TypeChecker<'a> {
         (TypedExprKind::Await(self.alloc(typed_inner)), ty)
     }
 
-    fn check_spawn_expr(&mut self, inner: &'a Expr<'a>, span: Span) -> (TypedExprKind<'a>, TypeId) {
+    fn check_spawn_expr(&mut self, inner: &'a Expr<'a>, _span: Span) -> (TypedExprKind<'a>, TypeId) {
         let typed_inner = self.check_expr(inner);
         let ty = self.session.types.borrow_mut().intern(Type::Task(typed_inner.ty));
 

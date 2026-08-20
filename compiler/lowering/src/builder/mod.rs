@@ -131,7 +131,7 @@ impl<'a> ProgramBuilder<'a> {
             };
             self.program.classes.insert("Task".to_string(), class_def);
         }
-        let mut original_builder = MirBuilder::new(
+        let original_builder = MirBuilder::new(
             actual_name.clone(),
             param_names.clone(),
             ref_params.clone(),
@@ -511,7 +511,7 @@ impl<'a> ProgramBuilder<'a> {
                     }
                 }
                 
-                let func_name_str = self.session.interner.borrow().lookup(*name).to_string();
+                let _func_name_str = self.session.interner.borrow().lookup(*name).to_string();
                 let returns_ref = return_type
                     .as_ref()
                     .is_some_and(|t| is_ref_type(t, self.session));
