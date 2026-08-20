@@ -78,6 +78,31 @@ impl<'a, 'b> Translator<'a, 'b> {
                 };
                 self.builder.def_var(var, ptr);
             }
+
+            let zero_val = self.builder.ins().iconst(types::I64, 0);
+            let mut defined_vars = std::collections::HashSet::new();
+            
+            for param_name in &function.parameters {
+                defined_vars.insert(mir::Place::Var(param_name.clone()));
+            }
+            for (place, _) in &function.struct_places {
+                defined_vars.insert(place.clone());
+            }
+
+            for block in &function.blocks {
+                for inst in &block.instructions {
+                    if let Inst::Assign(place, _) = inst {
+                        if !defined_vars.contains(place) {
+                            defined_vars.insert(place.clone());
+                            let var = match place {
+                                mir::Place::Var(name) => self.get_or_create_var(name),
+                                mir::Place::Temp(id) => self.get_or_create_temp(*id),
+                            };
+                            self.builder.def_var(var, zero_val);
+                        }
+                    }
+                }
+            }
         }
 
         // Translate each block

@@ -2,8 +2,8 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 pub mod async_rt;
 pub mod actor;
-use std::ffi::CStr;
-use std::os::raw::c_char;
+pub mod string_builder;
+use std::ffi::{c_void, c_char, CStr};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 unsafe extern "C" {
@@ -14,6 +14,7 @@ unsafe extern "C" {
 #[repr(C)]
 pub struct PaceClassMetadata {
     pub deinit_fn: *const (),
+    pub mailbox_offset: u64,
     pub field_count: u64,
     pub field_offsets: [u64; 0],
 }
@@ -180,6 +181,20 @@ pub extern "C" fn pace_release(obj: *mut u8) {
             if !deinit_fn.is_null() {
                 let deinit: extern "C" fn(*mut u8) = unsafe { std::mem::transmute(deinit_fn) };
                 deinit(obj);
+            }
+
+            let mailbox_offset = unsafe { (*metadata).mailbox_offset };
+            if mailbox_offset > 0 {
+                // Destroy the mailbox
+                let mailbox_ptr = unsafe { *(obj.add(mailbox_offset as usize) as *const *mut c_void) };
+                if !mailbox_ptr.is_null() {
+                    unsafe extern "C" {
+                        fn pace_actor_mailbox_destroy(mailbox: *mut c_void);
+                    }
+                    unsafe {
+                        pace_actor_mailbox_destroy(mailbox_ptr);
+                    }
+                }
             }
 
             let field_count = unsafe { (*metadata).field_count };

@@ -1,0 +1,20 @@
+foreign func paceStringBuilderNew(): Pointer<CChar>;
+foreign func paceStringBuilderAppend(builder: Pointer<CChar>, s: String);
+foreign func paceStringBuilderToString(builder: Pointer<CChar>): String;
+foreign func paceStringBuilderDrop(builder: Pointer<CChar>);
+
+class StringBuilder {
+    var ptr: Pointer<CChar>;
+
+    func init() {
+        self.ptr = paceStringBuilderNew();
+    }
+
+    func append(s: String) {
+        paceStringBuilderAppend(self.ptr, s);
+    }
+
+    func toString(): String {
+        return paceStringBuilderToString(self.ptr);
+    }
+}

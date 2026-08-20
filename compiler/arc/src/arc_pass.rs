@@ -52,6 +52,9 @@ impl ArcPass {
                 for inst in &block.instructions {
                     match inst {
                         Inst::Assign(place, RValue::Call(func_name, args)) => {
+                            if function_returns_reference.get(func_name) == Some(&true) {
+                                new_instructions.push(Inst::Release(Value::Place(place.clone())));
+                            }
                             new_instructions.push(Inst::Assign(
                                 place.clone(),
                                 RValue::Call(func_name.clone(), args.clone()),
@@ -61,12 +64,16 @@ impl ArcPass {
                                 owned_places.insert(place.clone());
                             }
                         }
-                        Inst::Assign(place, RValue::AllocateObject(_)) => {
-                            new_instructions.push(inst.clone());
+                        Inst::Assign(place, RValue::AllocateObject(name)) => {
+                            new_instructions.push(Inst::Release(Value::Place(place.clone())));
+                            new_instructions.push(Inst::Assign(
+                                place.clone(),
+                                RValue::AllocateObject(name.clone()),
+                            ));
                             reference_places.insert(place.clone());
                             owned_places.insert(place.clone());
                         }
-                        Inst::Assign(place, RValue::ConstructVariant(_, _, payloads)) => {
+                        Inst::Assign(place, RValue::ConstructVariant(name, variant, payloads)) => {
                             for payload in payloads {
                                 if let Value::Place(p) = payload
                                     && reference_places.contains(p)
@@ -74,11 +81,15 @@ impl ArcPass {
                                     new_instructions.push(Inst::Retain(payload.clone()));
                                 }
                             }
+                            new_instructions.push(Inst::Release(Value::Place(place.clone())));
                             new_instructions.push(inst.clone());
                             reference_places.insert(place.clone());
                             owned_places.insert(place.clone());
                         }
-                        Inst::Assign(place, RValue::ExtractPayload(_, _val, _, _, is_ref)) => {
+                        Inst::Assign(place, RValue::ExtractPayload(a, b, c, d, is_ref)) => {
+                            if *is_ref {
+                                new_instructions.push(Inst::Release(Value::Place(place.clone())));
+                            }
                             new_instructions.push(inst.clone());
                             if *is_ref {
                                 new_instructions.push(Inst::Retain(Value::Place(place.clone())));
@@ -97,12 +108,17 @@ impl ArcPass {
                             }) {
                                 is_ref_mut = true;
                             }
+                            if is_ref_mut {
+                                new_instructions.push(Inst::Release(Value::Place(place.clone())));
+                            }
                             new_instructions.push(Inst::Assign(
                                 place.clone(),
                                 RValue::Array(vals.clone(), is_ref_mut),
                             ));
-                            reference_places.insert(place.clone());
-                            owned_places.insert(place.clone());
+                            if is_ref_mut {
+                                reference_places.insert(place.clone());
+                                owned_places.insert(place.clone());
+                            }
                         }
                         Inst::Assign(place, RValue::ArrayRepeat(val, count, is_ref)) => {
                             let mut is_ref_mut = *is_ref;
@@ -111,15 +127,26 @@ impl ArcPass {
                             {
                                 is_ref_mut = true;
                             }
+                            if is_ref_mut {
+                                new_instructions.push(Inst::Release(Value::Place(place.clone())));
+                            }
                             new_instructions.push(Inst::Assign(
                                 place.clone(),
                                 RValue::ArrayRepeat(val.clone(), count.clone(), is_ref_mut),
                             ));
-                            reference_places.insert(place.clone());
-                            owned_places.insert(place.clone());
+                            if is_ref_mut {
+                                reference_places.insert(place.clone());
+                                owned_places.insert(place.clone());
+                            }
                         }
                         Inst::Assign(place, RValue::Use(Value::Place(src_place))) => {
                             if reference_places.contains(src_place) || is_weak(src_place) {
+                                if is_weak(place) {
+                                    new_instructions.push(Inst::WeakRelease(Value::Place(place.clone())));
+                                } else {
+                                    new_instructions.push(Inst::Release(Value::Place(place.clone())));
+                                }
+                                
                                 reference_places.insert(place.clone());
                                 owned_places.insert(place.clone());
 
