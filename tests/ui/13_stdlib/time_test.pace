@@ -1,0 +1,12 @@
+import "../../../stdlib/src/core/time.pace";
+import "../../../stdlib/src/io/print.pace";
+
+func main() {
+    let t = Time();
+    let start = t.now();
+    t.sleep(10.0);
+    let end = t.now();
+    if end > start {
+        print("Time works");
+    }
+}

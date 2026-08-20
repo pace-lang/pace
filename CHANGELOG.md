@@ -17,6 +17,8 @@ All notable changes to the Pace language will be documented in this file.
 - **Struct Value Semantics**: Structs are now treated strictly as deep-copied value types. Updating properties of a copied struct variable no longer incorrectly shares memory with the original instance.
 - **Micro-benchmarks**: Added native performance benchmarks for `Map` insertions, recursive functions (Fibonacci), `Struct` deep copies, and Sieve of Eratosthenes. 
 - **Memory Leak Test Suite**: Created a Valgrind test wrapper (`tests/memory_leak_test.sh`) to guarantee zero memory leaks across new native collections.
+- **File System (`std::fs`)**: Implemented the File System API, adding native Pace `File` class and Rust OS primitives for file I/O operations (`open`, `read`, `write`, `close`).
+- **Date & Time (`std::time`)**: Implemented the Date and Time APIs, adding the `Time` class to support high-precision Unix epoch generation (`now`) and thread-blocking (`sleep`).
 
 ### Fixed
 - Fixed cascading `Unknown type 'Any'` errors when parsing invalid or unknown generic types, drastically improving compiler error quality and readability.
@@ -33,12 +35,13 @@ All notable changes to the Pace language will be documented in this file.
 ### Changed
 - Refactored `Map<K, V>` and `Set<T>` to be completely natively implemented in Pace using the new memory primitives instead of relying on the C runtime.
 - Refactored `List<T>` to be completely natively implemented in Pace using the new memory primitives instead of relying on the C runtime.
+- Refactored all remaining String Utility methods (`split`, `replace`, `trim`, `toLower`, `toUpper`, `contains`) to be completely natively implemented in Pace instead of relying on the C FFI.
 - Refactored the Pace Standard Library (Stdlib) to use Extension Methods instead of standalone generic functions. Methods for Strings (`s.len()`), Arrays (`arr.push()`), Options, and Maps are now natively accessed via dot-syntax.
-- Removed outdated `list*` FFI functions from the C runtime.
+- Removed outdated `list*` and String utility FFI functions from the C runtime.
 - Standardized "Not implemented yet" warning messages in the CLI.
 - Updated `pace init` error messages to use standard diagnostic formatting.
 
-### Fixed
+- Fixed memory reclamation bugs when Pace Native Lists stored String references by introducing `retainString` to the memory primitives, ensuring Strings aren't garbage collected prematurely.
 - Fixed memory corruption bug where extracting a `Struct` payload from a generic `Enum` (e.g. `Option<Point>`) mistakenly incremented the struct's padding by incorrectly applying an ARC `Retain` instruction.
 - Fixed a bug where `Result` enums with primitive success/error types inside `try_expr` (the `?` operator) were failing to generate the correct monomorphized Enum names.
 - Fixed critical memory corruption bug where `Struct` property access (`GetProperty`/`SetProperty`) was reading/writing out-of-bounds memory by incorrectly applying a 24-byte Class object header offset.

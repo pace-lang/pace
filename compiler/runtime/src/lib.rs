@@ -666,23 +666,62 @@ pub extern "C" fn stringToUpper(s_ptr: *const c_char) -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn fileIsValid(_ptr: *mut u8) -> u8 {
-    0 // false
+pub extern "C" fn fileIsValid(ptr: *mut core::ffi::c_void) -> i64 {
+    if ptr.is_null() { 0 } else { 1 }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn fileReadAll(_ptr: *mut u8) -> *mut u8 {
-    std::ptr::null_mut()
+pub extern "C" fn fileReadAll(ptr: *mut core::ffi::c_void) -> *const c_char {
+    if ptr.is_null() {
+        return allocate_pace_string("");
+    }
+    let file = unsafe { &mut *(ptr as *mut std::fs::File) };
+    use std::io::Read;
+    let mut contents = String::new();
+    if file.read_to_string(&mut contents).is_ok() {
+        return allocate_pace_string(&contents);
+    }
+    allocate_pace_string("")
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn fileClose(_ptr: *mut u8) {}
+pub extern "C" fn fileClose(ptr: *mut core::ffi::c_void) {
+    if !ptr.is_null() {
+        unsafe { drop(Box::from_raw(ptr as *mut std::fs::File)) };
+    }
+}
 
 #[unsafe(no_mangle)]
-pub extern "C" fn fileWrite(_ptr: *mut u8, _data: *mut u8) {}
+pub extern "C" fn fileWrite(ptr: *mut core::ffi::c_void, data_ptr: *const c_char) {
+    if ptr.is_null() || data_ptr.is_null() { return; }
+    let file = unsafe { &mut *(ptr as *mut std::fs::File) };
+    let data = unsafe { std::ffi::CStr::from_ptr(data_ptr.add(24)) }.to_bytes();
+    use std::io::Write;
+    let _ = file.write_all(data);
+}
 
 #[unsafe(no_mangle)]
-pub extern "C" fn fileOpen(_path: *mut u8) -> *mut u8 {
+pub extern "C" fn fileOpen(path_ptr: *const c_char, mode_ptr: *const c_char) -> *mut core::ffi::c_void {
+    if path_ptr.is_null() || mode_ptr.is_null() { return std::ptr::null_mut(); }
+    let path_str = unsafe { std::ffi::CStr::from_ptr(path_ptr.add(24)) }.to_string_lossy();
+    let mode_str = unsafe { std::ffi::CStr::from_ptr(mode_ptr.add(24)) }.to_string_lossy();
+    
+    let mut options = std::fs::OpenOptions::new();
+    if mode_str == "r" {
+        options.read(true);
+    } else if mode_str == "w" {
+        options.write(true).create(true).truncate(true);
+    } else if mode_str == "a" {
+        options.write(true).create(true).append(true);
+    } else if mode_str == "rw" {
+        options.read(true).write(true).create(true);
+    } else {
+        options.read(true).write(true).create(true); // default
+    }
+    
+    if let Ok(file) = options.open(path_str.as_ref()) {
+        return Box::into_raw(Box::new(file)) as *mut core::ffi::c_void;
+    }
     std::ptr::null_mut()
 }
 #[unsafe(no_mangle)]
@@ -815,3 +854,15 @@ pub extern "C" fn retainString(val: *mut u8) {
 }
 
 
+
+#[unsafe(no_mangle)]
+pub extern "C" fn timeNow() -> f64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn timeSleep(ms: f64) {
+    if ms > 0.0 {
+        std::thread::sleep(std::time::Duration::from_millis(ms as u64));
+    }
+}

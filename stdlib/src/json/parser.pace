@@ -5,8 +5,6 @@ import "../collections/map.pace";
 import "../collections/list.pace";
 
 foreign func retainJsonValue(val: JsonValue);
-foreign func retainString(val: String);
-
 class JsonParser {
     var source: String;
     var pos: Int;

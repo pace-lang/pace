@@ -1,0 +1,14 @@
+foreign func timeNow(): Float;
+foreign func timeSleep(ms: Float);
+
+class Time {
+    func init() {}
+
+    func now(): Float {
+        return timeNow();
+    }
+    
+    func sleep(ms: Float) {
+        timeSleep(ms);
+    }
+}

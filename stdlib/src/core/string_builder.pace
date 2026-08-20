@@ -48,6 +48,18 @@ class StringBuilder {
         self.length = newLen;
     }
 
+    func appendChar(c: Int) {
+        var newLen = self.length + 1;
+        if newLen > self.capacity {
+            while self.capacity < newLen {
+                self.capacity = self.capacity * 2;
+            }
+            self.ptr = realloc(self.ptr, self.capacity);
+        }
+        ptrWriteByte(self.ptr, self.length, c);
+        self.length = newLen;
+    }
+
     func toString(): String {
         return paceStringFromBytes(self.ptr, self.length);
     }
