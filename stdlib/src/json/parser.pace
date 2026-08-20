@@ -90,13 +90,9 @@ class JsonParser {
 
     func matchKeyword(expected: String) {
         let expectedLen = expected.len();
-        var i = 0;
-        while i < expectedLen {
-            let c = self.consume();
-            if c != expected.charCodeAt(i) {
-                // Invalid keyword, ignoring for simplicity
-            }
-            i = i + 1;
+        let matched = stringMatchKeywordAt(self.source, self.pos, expected);
+        if matched == 1 {
+            self.pos = self.pos + expectedLen;
         }
     }
 
@@ -118,45 +114,25 @@ class JsonParser {
 
     func parseNumber(): JsonValue {
         let start = self.pos;
+        let end = stringFindNumberEnd(self.source, start);
+        if end <= start { return JsonValue.Null(); }
+        
+        self.pos = end;
+        
         var hasDecimal = false;
-        var c = self.peek();
-        
-        if c == 45 { // '-'
-            self.consume();
-            c = self.peek();
+        var i = start;
+        while i < end {
+            let c = self.source.charCodeAt(i);
+            if c == 46 { hasDecimal = true; }
+            if c == 101 { hasDecimal = true; } // 'e'
+            if c == 69 { hasDecimal = true; }  // 'E'
+            i = i + 1;
         }
-        
-        var isNumChar = false;
-        if c >= 48 { if c <= 57 { isNumChar = true; } }
-        if c == 46 { isNumChar = true; }
-        if c == 101 { isNumChar = true; }
-        if c == 69 { isNumChar = true; }
-        if c == 43 { isNumChar = true; }
-        if c == 45 { isNumChar = true; }
-
-        while isNumChar {
-            if c == 46 { // '.'
-                hasDecimal = true;
-            }
-            self.consume();
-            c = self.peek();
-            
-            isNumChar = false;
-            if c >= 48 { if c <= 57 { isNumChar = true; } }
-            if c == 46 { isNumChar = true; }
-            if c == 101 { isNumChar = true; }
-            if c == 69 { isNumChar = true; }
-            if c == 43 { isNumChar = true; }
-            if c == 45 { isNumChar = true; }
-        }
-        
-        let end = self.pos;
-        let str = self.source.substring(start, end);
         
         if hasDecimal {
-            return JsonValue.NumberFloat(str.toFloat());
+            return JsonValue.NumberFloat(stringSubstringToFloat(self.source, start, end));
         } else {
-            return JsonValue.NumberInt(str.toInt());
+            return JsonValue.NumberInt(stringSubstringToInt(self.source, start, end));
         }
     }
 

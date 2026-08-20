@@ -149,7 +149,7 @@ impl<'a> ProgramBuilder<'a> {
         if is_async {
             // 1. Generate Context Struct
             let context_name = format!("{}_Context", actual_name.replace("::", "_"));
-            let mut ctx_fields = vec!["_state".to_string(), "_result".to_string()];
+            let mut ctx_fields = vec!["state".to_string(), "result".to_string()];
             ctx_fields.extend(param_names.clone());
             
             // Add temp_0 .. temp_{N-1}
@@ -194,7 +194,7 @@ impl<'a> ProgramBuilder<'a> {
             
             start_block.instructions.push(mir::Inst::SetProperty(
                 mir::Value::Place(ctx_place.clone()),
-                "_state".to_string(),
+                "state".to_string(),
                 context_name.clone(),
                 mir::Value::Int(0),
                 false,
@@ -212,6 +212,8 @@ impl<'a> ProgramBuilder<'a> {
                 mir::Value::Place(ctx_place.clone()),
                 false,
             ));
+            
+            start_block.instructions.push(mir::Inst::Retain(mir::Value::Place(ctx_place.clone())));
             
             start_block.terminator = Some(mir::Terminator::Return(Some(mir::Value::Place(task_place))));
             mir_func.blocks.push(start_block);

@@ -2,9 +2,12 @@ async func getValue(): Int {
     return 42;
 }
 
+import "../../../stdlib/src/core/task.pace";
+
 func main() {
     print("Spawning task");
     spawn asyncMain();
+    paceSleep(500);
 }
 
 async func asyncMain() {

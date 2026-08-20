@@ -1,190 +1,219 @@
 import "../core/string.pace";
-import "../core/result.pace";
+import "../core/string_builder.pace";
+import "../collections/list.pace";
+import "socket.pace";
 
-// Client FFI
-foreign func httpClientCreateWithOptions(timeoutSecs: Int, userAgent: String): Pointer<CChar>;
-foreign func httpClientFree(ptr: Pointer<CChar>);
-foreign func httpRequestCreate(method: String, url: String): Pointer<CChar>;
-foreign func httpRequestAddHeader(req: Pointer<CChar>, key: String, val: String);
-foreign func httpRequestSetBody(req: Pointer<CChar>, body: String);
-foreign func httpRequestFree(ptr: Pointer<CChar>);
-foreign func httpClientSend(agent: Pointer<CChar>, req: Pointer<CChar>): Pointer<CChar>;
-
-foreign func httpResponseGetStatus(ptr: Pointer<CChar>): Int;
-foreign func httpResponseGetBody(ptr: Pointer<CChar>): String;
-foreign func httpResponseGetHeader(ptr: Pointer<CChar>, key: String): String;
-foreign func httpResponseFree(ptr: Pointer<CChar>);
-foreign func httpResponseIsValid(ptr: Pointer<CChar>): Boolean;
-
-class HttpResponse {
+class HttpServerResponse {
     var status: Int;
     var body: String;
-    var ptr: Pointer<CChar>;
+    var headers: List<String>;
     
-    func init(status: Int, body: String, ptr: Pointer<CChar>) {
+    func init(status: Int, body: String) {
         self.status = status;
         self.body = body;
-        self.ptr = ptr;
+        self.headers = List<String>();
     }
-
-    func getHeader(key: String): String {
-        return httpResponseGetHeader(self.ptr, key);
+    
+    func addHeader(key: String, value: String) {
+        self.headers.push(key + ": " + value);
     }
-
-    func free() {
-        httpResponseFree(self.ptr);
+    
+    func toString(): String {
+        let builder = StringBuilder();
+        builder.append("HTTP/1.1 ");
+        builder.append(self.status.toString());
+        if self.status == 200 {
+            builder.append(" OK\r\n");
+        } else if self.status == 404 {
+            builder.append(" Not Found\r\n");
+        } else {
+            builder.append(" Unknown\r\n");
+        }
+        
+        var i = 0;
+        while i < self.headers.len() {
+            builder.append(self.headers.get(i).unwrap());
+            builder.append("\r\n");
+            i = i + 1;
+        }
+        
+        builder.append("Content-Length: ");
+        builder.append(self.body.len().toString());
+        builder.append("\r\n\r\n");
+        builder.append(self.body);
+        
+        return builder.toString();
     }
 }
 
 class HttpRequest {
-    var ptr: Pointer<CChar>;
+    var method: String;
+    var path: String;
+    var stream: TcpStream;
+    
+    func init() {
+        self.method = "";
+        self.path = "";
+        self.stream = TcpStream();
+    }
+    
+    func respondWith(resp: HttpServerResponse) {
+        let respStr = resp.toString();
+        self.stream.writeString(respStr);
+        self.stream.close();
+    }
+}
 
+class HttpServer {
+    var listener: TcpListener;
+    
+    func init() {
+        self.listener = TcpListener();
+    }
+    
+    func bind(addr: String): Boolean {
+        return self.listener.bind(addr);
+    }
+    
+    func accept(): HttpRequest {
+        let stream = self.listener.accept();
+        let req = HttpRequest();
+        req.stream = stream;
+        
+        let requestStr = stream.readString(4096);
+        if requestStr != "" {
+            let parts = requestStr.split(" ");
+            if parts.len() >= 2 {
+                req.method = parts.get(0).unwrap();
+                req.path = parts.get(1).unwrap();
+            }
+        }
+        return req;
+    }
+    
+    func close() {
+        self.listener.close();
+    }
+}
+
+func bindHttpServer(addr: String): HttpServer {
+    let server = HttpServer();
+    let success = server.bind(addr);
+    if success == false {
+        print("Failed to bind server");
+    }
+    return server;
+}
+
+class ClientHttpRequest {
+    var method: String;
+    var url: String;
+    
     func init(method: String, url: String) {
-        self.ptr = httpRequestCreate(method, url);
+        self.method = method;
+        self.url = url;
     }
+}
 
-    func addHeader(key: String, value: String): HttpRequest {
-        httpRequestAddHeader(self.ptr, key, value);
-        return self;
+class HttpResult {
+    var ok: Boolean;
+    var value: HttpServerResponse;
+    
+    func init(ok: Boolean, value: HttpServerResponse) {
+        self.ok = ok;
+        self.value = value;
     }
-
-    func setBody(body: String): HttpRequest {
-        httpRequestSetBody(self.ptr, body);
-        return self;
+    
+    func isOk(): Boolean {
+        return self.ok;
     }
-
-    func free() {
-        httpRequestFree(self.ptr);
+    
+    func unwrap(): HttpServerResponse {
+        return self.value;
     }
 }
 
 class HttpClientOptions {
-    var timeoutSecs: Int;
+    var timeout: Int;
     var userAgent: String;
-
-    func init(timeoutSecs: Int, userAgent: String) {
-        self.timeoutSecs = timeoutSecs;
+    
+    func init(timeout: Int, userAgent: String) {
+        self.timeout = timeout;
         self.userAgent = userAgent;
     }
 }
 
 class HttpClient {
-    var ptr: Pointer<CChar>;
-
+    var options: HttpClientOptions;
+    
     func init(options: HttpClientOptions) {
-        self.ptr = httpClientCreateWithOptions(options.timeoutSecs, options.userAgent);
+        self.options = options;
     }
-
-
-    func send(req: HttpRequest): Result<HttpResponse, String> {
-        let respPtr = httpClientSend(self.ptr, req.ptr);
+    
+    func send(req: ClientHttpRequest): HttpResult {
+        let isHttps = req.url.contains("https://");
+        var domain = "";
+        var path = "/";
+        var port = "";
         
-        if httpResponseIsValid(respPtr) == false {
-            return Result.Err("HTTP Request Failed or Network Error");
+        var urlStrip = "";
+        if isHttps {
+            urlStrip = req.url.substring(8, req.url.len());
+            port = "443";
+        } else {
+            urlStrip = req.url.substring(7, req.url.len());
+            port = "80";
         }
         
-        let status = httpResponseGetStatus(respPtr);
-        let body = httpResponseGetBody(respPtr);
+        // Find path
+        let parts = urlStrip.split("/");
+        if parts.len() > 0 {
+            domain = parts.get(0).unwrap();
+        }
+        if parts.len() > 1 {
+            path = "/" + parts.get(1).unwrap();
+        }
         
-        let resp = HttpResponse(status, body, respPtr);
-        return Result.Ok(resp);
-    }
-
-    func close() {
-        httpClientFree(self.ptr);
-    }
-}
-
-func httpGetRequest(url: String): Result<HttpResponse, String> {
-    let client = HttpClient(HttpClientOptions(30, "pace-http-client"));
-    let req = HttpRequest("GET", url);
-    let result = client.send(req);
-    // Don't free the req here as it gets consumed/kept by FFI logic or should be freed explicitly by user.
-    return result;
-}
-
-// ---------------------------------------------------------
-// HTTP SERVER
-// ---------------------------------------------------------
-
-foreign func httpServerBind(addr: String): Pointer<CChar>;
-foreign func httpServerAccept(serverPtr: Pointer<CChar>): Pointer<CChar>;
-foreign func httpServerFree(serverPtr: Pointer<CChar>);
-foreign func httpRequestGetPath(reqPtr: Pointer<CChar>): String;
-foreign func httpRequestMethod(reqPtr: Pointer<CChar>): String;
-foreign func httpRequestGetHeader(reqPtr: Pointer<CChar>, key: String): String;
-foreign func httpRequestGetBody(reqPtr: Pointer<CChar>): String;
-foreign func httpRequestGetQuery(reqPtr: Pointer<CChar>, key: String): String;
-foreign func httpRequestRespond(reqPtr: Pointer<CChar>, respPtr: Pointer<CChar>);
-foreign func httpServerResponseCreate(status: Int, body: String): Pointer<CChar>;
-foreign func httpServerResponseAddHeader(respPtr: Pointer<CChar>, key: String, val: String);
-
-class HttpServerResponse {
-    var ptr: Pointer<CChar>;
-    
-    func init(status: Int, body: String) {
-        self.ptr = httpServerResponseCreate(status, body);
-    }
-    
-    func addHeader(key: String, value: String): HttpServerResponse {
-        httpServerResponseAddHeader(self.ptr, key, value);
-        return self;
-    }
-}
-
-class HttpServerRequest {
-    var method: String;
-    var path: String;
-    var ptr: Pointer<CChar>;
-    
-    func init(method: String, path: String, ptr: Pointer<CChar>) {
-        self.method = method;
-        self.path = path;
-        self.ptr = ptr;
-    }
-
-    func getHeader(key: String): String {
-        return httpRequestGetHeader(self.ptr, key);
-    }
-    
-    func getBody(): String {
-        return httpRequestGetBody(self.ptr);
-    }
-    
-    func getQuery(key: String): String {
-        return httpRequestGetQuery(self.ptr, key);
-    }
-    
-    func respond(status: Int, body: String) {
-        let resp = HttpServerResponse(status, body);
-        httpRequestRespond(self.ptr, resp.ptr);
-    }
-
-    func respondWith(resp: HttpServerResponse) {
-        httpRequestRespond(self.ptr, resp.ptr);
-    }
-}
-
-class HttpServer {
-    var ptr: Pointer<CChar>;
-    
-    func init(ptr: Pointer<CChar>) {
-        self.ptr = ptr;
-    }
-    
-    func accept(): HttpServerRequest {
-        let reqPtr = httpServerAccept(self.ptr);
-        let path = httpRequestGetPath(reqPtr);
-        let method = httpRequestMethod(reqPtr);
-        return HttpServerRequest(method, path, reqPtr);
+        let addr = domain + ":" + port;
+        let requestStr = req.method + " " + path + " HTTP/1.1\r\nHost: " + domain + "\r\nUser-Agent: " + self.options.userAgent + "\r\nConnection: close\r\n\r\n";
+        
+        var responseStr = "";
+        if isHttps {
+            let stream = TlsStream();
+            if stream.connect(addr, domain) {
+                stream.writeString(requestStr);
+                responseStr = stream.readString(65536);
+                stream.close();
+            }
+        } else {
+            let stream = TcpStream();
+            if stream.connect(addr) {
+                stream.writeString(requestStr);
+                responseStr = stream.readString(65536);
+                stream.close();
+            }
+        }
+        
+        if responseStr == "" {
+            return HttpResult(false, HttpServerResponse(0, ""));
+        }
+        
+        // Parse HTTP/1.1 200 OK
+        var status = 0;
+        let lines = responseStr.split("\r\n");
+        if lines.len() > 0 {
+            let firstLine = lines.get(0).unwrap();
+            let firstLineParts = firstLine.split(" ");
+            if firstLineParts.len() >= 2 {
+                status = firstLineParts.get(1).unwrap().toInt();
+            }
+        }
+        
+        let resp = HttpServerResponse(status, responseStr);
+        return HttpResult(true, resp);
     }
     
     func close() {
-        httpServerFree(self.ptr);
+        // Nothing to close for now
     }
-}
-
-func bindHttpServer(addr: String): HttpServer {
-    let ptr = httpServerBind(addr);
-    return HttpServer(ptr);
 }

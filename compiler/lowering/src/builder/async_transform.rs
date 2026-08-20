@@ -22,10 +22,15 @@ pub fn lower_async_to_poll(
     let mut dispatch_block = BasicBlock::new(BlockId(999999));
     let state_place = Place::Temp(1);
     
-    // In our simplified codegen approach, we expect Cranelift translator 
-    // to automatically map `Place::Temp(X)` to local variables,
-    // and handle the prologue loading from the context struct before Block 0.
-    // So we just need to provide the switch cases to the Cranelift backend.
+    let load_state = Inst::Assign(
+        state_place.clone(),
+        RValue::GetProperty(
+            Value::Place(Place::Var("_ctx".to_string())),
+            "state".to_string(),
+            context_name.to_string(),
+        ),
+    );
+    dispatch_block.instructions.push(load_state);
     
     // The waker is passed as the second argument: `_waker`
     let waker_place = Place::Var("_waker".to_string());
@@ -43,13 +48,21 @@ pub fn lower_async_to_poll(
                     switch_cases.push((state_counter, resume_block_id));
 
                     // Current block: Register waker, save state and return Pending
-                    // (Codegen translator will insert the actual save instructions)
                     let waker_inst = Inst::RegisterWaker(task_val.clone(), Value::Place(waker_place.clone()));
                     current_insts.push(waker_inst);
                     
+                    let save_state = Inst::SetProperty(
+                        Value::Place(Place::Var("_ctx".to_string())),
+                        "state".to_string(),
+                        context_name.to_string(),
+                        Value::Int(state_counter as i64),
+                        false,
+                    );
+                    current_insts.push(save_state);
+                    
                     let mut pre_await_block = BasicBlock::new(current_block_id);
                     pre_await_block.instructions = current_insts;
-                    pre_await_block.terminator = Some(Terminator::Return(Some(Value::Int(state_counter as i64)))); // State to save
+                    pre_await_block.terminator = Some(Terminator::Return(Some(Value::Int(0)))); // 0 = Pending
                     new_blocks.push(pre_await_block);
 
                     // Setup for resume block
@@ -73,8 +86,8 @@ pub fn lower_async_to_poll(
         if let Some(Terminator::Return(opt_val)) = &block.terminator {
             if let Some(val) = opt_val {
                 let save_result = Inst::SetProperty(
-                    Value::Place(Place::Temp(0)), // ctx_place
-                    "_result".to_string(),
+                    Value::Place(Place::Var("_ctx".to_string())),
+                    "result".to_string(),
                     context_name.to_string(),
                     val.clone(),
                     false,

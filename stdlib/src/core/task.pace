@@ -1,0 +1,41 @@
+// Task definitions and primitives
+
+class Waker {
+    var ptr: Pointer<CChar>;
+    
+    func init(ptr: Pointer<CChar>) {
+        self.ptr = ptr;
+    }
+    
+    // Will be defined below
+}
+
+foreign func paceNullPointer(): Pointer<CChar>;
+foreign func paceSleep(ms: Int);
+
+// The internal Task object that the Executor schedules
+class Task {
+    var state: Int;
+    var context: Pointer<CChar>;
+    var pollFn: Pointer<CChar>;
+    var waker: Pointer<CChar>;
+    var result: Pointer<CChar>; // Will point to dynamically typed result
+    
+    func init() {
+        self.state = 0;
+        self.context = paceNullPointer();
+        self.pollFn = paceNullPointer();
+        self.waker = paceNullPointer();
+        self.result = paceNullPointer();
+    }
+}
+
+foreign func paceWakerWake(waker: Pointer<CChar>);
+foreign func paceSpawnTask(task: Task);
+
+extend Waker {
+    func wake() {
+        // We assume ptr is not 0
+        paceWakerWake(self.ptr);
+    }
+}

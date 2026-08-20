@@ -20,14 +20,14 @@ impl Future for PaceTask {
         let waker_ptr = Box::into_raw(Box::new(waker));
         
         // Read context_ptr and poll_fn from Task object
-        // Task fields: ["context" (offset 24), "poll_fn" (offset 32), "waker" (offset 40), "result" (offset 48)]
+        // Task fields: ["state" (offset 24), "context" (offset 32), "poll_fn" (offset 40), "waker" (offset 48), "result" (offset 56)]
         let context_ptr = unsafe {
-            let ctx_ptr_loc = (self.task_ptr as *const u8).add(24) as *const *mut c_void;
+            let ctx_ptr_loc = (self.task_ptr as *const u8).add(32) as *const *mut c_void;
             *ctx_ptr_loc
         };
         
         let poll_fn = unsafe {
-            let poll_fn_loc = (self.task_ptr as *const u8).add(32) as *const PacePollFn;
+            let poll_fn_loc = (self.task_ptr as *const u8).add(40) as *const PacePollFn;
             *poll_fn_loc
         };
         
@@ -36,7 +36,7 @@ impl Future for PaceTask {
         if result == 1 {
             // Read waker from Task object and wake it if it exists
             let stored_waker_ptr = unsafe {
-                let waker_loc = (self.task_ptr as *const u8).add(40) as *const *mut Waker;
+                let waker_loc = (self.task_ptr as *const u8).add(48) as *const *mut Waker;
                 *waker_loc
             };
             
@@ -54,17 +54,41 @@ impl Future for PaceTask {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pace_spawn_task(task_ptr: *mut c_void) {
+pub extern "C" fn paceSpawnTask(task_ptr: *mut c_void) {
+    if task_ptr.is_null() { return; }
+    
+    // Retain the task object so it doesn't get freed while we execute it
+    crate::pace_retain(task_ptr as *mut u8);
+    
     let task = PaceTask {
         task_ptr,
     };
     
-    if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        handle.spawn(task);
-    } else {
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(task);
-        });
+    let task_ptr_val = task_ptr as usize;
+    let future = async move {
+        task.await;
+        // Release the task object after it's done executing
+        crate::pace_release(task_ptr_val as *mut u8);
+    };
+    
+    static RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
+    let rt = RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+    });
+    
+    rt.spawn(future);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn paceWakerWake(waker_ptr: *mut c_void) {
+    if waker_ptr.is_null() {
+        return;
+    }
+    unsafe {
+        let waker = Box::from_raw(waker_ptr as *mut Waker);
+        waker.wake();
     }
 }

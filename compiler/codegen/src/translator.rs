@@ -337,8 +337,9 @@ impl<'a, 'b> Translator<'a, 'b> {
                     RValue::Call(func_name, args) => {
                         let target_func_name = func_name.as_str();
 
-                        // Intercept Compiler Intrinsics (ptrRead, ptrWrite)
-                        if target_func_name == "ptrReadByte" {
+                        if target_func_name == "paceNullPointer" {
+                            self.builder.ins().iconst(types::I64, 0)
+                        } else if target_func_name == "ptrReadByte" {
                             let ptr_val = self.translate_value(&args[0])?;
                             let index_val = self.translate_value(&args[1])?;
                             let addr = self.builder.ins().iadd(ptr_val, index_val);
@@ -597,8 +598,8 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let local_poll = self.module.declare_func_in_func(*poll_func_id, self.builder.func);
                         let poll_ptr = self.builder.ins().func_addr(types::I64, local_poll);
 
-                        // Store at offset 32 (poll_fn)
-                        let poll_offset = self.builder.ins().iadd_imm_s(obj_ptr, 32);
+                        // Store at offset 40 (poll_fn)
+                        let poll_offset = self.builder.ins().iadd_imm_s(obj_ptr, 40);
                         self.builder.ins().store(ir::MemFlagsData::new(), poll_ptr, poll_offset, 0);
 
                         obj_ptr
@@ -908,7 +909,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                     RValue::Spawn(task_val) => {
                         let cl_task = self.translate_value(task_val)?;
 
-                        let spawn_func = self.func_ids.get("pace_spawn_task").unwrap();
+                        let spawn_func = self.func_ids.get("paceSpawnTask").unwrap();
                         let local_spawn = self.module.declare_func_in_func(*spawn_func, self.builder.func);
                         
                         self.builder.ins().call(local_spawn, &[cl_task]);
@@ -916,10 +917,10 @@ impl<'a, 'b> Translator<'a, 'b> {
                     }
                     RValue::GetTaskResult(task_val) => {
                         let cl_task = self.translate_value(task_val)?;
-                        // Context is at offset 24
-                        let ctx_offset = self.builder.ins().iadd_imm_s(cl_task, 24);
+                        // Context is at offset 32
+                        let ctx_offset = self.builder.ins().iadd_imm_s(cl_task, 32);
                         let ctx_ptr = self.builder.ins().load(types::I64, ir::MemFlagsData::new(), ctx_offset, 0);
-                        // Result is at offset 32 in Context (_state is at 24, _result is at 32)
+                        // Result is at offset 32 in Context (state is at 24, result is at 32)
                         let result_offset = self.builder.ins().iadd_imm_s(ctx_ptr, 32);
                         self.builder.ins().load(types::I64, ir::MemFlagsData::new(), result_offset, 0)
                     }
@@ -935,7 +936,7 @@ impl<'a, 'b> Translator<'a, 'b> {
             Inst::RegisterWaker(task_val, waker_val) => {
                 let cl_task = self.translate_value(task_val)?;
                 let cl_waker = self.translate_value(waker_val)?;
-                let waker_offset = self.builder.ins().iadd_imm_s(cl_task, 40);
+                let waker_offset = self.builder.ins().iadd_imm_s(cl_task, 48);
                 self.builder.ins().store(ir::MemFlagsData::new(), cl_waker, waker_offset, 0);
                 Ok(())
             }

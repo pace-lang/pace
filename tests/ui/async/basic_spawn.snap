@@ -2,5 +2,6 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-Spawning task
-Before await
+Main start
+Hello from spawned task!
+Main end

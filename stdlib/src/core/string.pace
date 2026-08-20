@@ -22,7 +22,10 @@ foreign func stringToFloat(s: String): Float;
 foreign func paceIntToString(value: Int): String;
 foreign func paceFloatToString(value: Float): String;
 foreign func paceBoolToString(value: Boolean): String;
-
+foreign func stringFindNumberEnd(s: String, start: Int): Int;
+foreign func stringMatchKeywordAt(s: String, start: Int, keyword: String): Int;
+foreign func stringSubstringToInt(s: String, start: Int, end: Int): Int;
+foreign func stringSubstringToFloat(s: String, start: Int, end: Int): Float;
 extend Int {
     func toString(): String {
         return paceIntToString(self);
