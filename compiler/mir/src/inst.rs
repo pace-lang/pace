@@ -28,6 +28,7 @@ pub enum RValue {
     Call(String, Vec<Value>),
     MethodCall(Value, String, Vec<Value>),
     AllocateObject(String),
+    AllocateTask(String),
     AllocateStruct(String),
     GetProperty(Value, String, String),
     WeakUpgrade(Value),
@@ -39,6 +40,10 @@ pub enum RValue {
     ConstructVariant(String, usize, Vec<Value>),
     ExtractPayload(String, Value, usize, usize, bool),
     GetVariantTag(Value),
+    Await(Value),
+    GetTaskResult(Value),
+    Spawn(Value),
+    ActorMailboxPush(Value, String, Vec<Value>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,7 +57,8 @@ pub enum Inst {
     WeakRetain(Value),
     WeakRelease(Value),
 
-    MemCopy(Value, Value, String), // dest, src, struct_name
+    MemCopy(Value, Value, String),
+    RegisterWaker(Value, Value),
     DropStruct(Value, String), // ptr, struct_name
 }
 

@@ -6,6 +6,7 @@ use mir::{
 
 pub mod expr;
 pub mod stmt;
+pub mod async_transform;
 #[cfg(test)]
 mod tests;
 
@@ -109,6 +110,118 @@ impl<'a> ProgramBuilder<'a> {
         }
     }
 
+    fn build_func(
+        &mut self,
+        actual_name: String,
+        param_names: Vec<String>,
+        ref_params: std::collections::HashSet<String>,
+        returns_ref: bool,
+        is_async: bool,
+        enums_map: std::collections::HashMap<String, Vec<String>>,
+        body: &TypedStmt,
+    ) {
+        if !self.program.classes.contains_key("Task") {
+            let class_def = mir::ClassDef {
+                name: "Task".to_string(),
+                is_struct: false,
+                is_actor: false,
+                fields: vec!["context".to_string(), "poll_fn".to_string(), "waker".to_string(), "result".to_string()],
+                weak_fields: std::collections::HashSet::new(),
+                reference_fields: std::collections::HashSet::new(),
+            };
+            self.program.classes.insert("Task".to_string(), class_def);
+        }
+        let mut original_builder = MirBuilder::new(
+            actual_name.clone(),
+            param_names.clone(),
+            ref_params.clone(),
+            returns_ref,
+            enums_map,
+            self.session,
+            self.program.classes.iter().filter_map(|(k, v)| if v.is_struct { Some(k.clone()) } else { None }).collect(),
+            self.program.classes.iter().filter_map(|(k, v)| if v.is_actor { Some(k.clone()) } else { None }).collect(),
+        );
+        let original_mir = match &body.kind {
+            TypedStmtKind::Block(stmts) => original_builder.build(stmts),
+            _ => original_builder.build(std::slice::from_ref(body)),
+        };
+
+        if is_async {
+            // 1. Generate Context Struct
+            let context_name = format!("{}_Context", actual_name.replace("::", "_"));
+            let mut ctx_fields = vec!["_state".to_string(), "_result".to_string()];
+            ctx_fields.extend(param_names.clone());
+            
+            // Add temp_0 .. temp_{N-1}
+            for i in 0..original_mir.temp_count {
+                ctx_fields.push(format!("temp_{}", i));
+            }
+            
+            let class_def = mir::ClassDef {
+                name: context_name.clone(),
+                is_struct: false, // Context is heap allocated
+                is_actor: false,
+                fields: ctx_fields,
+                weak_fields: std::collections::HashSet::new(),
+                reference_fields: ref_params.clone(),
+            };
+            self.program.classes.insert(context_name.clone(), class_def);
+
+            // 2. Generate the state machine _poll function
+            let poll_func = async_transform::lower_async_to_poll(
+                &original_mir,
+                &context_name,
+                original_mir.temp_count,
+            );
+            let poll_func_name = poll_func.name.clone();
+            self.program.functions.insert(poll_func_name.clone(), poll_func);
+
+            // 3. Rewrite the original function to allocate Context and return Task
+            let mut mir_func = mir::Function::new(
+                actual_name.clone(),
+                param_names.clone(),
+                ref_params.clone(),
+                true, // Returns a reference (Task)
+            );
+            
+            let mut start_block = mir::BasicBlock::new(mir::BlockId(0));
+            
+            let ctx_place = mir::Place::Temp(0);
+            start_block.instructions.push(mir::Inst::Assign(
+                ctx_place.clone(),
+                mir::RValue::AllocateObject(context_name.clone()),
+            ));
+            
+            start_block.instructions.push(mir::Inst::SetProperty(
+                mir::Value::Place(ctx_place.clone()),
+                "_state".to_string(),
+                context_name.clone(),
+                mir::Value::Int(0),
+                false,
+            ));
+            
+            let task_place = mir::Place::Temp(1);
+            start_block.instructions.push(mir::Inst::Assign(
+                task_place.clone(),
+                mir::RValue::AllocateTask(poll_func_name),
+            ));
+            start_block.instructions.push(mir::Inst::SetProperty(
+                mir::Value::Place(task_place.clone()),
+                "context".to_string(),
+                "Task".to_string(),
+                mir::Value::Place(ctx_place.clone()),
+                false,
+            ));
+            
+            start_block.terminator = Some(mir::Terminator::Return(Some(mir::Value::Place(task_place))));
+            mir_func.blocks.push(start_block);
+            
+            self.program.functions.insert(actual_name, mir_func);
+        } else {
+            self.program.functions.insert(actual_name, original_mir);
+        }
+    }
+
     pub fn build(mut self, statements: &[TypedStmt]) -> Program {
         let mut struct_names = std::collections::HashSet::new();
         for stmt in statements {
@@ -177,6 +290,10 @@ impl<'a> ProgramBuilder<'a> {
                 let mut reference_fields = std::collections::HashSet::new();
 
                 let is_struct = matches!(stmt.kind, TypedStmtKind::Struct { .. });
+                let is_actor = match &stmt.kind {
+                    TypedStmtKind::Class { is_actor, .. } => *is_actor,
+                    _ => false,
+                };
 
                 for field in fields {
                     match &field.kind {
@@ -217,6 +334,7 @@ impl<'a> ProgramBuilder<'a> {
                 let class_def = mir::ClassDef {
                     name: self.session.interner.borrow().lookup(*name).to_string(),
                     is_struct,
+                    is_actor,
                     fields: field_names,
                     weak_fields,
                     reference_fields,
@@ -235,6 +353,7 @@ impl<'a> ProgramBuilder<'a> {
                         params,
                         return_type,
                         body,
+                        is_async,
                         ..
                     } = &method.kind
                     {
@@ -256,20 +375,15 @@ impl<'a> ProgramBuilder<'a> {
                             self.session.interner.borrow().lookup(*name),
                             self.session.interner.borrow().lookup(*m_name)
                         );
-                        let builder = MirBuilder::new(
-                            actual_name.clone(),
+                        self.build_func(
+                            actual_name,
                             param_names,
                             ref_params,
                             returns_ref,
+                            *is_async,
                             enums_map.clone(),
-                            self.session,
-                            self.program.classes.iter().filter_map(|(k, v)| if v.is_struct { Some(k.clone()) } else { None }).collect(),
+                            body,
                         );
-                        let mir_func = match &body.kind {
-                            TypedStmtKind::Block(stmts) => builder.build(stmts),
-                            _ => builder.build(std::slice::from_ref(body)),
-                        };
-                        self.program.functions.insert(actual_name, mir_func);
                     }
                 }
 
@@ -285,6 +399,7 @@ impl<'a> ProgramBuilder<'a> {
                         params,
                         return_type,
                         body,
+                        is_async,
                         ..
                     } = &method.kind
                     {
@@ -306,20 +421,15 @@ impl<'a> ProgramBuilder<'a> {
                             self.session.interner.borrow().lookup(*name),
                             self.session.interner.borrow().lookup(*m_name)
                         );
-                        let builder = MirBuilder::new(
-                            actual_name.clone(),
+                        self.build_func(
+                            actual_name,
                             param_names,
                             ref_params,
                             returns_ref,
+                            *is_async,
                             enums_map.clone(),
-                            self.session,
-                            self.program.classes.iter().filter_map(|(k, v)| if v.is_struct { Some(k.clone()) } else { None }).collect(),
+                            body,
                         );
-                        let mir_func = match &body.kind {
-                            TypedStmtKind::Block(stmts) => builder.build(stmts),
-                            _ => builder.build(std::slice::from_ref(body)),
-                        };
-                        self.program.functions.insert(actual_name, mir_func);
                     }
                 }
 
@@ -344,6 +454,7 @@ impl<'a> ProgramBuilder<'a> {
                         params,
                         return_type,
                         body,
+                        is_async,
                         ..
                     } = &method.kind
                     {
@@ -365,20 +476,15 @@ impl<'a> ProgramBuilder<'a> {
                             target_name,
                             self.session.interner.borrow().lookup(*m_name)
                         );
-                        let builder = MirBuilder::new(
-                            actual_name.clone(),
+                        self.build_func(
+                            actual_name,
                             param_names,
                             ref_params,
                             returns_ref,
+                            *is_async,
                             enums_map.clone(),
-                            self.session,
-                            self.program.classes.iter().filter_map(|(k, v)| if v.is_struct { Some(k.clone()) } else { None }).collect(),
+                            body,
                         );
-                        let mir_func = match &body.kind {
-                            TypedStmtKind::Block(stmts) => builder.build(stmts),
-                            _ => builder.build(std::slice::from_ref(body)),
-                        };
-                        self.program.functions.insert(actual_name, mir_func);
                     }
                 }
 
@@ -388,6 +494,7 @@ impl<'a> ProgramBuilder<'a> {
                 params,
                 return_type,
                 body,
+                is_async,
                 ..
             } = &stmt.kind
             {
@@ -399,25 +506,21 @@ impl<'a> ProgramBuilder<'a> {
                         ref_params.insert(self.session.interner.borrow().lookup(*p).to_string());
                     }
                 }
+                
+                let func_name_str = self.session.interner.borrow().lookup(*name).to_string();
                 let returns_ref = return_type
                     .as_ref()
                     .is_some_and(|t| is_ref_type(t, self.session));
-                let builder = MirBuilder::new(
-                    self.session.interner.borrow().lookup(*name).to_string(),
+
+                let actual_name = self.session.interner.borrow().lookup(*name).to_string();
+                self.build_func(
+                    actual_name,
                     param_names,
                     ref_params,
                     returns_ref,
+                    *is_async,
                     enums_map.clone(),
-                    self.session,
-                    self.program.classes.iter().filter_map(|(k, v)| if v.is_struct { Some(k.clone()) } else { None }).collect(),
-                );
-                let mir_func = match &body.kind {
-                    TypedStmtKind::Block(stmts) => builder.build(stmts),
-                    _ => builder.build(std::slice::from_ref(body)),
-                };
-                self.program.functions.insert(
-                    self.session.interner.borrow().lookup(*name).to_string(),
-                    mir_func,
+                    body,
                 );
             } else if let TypedStmtKind::ForeignFunc {
                 name,
@@ -471,6 +574,7 @@ impl<'a> ProgramBuilder<'a> {
                 enums_map.clone(),
                 self.session,
                 self.program.classes.iter().filter_map(|(k, v)| if v.is_struct { Some(k.clone()) } else { None }).collect(),
+                self.program.classes.iter().filter_map(|(k, v)| if v.is_actor { Some(k.clone()) } else { None }).collect(),
             );
             let main_func = builder.build(&main_stmts);
             self.program.functions.insert("main".into(), main_func);
@@ -487,6 +591,7 @@ pub struct MirBuilder<'a> {
     temp_counter: usize,
     enums_map: std::collections::HashMap<String, Vec<String>>,
     struct_names: std::collections::HashSet<String>,
+    actor_names: std::collections::HashSet<String>,
 }
 
 impl<'a> MirBuilder<'a> {
@@ -498,6 +603,7 @@ impl<'a> MirBuilder<'a> {
         enums_map: std::collections::HashMap<String, Vec<String>>,
         session: &'a session::CompilerSession,
         struct_names: std::collections::HashSet<String>,
+        actor_names: std::collections::HashSet<String>,
     ) -> Self {
         let mut function = Function::new(name, parameters, weak_vars, returns_reference);
         let start_block = BlockId(0);
@@ -510,6 +616,7 @@ impl<'a> MirBuilder<'a> {
             temp_counter: 0,
             enums_map,
             struct_names,
+            actor_names,
         }
     }
 
@@ -567,6 +674,7 @@ impl<'a> MirBuilder<'a> {
         if self.current().terminator.is_none() {
             self.current().terminator = Some(Terminator::Return(None));
         }
+        self.function.temp_count = self.temp_counter;
         self.function
     }
 }

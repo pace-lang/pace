@@ -5,6 +5,9 @@ All notable changes to the Pace language will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Async & Actors Core**: Implemented compiler frontend and state machine (MIR) lowering for `async/await` and Actors. The compiler now correctly typechecks async contexts, hoists `async` functions to return `Task<T>`, tracks local variable scopes across await boundaries via state structs, and dispatches actor method calls.
+- **Zero-Cost Interfaces**: Implemented implicit monomorphization for interface-based function parameters, completely eliminating virtual tables and dynamic dispatch overhead. The compiler now automatically synthesizes generic parameters for interfaces to dispatch them statically!
+- **Partial Generic Arguments**: Added support for partial specification of generic type parameters. Developers can now explicitly provide some generics while letting the compiler seamlessly infer the rest.
 - **HTTP Client**: Added `HttpClientOptions` to support configuring connection timeouts and custom User-Agent strings dynamically.
 - **HTTP Server**: Added `HttpServerRequest.getBody()` to allow reading POST/PUT request bodies, and `HttpServerRequest.getQuery()` to natively extract URL query parameters. Added `HttpServerResponse` class to allow customizing HTTP response headers and status codes dynamically. Added support for extracting request headers.
 - **HTTP Benchmarks**: Added `benchmarks/http_req` benchmarking suite for network tests, alongside the existing `http_server` benchmark. Pace HTTP Server now comfortably achieves ~4,800 RPS, beating Python and Dart.
@@ -16,6 +19,8 @@ All notable changes to the Pace language will be documented in this file.
 - **Memory Leak Test Suite**: Created a Valgrind test wrapper (`tests/memory_leak_test.sh`) to guarantee zero memory leaks across new native collections.
 
 ### Fixed
+- Fixed cascading `Unknown type 'Any'` errors when parsing invalid or unknown generic types, drastically improving compiler error quality and readability.
+- Resolved `unused_mut`, `unused_variables`, and `dead_code` warnings across the compiler architecture.
 - Fixed `[P3001]` compiler bug preventing nested structs from typechecking (e.g., `Rect` containing `Point`).
 - Fixed invalid ARC `MemCopy` behaviors causing segfaults on uninitialized struct stack slots.
 - Fixed `List` and `Map` native methods (`map.length`, `map.set`) incorrectly being mapped to Rust APIs, replacing them with proper Pace APIs.

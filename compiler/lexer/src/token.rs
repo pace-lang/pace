@@ -34,6 +34,8 @@ pub enum TokenKind {
     Hide,
     Async,
     Await,
+    Actor,
+    Spawn,
     True,
     False,
     Weak,

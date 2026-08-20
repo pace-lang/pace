@@ -89,6 +89,8 @@ pub enum TypedExprKind<'a> {
         enum_name: session::Symbol,
         variant_name: session::Symbol,
     },
+    Await(&'a TypedExpr<'a>),
+    Spawn(&'a TypedExpr<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -140,6 +142,7 @@ pub enum TypedStmtKind<'a> {
         params: Vec<(session::Symbol, TypeExpr<'a>)>,
         return_type: Option<TypeExpr<'a>>,
         body: &'a TypedStmt<'a>,
+        is_async: bool,
     },
     ForeignFunc {
         name: session::Symbol,
@@ -156,6 +159,7 @@ pub enum TypedStmtKind<'a> {
         implements: Vec<TypeExpr<'a>>,
         methods: Vec<TypedStmt<'a>>,
         fields: Vec<TypedStmt<'a>>,
+        is_actor: bool,
     },
     Struct {
         name: session::Symbol,

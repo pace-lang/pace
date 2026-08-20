@@ -5,6 +5,7 @@ use std::collections::HashMap;
 pub struct ClassDef {
     pub name: String,
     pub is_struct: bool,
+    pub is_actor: bool,
     pub fields: Vec<String>,
     pub weak_fields: std::collections::HashSet<String>,
     pub reference_fields: std::collections::HashSet<String>,

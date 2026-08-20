@@ -44,8 +44,16 @@ impl<'a> Parser<'a> {
         while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
             let is_private = self.parse_visibility();
             if self.match_token(&[TokenKind::Func]) {
-                if let Some(method) = self.function_declaration(is_private) {
+                if let Some(method) = self.function_declaration(is_private, false) {
                     methods.push(method);
+                }
+            } else if self.match_token(&[TokenKind::Async]) {
+                if self.match_token(&[TokenKind::Func]) {
+                    if let Some(method) = self.function_declaration(is_private, true) {
+                        methods.push(method);
+                    }
+                } else {
+                    self.error_at_current("Expected 'func' after 'async'.");
                 }
             } else {
                 self.error_at_current("Expected method declaration in extension body.");

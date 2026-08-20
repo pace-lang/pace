@@ -15,6 +15,14 @@ impl<'a> TypeChecker<'a> {
                     methods,
                     fields,
                     is_private: _,
+                }
+                | StmtKind::Actor {
+                    name,
+                    type_params,
+                    implements,
+                    methods,
+                    fields,
+                    is_private: _,
                 } => {
                     if !type_params.is_empty() {
                         self.generic_registry.register_class(*name, stmt.clone());
@@ -84,14 +92,18 @@ impl<'a> TypeChecker<'a> {
                             name: m_name,
                             params,
                             return_type,
+                            is_async,
                             ..
                         } = &method.kind
                         {
-                            let ret_ty = if let Some(rt) = return_type {
+                            let mut ret_ty = if let Some(rt) = return_type {
                                 self.parse_type(rt, method.span)
                             } else {
                                 self.session.types.borrow_mut().intern(Type::Void)
                             };
+                            if *is_async || matches!(stmt.kind, StmtKind::Actor { .. }) {
+                                ret_ty = self.session.types.borrow_mut().intern(Type::Task(ret_ty));
+                            }
                             let mut param_types = Vec::new();
                             for (_, pt) in params {
                                 param_types.push(self.parse_type(pt, method.span));
@@ -189,14 +201,18 @@ impl<'a> TypeChecker<'a> {
                             name: m_name,
                             params,
                             return_type,
+                            is_async,
                             ..
                         } = &method.kind
                         {
-                            let ret_ty = if let Some(rt) = return_type {
+                            let mut ret_ty = if let Some(rt) = return_type {
                                 self.parse_type(rt, method.span)
                             } else {
                                 self.session.types.borrow_mut().intern(Type::Void)
                             };
+                            if *is_async {
+                                ret_ty = self.session.types.borrow_mut().intern(Type::Task(ret_ty));
+                            }
                             let mut param_types = Vec::new();
                             for (_, pt) in params {
                                 param_types.push(self.parse_type(pt, method.span));
@@ -235,14 +251,18 @@ impl<'a> TypeChecker<'a> {
                             name: m_name,
                             params,
                             return_type,
+                            is_async,
                             ..
                         } = &method.kind
                         {
-                            let ret_ty = if let Some(rt) = return_type {
+                            let mut ret_ty = if let Some(rt) = return_type {
                                 self.parse_type(rt, method.span)
                             } else {
                                 self.session.types.borrow_mut().intern(Type::Void)
                             };
+                            if *is_async {
+                                ret_ty = self.session.types.borrow_mut().intern(Type::Task(ret_ty));
+                            }
                             let mut param_types = Vec::new();
                             for (_, pt) in params {
                                 param_types.push(self.parse_type(pt, method.span));
@@ -337,14 +357,18 @@ impl<'a> TypeChecker<'a> {
                             name: m_name,
                             params,
                             return_type,
+                            is_async,
                             ..
                         } = &method.kind
                         {
-                            let ret_ty = if let Some(rt) = return_type {
+                            let mut ret_ty = if let Some(rt) = return_type {
                                 self.parse_type(rt, method.span)
                             } else {
                                 self.session.types.borrow_mut().intern(Type::Void)
                             };
+                            if *is_async {
+                                ret_ty = self.session.types.borrow_mut().intern(Type::Task(ret_ty));
+                            }
                             let mut param_types = Vec::new();
                             for (_, pt) in params {
                                 param_types.push(self.parse_type(pt, method.span));
@@ -442,6 +466,7 @@ impl<'a> TypeChecker<'a> {
                     return_type,
                     body: _,
                     is_private: _,
+                    is_async,
                 } => {
                     self.env.push_scope();
                     for tp in type_params {
@@ -494,11 +519,14 @@ impl<'a> TypeChecker<'a> {
                         self.env.pop_scope();
                         continue;
                     }
-                    let ret_ty = if let Some(rt) = return_type {
+                    let mut ret_ty = if let Some(rt) = return_type {
                         self.parse_type(rt, stmt.span)
                     } else {
                         self.session.types.borrow_mut().intern(Type::Void)
                     };
+                    if *is_async {
+                        ret_ty = self.session.types.borrow_mut().intern(Type::Task(ret_ty));
+                    }
                     self.env.pop_scope();
 
                     let func_ty = self.session.types.borrow_mut().intern(Type::Function(
@@ -582,14 +610,18 @@ impl<'a> TypeChecker<'a> {
                             type_params: method_type_params,
                             params,
                             return_type,
+                            is_async,
                             ..
                         } = &method.kind
                         {
-                            let ret_ty = if let Some(rt) = return_type {
+                            let mut ret_ty = if let Some(rt) = return_type {
                                 self.parse_type(rt, method.span)
                             } else {
                                 self.session.types.borrow_mut().intern(Type::Void)
                             };
+                            if *is_async {
+                                ret_ty = self.session.types.borrow_mut().intern(Type::Task(ret_ty));
+                            }
                             let mut param_types = Vec::new();
                             for (_, pt) in params {
                                 param_types.push(self.parse_type(pt, method.span));

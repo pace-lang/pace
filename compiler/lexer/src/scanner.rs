@@ -452,6 +452,8 @@ impl<'a> Scanner<'a> {
             "hide" => TokenKind::Hide,
             "async" => TokenKind::Async,
             "await" => TokenKind::Await,
+            "actor" => TokenKind::Actor,
+            "spawn" => TokenKind::Spawn,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "weak" => TokenKind::Weak,

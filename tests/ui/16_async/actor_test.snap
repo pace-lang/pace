@@ -1,0 +1,7 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+Creating actor
+Sending increment
+Getting count

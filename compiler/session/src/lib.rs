@@ -174,6 +174,7 @@ impl CompilerSession {
             }
             Type::Optional(inner) => format!("{}?", self.format_type_internal(*inner)),
             Type::Array(inner) => format!("[{}]", self.format_type_internal(*inner)),
+            Type::Task(inner) => format!("Task<{}>", self.format_type_internal(*inner)),
             Type::Null => "Null".to_string(),
             Type::CInt => "CInt".to_string(),
             Type::CUInt => "CUInt".to_string(),

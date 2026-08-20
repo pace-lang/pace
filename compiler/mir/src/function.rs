@@ -9,6 +9,7 @@ pub struct Function {
     pub blocks: Vec<BasicBlock>,
     pub weak_vars: std::collections::HashSet<String>,
     pub struct_places: std::collections::HashMap<crate::inst::Place, String>,
+    pub temp_count: usize,
 }
 
 impl Function {
@@ -26,6 +27,7 @@ impl Function {
             blocks: Vec::new(),
             weak_vars: std::collections::HashSet::new(),
             struct_places: std::collections::HashMap::new(),
+            temp_count: 0,
         }
     }
 }

@@ -1,0 +1,15 @@
+async func getValue(): Int {
+    return 42;
+}
+
+func main() {
+    print("Spawning task");
+    spawn asyncMain();
+}
+
+async func asyncMain() {
+    print("Before await");
+    let val = await getValue();
+    print(val);
+    print("After await");
+}

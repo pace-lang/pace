@@ -53,6 +53,11 @@ impl<'a> Resolver<'a> {
                         is_private: false,
                         ..
                     }
+                    | StmtKind::Actor {
+                        name,
+                        is_private: false,
+                        ..
+                    }
                     | StmtKind::Struct {
                         name,
                         is_private: false,
@@ -172,6 +177,7 @@ impl<'a> Resolver<'a> {
                 StmtKind::Func { name, .. }
                 | StmtKind::ForeignFunc { name, .. }
                 | StmtKind::Class { name, .. }
+                | StmtKind::Actor { name, .. }
                 | StmtKind::Struct { name, .. }
                 | StmtKind::TypeAlias { name, .. }
                 | StmtKind::Interface { name, .. } => {
@@ -266,6 +272,14 @@ impl<'a> Resolver<'a> {
                 fields,
                 is_private: _,
             }
+            | StmtKind::Actor {
+                name: _,
+                type_params: _,
+                implements: _,
+                methods,
+                fields,
+                is_private: _,
+            }
             | StmtKind::Struct {
                 name: _,
                 type_params: _,
@@ -345,6 +359,7 @@ impl<'a> Resolver<'a> {
                 return_type: _,
                 body,
                 is_private: _,
+                is_async: _,
             } => {
                 // Name declared in hoisting
 
@@ -505,6 +520,9 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(object);
                 self.resolve_expr(index);
                 self.resolve_expr(value);
+            }
+            ExprKind::Await(inner) | ExprKind::Spawn(inner) => {
+                self.resolve_expr(inner);
             }
             ExprKind::SelfRef => {
                 if !self

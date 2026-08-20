@@ -41,8 +41,17 @@ impl<'a> Parser<'a> {
                 self.error_at_current("Visibility modifiers are not allowed on extensions.");
             }
             self.extension_declaration()
+        } else if self.match_token(&[TokenKind::Actor]) {
+            self.actor_declaration(is_private)
+        } else if self.match_token(&[TokenKind::Async]) {
+            if self.match_token(&[TokenKind::Func]) {
+                self.function_declaration(is_private, true)
+            } else {
+                self.error_at_current("Expected 'func' after 'async'.");
+                None
+            }
         } else if self.match_token(&[TokenKind::Func]) {
-            self.function_declaration(is_private)
+            self.function_declaration(is_private, false)
         } else if self.match_token(&[TokenKind::Let]) {
             self.variable_declaration(false, false, is_private)
         } else if self.match_token(&[TokenKind::Var]) {

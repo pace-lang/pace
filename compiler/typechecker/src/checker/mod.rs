@@ -37,12 +37,14 @@ pub struct TypeChecker<'a> {
     pub uninitialized_class_properties: HashMap<Symbol, Vec<Symbol>>,
     pub array_extension_mapping: HashMap<Symbol, TypeId>,
     pub is_checking_method: bool,
+    pub is_checking_actor: bool,
     pub instantiation_queue: Vec<(
         generics::SpecializationKey,
         Stmt<'a>,
         &'a generics::TypeSubstitution<'a>,
         Symbol,
     )>,
+    pub in_async_context: bool,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -87,7 +89,9 @@ impl<'a> TypeChecker<'a> {
             uninitialized_class_properties: HashMap::new(),
             array_extension_mapping: HashMap::new(),
             is_checking_method: false,
+            is_checking_actor: false,
             instantiation_queue: Vec::new(),
+            in_async_context: false,
         }
     }
 

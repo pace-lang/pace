@@ -1,0 +1,20 @@
+// async_control_flow.pace
+
+async func process(value: Int): Int {
+    if value > 5 {
+        return value * 2;
+    } else {
+        return value + 10;
+    }
+}
+
+async func main() {
+    let result1 = await process(8);
+    let result2 = await process(3);
+    
+    print("Result 1:");
+    print(result1); // Expected: 16
+    
+    print("Result 2:");
+    print(result2); // Expected: 13
+}

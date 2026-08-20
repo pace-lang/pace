@@ -74,6 +74,18 @@ impl<'a> MirBuilder<'a> {
             TypedExprKind::Unary(op, right) => self.lower_unary_expr(op, right),
             TypedExprKind::Binary(left, op, right) => self.lower_binary_expr(left, op, right),
             TypedExprKind::Range { .. } => self.lower_range_expr(),
+            TypedExprKind::Await(inner) => {
+                let inner_val = self.lower_expr(inner);
+                let tmp = self.new_temp();
+                self.emit_assignment(tmp.clone(), expr.ty, mir::RValue::Await(inner_val));
+                Value::Place(tmp)
+            }
+            TypedExprKind::Spawn(inner) => {
+                let inner_val = self.lower_expr(inner);
+                let tmp = self.new_temp();
+                self.emit_assignment(tmp.clone(), expr.ty, mir::RValue::Spawn(inner_val));
+                Value::Place(tmp)
+            }
         }
     }
 }

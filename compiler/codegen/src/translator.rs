@@ -507,6 +507,50 @@ impl<'a, 'b> Translator<'a, 'b> {
                             .call(local_alloc, &[size_val, metadata_ptr]);
                         self.builder.inst_results(call_inst)[0]
                     }
+                    RValue::AllocateTask(poll_name) => {
+                        let class_name = "Task";
+                        let class_def = self
+                            .program
+                            .classes
+                            .get(class_name)
+                            .unwrap_or_else(|| panic!("Class {} not found", class_name));
+                        let total_size = 24 + (class_def.fields.len() as i64 * 8);
+
+                        let alloc_func = self
+                            .func_ids
+                            .get("pace_alloc")
+                            .expect("pace_alloc not declared");
+                        let local_alloc = self
+                            .module
+                            .declare_func_in_func(*alloc_func, self.builder.func);
+
+                        let metadata_id = *self.class_metadata_ids.get(class_name).unwrap();
+                        let local_metadata_id = self
+                            .module
+                            .declare_data_in_func(metadata_id, self.builder.func);
+                        let metadata_ptr = self
+                            .builder
+                            .ins()
+                            .symbol_value(types::I64, local_metadata_id);
+                        let size_val = self.builder.ins().iconst(types::I64, total_size);
+
+                        let call_inst = self
+                            .builder
+                            .ins()
+                            .call(local_alloc, &[size_val, metadata_ptr]);
+                        let obj_ptr = self.builder.inst_results(call_inst)[0];
+
+                        // Get the poll_fn function pointer
+                        let poll_func_id = self.func_ids.get(poll_name).unwrap_or_else(|| panic!("Poll func {} not found", poll_name));
+                        let local_poll = self.module.declare_func_in_func(*poll_func_id, self.builder.func);
+                        let poll_ptr = self.builder.ins().func_addr(types::I64, local_poll);
+
+                        // Store at offset 32 (poll_fn)
+                        let poll_offset = self.builder.ins().iadd_imm(obj_ptr, 32);
+                        self.builder.ins().store(ir::MemFlagsData::new(), poll_ptr, poll_offset, 0);
+
+                        obj_ptr
+                    }
                     RValue::AllocateStruct(struct_name) => {
                         let struct_def = self
                             .program
@@ -764,10 +808,38 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let call_inst = self.builder.ins().call(local_weak_upgrade, &[cl_val]);
                         self.builder.inst_results(call_inst)[0]
                     }
+                    RValue::Spawn(task_val) => {
+                        let cl_task = self.translate_value(task_val)?;
+
+                        let spawn_func = self.func_ids.get("pace_spawn_task").unwrap();
+                        let local_spawn = self.module.declare_func_in_func(*spawn_func, self.builder.func);
+                        
+                        self.builder.ins().call(local_spawn, &[cl_task]);
+                        self.builder.ins().iconst(types::I64, 0) // Unit
+                    }
+                    RValue::GetTaskResult(task_val) => {
+                        let cl_task = self.translate_value(task_val)?;
+                        // Context is at offset 24
+                        let ctx_offset = self.builder.ins().iadd_imm(cl_task, 24);
+                        let ctx_ptr = self.builder.ins().load(types::I64, ir::MemFlagsData::new(), ctx_offset, 0);
+                        // Result is at offset 32 in Context (_state is at 24, _result is at 32)
+                        let result_offset = self.builder.ins().iadd_imm(ctx_ptr, 32);
+                        self.builder.ins().load(types::I64, ir::MemFlagsData::new(), result_offset, 0)
+                    }
+                    RValue::Await(_) | RValue::ActorMailboxPush(_, _, _) => {
+                        unimplemented!("Await and ActorMailboxPush should be transformed away by MIR lowering or have specific implementations.")
+                    }
                 };
 
                 let var = self.get_place_var(place);
                 self.builder.def_var(var, cl_val);
+                Ok(())
+            }
+            Inst::RegisterWaker(task_val, waker_val) => {
+                let cl_task = self.translate_value(task_val)?;
+                let cl_waker = self.translate_value(waker_val)?;
+                let waker_offset = self.builder.ins().iadd_imm(cl_task, 40);
+                self.builder.ins().store(ir::MemFlagsData::new(), cl_waker, waker_offset, 0);
                 Ok(())
             }
             Inst::SetProperty(obj_val, prop_name, class_name, val_val, _is_ref) => {

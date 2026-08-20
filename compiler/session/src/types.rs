@@ -27,6 +27,7 @@ pub enum Type {
     Interface(Symbol, Vec<Symbol>),
     Optional(TypeId),
     Array(TypeId),
+    Task(TypeId),
     Range,
     Null,
     // FFI Types

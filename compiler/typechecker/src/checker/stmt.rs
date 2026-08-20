@@ -44,6 +44,14 @@ impl<'a> TypeChecker<'a> {
                 methods,
                 fields,
                 is_private: _,
+            }
+            | StmtKind::Actor {
+                name,
+                type_params,
+                implements,
+                methods,
+                fields,
+                is_private: _,
             } => {
                 if !type_params.is_empty() {
                     return TypedStmt {
@@ -105,12 +113,19 @@ impl<'a> TypeChecker<'a> {
                 let prev_class = self.current_class;
                 self.current_class = Some(*name);
 
+                let is_actor = matches!(&stmt.kind, StmtKind::Actor { .. });
+
                 let mut typed_methods = Vec::new();
                 for method in methods {
-                    let prev = self.is_checking_method;
+                    let prev_method = self.is_checking_method;
+                    let prev_actor = self.is_checking_actor;
                     self.is_checking_method = true;
+                    if is_actor {
+                        self.is_checking_actor = true;
+                    }
                     typed_methods.push(self.check_stmt(method));
-                    self.is_checking_method = prev;
+                    self.is_checking_method = prev_method;
+                    self.is_checking_actor = prev_actor;
                 }
 
                 let mut typed_fields = Vec::new();
@@ -126,6 +141,7 @@ impl<'a> TypeChecker<'a> {
                     implements: implements.clone(),
                     methods: typed_methods,
                     fields: typed_fields,
+                    is_actor,
                 }
             }
             StmtKind::Struct {
@@ -270,6 +286,7 @@ impl<'a> TypeChecker<'a> {
                 return_type,
                 body,
                 is_private: _,
+                is_async,
             } => {
                 if !type_params.is_empty() || self.generic_registry.get_function(*name).is_some() {
                     return TypedStmt {
@@ -278,18 +295,23 @@ impl<'a> TypeChecker<'a> {
                     };
                 }
 
-                let ret_ty = if let Some(rt) = return_type {
+                let mut ret_ty = if let Some(rt) = return_type {
                     self.parse_type(rt, stmt.span)
                 } else {
                     self.session.types.borrow_mut().intern(Type::Void)
                 };
+
+                let is_method = self.is_checking_method;
+                if (*is_async || (is_method && self.is_checking_actor)) && !matches!(self.get_type(ret_ty), Type::Task(_)) {
+                    ret_ty = self.session.types.borrow_mut().intern(Type::Task(ret_ty));
+                }
 
                 let mut param_types = Vec::new();
                 for (_, param_type_str) in params {
                     param_types.push(self.parse_type(param_type_str, stmt.span));
                 }
 
-                let is_method = self.is_checking_method;
+                let actually_async = *is_async || (is_method && self.is_checking_actor);
                 self.is_checking_method = false; // Reset so nested functions are declared as normal variables
 
                 let mut resolved_name = *name;
@@ -338,7 +360,14 @@ impl<'a> TypeChecker<'a> {
                 let previous_return = self.current_return_type.take();
                 self.current_return_type = Some(ret_ty);
 
+                let previous_in_async_context = self.in_async_context;
+                if actually_async {
+                    self.in_async_context = true;
+                }
+
                 let typed_body = self.check_stmt(body);
+
+                self.in_async_context = previous_in_async_context;
 
                 if self.session.interner.borrow().lookup(*name) == "init"
                     && let Some(ref class_name) = self.current_class
@@ -369,6 +398,7 @@ impl<'a> TypeChecker<'a> {
                     params: params.clone(),
                     return_type: return_type.clone(),
                     body: self.alloc(typed_body),
+                    is_async: actually_async,
                 }
             }
             StmtKind::If {
@@ -529,10 +559,19 @@ impl<'a> TypeChecker<'a> {
             }),
             StmtKind::Return { value } => {
                 let typed_val = if let Some(val) = value {
-                    let expected_ret = self.current_return_type;
+                    let mut expected_ret = self.current_return_type;
+                    
+                    if self.in_async_context {
+                        if let Some(expected_ty) = expected_ret {
+                            if let Type::Task(inner_type_id) = self.get_type(expected_ty).clone() {
+                                expected_ret = Some(inner_type_id);
+                            }
+                        }
+                    }
+                    
                     let mut tv = self.check_expr_with_expected(val, expected_ret);
 
-                    if let Some(expected_ty) = self.current_return_type {
+                    if let Some(expected_ty) = expected_ret {
                         if !self.is_assignable(tv.ty, expected_ty)
                             && tv.ty != self.session.types.borrow_mut().intern(Type::Error)
                             && expected_ty != self.session.types.borrow_mut().intern(Type::Error)
@@ -558,8 +597,17 @@ impl<'a> TypeChecker<'a> {
                     }
                     Some(tv)
                 } else {
-                    if self.current_return_type.is_some()
-                        && *self.current_return_type.as_ref().unwrap()
+                    let mut expected_ret = self.current_return_type;
+                    if self.in_async_context {
+                        if let Some(expected_ty) = expected_ret {
+                            if let Type::Task(inner_type_id) = self.get_type(expected_ty).clone() {
+                                expected_ret = Some(inner_type_id);
+                            }
+                        }
+                    }
+                    
+                    if expected_ret.is_some()
+                        && *expected_ret.as_ref().unwrap()
                             != self.session.types.borrow_mut().intern(Type::Void)
                     {
                         self.error(
@@ -568,7 +616,7 @@ impl<'a> TypeChecker<'a> {
                             &format!(
                                 "Expected return type '{}', found 'Void'.",
                                 self.session
-                                    .format_type(*self.current_return_type.as_ref().unwrap())
+                                    .format_type(*expected_ret.as_ref().unwrap())
                             ),
                         );
                     }

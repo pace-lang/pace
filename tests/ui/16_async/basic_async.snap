@@ -1,0 +1,6 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+assertion_line: 83
+expression: normalized_stderr
+---
+Spawning task

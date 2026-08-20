@@ -136,12 +136,15 @@ pub enum ExprKind<'a> {
         object: &'a Expr<'a>,
         index: &'a Expr<'a>,
     },
-    /// Index assignment: `arr[i] = value`
     IndexSet {
         object: &'a Expr<'a>,
         index: &'a Expr<'a>,
         value: &'a Expr<'a>,
     },
+    /// Await an asynchronous task: `await expr`
+    Await(&'a Expr<'a>),
+    /// Spawn an asynchronous task: `spawn expr`
+    Spawn(&'a Expr<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -90,6 +90,7 @@ pub enum StmtKind<'a> {
         return_type: Option<TypeExpr<'a>>,
         body: &'a Stmt<'a>,
         is_private: bool,
+        is_async: bool,
     },
     /// A foreign function declaration: `foreign func name<T>(params) -> return_type;`
     ForeignFunc {
@@ -104,6 +105,15 @@ pub enum StmtKind<'a> {
     Return { value: Option<&'a Expr<'a>> },
     /// A class declaration: `class name<T> { fields; methods; }`
     Class {
+        name: session::Symbol,
+        type_params: Vec<session::Symbol>,
+        implements: Vec<TypeExpr<'a>>,
+        methods: Vec<Stmt<'a>>,
+        fields: Vec<Stmt<'a>>,
+        is_private: bool,
+    },
+    /// An actor declaration: `actor name<T> { fields; methods; }`
+    Actor {
         name: session::Symbol,
         type_params: Vec<session::Symbol>,
         implements: Vec<TypeExpr<'a>>,

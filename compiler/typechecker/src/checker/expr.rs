@@ -76,7 +76,45 @@ impl<'a> TypeChecker<'a> {
             ExprKind::Unary(op, right) => self.check_unary_expr(op, right, expr.span),
             ExprKind::Range { start, end } => self.check_range_expr(start, end, expr.span),
             ExprKind::Binary(left, op, right) => self.check_binary_expr(left, op, right, expr.span),
+            ExprKind::Await(inner) => self.check_await_expr(inner, expr.span),
+            ExprKind::Spawn(inner) => self.check_spawn_expr(inner, expr.span),
         };
         TypedExpr::new(kind, ty, expr.span)
+    }
+
+    fn check_await_expr(&mut self, inner: &'a Expr<'a>, span: Span) -> (TypedExprKind<'a>, TypeId) {
+        if !self.in_async_context {
+            self.error(
+                span,
+                DiagnosticCode::TypeMismatch, // Or maybe a more specific code for this
+                "Cannot use 'await' outside of an async context.",
+            );
+        }
+
+        let typed_inner = self.check_expr(inner);
+        let inner_ty = self.session.types.borrow().get(typed_inner.ty).clone();
+
+        let ty = if let Type::Task(inner_type_id) = inner_ty {
+            inner_type_id
+        } else {
+            self.error(
+                span,
+                DiagnosticCode::TypeMismatch,
+                &format!(
+                    "Cannot await a non-task type. Expected Task<T>, got {}",
+                    self.session.format_type(typed_inner.ty)
+                ),
+            );
+            self.session.types.borrow_mut().intern(Type::Error)
+        };
+
+        (TypedExprKind::Await(self.alloc(typed_inner)), ty)
+    }
+
+    fn check_spawn_expr(&mut self, inner: &'a Expr<'a>, span: Span) -> (TypedExprKind<'a>, TypeId) {
+        let typed_inner = self.check_expr(inner);
+        let ty = self.session.types.borrow_mut().intern(Type::Task(typed_inner.ty));
+
+        (TypedExprKind::Spawn(self.alloc(typed_inner)), ty)
     }
 }

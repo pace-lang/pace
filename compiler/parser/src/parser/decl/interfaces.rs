@@ -31,8 +31,16 @@ impl<'a> Parser<'a> {
             let item_is_private = self.parse_visibility();
 
             if self.match_token(&[TokenKind::Func]) {
-                if let Some(method) = self.interface_method_declaration(item_is_private) {
+                if let Some(method) = self.interface_method_declaration(item_is_private, false) {
                     methods.push(method);
+                }
+            } else if self.match_token(&[TokenKind::Async]) {
+                if self.match_token(&[TokenKind::Func]) {
+                    if let Some(method) = self.interface_method_declaration(item_is_private, true) {
+                        methods.push(method);
+                    }
+                } else {
+                    self.error_at_current("Expected 'func' after 'async'.");
                 }
             } else {
                 self.error_at_current("Expected method signature inside interface.");
@@ -64,7 +72,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    pub(crate) fn interface_method_declaration(&mut self, is_private: bool) -> Option<Stmt<'a>> {
+    pub(crate) fn interface_method_declaration(&mut self, is_private: bool, is_async: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token {
@@ -151,6 +159,7 @@ impl<'a> Parser<'a> {
                 return_type,
                 body: empty_body,
                 is_private,
+                is_async,
             },
             span,
         ))

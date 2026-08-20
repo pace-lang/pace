@@ -50,9 +50,17 @@ impl<'a> Parser<'a> {
                         methods.push(init_method);
                     }
                 } else {
-                    if let Some(method) = self.function_declaration(item_is_private) {
+                    if let Some(method) = self.function_declaration(item_is_private, false) {
                         methods.push(method);
                     }
+                }
+            } else if self.match_token(&[TokenKind::Async]) {
+                if self.match_token(&[TokenKind::Func]) {
+                    if let Some(method) = self.function_declaration(item_is_private, true) {
+                        methods.push(method);
+                    }
+                } else {
+                    self.error_at_current("Expected 'func' after 'async'.");
                 }
             } else if self.match_token(&[TokenKind::Init]) {
                 self.error_at_current("Constructors must be declared with 'func init'.");

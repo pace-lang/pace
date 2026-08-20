@@ -57,7 +57,11 @@ pub fn execute(override_file: Option<&str>, release: bool) -> PathBuf {
         exit(1);
     }
 
-    let package_name = root.file_name().and_then(|n| n.to_str()).unwrap_or("app");
+    let package_name = if let Some(file_path) = override_file {
+        Path::new(file_path).file_stem().and_then(|n| n.to_str()).unwrap_or("app")
+    } else {
+        root.file_name().and_then(|n| n.to_str()).unwrap_or("app")
+    };
     let out_file = target_dir.join(package_name);
     if let Err(e) = Linker::link(&obj_file, &out_file, release) {
         print_global_error(&format!("Linker failed: {}", e));

@@ -89,6 +89,7 @@ impl<'a> Monomorphizer<'a> {
                 return_type,
                 body,
                 is_private,
+                is_async,
             } => {
                 // If this is a standalone function, we rename it. If it's a method inside a class, we keep the name!
                 // We'll rename it ONLY if it's the top-level generic function being monomorphized.
@@ -109,6 +110,7 @@ impl<'a> Monomorphizer<'a> {
                     return_type: new_return,
                     body: new_body,
                     is_private: *is_private,
+                    is_async: *is_async,
                 }
             }
             StmtKind::ForeignFunc {

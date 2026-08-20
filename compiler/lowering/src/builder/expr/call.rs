@@ -75,17 +75,19 @@ impl<'a> MirBuilder<'a> {
                                 .replace(",", "_")
                         }
                     };
+                    let is_actor = self.actor_names.contains(&target_name);
+
                     let actual_name = format!(
                         "{}::{}",
                         target_name,
                         self.session.interner.borrow().lookup(*name)
                     );
+                    
                     arg_values.insert(0, obj_val);
-                    {
-                        let __inst =
-                            Inst::Assign(temp.clone(), RValue::Call(actual_name, arg_values));
-                        self.current().instructions.push(__inst)
-                    };
+                    let __inst =
+                        Inst::Assign(temp.clone(), RValue::Call(actual_name, arg_values));
+                    self.current().instructions.push(__inst);
+                    
                     return Value::Place(temp);
                 }
             }

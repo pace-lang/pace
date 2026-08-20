@@ -136,6 +136,13 @@ impl CraneliftGenerator {
             .map_err(|e| format!("Failed to declare pace_alloc_array_repeat: {}", e))?;
         func_ids.insert("pace_alloc_array_repeat".to_string(), alloc_repeat_id);
 
+        let mut spawn_sig = module.make_signature();
+        spawn_sig.params.push(AbiParam::new(types::I64));
+        let spawn_id = module
+            .declare_function("pace_spawn_task", Linkage::Import, &spawn_sig)
+            .unwrap();
+        func_ids.insert("pace_spawn_task".to_string(), spawn_id);
+
         let mut panic_sig = module.make_signature();
         panic_sig.params.push(AbiParam::new(types::I64));
         let panic_id = module
