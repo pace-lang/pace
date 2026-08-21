@@ -66,11 +66,6 @@ pub enum TypedExprKind<'a> {
         false_expr: &'a TypedExpr<'a>,
     },
     Array(Vec<TypedExpr<'a>>),
-    ListComprehension {
-        expr: &'a TypedExpr<'a>,
-        item_name: session::Symbol,
-        iterator: &'a TypedExpr<'a>,
-    },
     ArrayRepeat {
         value: &'a TypedExpr<'a>,
         count: &'a TypedExpr<'a>,

@@ -37,12 +37,9 @@ pub enum StmtKind<'a> {
         type_params: Vec<session::Symbol>,
         methods: Vec<Stmt<'a>>,
     },
-    /// An import statement: `import "path" [as alias] [show a, b] [hide x, y]`
     Import {
         path: session::Symbol,
         alias: Option<session::Symbol>,
-        show: Vec<session::Symbol>,
-        hide: Vec<session::Symbol>,
     },
     /// An export statement: `export "path"`
     Export { path: session::Symbol },

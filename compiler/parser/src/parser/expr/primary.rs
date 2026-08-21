@@ -156,61 +156,7 @@ impl<'a> Parser<'a> {
                             },
                             span,
                         ));
-                    } else if self.match_token(&[TokenKind::For]) {
-                        let item_name = if let Some(Token {
-                            kind: TokenKind::Identifier(n),
-                            ..
-                        }) = self.peek().cloned()
-                        {
-                            self.advance();
-                            n
-                        } else {
-                            self.error_at_current(
-                                "Expected item name after 'for' in list comprehension.",
-                            );
-                            return None;
-                        };
 
-                        let is_in = if let Some(Token {
-                            kind: TokenKind::Identifier(s),
-                            ..
-                        }) = self.peek()
-                        {
-                            self.session.interner.borrow().lookup(*s) == "in"
-                        } else {
-                            false
-                        };
-
-                        if is_in {
-                            self.advance();
-                        } else {
-                            self.error_at_current(
-                                "Expected 'in' after item name in list comprehension.",
-                            );
-                            return None;
-                        }
-
-                        let iterator = self.expression()?;
-                        if !self.match_token(&[TokenKind::RightBracket]) {
-                            self.error_at_current("Expected ']' after list comprehension.");
-                            return None;
-                        }
-                        let end_span = self.previous().span;
-                        let span = Span::new(
-                            start_span.file_id,
-                            start_span.start,
-                            end_span.end,
-                            start_span.start_loc,
-                            end_span.end_loc,
-                        );
-                        return Some(Expr::new(
-                            ExprKind::ListComprehension {
-                                expr: self.session.ast_arena.alloc(first_expr),
-                                item_name,
-                                iterator: self.session.ast_arena.alloc(iterator),
-                            },
-                            span,
-                        ));
                     } else {
                         let mut elements = vec![first_expr];
                         while self.match_token(&[TokenKind::Comma]) {

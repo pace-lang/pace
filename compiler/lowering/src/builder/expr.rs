@@ -25,11 +25,7 @@ impl<'a> MirBuilder<'a> {
             TypedExprKind::ArrayRepeat { value, count } => {
                 self.lower_array_repeat_expr(value, count)
             }
-            TypedExprKind::ListComprehension {
-                expr: mapped_expr,
-                item_name,
-                iterator,
-            } => self.lower_list_comprehension_expr(mapped_expr, *item_name, iterator),
+
             TypedExprKind::Match { value, arms } => self.lower_match_expr(value, arms),
             TypedExprKind::EnumVariant {
                 enum_name,

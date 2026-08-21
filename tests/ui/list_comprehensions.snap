@@ -1,9 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-assertion_line: 83
-expression: normalized_stderr
----
-2
-10
-1
-5

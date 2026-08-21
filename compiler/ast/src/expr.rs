@@ -128,12 +128,6 @@ pub enum ExprKind<'a> {
     },
     /// Array literal: `[1, 2, 3]`
     Array(Vec<Expr<'a>>),
-    /// List comprehension: `[expr for item in iterator]`
-    ListComprehension {
-        expr: &'a Expr<'a>,
-        item_name: session::Symbol,
-        iterator: &'a Expr<'a>,
-    },
     /// Array repeat initialization: `[0; 10]`
     ArrayRepeat {
         value: &'a Expr<'a>,

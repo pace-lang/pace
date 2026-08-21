@@ -47,11 +47,7 @@ impl<'a> TypeChecker<'a> {
             ExprKind::ArrayRepeat { value, count } => {
                 self.check_array_repeat_expr(value, count, expr.span)
             }
-            ExprKind::ListComprehension {
-                expr: mapped_expr,
-                item_name,
-                iterator,
-            } => self.check_list_comprehension_expr(mapped_expr, item_name, iterator, expr.span),
+
             ExprKind::IndexGet { object, index } => {
                 self.check_index_get_expr(object, index, expr.span)
             }

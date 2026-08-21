@@ -86,49 +86,5 @@ impl<'a> TypeChecker<'a> {
         )
     }
 
-    pub(crate) fn check_list_comprehension_expr(
-        &mut self,
-        mapped_expr: &Expr<'a>,
-        item_name: &Symbol,
-        iterator: &Expr<'a>,
-        span: Span,
-    ) -> (TypedExprKind<'a>, TypeId) {
-        let typed_iterator = self.check_expr(iterator);
 
-        let item_type = match self.get_type(typed_iterator.ty) {
-            Type::Range => self.session.types.borrow_mut().intern(Type::Int),
-            Type::Array(inner) => inner,
-            Type::Error => self.session.types.borrow_mut().intern(Type::Error),
-            _ => {
-                self.error(
-                    span,
-                    DiagnosticCode::TypeMismatch,
-                    &format!(
-                        "Cannot iterate over non-iterable type '{}'.",
-                        self.session.format_type(typed_iterator.ty)
-                    ),
-                );
-                self.session.types.borrow_mut().intern(Type::Error)
-            }
-        };
-
-        self.env.push_scope();
-        self.env.declare_var(*item_name, item_type, false);
-        let typed_expr = self.check_expr(mapped_expr);
-        self.env.pop_scope();
-
-        let ty = self
-            .session
-            .types
-            .borrow_mut()
-            .intern(Type::Array(typed_expr.ty));
-        (
-            TypedExprKind::ListComprehension {
-                expr: self.alloc(typed_expr),
-                item_name: *item_name,
-                iterator: self.alloc(typed_iterator),
-            },
-            ty,
-        )
-    }
 }

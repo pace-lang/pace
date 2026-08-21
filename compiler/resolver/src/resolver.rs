@@ -118,8 +118,6 @@ impl<'a> Resolver<'a> {
             if let StmtKind::Import {
                 path,
                 alias,
-                show,
-                hide,
             } = &stmt.kind
             {
                 // Find the imported module
@@ -141,11 +139,7 @@ impl<'a> Resolver<'a> {
                             self.scopes.declare(*alias_name);
                         } else {
                             for (export, sub_exports) in exports {
-                                if (!show.is_empty() && !show.contains(export))
-                                    || hide.contains(export)
-                                {
-                                    continue;
-                                }
+
                                 self.scopes.declare(*export);
                                 for sub in sub_exports {
                                     self.scopes.declare(*sub);
@@ -495,18 +489,7 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(value);
                 self.resolve_expr(count);
             }
-            ExprKind::ListComprehension {
-                expr: mapped_expr,
-                item_name,
-                iterator,
-            } => {
-                self.resolve_expr(iterator);
 
-                self.scopes.push_scope();
-                self.scopes.declare(*item_name);
-                self.resolve_expr(mapped_expr);
-                self.scopes.pop_scope();
-            }
             ExprKind::InterpolatedString(pieces) => {
                 for piece in pieces {
                     self.resolve_expr(piece);

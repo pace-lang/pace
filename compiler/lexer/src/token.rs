@@ -29,8 +29,6 @@ pub enum TokenKind {
     Enum,
     Match,
     As,
-    Show,
-    Hide,
     Async,
     Await,
     Actor,

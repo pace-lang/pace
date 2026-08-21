@@ -39,45 +39,6 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let mut show = Vec::new();
-        if self.match_token(&[TokenKind::Show]) {
-            loop {
-                if let Some(Token {
-                    kind: TokenKind::Identifier(i),
-                    ..
-                }) = self.peek().cloned()
-                {
-                    self.advance();
-                    show.push(i);
-                } else {
-                    self.error_at_current("Expected identifier after 'show'.");
-                    break;
-                }
-                if !self.match_token(&[TokenKind::Comma]) {
-                    break;
-                }
-            }
-        }
-
-        let mut hide = Vec::new();
-        if self.match_token(&[TokenKind::Hide]) {
-            loop {
-                if let Some(Token {
-                    kind: TokenKind::Identifier(i),
-                    ..
-                }) = self.peek().cloned()
-                {
-                    self.advance();
-                    hide.push(i);
-                } else {
-                    self.error_at_current("Expected identifier after 'hide'.");
-                    break;
-                }
-                if !self.match_token(&[TokenKind::Comma]) {
-                    break;
-                }
-            }
-        }
 
         if !self.match_token(&[TokenKind::Semicolon]) {
             self.error_at_current("Expected ';' after import declaration.");
@@ -97,8 +58,6 @@ impl<'a> Parser<'a> {
             StmtKind::Import {
                 path,
                 alias,
-                show,
-                hide,
             },
             span,
         ))

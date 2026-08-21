@@ -461,8 +461,6 @@ impl<'a> Scanner<'a> {
             "export" => TokenKind::Export,
             "private" => TokenKind::Private,
             "as" => TokenKind::As,
-            "show" => TokenKind::Show,
-            "hide" => TokenKind::Hide,
             "async" => TokenKind::Async,
             "await" => TokenKind::Await,
             "actor" => TokenKind::Actor,

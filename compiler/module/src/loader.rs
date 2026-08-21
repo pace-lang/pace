@@ -140,8 +140,6 @@ impl<'a> ModuleLoader<'a> {
                                             .borrow_mut()
                                             .intern(&format!("\"{}\"", import_path)),
                                         alias: None,
-                                        show: vec![],
-                                        hide: vec![],
                                     },
                                     diagnostics::Span::new(
                                         0,
