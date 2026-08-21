@@ -51,7 +51,7 @@ impl<'a> TypeChecker<'a> {
                     let mut class_mutables_map = std::collections::HashMap::new();
 
                     for field in fields {
-                        let (f_name, type_annotation, initializer, _is_weak, is_mutable) =
+                        let (f_name, type_annotation, initializer, _is_weak, is_mutable, is_static) =
                             match &field.kind {
                                 StmtKind::Var {
                                     name,
@@ -59,17 +59,19 @@ impl<'a> TypeChecker<'a> {
                                     initializer,
                                     is_weak,
                                     is_private: _,
-                                } => (name, type_annotation, initializer, *is_weak, true),
+                                    is_static,
+                                } => (name, type_annotation, initializer, *is_weak, true, *is_static),
                                 StmtKind::Let {
                                     name,
                                     type_annotation,
                                     initializer,
                                     is_private: _,
-                                } => (name, type_annotation, initializer, false, false),
+                                    is_static,
+                                } => (name, type_annotation, initializer, false, false, *is_static),
                                 _ => continue,
                             };
 
-                        if initializer.is_none() {
+                        if initializer.is_none() && !is_static {
                             uninit_props.push(*f_name);
                         }
 
@@ -80,8 +82,13 @@ impl<'a> TypeChecker<'a> {
                         } else {
                             self.session.types.borrow_mut().intern(Type::Any)
                         };
-                        class_members.insert(*f_name, ty);
-                        class_mutables_map.insert(*f_name, is_mutable);
+                        if is_static {
+                            self.class_static_members.entry(*name).or_default().insert(*f_name, ty);
+                            self.class_static_mutables.entry(*name).or_default().insert(*f_name, is_mutable);
+                        } else {
+                            class_members.insert(*f_name, ty);
+                            class_mutables_map.insert(*f_name, is_mutable);
+                        }
                     }
 
                     if matches!(stmt.kind, StmtKind::Actor { .. }) {
@@ -104,6 +111,7 @@ impl<'a> TypeChecker<'a> {
                             params,
                             return_type,
                             is_async,
+                            is_static,
                             ..
                         } = &method.kind
                         {
@@ -119,14 +127,17 @@ impl<'a> TypeChecker<'a> {
                             for (_, pt) in params {
                                 param_types.push(self.parse_type(pt, method.span));
                             }
-                            class_members.insert(
-                                *m_name,
-                                self.session.types.borrow_mut().intern(Type::Function(
-                                    Vec::new(),
-                                    param_types,
-                                    ret_ty,
-                                )),
-                            );
+                            let func_ty = self.session.types.borrow_mut().intern(Type::Function(
+                                Vec::new(),
+                                param_types,
+                                ret_ty,
+                            ));
+                            
+                            if *is_static {
+                                self.class_static_members.entry(*name).or_default().insert(*m_name, func_ty);
+                            } else {
+                                class_members.insert(*m_name, func_ty);
+                            }
                         }
                     }
 
@@ -173,23 +184,25 @@ impl<'a> TypeChecker<'a> {
                     let mut struct_mutables_map = std::collections::HashMap::new();
 
                     for field in fields {
-                        let (f_name, type_annotation, initializer, is_mutable) = match &field.kind {
+                        let (f_name, type_annotation, initializer, is_mutable, is_static) = match &field.kind {
                             StmtKind::Var {
                                 name,
                                 type_annotation,
                                 initializer,
+                                is_static,
                                 ..
-                            } => (name, type_annotation, initializer, true),
+                            } => (name, type_annotation, initializer, true, *is_static),
                             StmtKind::Let {
                                 name,
                                 type_annotation,
                                 initializer,
+                                is_static,
                                 ..
-                            } => (name, type_annotation, initializer, false),
+                            } => (name, type_annotation, initializer, false, *is_static),
                             _ => continue,
                         };
 
-                        if initializer.is_none() {
+                        if initializer.is_none() && !is_static {
                             uninit_props.push(*f_name);
                         }
 
@@ -200,8 +213,13 @@ impl<'a> TypeChecker<'a> {
                         } else {
                             self.session.types.borrow_mut().intern(Type::Any)
                         };
-                        struct_members.insert(*f_name, ty);
-                        struct_mutables_map.insert(*f_name, is_mutable);
+                        if is_static {
+                            self.class_static_members.entry(*name).or_default().insert(*f_name, ty);
+                            self.class_static_mutables.entry(*name).or_default().insert(*f_name, is_mutable);
+                        } else {
+                            struct_members.insert(*f_name, ty);
+                            struct_mutables_map.insert(*f_name, is_mutable);
+                        }
                     }
 
                     self.uninitialized_class_properties
@@ -213,6 +231,7 @@ impl<'a> TypeChecker<'a> {
                             params,
                             return_type,
                             is_async,
+                            is_static,
                             ..
                         } = &method.kind
                         {
@@ -228,14 +247,16 @@ impl<'a> TypeChecker<'a> {
                             for (_, pt) in params {
                                 param_types.push(self.parse_type(pt, method.span));
                             }
-                            struct_members.insert(
-                                *m_name,
-                                self.session.types.borrow_mut().intern(Type::Function(
-                                    Vec::new(),
-                                    param_types,
-                                    ret_ty,
-                                )),
-                            );
+                            let func_ty = self.session.types.borrow_mut().intern(Type::Function(
+                                Vec::new(),
+                                param_types,
+                                ret_ty,
+                            ));
+                            if *is_static {
+                                self.class_static_members.entry(*name).or_default().insert(*m_name, func_ty);
+                            } else {
+                                struct_members.insert(*m_name, func_ty);
+                            }
                         }
                     }
 
@@ -369,6 +390,7 @@ impl<'a> TypeChecker<'a> {
                             params,
                             return_type,
                             is_async,
+                            is_static,
                             ..
                         } = &method.kind
                         {
@@ -384,14 +406,16 @@ impl<'a> TypeChecker<'a> {
                             for (_, pt) in params {
                                 param_types.push(self.parse_type(pt, method.span));
                             }
-                            enum_methods.insert(
-                                *m_name,
-                                self.session.types.borrow_mut().intern(Type::Function(
-                                    Vec::new(),
-                                    param_types,
-                                    ret_ty,
-                                )),
-                            );
+                            let func_ty = self.session.types.borrow_mut().intern(Type::Function(
+                                Vec::new(),
+                                param_types,
+                                ret_ty,
+                            ));
+                            if *is_static {
+                                self.class_static_members.entry(*name).or_default().insert(*m_name, func_ty);
+                            } else {
+                                enum_methods.insert(*m_name, func_ty);
+                            }
                         }
                     }
                     self.classes.insert(*name, enum_methods);
@@ -437,6 +461,7 @@ impl<'a> TypeChecker<'a> {
                     params,
                     return_type,
                     is_private: _,
+                    is_static: _,
                 } => {
                     self.env.push_scope();
                     for tp in type_params {
@@ -478,6 +503,7 @@ impl<'a> TypeChecker<'a> {
                     body: _,
                     is_private: _,
                     is_async,
+                    is_static: _,
                 } => {
                     self.env.push_scope();
                     for tp in type_params {

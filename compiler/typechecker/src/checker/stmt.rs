@@ -16,8 +16,9 @@ impl<'a> TypeChecker<'a> {
                 type_annotation,
                 initializer,
                 is_private: _,
+                is_static,
             } => {
-                self.check_var_decl(*name, type_annotation, initializer, false, false, stmt.span)
+                self.check_var_decl(*name, type_annotation, initializer, false, false, *is_static, stmt.span)
                     .kind
             }
             StmtKind::Var {
@@ -26,6 +27,7 @@ impl<'a> TypeChecker<'a> {
                 initializer,
                 is_weak,
                 is_private: _,
+                is_static,
             } => {
                 self.check_var_decl(
                     *name,
@@ -33,6 +35,7 @@ impl<'a> TypeChecker<'a> {
                     initializer,
                     *is_weak,
                     true,
+                    *is_static,
                     stmt.span,
                 )
                 .kind
@@ -273,11 +276,13 @@ impl<'a> TypeChecker<'a> {
                 params,
                 return_type,
                 is_private: _,
+                is_static,
             } => TypedStmtKind::ForeignFunc {
                 name: *name,
                 base_name: *base_name,
                 params: params.clone(),
                 return_type: return_type.clone(),
+                is_static: *is_static,
             },
             StmtKind::Func {
                 name,
@@ -287,6 +292,7 @@ impl<'a> TypeChecker<'a> {
                 body,
                 is_private: _,
                 is_async,
+                is_static,
             } => {
                 if !type_params.is_empty() || self.generic_registry.get_function(*name).is_some() {
                     return TypedStmt {
@@ -399,6 +405,7 @@ impl<'a> TypeChecker<'a> {
                     return_type: return_type.clone(),
                     body: self.alloc(typed_body),
                     is_async: actually_async,
+                    is_static: *is_static,
                 }
             }
             StmtKind::If {
@@ -637,6 +644,7 @@ impl<'a> TypeChecker<'a> {
         initializer: &Option<&Expr<'a>>,
         is_weak: bool,
         is_mutable: bool,
+        is_static: bool,
         span: Span,
     ) -> TypedStmt<'a> {
         let expected_ty = type_annotation
@@ -699,12 +707,14 @@ impl<'a> TypeChecker<'a> {
                 type_annotation: type_annotation.clone(),
                 initializer: typed_init.map(|e| self.alloc(e)),
                 is_weak,
+                is_static,
             }
         } else {
             TypedStmtKind::Let {
                 name,
                 type_annotation: type_annotation.clone(),
                 initializer: typed_init.map(|e| self.alloc(e)),
+                is_static,
             }
         };
         TypedStmt::new(kind, span)

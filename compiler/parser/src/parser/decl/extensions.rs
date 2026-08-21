@@ -44,12 +44,12 @@ impl<'a> Parser<'a> {
         while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
             let is_private = self.parse_visibility();
             if self.match_token(&[TokenKind::Func]) {
-                if let Some(method) = self.function_declaration(is_private, false) {
+                if let Some(method) = self.function_declaration(is_private, false, false) {
                     methods.push(method);
                 }
             } else if self.match_token(&[TokenKind::Async]) {
                 if self.match_token(&[TokenKind::Func]) {
-                    if let Some(method) = self.function_declaration(is_private, true) {
+                    if let Some(method) = self.function_declaration(is_private, true, false) {
                         methods.push(method);
                     }
                 } else {

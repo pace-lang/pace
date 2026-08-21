@@ -150,7 +150,7 @@ impl<'a> MirBuilder<'a> {
                 self.current_block = merge_block;
                 current_val
             }
-            TypedExprKind::Get { object, name } => {
+            TypedExprKind::Get { object, name, is_static: _ } => {
                 let obj_val = self.lower_expr(object);
                 
                 let class_name = match self.session.types.borrow().get(object.ty).clone() {

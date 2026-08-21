@@ -240,6 +240,7 @@ impl<'a> Resolver<'a> {
                 type_annotation: _,
                 initializer,
                 is_private: _,
+                is_static: _,
             }
             | StmtKind::Var {
                 name,
@@ -247,6 +248,7 @@ impl<'a> Resolver<'a> {
                 initializer,
                 is_weak: _,
                 is_private: _,
+                is_static: _,
             } => {
                 // Resolve initializer first so it can't reference the variable being declared
                 if let Some(init) = initializer {
@@ -341,6 +343,7 @@ impl<'a> Resolver<'a> {
                 params: _,
                 return_type: _,
                 is_private: _,
+                is_static: _,
             } => {
                 // Name declared in hoisting
             }
@@ -360,6 +363,7 @@ impl<'a> Resolver<'a> {
                 body,
                 is_private: _,
                 is_async: _,
+                is_static: _,
             } => {
                 // Name declared in hoisting
 

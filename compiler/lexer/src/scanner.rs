@@ -458,6 +458,7 @@ impl<'a> Scanner<'a> {
             "weak" => TokenKind::Weak,
             "null" => TokenKind::Null,
             "foreign" => TokenKind::Foreign,
+            "static" => TokenKind::Static,
             _ => TokenKind::Identifier(session.interner.borrow_mut().intern(text)),
         }
     }

@@ -31,6 +31,7 @@ pub enum RValue {
     AllocateTask(String),
     AllocateStruct(String),
     GetProperty(Value, String, String),
+    GetStaticProperty(String, String),
     WeakUpgrade(Value),
     ForceUnwrap(Value),
     Array(Vec<Value>, bool),
@@ -50,6 +51,7 @@ pub enum RValue {
 pub enum Inst {
     Assign(Place, RValue),
     SetProperty(Value, String, String, Value, bool),
+    SetStaticProperty(String, String, Value, bool),
     IndexSet(Value, Value, Value),
 
     Retain(Value),

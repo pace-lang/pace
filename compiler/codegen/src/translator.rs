@@ -639,6 +639,17 @@ impl<'a, 'b> Translator<'a, 'b> {
                             .ins()
                             .load(types::I64, ir::MemFlagsData::new(), cl_obj, offset)
                     }
+                    RValue::GetStaticProperty(class_name, prop_name) => {
+                        let data_id = self.module.declare_data(
+                            &format!("_pace_static_{}_{}", class_name, prop_name),
+                            cranelift_module::Linkage::Export,
+                            true,
+                            false,
+                        ).unwrap();
+                        let local_data = self.module.declare_data_in_func(data_id, self.builder.func);
+                        let ptr = self.builder.ins().symbol_value(types::I64, local_data);
+                        self.builder.ins().load(types::I64, ir::MemFlagsData::new(), ptr, 0)
+                    }
                     RValue::ForceUnwrap(inner) => {
                         let cl_val = self.translate_value(inner)?;
                         let is_null =
@@ -959,6 +970,20 @@ impl<'a, 'b> Translator<'a, 'b> {
                 self.builder
                     .ins()
                     .store(ir::MemFlagsData::new(), cl_val, cl_obj, offset);
+                Ok(())
+            }
+            Inst::SetStaticProperty(class_name, prop_name, value, _is_ref) => {
+                let cl_val = self.translate_value(value)?;
+                
+                let data_id = self.module.declare_data(
+                    &format!("_pace_static_{}_{}", class_name, prop_name),
+                    cranelift_module::Linkage::Export,
+                    true,
+                    false,
+                ).unwrap();
+                let local_data = self.module.declare_data_in_func(data_id, self.builder.func);
+                let ptr = self.builder.ins().symbol_value(types::I64, local_data);
+                self.builder.ins().store(ir::MemFlagsData::new(), cl_val, ptr, 0);
                 Ok(())
             }
             Inst::IndexSet(array, index, val) => {

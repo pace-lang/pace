@@ -8,6 +8,7 @@ impl<'a> Parser<'a> {
         is_var: bool,
         is_weak: bool,
         is_private: bool,
+        is_static: bool,
     ) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
@@ -53,6 +54,7 @@ impl<'a> Parser<'a> {
                 initializer: initializer.map(|e| &*self.session.ast_arena.alloc(e)),
                 is_weak,
                 is_private,
+                is_static,
             }
         } else {
             StmtKind::Let {
@@ -60,6 +62,7 @@ impl<'a> Parser<'a> {
                 type_annotation,
                 initializer: initializer.map(|e| &*self.session.ast_arena.alloc(e)),
                 is_private,
+                is_static,
             }
         };
 

@@ -29,10 +29,33 @@ impl<'a> Parser<'a> {
         let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
-            let is_method = self.check(&TokenKind::Func) || self.check(&TokenKind::Private);
+            let is_static = self.match_token(&[TokenKind::Static]);
+            let is_method = self.check(&TokenKind::Func) || self.check(&TokenKind::Private) || self.check(&TokenKind::Async) || is_static;
             if is_method {
-                if let Some(method) = self.declaration() {
-                    methods.push(method);
+                // If we consumed `static`, we need to handle the method parsing since `declaration()` doesn't expect `static` at the top level
+                // Actually, `declaration()` doesn't handle `static` at all right now, but for enums, methods are parsed just like top-level declarations
+                // Wait, if we use `self.declaration()`, it will fail because `static` isn't handled in `decl.rs`.
+                // Let's parse it inline like in classes/structs instead of using `self.declaration()`.
+                // However, `self.declaration()` also handles variables and things. 
+                // Wait, enums only have methods, not fields (besides variants).
+                if self.match_token(&[TokenKind::Func]) {
+                    if let Some(method) = self.function_declaration(false, false, is_static) {
+                        methods.push(method);
+                    }
+                } else if self.match_token(&[TokenKind::Async]) {
+                    if self.match_token(&[TokenKind::Func]) {
+                        if let Some(method) = self.function_declaration(false, true, is_static) {
+                            methods.push(method);
+                        }
+                    } else {
+                        self.error_at_current("Expected 'func' after 'async'.");
+                    }
+                } else if is_static {
+                    self.error_at_current("Expected 'func' or 'async func' after 'static'.");
+                } else {
+                     if let Some(method) = self.declaration() {
+                         methods.push(method);
+                     }
                 }
                 continue;
             }

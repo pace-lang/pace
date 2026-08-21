@@ -321,6 +321,21 @@ impl CraneliftGenerator {
 
             module.define_data(data_id, &data_ctx).unwrap();
             class_metadata_ids.insert(class_name.clone(), data_id);
+
+            for static_field in &class_def.static_fields {
+                let mut static_ctx = DataDescription::new();
+                static_ctx.set_align(8);
+                static_ctx.define(Box::new([0u8; 8]));
+                let static_id = module
+                    .declare_data(
+                        &format!("_pace_static_{}_{}", class_name, static_field),
+                        Linkage::Export,
+                        true,
+                        false,
+                    )
+                    .unwrap();
+                module.define_data(static_id, &static_ctx).unwrap();
+            }
         }
 
         let mut enum_metadata_ids = HashMap::new();

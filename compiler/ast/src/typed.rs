@@ -32,11 +32,13 @@ pub enum TypedExprKind<'a> {
     Get {
         object: &'a TypedExpr<'a>,
         name: session::Symbol,
+        is_static: bool,
     },
     Set {
         object: &'a TypedExpr<'a>,
         name: session::Symbol,
         value: &'a TypedExpr<'a>,
+        is_static: bool,
     },
     Assign {
         name: session::Symbol,
@@ -112,12 +114,14 @@ pub enum TypedStmtKind<'a> {
         name: session::Symbol,
         type_annotation: Option<TypeExpr<'a>>,
         initializer: Option<&'a TypedExpr<'a>>,
+        is_static: bool,
     },
     Var {
         name: session::Symbol,
         type_annotation: Option<TypeExpr<'a>>,
         initializer: Option<&'a TypedExpr<'a>>,
         is_weak: bool,
+        is_static: bool,
     },
     Expression(&'a TypedExpr<'a>),
     Block(Vec<TypedStmt<'a>>),
@@ -143,12 +147,14 @@ pub enum TypedStmtKind<'a> {
         return_type: Option<TypeExpr<'a>>,
         body: &'a TypedStmt<'a>,
         is_async: bool,
+        is_static: bool,
     },
     ForeignFunc {
         name: session::Symbol,
         base_name: session::Symbol,
         params: Vec<(session::Symbol, TypeExpr<'a>)>,
         return_type: Option<TypeExpr<'a>>,
+        is_static: bool,
     },
     Return {
         value: Option<&'a TypedExpr<'a>>,

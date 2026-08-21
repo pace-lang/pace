@@ -52,6 +52,7 @@ pub enum StmtKind<'a> {
         type_annotation: Option<TypeExpr<'a>>,
         initializer: Option<&'a Expr<'a>>,
         is_private: bool,
+        is_static: bool,
     },
     /// A var declaration: `[weak] var name: type = expression;`
     Var {
@@ -60,6 +61,7 @@ pub enum StmtKind<'a> {
         initializer: Option<&'a Expr<'a>>,
         is_weak: bool,
         is_private: bool,
+        is_static: bool,
     },
     /// An expression evaluated for side effects: `10 + 20;`
     Expression(&'a Expr<'a>),
@@ -91,6 +93,7 @@ pub enum StmtKind<'a> {
         body: &'a Stmt<'a>,
         is_private: bool,
         is_async: bool,
+        is_static: bool,
     },
     /// A foreign function declaration: `foreign func name<T>(params) -> return_type;`
     ForeignFunc {
@@ -100,6 +103,7 @@ pub enum StmtKind<'a> {
         params: Vec<(session::Symbol, TypeExpr<'a>)>,
         return_type: Option<TypeExpr<'a>>,
         is_private: bool,
+        is_static: bool,
     },
     /// A return statement: `return value;`
     Return { value: Option<&'a Expr<'a>> },

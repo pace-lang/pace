@@ -48,7 +48,12 @@ impl<'a> MirBuilder<'a> {
         val_val
     }
 
-    pub(crate) fn lower_get_expr(&mut self, object: &TypedExpr, name: session::Symbol) -> Value {
+    pub(crate) fn lower_get_expr(
+        &mut self,
+        object: &TypedExpr,
+        name: session::Symbol,
+        is_static: bool,
+    ) -> Value {
         let obj_val = self.lower_expr(object);
         
         let class_name = match self.session.types.borrow().get(object.ty).clone() {
@@ -73,16 +78,27 @@ impl<'a> MirBuilder<'a> {
             t => panic!("GetProperty on non-class/struct: {:?}", t),
         };
 
+        // No more is_static local variable
         let temp = self.new_temp();
         {
-            let __inst = Inst::Assign(
-                temp.clone(),
-                RValue::GetProperty(
-                    obj_val,
-                    self.session.interner.borrow().lookup(name).to_string(),
-                    class_name,
-                ),
-            );
+            let __inst = if is_static {
+                Inst::Assign(
+                    temp.clone(),
+                    RValue::GetStaticProperty(
+                        class_name,
+                        self.session.interner.borrow().lookup(name).to_string(),
+                    ),
+                )
+            } else {
+                Inst::Assign(
+                    temp.clone(),
+                    RValue::GetProperty(
+                        obj_val,
+                        self.session.interner.borrow().lookup(name).to_string(),
+                        class_name,
+                    ),
+                )
+            };
             self.current().instructions.push(__inst)
         };
         Value::Place(temp)
@@ -93,6 +109,7 @@ impl<'a> MirBuilder<'a> {
         object: &TypedExpr,
         name: session::Symbol,
         value: &TypedExpr,
+        is_static: bool,
     ) -> Value {
         let obj_val = self.lower_expr(object);
         let val_val = self.lower_expr(value);
@@ -118,14 +135,24 @@ impl<'a> MirBuilder<'a> {
             t => panic!("SetProperty on non-class/struct: {:?}", t),
         };
 
+        // No more is_static local variable
         {
-            let __inst = Inst::SetProperty(
-                obj_val,
-                self.session.interner.borrow().lookup(name).to_string(),
-                class_name,
-                val_val.clone(),
-                crate::builder::is_ref_type_id(value.ty, self.session, &self.struct_names),
-            );
+            let __inst = if is_static {
+                Inst::SetStaticProperty(
+                    class_name,
+                    self.session.interner.borrow().lookup(name).to_string(),
+                    val_val.clone(),
+                    crate::builder::is_ref_type_id(value.ty, self.session, &self.struct_names),
+                )
+            } else {
+                Inst::SetProperty(
+                    obj_val,
+                    self.session.interner.borrow().lookup(name).to_string(),
+                    class_name,
+                    val_val.clone(),
+                    crate::builder::is_ref_type_id(value.ty, self.session, &self.struct_names),
+                )
+            };
             self.current().instructions.push(__inst)
         };
         val_val

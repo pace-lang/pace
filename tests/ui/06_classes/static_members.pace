@@ -1,0 +1,51 @@
+class MathUtils {
+    static let Pi = 3.14159;
+    static var lastCalculation = 0;
+
+    static func add(a: Int, b: Int): Int {
+        let result = a + b;
+        MathUtils.lastCalculation = result;
+        return result;
+    }
+}
+
+struct Point {
+    static let OriginX: Int = 0;
+    static let OriginY: Int = 0;
+    
+    var x: Int;
+    var y: Int;
+    
+    func init(x: Int, y: Int) {
+        self.x = x;
+        self.y = y;
+    }
+    
+    static func createOrigin(): Point {
+        return Point(Point.OriginX, Point.OriginY);
+    }
+}
+
+enum MyStatus {
+    Success,
+    Failure,
+    
+    static func getDefault(): MyStatus {
+        return MyStatus.Success();
+    }
+}
+
+func main() {
+    print(MathUtils.Pi);
+    print(MathUtils.lastCalculation);
+    
+    let sum = MathUtils.add(10, 20);
+    print(sum);
+    print(MathUtils.lastCalculation);
+    
+    let p = Point.createOrigin();
+    print(p.x);
+    print(p.y);
+    
+    let defaultStatus = MyStatus.getDefault();
+}

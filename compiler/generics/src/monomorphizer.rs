@@ -90,6 +90,7 @@ impl<'a> Monomorphizer<'a> {
                 body,
                 is_private,
                 is_async,
+                is_static,
             } => {
                 // If this is a standalone function, we rename it. If it's a method inside a class, we keep the name!
                 // We'll rename it ONLY if it's the top-level generic function being monomorphized.
@@ -111,6 +112,7 @@ impl<'a> Monomorphizer<'a> {
                     body: new_body,
                     is_private: *is_private,
                     is_async: *is_async,
+                    is_static: *is_static,
                 }
             }
             StmtKind::ForeignFunc {
@@ -120,6 +122,7 @@ impl<'a> Monomorphizer<'a> {
                 params,
                 return_type,
                 is_private,
+                is_static,
             } => {
                 let new_params = params
                     .iter()
@@ -133,6 +136,7 @@ impl<'a> Monomorphizer<'a> {
                     params: new_params,
                     return_type: new_return,
                     is_private: *is_private,
+                    is_static: *is_static,
                 }
             }
             StmtKind::Let {
@@ -140,6 +144,7 @@ impl<'a> Monomorphizer<'a> {
                 type_annotation,
                 initializer,
                 is_private,
+                is_static,
             } => StmtKind::Let {
                 name: *name,
                 type_annotation: type_annotation.as_ref().map(|t| self.subst.substitute(t)),
@@ -147,6 +152,7 @@ impl<'a> Monomorphizer<'a> {
                     .as_ref()
                     .map(|e| &*self.subst.arena.alloc(self.monomorphize_expr(e))),
                 is_private: *is_private,
+                is_static: *is_static,
             },
             StmtKind::Var {
                 name,
@@ -154,6 +160,7 @@ impl<'a> Monomorphizer<'a> {
                 initializer,
                 is_weak,
                 is_private,
+                is_static,
             } => StmtKind::Var {
                 name: *name,
                 type_annotation: type_annotation.as_ref().map(|t| self.subst.substitute(t)),
@@ -162,6 +169,7 @@ impl<'a> Monomorphizer<'a> {
                     .map(|e| &*self.subst.arena.alloc(self.monomorphize_expr(e))),
                 is_weak: *is_weak,
                 is_private: *is_private,
+                is_static: *is_static,
             },
             StmtKind::Expression(expr) => {
                 StmtKind::Expression(self.subst.arena.alloc(self.monomorphize_expr(expr)))

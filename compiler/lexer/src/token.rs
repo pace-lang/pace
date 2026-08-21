@@ -40,6 +40,7 @@ pub enum TokenKind {
     Weak,
     Null,
     Foreign,
+    Static,
 
     // Identifiers and Literals
     Identifier(session::Symbol),

@@ -531,6 +531,7 @@ impl<'a> TypeChecker<'a> {
                     object,
                     name,
                     value: _,
+                    is_static: _,
                 } = &expr.kind
                     && let TypedExprKind::SelfRef = &object.kind
                 {

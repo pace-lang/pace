@@ -5,6 +5,7 @@ All notable changes to the Pace language will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Static Members**: Added full support for static properties and static methods on Classes, Structs, and Enums via the `static` keyword. Static members are accessed directly via the type name (e.g., `Math.PI`, `Point.create()`), and are hoisted as global variables in the Cranelift compiler backend.
 - **Async & Actors Core**: Implemented full concurrent execution runtime for Actor Mailboxes and Async functions. Actor method calls are now safely dispatched to Tokio-backed background tasks, utilizing injected `__mailbox` fields and automated `PaceTask` yielding to achieve true non-blocking concurrency. The compiler also correctly typechecks async contexts, hoists `async` functions to return `Task<T>`, and tracks local variable scopes across await boundaries via state structs.
 - **Zero-Cost Interfaces**: Implemented implicit monomorphization for interface-based function parameters, completely eliminating virtual tables and dynamic dispatch overhead. The compiler now automatically synthesizes generic parameters for interfaces to dispatch them statically!
 - **Partial Generic Arguments**: Added support for partial specification of generic type parameters. Developers can now explicitly provide some generics while letting the compiler seamlessly infer the rest.

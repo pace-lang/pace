@@ -92,6 +92,7 @@ impl<'a> Parser<'a> {
                 params,
                 return_type,
                 is_private,
+                is_static: false,
             },
             span,
         ))

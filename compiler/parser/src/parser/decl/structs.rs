@@ -31,38 +31,46 @@ impl<'a> Parser<'a> {
         while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
             let item_is_private = self.parse_visibility();
 
+            let is_static = self.match_token(&[TokenKind::Static]);
+
             if self.match_token(&[TokenKind::Let]) {
-                if let Some(field) = self.variable_declaration(false, false, item_is_private) {
+                if let Some(field) = self.variable_declaration(false, false, item_is_private, is_static) {
                     fields.push(field);
                 }
             } else if self.match_token(&[TokenKind::Var]) {
-                if let Some(field) = self.variable_declaration(true, false, item_is_private) {
+                if let Some(field) = self.variable_declaration(true, false, item_is_private, is_static) {
                     fields.push(field);
                 }
             } else if self.match_token(&[TokenKind::Weak]) {
                 self.error_at_current("Structs cannot contain weak references.");
                 if self.match_token(&[TokenKind::Var]) {
-                    self.variable_declaration(true, true, item_is_private); // Parse it anyway to recover
+                    self.variable_declaration(true, true, item_is_private, is_static); // Parse it anyway to recover
                 }
             } else if self.match_token(&[TokenKind::Func]) {
                 if self.match_token(&[TokenKind::Init]) {
+                    if is_static {
+                        self.error_at_current("Constructors cannot be static.");
+                    }
                     if let Some(init_method) = self.init_declaration(item_is_private) {
                         methods.push(init_method);
                     }
                 } else {
-                    if let Some(method) = self.function_declaration(item_is_private, false) {
+                    if let Some(method) = self.function_declaration(item_is_private, false, is_static) {
                         methods.push(method);
                     }
                 }
             } else if self.match_token(&[TokenKind::Async]) {
                 if self.match_token(&[TokenKind::Func]) {
-                    if let Some(method) = self.function_declaration(item_is_private, true) {
+                    if let Some(method) = self.function_declaration(item_is_private, true, is_static) {
                         methods.push(method);
                     }
                 } else {
                     self.error_at_current("Expected 'func' after 'async'.");
                 }
             } else if self.match_token(&[TokenKind::Init]) {
+                if is_static {
+                    self.error_at_current("Constructors cannot be static.");
+                }
                 self.error_at_current("Constructors must be declared with 'func init'.");
                 if let Some(init_method) = self.init_declaration(false) {
                     methods.push(init_method);

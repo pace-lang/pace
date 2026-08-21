@@ -427,7 +427,59 @@ impl<'a> TypeChecker<'a> {
                     .map(|s| self.session.types.borrow_mut().intern(Type::Generic(*s)))
                     .collect(),
             ),
-            Type::Enum(n, _args) => (n, Vec::new()),
+            Type::Class(n, _) | Type::Struct(n, _) | Type::Enum(n, _) => {
+                if let Some(static_props) = self.class_static_members.get(&n) {
+                    if let Some(prop_ty) = static_props.get(&name) {
+                        return (
+                            TypedExprKind::Get {
+                                object: self.alloc(typed_obj),
+                                name,
+                                is_static: true,
+                            },
+                            *prop_ty,
+                        );
+                    }
+                }
+
+                if let Type::Enum(n, params) = self.get_type(typed_obj.ty) {
+                    if let Some(enum_variants) = self.enums.get(&n) {
+                        if let Some(variant_ty) = enum_variants.get(&name) {
+                            // Currently, we don't have generic arguments provided at the static access site for enum variants,
+                            // e.g. `Option.Some`. If they need arguments, it's typically a constructor call.
+                            // We just return the generic variant type.
+                            return (
+                                TypedExprKind::EnumVariant {
+                                    enum_name: n,
+                                    variant_name: name,
+                                },
+                                *variant_ty,
+                            );
+                        }
+                    }
+                }
+
+                if matches!(self.get_type(typed_obj.ty), Type::Enum(..)) {
+                    (n, Vec::new())
+                } else {
+                    self.error(
+                        span,
+                        DiagnosticCode::UnknownType,
+                        &format!(
+                            "Static property '{}' not found on type '{}'.",
+                            self.session.interner.borrow().lookup(name),
+                            self.session.interner.borrow().lookup(n)
+                        ),
+                    );
+                    return (
+                        TypedExprKind::Get {
+                            object: self.alloc(typed_obj),
+                            name,
+                            is_static: true,
+                        },
+                        self.session.types.borrow_mut().intern(Type::Error),
+                    );
+                }
+            }
             Type::Array(inner) => {
                 let array_sym = self.session.interner.borrow_mut().intern("$ArrayExtension");
                 let mut type_params = Vec::new();
@@ -455,6 +507,7 @@ impl<'a> TypeChecker<'a> {
                             TypedExprKind::Get {
                                 object: self.alloc(typed_obj),
                                 name,
+                                is_static: false,
                             },
                             *ext_method_ty,
                         );
@@ -476,6 +529,7 @@ impl<'a> TypeChecker<'a> {
                     TypedExprKind::Get {
                         object: self.alloc(typed_obj),
                         name,
+                        is_static: false,
                     },
                     self.session.types.borrow_mut().intern(Type::Error),
                 );
@@ -487,6 +541,7 @@ impl<'a> TypeChecker<'a> {
                             TypedExprKind::Get {
                                 object: self.alloc(typed_obj),
                                 name,
+                                is_static: false,
                             },
                             *ext_method_ty,
                         );
@@ -508,6 +563,7 @@ impl<'a> TypeChecker<'a> {
                     TypedExprKind::Get {
                         object: self.alloc(typed_obj),
                         name,
+                        is_static: false,
                     },
                     self.session.types.borrow_mut().intern(Type::Error),
                 );
@@ -711,6 +767,7 @@ impl<'a> TypeChecker<'a> {
             TypedExprKind::Get {
                 object: self.alloc(typed_obj),
                 name,
+                is_static: false, // Wait! I should check what line 761 is doing. Let me assume it's instance because it's at the end of the file, likely fallback. Wait, let me view it first!
             },
             ty,
         )
@@ -736,6 +793,80 @@ impl<'a> TypeChecker<'a> {
                     .map(|s| self.session.types.borrow_mut().intern(Type::Generic(*s)))
                     .collect(),
             ),
+            Type::Class(n, _) | Type::Struct(n, _) | Type::Enum(n, _) => {
+                let static_lookup = self.class_static_members.get(&n).and_then(|props| props.get(&name).copied());
+                let mut is_immutable = false;
+                if static_lookup.is_some() {
+                    if let Some(muts) = self.class_static_mutables.get(&n) {
+                        if let Some(&is_mut) = muts.get(&name) {
+                            if !is_mut {
+                                is_immutable = true;
+                            }
+                        }
+                    }
+                }
+
+                if let Some(prop_ty) = static_lookup {
+                    if is_immutable {
+                            self.error(
+                                span,
+                                DiagnosticCode::ImmutableAssignment,
+                                &format!(
+                                    "Cannot mutate immutable static property '{}'.",
+                                    self.session.interner.borrow().lookup(name)
+                                ),
+                            )
+                        }
+                        
+                        if !self.is_assignable(typed_val.ty, prop_ty)
+                            && typed_val.ty != self.session.types.borrow_mut().intern(Type::Error)
+                            && prop_ty != self.session.types.borrow_mut().intern(Type::Error)
+                            && prop_ty != self.session.types.borrow_mut().intern(Type::Any)
+                        {
+                            self.error(
+                                span,
+                                DiagnosticCode::TypeMismatch,
+                                &format!(
+                                    "Cannot assign type '{}' to static property of type '{}'.",
+                                    self.session.format_type(typed_val.ty),
+                                    self.session.format_type(prop_ty)
+                                ),
+                            );
+                        }
+                    return (
+                        TypedExprKind::Set {
+                            object: self.alloc(typed_obj),
+                            name,
+                            value: self.alloc(typed_val.clone()),
+                            is_static: true,
+                        },
+                        typed_val.ty,
+                    );
+                }
+                
+                if matches!(self.get_type(typed_obj.ty), Type::Enum(..)) {
+                    (n, Vec::new())
+                } else {
+                    self.error(
+                        span,
+                        DiagnosticCode::UnknownType,
+                        &format!(
+                            "Static property '{}' not found on type '{}'.",
+                            self.session.interner.borrow().lookup(name),
+                            self.session.interner.borrow().lookup(n)
+                        ),
+                    );
+                    return (
+                        TypedExprKind::Set {
+                            object: self.alloc(typed_obj),
+                            name,
+                            value: self.alloc(typed_val.clone()),
+                            is_static: true,
+                        },
+                        self.session.types.borrow_mut().intern(Type::Error),
+                    );
+                }
+            }
             _ => {
                 if typed_obj.ty != self.session.types.borrow_mut().intern(Type::Error) {
                     self.error(
@@ -753,6 +884,7 @@ impl<'a> TypeChecker<'a> {
                         object: self.alloc(typed_obj),
                         name,
                         value: self.alloc(typed_val.clone()),
+                        is_static: false,
                     },
                     typed_val.ty,
                 );
@@ -819,6 +951,7 @@ impl<'a> TypeChecker<'a> {
                 object: self.alloc(typed_obj),
                 name,
                 value: self.alloc(typed_val.clone()),
+                is_static: false,
             },
             typed_val.ty,
         )

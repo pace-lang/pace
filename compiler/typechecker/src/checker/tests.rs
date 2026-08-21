@@ -20,6 +20,7 @@ fn test_valid_math() {
         StmtKind::Let {
             name: sym_x,
             is_private: false,
+            is_static: false,
             type_annotation: None,
             initializer: Some(checker.alloc(Expr::new(
                 ExprKind::Binary(
@@ -54,6 +55,7 @@ fn test_type_mismatch() {
         StmtKind::Let {
             name: sym_x,
             is_private: false,
+            is_static: false,
             type_annotation: None,
             initializer: Some(checker.alloc(Expr::new(
                 ExprKind::Binary(
@@ -109,6 +111,7 @@ fn test_immutable_assignment() {
         StmtKind::Let {
             name: sym_x,
             is_private: false,
+            is_static: false,
             type_annotation: None,
             initializer: Some(checker.alloc(Expr::new(ExprKind::Integer(10), make_span()))),
         },
@@ -148,6 +151,7 @@ fn test_block_scope() {
         StmtKind::Let {
             name: sym_x,
             is_private: false,
+            is_static: false,
             type_annotation: None,
             initializer: Some(checker.alloc(Expr::new(ExprKind::Integer(10), make_span()))),
         },
@@ -160,6 +164,7 @@ fn test_block_scope() {
         StmtKind::Let {
             name: sym_x,
             is_private: false,
+            is_static: false,
             type_annotation: None,
             initializer: Some(checker.alloc(Expr::new(ExprKind::String(sym_y), make_span()))),
         },

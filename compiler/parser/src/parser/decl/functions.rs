@@ -74,12 +74,13 @@ impl<'a> Parser<'a> {
                 body: self.session.ast_arena.alloc(body),
                 is_private,
                 is_async: false,
+                is_static: false,
             },
             span,
         ))
     }
 
-    pub(crate) fn function_declaration(&mut self, is_private: bool, is_async: bool) -> Option<Stmt<'a>> {
+    pub(crate) fn function_declaration(&mut self, is_private: bool, is_async: bool, is_static: bool) -> Option<Stmt<'a>> {
         let start_span = self.previous().span;
 
         let name = if let Some(Token {
@@ -164,6 +165,7 @@ impl<'a> Parser<'a> {
                 body: self.session.ast_arena.alloc(body),
                 is_private,
                 is_async,
+                is_static,
             },
             span,
         ))

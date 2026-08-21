@@ -39,7 +39,7 @@ impl<'a> MirBuilder<'a> {
             arg_values.push(self.lower_expr(arg));
         }
 
-        if let TypedExprKind::Get { object, name } = &callee.kind {
+        if let TypedExprKind::Get { object, name, is_static } = &callee.kind {
             let obj_val = self.lower_expr(object);
             let temp = self.new_temp();
 
@@ -84,7 +84,11 @@ impl<'a> MirBuilder<'a> {
                     );
                     
                     let obj_val_for_push = obj_val.clone();
-                    arg_values.insert(0, obj_val);
+                    
+                    if !*is_static {
+                        arg_values.insert(0, obj_val);
+                    }
+                    
                     let __inst = if is_actor && self.session.interner.borrow().lookup(*name) != "init" {
                         Inst::Assign(temp.clone(), RValue::ActorMailboxPush(obj_val_for_push, actual_name, arg_values))
                     } else {

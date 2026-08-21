@@ -42,7 +42,7 @@ impl<'a> MirBuilder<'a> {
                 value,
             } => self.lower_index_set_expr(object, index, value),
             TypedExprKind::Grouping(inner) => self.lower_grouping_expr(inner),
-            TypedExprKind::Get { object, name } => self.lower_get_expr(object, *name),
+            TypedExprKind::Get { object, name, is_static } => self.lower_get_expr(object, *name, *is_static),
             TypedExprKind::PostfixTry(inner) => self.lower_postfix_try_expr(inner),
             TypedExprKind::ForceUnwrap(inner) => self.lower_force_unwrap_expr(inner),
             TypedExprKind::OptionalGet { object, name } => {
@@ -63,7 +63,8 @@ impl<'a> MirBuilder<'a> {
                 object,
                 name,
                 value,
-            } => self.lower_set_expr(object, *name, value),
+                is_static,
+            } => self.lower_set_expr(object, *name, value, *is_static),
             TypedExprKind::Assign { name, value } => self.lower_assign_expr(*name, value),
             TypedExprKind::SelfRef => self.lower_self_ref_expr(),
             TypedExprKind::Call {

@@ -44,20 +44,20 @@ impl<'a> Parser<'a> {
             self.actor_declaration(is_private)
         } else if self.match_token(&[TokenKind::Async]) {
             if self.match_token(&[TokenKind::Func]) {
-                self.function_declaration(is_private, true)
+                self.function_declaration(is_private, true, false)
             } else {
                 self.error_at_current("Expected 'func' after 'async'.");
                 None
             }
         } else if self.match_token(&[TokenKind::Func]) {
-            self.function_declaration(is_private, false)
+            self.function_declaration(is_private, false, false)
         } else if self.match_token(&[TokenKind::Let]) {
-            self.variable_declaration(false, false, is_private)
+            self.variable_declaration(false, false, is_private, false)
         } else if self.match_token(&[TokenKind::Var]) {
-            self.variable_declaration(true, false, is_private)
+            self.variable_declaration(true, false, is_private, false)
         } else if self.match_token(&[TokenKind::Weak]) {
             if self.match_token(&[TokenKind::Var]) {
-                self.variable_declaration(true, true, is_private)
+                self.variable_declaration(true, true, is_private, false)
             } else {
                 self.error_at_current("Expected 'var' after 'weak'.");
                 None

@@ -1,0 +1,11 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+assertion_line: 83
+expression: normalized_stderr
+---
+0
+0
+30
+30
+0
+0

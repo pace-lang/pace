@@ -126,6 +126,7 @@ impl<'a> ProgramBuilder<'a> {
                 is_struct: false,
                 is_actor: false,
                 fields: vec!["context".to_string(), "poll_fn".to_string(), "waker".to_string(), "result".to_string()],
+                static_fields: Vec::new(),
                 weak_fields: std::collections::HashSet::new(),
                 reference_fields: std::collections::HashSet::new(),
             };
@@ -162,6 +163,7 @@ impl<'a> ProgramBuilder<'a> {
                 is_struct: false, // Context is heap allocated
                 is_actor: false,
                 fields: ctx_fields,
+                static_fields: Vec::new(),
                 weak_fields: std::collections::HashSet::new(),
                 reference_fields: ref_params.clone(),
             };
@@ -288,6 +290,7 @@ impl<'a> ProgramBuilder<'a> {
             } = &stmt.kind
             {
                 let mut field_names = Vec::new();
+                let mut static_fields = Vec::new();
                 let mut weak_fields = std::collections::HashSet::new();
                 let mut reference_fields = std::collections::HashSet::new();
 
@@ -303,8 +306,13 @@ impl<'a> ProgramBuilder<'a> {
                             name: f_name,
                             is_weak,
                             type_annotation,
+                            is_static,
                             ..
                         } => {
+                            if *is_static {
+                                static_fields.push(self.session.interner.borrow().lookup(*f_name).to_string());
+                                continue;
+                            }
                             field_names
                                 .push(self.session.interner.borrow().lookup(*f_name).to_string());
                             if *is_weak {
@@ -320,8 +328,13 @@ impl<'a> ProgramBuilder<'a> {
                         TypedStmtKind::Let {
                             name: f_name,
                             type_annotation,
+                            is_static,
                             ..
                         } => {
+                            if *is_static {
+                                static_fields.push(self.session.interner.borrow().lookup(*f_name).to_string());
+                                continue;
+                            }
                             field_names
                                 .push(self.session.interner.borrow().lookup(*f_name).to_string());
                             if is_ref_type_opt(type_annotation, self.session) {
@@ -342,6 +355,7 @@ impl<'a> ProgramBuilder<'a> {
                     is_struct,
                     is_actor,
                     fields: field_names,
+                    static_fields,
                     weak_fields,
                     reference_fields,
                 };
@@ -360,12 +374,16 @@ impl<'a> ProgramBuilder<'a> {
                         return_type,
                         body,
                         is_async,
+                        is_static,
                         ..
                     } = &method.kind
                     {
-                        let mut param_names = vec!["self".to_string()];
+                        let mut param_names = Vec::new();
                         let mut ref_params = std::collections::HashSet::new();
-                        ref_params.insert("self".to_string());
+                        if !*is_static {
+                            param_names.push("self".to_string());
+                            ref_params.insert("self".to_string());
+                        }
                         for (p, ty) in params {
                             param_names.push(self.session.interner.borrow().lookup(*p).to_string());
                             if is_ref_type(ty, self.session) {
@@ -406,12 +424,16 @@ impl<'a> ProgramBuilder<'a> {
                         return_type,
                         body,
                         is_async,
+                        is_static,
                         ..
                     } = &method.kind
                     {
-                        let mut param_names = vec!["self".to_string()];
+                        let mut param_names = Vec::new();
                         let mut ref_params = std::collections::HashSet::new();
-                        ref_params.insert("self".to_string());
+                        if !*is_static {
+                            param_names.push("self".to_string());
+                            ref_params.insert("self".to_string());
+                        }
                         for (p, ty) in params {
                             param_names.push(self.session.interner.borrow().lookup(*p).to_string());
                             if is_ref_type(ty, self.session) {
@@ -461,12 +483,16 @@ impl<'a> ProgramBuilder<'a> {
                         return_type,
                         body,
                         is_async,
+                        is_static,
                         ..
                     } = &method.kind
                     {
-                        let mut param_names = vec!["self".to_string()];
+                        let mut param_names = Vec::new();
                         let mut ref_params = std::collections::HashSet::new();
-                        ref_params.insert("self".to_string());
+                        if !*is_static {
+                            param_names.push("self".to_string());
+                            ref_params.insert("self".to_string());
+                        }
                         for (p, ty) in params {
                             param_names.push(self.session.interner.borrow().lookup(*p).to_string());
                             if is_ref_type(ty, self.session) {
@@ -533,6 +559,7 @@ impl<'a> ProgramBuilder<'a> {
                 base_name,
                 params,
                 return_type,
+                is_static: _,
             } = &stmt.kind
             {
                 let mut param_types = Vec::new();

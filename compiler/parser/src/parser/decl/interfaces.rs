@@ -160,6 +160,7 @@ impl<'a> Parser<'a> {
                 body: empty_body,
                 is_private,
                 is_async,
+                is_static: false,
             },
             span,
         ))
