@@ -1,8 +1,8 @@
-import "json.pace";
-import "../core/result.pace";
-import "../core/string.pace";
-import "../collections/map.pace";
-import "../collections/list.pace";
+import "lib.pace";
+import "std/core/result.pace";
+import "std/core/string.pace";
+import "std/collections/map.pace";
+import "std/collections/list.pace";
 
 class JsonParser {
     var source: String;

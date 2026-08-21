@@ -1,6 +1,6 @@
-import "../collections/map.pace";
-import "../core/option.pace";
-import "../collections/list.pace";
+import "std/collections/map.pace";
+import "std/core/option.pace";
+import "std/collections/list.pace";
 
 enum JsonValue {
     Null,

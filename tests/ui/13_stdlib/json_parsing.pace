@@ -1,6 +1,6 @@
-import "../../../stdlib/src/json/json.pace";
-import "../../../stdlib/src/json/parser.pace";
-import "../../../stdlib/src/json/stringify.pace";
+import "../../../packages/json/src/lib.pace";
+import "../../../packages/json/src/parser.pace";
+import "../../../packages/json/src/stringify.pace";
 
 func testCase(source: String) {
     let result = source.parseJson();

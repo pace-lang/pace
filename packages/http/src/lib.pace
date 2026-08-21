@@ -1,8 +1,8 @@
-import "../core/string.pace";
-import "../core/string_builder.pace";
-import "../core/option.pace";
-import "../collections/list.pace";
-import "socket.pace";
+import "std/core/string.pace";
+import "std/core/string_builder.pace";
+import "std/core/option.pace";
+import "std/collections/list.pace";
+import "std/net/socket.pace";
 
 enum HttpStatus {
     StatusOk,

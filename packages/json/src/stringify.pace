@@ -1,6 +1,6 @@
-import "json.pace";
-import "../core/string.pace";
-import "../core/string_builder.pace";
+import "lib.pace";
+import "std/core/string.pace";
+import "std/core/string_builder.pace";
 
 func stringifyJson(value: JsonValue): String {
     let builder = StringBuilder();
