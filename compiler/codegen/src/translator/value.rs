@@ -1,6 +1,6 @@
 use super::Translator;
 use cranelift_module::Module;
-use cranelift_codegen::ir::{self, InstBuilder, Value as CraneliftValue, types};
+use cranelift_codegen::ir::{InstBuilder, Value as CraneliftValue, types};
 use mir::Value;
 
 impl<'a, 'b> Translator<'a, 'b> {

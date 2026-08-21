@@ -1,6 +1,6 @@
 use super::Translator;
-use cranelift_codegen::ir::{self, InstBuilder, Value as CraneliftValue, types};
-use mir::{Inst, RValue, Value, Place};
+use cranelift_codegen::ir::{self, InstBuilder, types};
+use mir::{Inst, RValue, Value};
 use ast::{BinaryOp, UnaryOp};
 
 use cranelift_module::Module;
@@ -341,11 +341,8 @@ impl<'a, 'b> Translator<'a, 'b> {
                         }
                     }
                     RValue::AllocateObject(class_name) => {
-                        let class_def = self
-                            .program
-                            .classes
-                            .get(class_name)
-                            .unwrap_or_else(|| panic!("Class {} not found", class_name));
+                        let class_def = self.program.classes.get(class_name)
+                            .ok_or_else(|| format!("Class {} not found", class_name))?;
                         let total_size = 24 + (class_def.fields.len() as i64 * 8);
 
                         let alloc_func = self
@@ -387,11 +384,8 @@ impl<'a, 'b> Translator<'a, 'b> {
                     }
                     RValue::AllocateTask(poll_name) => {
                         let class_name = "Task";
-                        let class_def = self
-                            .program
-                            .classes
-                            .get(class_name)
-                            .unwrap_or_else(|| panic!("Class {} not found", class_name));
+                        let class_def = self.program.classes.get(class_name)
+                            .ok_or_else(|| format!("Class {} not found", class_name))?;
                         let total_size = 24 + (class_def.fields.len() as i64 * 8);
 
                         let alloc_func = self
@@ -419,7 +413,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let obj_ptr = self.builder.inst_results(call_inst)[0];
 
                         // Get the poll_fn function pointer
-                        let poll_func_id = self.func_ids.get(poll_name).unwrap_or_else(|| panic!("Poll func {} not found", poll_name));
+                        let poll_func_id = self.func_ids.get(poll_name).ok_or_else(|| format!("Poll func {} not found", poll_name))?;
                         let local_poll = self.module.declare_func_in_func(*poll_func_id, self.builder.func);
                         let poll_ptr = self.builder.ins().func_addr(types::I64, local_poll);
 
@@ -430,11 +424,8 @@ impl<'a, 'b> Translator<'a, 'b> {
                         obj_ptr
                     }
                     RValue::AllocateStruct(struct_name) => {
-                        let struct_def = self
-                            .program
-                            .classes
-                            .get(struct_name)
-                            .unwrap_or_else(|| panic!("Struct {} not found", struct_name));
+                        let struct_def = self.program.classes.get(struct_name)
+                            .ok_or_else(|| format!("Struct {} not found", struct_name))?;
 
                         let total_size = struct_def.fields.len() as u32 * 8;
 
@@ -449,10 +440,10 @@ impl<'a, 'b> Translator<'a, 'b> {
                         let cl_obj = self.translate_value(obj_val)?;
 
                         let class_def = self.program.classes.get(class_name)
-                            .unwrap_or_else(|| panic!("Class {} not found in program", class_name));
+                            .ok_or_else(|| format!("Class {} not found", class_name))?;
                             
                         let idx = class_def.fields.iter().position(|f| f == prop_name)
-                            .unwrap_or_else(|| panic!("Property {} not found in class {}", prop_name, class_name));
+                            .ok_or_else(|| format!("Property {} not found in class {}", prop_name, class_name))?;
                             
                         let offset = if class_def.is_struct {
                             idx as i32 * 8
@@ -664,9 +655,10 @@ impl<'a, 'b> Translator<'a, 'b> {
                             offset,
                         );
 
-                        let enum_def = self.program.enums.get(enum_name).unwrap_or_else(|| {
-                            panic!("Enum {} not found in program.enums!", enum_name);
-                        });
+                        let enum_def = match self.program.enums.get(enum_name) {
+                            Some(d) => d,
+                            None => return Err(format!("Enum {} not found in program.enums!", enum_name)),
+                        };
                         let variant_def = &enum_def.variants[*_variant_idx];
 
                         if let Some(_struct_name) = variant_def.struct_payloads.get(field_idx) {
@@ -685,10 +677,8 @@ impl<'a, 'b> Translator<'a, 'b> {
                     RValue::ActorMailboxPush(obj, method, args) => {
                         // 1. Call the method synchronously to obtain the Task object
                         let target_func_name = method.as_str();
-                        let func_id = self
-                            .func_ids
-                            .get(target_func_name)
-                            .unwrap_or_else(|| panic!("Function {} not found for ActorMailboxPush", target_func_name));
+                        let func_id = self.func_ids.get(target_func_name)
+                            .ok_or_else(|| format!("Function {} not found for ActorMailboxPush", target_func_name))?;
                         let local_callee = self
                             .module
                             .declare_func_in_func(*func_id, self.builder.func);
@@ -781,15 +771,14 @@ impl<'a, 'b> Translator<'a, 'b> {
                 let cl_val = self.translate_value(val_val)?;
 
                 let class_def = self.program.classes.get(class_name)
-                    .unwrap_or_else(|| panic!("Class {} not found in program", class_name));
-                    
-                let idx = class_def.fields.iter().position(|f| f == prop_name)
-                    .unwrap_or_else(|| panic!("Property {} not found in class {}", prop_name, class_name));
+                    .ok_or_else(|| format!("Class {} not found in program", class_name))?;
+                let prop_idx = class_def.fields.iter().position(|f| f == prop_name)
+                    .ok_or_else(|| format!("Property {} not found in class {}", prop_name, class_name))?;
                     
                 let offset = if class_def.is_struct {
-                    idx as i32 * 8
+                    prop_idx as i32 * 8
                 } else {
-                    24 + (idx as i32 * 8)
+                    24 + (prop_idx as i32 * 8)
                 };
 
                 self.builder

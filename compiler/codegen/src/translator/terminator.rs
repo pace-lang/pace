@@ -1,6 +1,6 @@
 use super::Translator;
 use cranelift_codegen::ir::{self, InstBuilder, types};
-use mir::{Terminator, Value};
+use mir::Terminator;
 
 impl<'a, 'b> Translator<'a, 'b> {
 

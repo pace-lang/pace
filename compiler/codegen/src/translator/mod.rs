@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
-use ast::{BinaryOp, UnaryOp};
 use cranelift_codegen::ir::{self, Block, InstBuilder, Value as CraneliftValue, types};
 use cranelift_frontend::{FunctionBuilder, Variable};
 use cranelift_module::{DataId, FuncId, Module};
 use cranelift_object::ObjectModule;
-use mir::{BlockId, Function, Inst, Place, RValue, Terminator, Value};
+use mir::{BlockId, Function, Inst, Place};
 
 pub struct Translator<'a, 'b> {
     builder: &'a mut FunctionBuilder<'b>,
