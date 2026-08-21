@@ -1,6 +1,6 @@
 use super::super::*;
-use ast::{TypedExpr, TypedExprKind};
-use mir::{Inst, Place, RValue, Terminator, Value};
+use ast::TypedExpr;
+use mir::{Inst, RValue, Value};
 
 impl<'a> MirBuilder<'a> {
     pub(crate) fn lower_array_expr(&mut self, elements: &[TypedExpr]) -> Value {

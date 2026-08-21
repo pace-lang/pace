@@ -20,7 +20,6 @@ enum Result<T, E> {
 
     func panicUnwrap(): T {
         pacePanic(3);
-        return self.unwrap();
     }
 
     func unwrap(): T {
@@ -32,7 +31,6 @@ enum Result<T, E> {
 
     func panicUnwrapErr(): E {
         pacePanic(3);
-        return self.unwrapErr();
     }
 
     func unwrapErr(): E {

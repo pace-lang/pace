@@ -20,7 +20,6 @@ enum Option<T> {
 
     func panicUnwrap(): T {
         pacePanic(1);
-        return self.unwrap();
     }
 
     func unwrap(): T {

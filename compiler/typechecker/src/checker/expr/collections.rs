@@ -1,5 +1,4 @@
 use super::super::*;
-use session::interner::Symbol;
 use session::types::{Type, TypeId};
 
 impl<'a> TypeChecker<'a> {
