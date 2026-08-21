@@ -34,6 +34,7 @@ All notable changes to the Pace language will be documented in this file.
 - Added `pace clean` command to remove the target directory.
 
 ### Changed
+- Refactored the `Math` Standard Library (`std::math`) to use static methods and properties (e.g. `Math.sqrt()`, `Math.Pi`) instead of standalone module functions. Expanded the library to include `ceil`, `floor`, `round`, `trunc`, `max`, `min`, `sign`, `sin`, `cos`, `tan`, `cbrt`, `exp`, and `log`.
 - Refactored `Map<K, V>` and `Set<T>` to be completely natively implemented in Pace using the new memory primitives instead of relying on the C runtime.
 - Refactored `List<T>` to be completely natively implemented in Pace using the new memory primitives instead of relying on the C runtime.
 - Refactored all remaining String Utility methods (`split`, `replace`, `trim`, `toLower`, `toUpper`, `contains`) to be completely natively implemented in Pace instead of relying on the C FFI.

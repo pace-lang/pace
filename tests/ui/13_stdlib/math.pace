@@ -1,19 +1,61 @@
-
 func main() {
-    // We don't have robust float printing yet, so we cast to Int or do comparisons
-    let s = math::sqrt(16.0);
+    // Basic operations
+    let s = Math.sqrt(16.0);
     if s > 3.9 && s < 4.1 {
         print("sqrt(16) is 4");
     }
 
-    let p = math::pow(2.0, 3.0);
+    let p = Math.pow(2.0, 3.0);
     if p > 7.9 && p < 8.1 {
         print("pow(2, 3) is 8");
     }
 
-    let a = math::abs(-10.5);
+    let a = Math.abs(-10.5);
     if a > 10.4 && a < 10.6 {
         print("abs(-10.5) is 10.5");
+    }
+
+    // Rounding & Truncation
+    let c = Math.ceil(4.2);
+    if c > 4.9 && c < 5.1 {
+        print("ceil(4.2) is 5");
+    }
+
+    let f = Math.floor(4.8);
+    if f > 3.9 && f < 4.1 {
+        print("floor(4.8) is 4");
+    }
+
+    let r = Math.round(4.5);
+    if r > 4.9 && r < 5.1 {
+        print("round(4.5) is 5");
+    }
+
+    let t = Math.trunc(-4.8);
+    if t > -4.1 && t < -3.9 {
+        print("trunc(-4.8) is -4");
+    }
+
+    // Min / Max / Sign
+    let mx = Math.max(10.0, 20.0);
+    if mx > 19.9 && mx < 20.1 {
+        print("max(10, 20) is 20");
+    }
+
+    let mn = Math.min(10.0, 20.0);
+    if mn > 9.9 && mn < 10.1 {
+        print("min(10, 20) is 10");
+    }
+
+    let sg = Math.sign(-50.0);
+    if sg > -1.1 && sg < -0.9 {
+        print("sign(-50) is -1");
+    }
+
+    // Constants
+    let pi = Math.Pi;
+    if pi > 3.14 && pi < 3.15 {
+        print("Pi is approx 3.14");
     }
 
     print("Math ok!");

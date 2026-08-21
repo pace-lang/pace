@@ -1,6 +1,5 @@
 ---
 source: compiler/cli/tests/golden_tests.rs
-assertion_line: 83
 expression: normalized_stderr
 ---
 [33m[P5001] Warning:[0m Variable `opt_out` does not follow Pace naming conventions

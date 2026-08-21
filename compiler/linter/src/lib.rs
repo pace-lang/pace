@@ -91,7 +91,7 @@ impl<'a> Linter<'a> {
                 // ensure it's not UPPER_SNAKE_CASE. If it is UPPER_SNAKE_CASE, we'll
                 // guide them to PascalCase or camelCase.
                 let name_str = self.session.interner.borrow().lookup(*name).to_string();
-                if is_upper_snake_case(&name_str) {
+                if is_upper_snake_case(&name_str) && name_str.len() > 1 {
                     self.report_naming_violation(
                         stmt.span,
                         &format!("Variable `{}` uses UPPER_SNAKE_CASE which is not idiomatic in Pace", name_str),

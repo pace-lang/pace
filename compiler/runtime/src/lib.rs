@@ -815,29 +815,43 @@ pub extern "C" fn printEnum(val: *const u8) {
 // ---------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mathSqrt(x: f64) -> f64 {
-    x.sqrt()
-}
+pub extern "C" fn mathSqrt(x: f64) -> f64 { x.sqrt() }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mathPow(base: f64, exp: f64) -> f64 {
-    base.powf(exp)
-}
+pub extern "C" fn mathPow(base: f64, exp: f64) -> f64 { base.powf(exp) }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mathAbs(x: f64) -> f64 {
-    x.abs()
-}
+pub extern "C" fn mathSin(x: f64) -> f64 { x.sin() }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mathSin(x: f64) -> f64 {
-    x.sin()
-}
+pub extern "C" fn mathCos(x: f64) -> f64 { x.cos() }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn mathCos(x: f64) -> f64 {
-    x.cos()
-}
+pub extern "C" fn mathCeil(x: f64) -> f64 { x.ceil() }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathFloor(x: f64) -> f64 { x.floor() }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathCbrt(x: f64) -> f64 { x.cbrt() }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathExp(x: f64) -> f64 { x.exp() }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathLog(x: f64) -> f64 { x.ln() }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathTan(x: f64) -> f64 { x.tan() }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathAsin(x: f64) -> f64 { x.asin() }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathAcos(x: f64) -> f64 { x.acos() }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn mathAtan(x: f64) -> f64 { x.atan() }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn retainJsonValue(val: *mut u8) {

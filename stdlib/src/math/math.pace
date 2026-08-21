@@ -1,25 +1,115 @@
-foreign func mathSqrt(x: Float): Float;
+foreign func mathCeil(x: Float): Float;
+foreign func mathFloor(x: Float): Float;
 foreign func mathPow(base: Float, exp: Float): Float;
-foreign func mathAbs(x: Float): Float;
+foreign func mathSqrt(x: Float): Float;
+foreign func mathCbrt(x: Float): Float;
+foreign func mathExp(x: Float): Float;
+foreign func mathLog(x: Float): Float;
 foreign func mathSin(x: Float): Float;
 foreign func mathCos(x: Float): Float;
+foreign func mathTan(x: Float): Float;
+foreign func mathAsin(x: Float): Float;
+foreign func mathAcos(x: Float): Float;
+foreign func mathAtan(x: Float): Float;
 
-func sqrt(x: Float): Float {
-    return mathSqrt(x);
-}
+class Math {
+    static let Pi: Float = 3.141592653589793;
+    static let E: Float = 2.718281828459045;
+    static let Ln2: Float = 0.6931471805599453;
+    static let Ln10: Float = 2.302585092994046;
+    static let Sqrt2: Float = 1.4142135623730951;
 
-func pow(base: Float, exp: Float): Float {
-    return mathPow(base, exp);
-}
+    static func ceil(x: Float): Float {
+        return mathCeil(x);
+    }
 
-func abs(x: Float): Float {
-    return mathAbs(x);
-}
+    static func floor(x: Float): Float {
+        return mathFloor(x);
+    }
 
-func sin(x: Float): Float {
-    return mathSin(x);
-}
+    static func round(x: Float): Float {
+        return Math.floor(x + 0.5);
+    }
 
-func cos(x: Float): Float {
-    return mathCos(x);
+    static func trunc(x: Float): Float {
+        if x < 0.0 {
+            return Math.ceil(x);
+        }
+        return Math.floor(x);
+    }
+
+    static func pow(base: Float, exp: Float): Float {
+        return mathPow(base, exp);
+    }
+
+    static func sqrt(x: Float): Float {
+        return mathSqrt(x);
+    }
+
+    static func cbrt(x: Float): Float {
+        return mathCbrt(x);
+    }
+
+    static func exp(x: Float): Float {
+        return mathExp(x);
+    }
+
+    static func log(x: Float): Float {
+        return mathLog(x);
+    }
+
+    static func abs(x: Float): Float {
+        if x < 0.0 {
+            return -x;
+        }
+        return x;
+    }
+
+    static func max(a: Float, b: Float): Float {
+        if a > b {
+            return a;
+        }
+        return b;
+    }
+
+    static func min(a: Float, b: Float): Float {
+        if a < b {
+            return a;
+        }
+        return b;
+    }
+
+    static func sign(x: Float): Float {
+        if x > 0.0 {
+            return 1.0;
+        }
+        if x < 0.0 {
+            return -1.0;
+        }
+        return 0.0;
+    }
+
+    static func sin(x: Float): Float {
+        return mathSin(x);
+    }
+
+    static func cos(x: Float): Float {
+        return mathCos(x);
+    }
+
+    static func tan(x: Float): Float {
+        return mathTan(x);
+    }
+
+    static func asin(x: Float): Float {
+        return mathAsin(x);
+    }
+
+    static func acos(x: Float): Float {
+        return mathAcos(x);
+    }
+
+    static func atan(x: Float): Float {
+        return mathAtan(x);
+    }
 }

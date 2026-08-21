@@ -284,9 +284,14 @@ impl<'a> MirBuilder<'a> {
                                 let __inst = Inst::Assign(
                                     item_temp.clone(),
                                     RValue::ExtractPayload(
-                                        match self.session.types.borrow().get(*item_ty) {
-                                            session::types::Type::Instance(sym) => format!("Option_{}", self.session.interner.borrow().lookup(*sym)),
-                                            _ => unreachable!("Iterator item type must be Instance"),
+                                        {
+                                            let target_name_raw = self.session.format_type(*item_ty);
+                                            let type_name = target_name_raw
+                                                .replace("<", "_")
+                                                .replace(">", "")
+                                                .replace(" ", "")
+                                                .replace(",", "_");
+                                            format!("Option_{}", type_name)
                                         },
                                         Value::Place(next_call.clone()),
                                         0,

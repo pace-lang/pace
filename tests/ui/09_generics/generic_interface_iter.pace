@@ -12,7 +12,7 @@ class MyIterator<T> implements Iterator<T> {
 }
 
 func main() {
-    let list = MyList<int>();
+    let list = MyList<Int>();
     for item in list {
         print(item);
     }
