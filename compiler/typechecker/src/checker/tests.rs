@@ -74,7 +74,7 @@ fn test_type_mismatch() {
     assert!(
         checker.errors[0]
             .message
-            .contains("Cannot apply operator to types 'Int' and 'String'")
+            .contains("Cannot apply arithmetic operator to types 'Int' and 'String'")
     );
 }
 
@@ -96,7 +96,7 @@ fn test_if_condition_type() {
 
     checker.check(&[stmt]);
     assert_eq!(checker.errors.len(), 1);
-    assert!(checker.errors[0].message.contains("Expected 'Boolean'"));
+    assert!(checker.errors[0].message.contains("Expected 'Bool'"));
 }
 
 #[test]

@@ -9,14 +9,14 @@ impl<'a> TypeChecker<'a> {
         else_branch: &Option<&'a Stmt<'a>>,
     ) -> TypedStmtKind<'a> {
         let typed_condition = self.check_expr(condition);
-        if typed_condition.ty != self.session.types.borrow_mut().intern(Type::Boolean)
+        if typed_condition.ty != self.session.types.borrow_mut().intern(Type::Bool)
             && typed_condition.ty != self.session.types.borrow_mut().intern(Type::Error)
         {
             self.error(
                 condition.span,
                 DiagnosticCode::TypeMismatch,
                 &format!(
-                    "Expected 'Boolean' for if condition, found '{}'.",
+                    "Expected 'Bool' for if condition, found '{}'.",
                     self.session.format_type(typed_condition.ty)
                 ),
             )
@@ -40,14 +40,14 @@ impl<'a> TypeChecker<'a> {
         body: &'a Stmt<'a>,
     ) -> TypedStmtKind<'a> {
         let typed_condition = self.check_expr(condition);
-        if typed_condition.ty != self.session.types.borrow_mut().intern(Type::Boolean)
+        if typed_condition.ty != self.session.types.borrow_mut().intern(Type::Bool)
             && typed_condition.ty != self.session.types.borrow_mut().intern(Type::Error)
         {
             self.error(
                 condition.span,
                 DiagnosticCode::TypeMismatch,
                 &format!(
-                    "Expected 'Boolean' for while condition, found '{}'.",
+                    "Expected 'Bool' for while condition, found '{}'.",
                     self.session.format_type(typed_condition.ty)
                 ),
             )

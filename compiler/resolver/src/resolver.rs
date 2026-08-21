@@ -440,6 +440,10 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(left);
                 self.resolve_expr(right);
             }
+            ExprKind::CompoundAssign { target, value, .. } => {
+                self.resolve_expr(target);
+                self.resolve_expr(value);
+            }
             ExprKind::Unary(_, right) => {
                 self.resolve_expr(right);
             }
@@ -527,7 +531,7 @@ impl<'a> Resolver<'a> {
             ExprKind::Integer(_)
             | ExprKind::Float(_)
             | ExprKind::String(_)
-            | ExprKind::Boolean(_)
+            | ExprKind::Bool(_)
             | ExprKind::Null => {}
             ExprKind::ForceUnwrap(inner) => {
                 self.resolve_expr(inner);

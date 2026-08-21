@@ -123,7 +123,7 @@ impl<'a> TypeChecker<'a> {
     ) -> (TypedExprKind<'a>, TypeId) {
         let typed_condition = self.check_expr(condition);
 
-        let bool_ty = self.session.types.borrow_mut().intern(Type::Boolean);
+        let bool_ty = self.session.types.borrow_mut().intern(Type::Bool);
         if typed_condition.ty != bool_ty
             && typed_condition.ty != self.session.types.borrow_mut().intern(Type::Error)
         {

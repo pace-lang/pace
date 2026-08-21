@@ -11,7 +11,7 @@ pub enum Value {
     Int(i64),
     Float(f64),
     String(String),
-    Boolean(bool),
+    Bool(bool),
     Place(Place),
     Object(usize),
     Array(Vec<Value>),

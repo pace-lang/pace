@@ -14,7 +14,7 @@ pub enum TypedExprKind<'a> {
     Float(f64),
     String(session::Symbol),
     InterpolatedString(Vec<TypedExpr<'a>>),
-    Boolean(bool),
+    Bool(bool),
     Null,
     Variable(session::Symbol),
     Range {
@@ -43,6 +43,11 @@ pub enum TypedExprKind<'a> {
     },
     Assign {
         name: session::Symbol,
+        value: &'a TypedExpr<'a>,
+    },
+    CompoundAssign {
+        target: &'a TypedExpr<'a>,
+        operator: BinaryOp,
         value: &'a TypedExpr<'a>,
     },
     SelfRef,

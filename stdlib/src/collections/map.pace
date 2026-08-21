@@ -169,7 +169,7 @@ class Map<K, V> {
         return Option.None();
     }
 
-    func contains(key: K): Boolean {
+    func contains(key: K): Bool {
         let opt = self.get(key);
         return opt.isSome();
     }
@@ -252,7 +252,7 @@ class Map<K, V> {
         return self.length;
     }
 
-    func isEmpty(): Boolean {
+    func isEmpty(): Bool {
         return self.length == 0;
     }
 }

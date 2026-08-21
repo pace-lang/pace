@@ -93,7 +93,7 @@ class Set<T> {
         }
     }
 
-    func contains(value: T): Boolean {
+    func contains(value: T): Bool {
         var h = hash<T>(value);
         if h < 0 {
             h = 0 - h;
@@ -119,7 +119,7 @@ class Set<T> {
         return false;
     }
 
-    func remove(value: T): Boolean {
+    func remove(value: T): Bool {
         var h = hash<T>(value);
         if h < 0 {
             h = 0 - h;
@@ -173,7 +173,7 @@ class Set<T> {
         return self.length;
     }
 
-    func isEmpty(): Boolean {
+    func isEmpty(): Bool {
         return self.length == 0;
     }
 }

@@ -18,7 +18,7 @@ impl<'a> MirBuilder<'a> {
             TypedExprKind::InterpolatedString(pieces) => {
                 self.lower_interpolated_string_expr(pieces)
             }
-            TypedExprKind::Boolean(b) => self.lower_boolean_expr(*b),
+            TypedExprKind::Bool(b) => self.lower_boolean_expr(*b),
             TypedExprKind::Null => self.lower_null_expr(),
             TypedExprKind::Variable(name) => self.lower_variable_expr(*name),
             TypedExprKind::Array(elements) => self.lower_array_expr(elements),
@@ -62,6 +62,9 @@ impl<'a> MirBuilder<'a> {
                 is_static,
             } => self.lower_set_expr(object, *name, value, *is_static),
             TypedExprKind::Assign { name, value } => self.lower_assign_expr(*name, value),
+            TypedExprKind::CompoundAssign { target, operator, value } => {
+                self.lower_compound_assign_expr(target, operator, value)
+            }
             TypedExprKind::SelfRef => self.lower_self_ref_expr(),
             TypedExprKind::Call {
                 callee,

@@ -164,6 +164,54 @@ impl<'a> TypeChecker<'a> {
         )
     }
 
+    pub(crate) fn check_compound_assign_expr(
+        &mut self,
+        target: &Expr<'a>,
+        operator: &BinaryOp,
+        value: &Expr<'a>,
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
+        let typed_target = self.check_expr(target);
+        let typed_value = self.check_expr(value);
+
+        match &typed_target.kind {
+            TypedExprKind::Variable(name) => {
+                if !self.env.is_mutable(*name) {
+                    self.error(
+                        span,
+                        DiagnosticCode::ImmutableAssignment,
+                        &format!(
+                            "Cannot mutate immutable variable '{}'.",
+                            self.session.interner.borrow().lookup(*name)
+                        ),
+                    )
+                }
+            }
+            TypedExprKind::Get { .. } | TypedExprKind::IndexGet { .. } => {
+                // Mutability of fields and indices is generally allowed or checked elsewhere
+            }
+            _ => {
+                self.error(
+                    span,
+                    DiagnosticCode::TypeMismatch,
+                    "Invalid target for compound assignment.",
+                );
+            }
+        }
+
+        // We use check_binary_expr logic to ensure the operator is valid for the types
+        let (_, ty) = self.check_binary_expr(target, operator, value, span);
+
+        (
+            TypedExprKind::CompoundAssign {
+                target: self.alloc(typed_target),
+                operator: operator.clone(),
+                value: self.alloc(typed_value),
+            },
+            ty,
+        )
+    }
+
     pub(crate) fn check_self_ref_expr(&mut self, span: Span) -> (TypedExprKind<'a>, TypeId) {
         if let Some(ty) = self
             .env

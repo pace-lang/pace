@@ -5,7 +5,7 @@ foreign func fileOpen(path: String, mode: String): Pointer<CChar>;
 foreign func fileReadAll(ptr: Pointer<CChar>): String;
 foreign func fileWrite(ptr: Pointer<CChar>, data: String);
 foreign func fileClose(ptr: Pointer<CChar>);
-foreign func fileIsValid(ptr: Pointer<CChar>): Boolean;
+foreign func fileIsValid(ptr: Pointer<CChar>): Bool;
 
 class File {
     var ptr: Pointer<CChar>;
@@ -22,7 +22,7 @@ class File {
         }
     }
 
-    func write(data: String): Result<Boolean, String> {
+    func write(data: String): Result<Bool, String> {
         if fileIsValid(self.ptr) {
             fileWrite(self.ptr, data);
             return Result.Ok(true);

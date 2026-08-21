@@ -208,7 +208,7 @@ impl<'a> MirBuilder<'a> {
                 session::types::Type::Float => {
                     func_name = self.session.interner.borrow_mut().intern("printFloat")
                 }
-                session::types::Type::Boolean => {
+                session::types::Type::Bool => {
                     func_name = self.session.interner.borrow_mut().intern("printBool")
                 }
                 session::types::Type::Enum(_, _) | session::types::Type::Instance(_) => {

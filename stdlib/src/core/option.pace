@@ -4,14 +4,14 @@ enum Option<T> {
     Some(T),
     None
 
-    func isSome(): Boolean {
+    func isSome(): Bool {
         return match self {
             Option.Some(_) => true,
             Option.None() => false,
         };
     }
 
-    func isNone(): Boolean {
+    func isNone(): Bool {
         return match self {
             Option.Some(_) => false,
             Option.None() => true,

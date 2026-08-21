@@ -40,7 +40,7 @@ fn type_expr_to_abi(type_expr: &TypeExpr, session: &session::CompilerSession) ->
 fn is_ref_type_opt(te: &Option<ast::TypeExpr>, session: &session::CompilerSession) -> bool {
     match te {
         Some(ast::TypeExpr::Named(name)) => {
-            !["Int", "Float", "Boolean"].contains(&session.interner.borrow().lookup(*name))
+            !["Int", "Float", "Bool"].contains(&session.interner.borrow().lookup(*name))
         }
         Some(ast::TypeExpr::Optional(inner)) => is_ref_type_opt(&Some((**inner).clone()), session),
         Some(ast::TypeExpr::Array(_)) => true,
@@ -65,7 +65,7 @@ pub(crate) fn is_ref_type_id(
     match session.types.borrow().get(ty) {
         session::types::Type::Int
         | session::types::Type::Float
-        | session::types::Type::Boolean
+        | session::types::Type::Bool
         | session::types::Type::Pointer(_)
         | session::types::Type::Void
         | session::types::Type::Null

@@ -2,13 +2,13 @@
 let greeting: String = "Welcome to Pace!";
 var counter: Int = 10;
 let pi: Float = 3.14159;
-let isAwesome: Boolean = true;
+let isAwesome: Bool = true;
 
 print(greeting);
 print("Pi is approximately", pi);
 
 // --- Functions and Control Flow ---
-func calculate_factorial(n: Int): Int {
+func calculateFactorial(n: Int): Int {
     var result = 1;
     var current = n;
     
@@ -20,10 +20,10 @@ func calculate_factorial(n: Int): Int {
     return result;
 }
 
-let fact5 = calculate_factorial(5);
+let fact5 = calculateFactorial(5);
 print("Factorial of 5 is:", fact5);
 
-func check_magnitude(num: Int) {
+func checkMagnitude(num: Int) {
     if num > 10 {
         print(num, "is greater than 10");
     } else {
@@ -31,8 +31,8 @@ func check_magnitude(num: Int) {
     }
 }
 
-check_magnitude(fact5);
-check_magnitude(counter);
+checkMagnitude(fact5);
+checkMagnitude(counter);
 
 // --- Classes and Objects ---
 class BankAccount {

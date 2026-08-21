@@ -21,6 +21,78 @@ impl<'a> MirBuilder<'a> {
         val
     }
 
+    pub(crate) fn lower_compound_assign_expr(
+        &mut self,
+        target: &TypedExpr,
+        operator: &ast::BinaryOp,
+        value: &TypedExpr,
+    ) -> Value {
+        // Get the current value of the target
+        let target_val = self.lower_expr(target);
+        // Get the RHS value
+        let rhs_val = self.lower_expr(value);
+        
+        // Compute the new value
+        let tmp = self.new_temp();
+        self.current().instructions.push(Inst::Assign(
+            tmp.clone(),
+            RValue::BinaryOp(operator.clone(), target_val, rhs_val),
+        ));
+        let new_val = Value::Place(tmp);
+
+        // Assign back to the target
+        match &target.kind {
+            ast::TypedExprKind::Variable(name) => {
+                let name_str = self.session.interner.borrow().lookup(*name).to_string();
+                self.current().instructions.push(Inst::Assign(
+                    Place::Var(name_str),
+                    RValue::Use(new_val.clone()),
+                ));
+            }
+            ast::TypedExprKind::Get { object, name, is_static } => {
+                let obj_val = self.lower_expr(object); // Note: evaluates object twice, fixme in future
+                let class_name = match self.session.types.borrow().get(object.ty).clone() {
+                    session::types::Type::Class(class_name, _) => {
+                        self.session.interner.borrow().lookup(class_name).to_string()
+                    }
+                    session::types::Type::Struct(struct_name, _) => {
+                        self.session.interner.borrow().lookup(struct_name).to_string()
+                    }
+                    session::types::Type::Instance(c_name) => {
+                        self.session.interner.borrow().lookup(c_name).to_string()
+                    }
+                    t => panic!("GetProperty on non-class/struct: {:?}", t),
+                };
+                let name_str = self.session.interner.borrow().lookup(*name).to_string();
+                let is_ref = super::super::is_ref_type_id(value.ty, self.session, &self.struct_names);
+                
+                if *is_static {
+                    self.current().instructions.push(Inst::SetStaticProperty(
+                        class_name,
+                        name_str,
+                        new_val.clone(),
+                        is_ref,
+                    ));
+                } else {
+                    self.current().instructions.push(Inst::SetProperty(
+                        obj_val,
+                        name_str,
+                        class_name,
+                        new_val.clone(),
+                        is_ref,
+                    ));
+                }
+            }
+            ast::TypedExprKind::IndexGet { object, index } => {
+                let obj_val = self.lower_expr(object); // Evaluates twice
+                let idx_val = self.lower_expr(index);  // Evaluates twice
+                self.current().instructions.push(Inst::IndexSet(obj_val, idx_val, new_val.clone()));
+            }
+            _ => unreachable!(),
+        }
+        new_val
+    }
+
     pub(crate) fn lower_index_get_expr(&mut self, object: &TypedExpr, index: &TypedExpr) -> Value {
         let obj_val = self.lower_expr(object);
         let idx_val = self.lower_expr(index);

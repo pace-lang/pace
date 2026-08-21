@@ -6,7 +6,20 @@ impl<'a> Parser<'a> {
     pub(crate) fn assignment(&mut self) -> Option<Expr<'a>> {
         let expr = self.ternary()?;
 
-        if self.match_token(&[TokenKind::Equal, TokenKind::QuestionQuestionEqual]) {
+        if self.match_token(&[
+            TokenKind::Equal,
+            TokenKind::QuestionQuestionEqual,
+            TokenKind::PlusEqual,
+            TokenKind::MinusEqual,
+            TokenKind::StarEqual,
+            TokenKind::SlashEqual,
+            TokenKind::PercentEqual,
+            TokenKind::AmpersandEqual,
+            TokenKind::PipeEqual,
+            TokenKind::CaretEqual,
+            TokenKind::LessLessEqual,
+            TokenKind::GreaterGreaterEqual,
+        ]) {
             let op = self.previous().clone();
             let value = self.assignment()?;
 
@@ -30,6 +43,42 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         self.error_at_current("Invalid assignment target for ??=.");
+                    }
+                }
+            } else if op.kind != TokenKind::Equal {
+                let operator = match op.kind {
+                    TokenKind::PlusEqual => BinaryOp::Add,
+                    TokenKind::MinusEqual => BinaryOp::Subtract,
+                    TokenKind::StarEqual => BinaryOp::Multiply,
+                    TokenKind::SlashEqual => BinaryOp::Divide,
+                    TokenKind::PercentEqual => BinaryOp::Modulo,
+                    TokenKind::AmpersandEqual => BinaryOp::BitwiseAnd,
+                    TokenKind::PipeEqual => BinaryOp::BitwiseOr,
+                    TokenKind::CaretEqual => BinaryOp::BitwiseXor,
+                    TokenKind::LessLessEqual => BinaryOp::ShiftLeft,
+                    TokenKind::GreaterGreaterEqual => BinaryOp::ShiftRight,
+                    _ => unreachable!(),
+                };
+                match expr.kind {
+                    ExprKind::Variable(_) | ExprKind::Get { .. } | ExprKind::IndexGet { .. } => {
+                        let span = Span::new(
+                            expr.span.file_id,
+                            expr.span.start,
+                            value.span.end,
+                            expr.span.start_loc,
+                            value.span.end_loc,
+                        );
+                        return Some(Expr::new(
+                            ExprKind::CompoundAssign {
+                                target: self.session.ast_arena.alloc(expr),
+                                operator,
+                                value: self.session.ast_arena.alloc(value),
+                            },
+                            span,
+                        ));
+                    }
+                    _ => {
+                        self.error_at_current("Invalid assignment target for compound assignment.");
                     }
                 }
             } else {

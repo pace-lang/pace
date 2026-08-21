@@ -16,7 +16,7 @@ impl<'a, 'b> Translator<'a, 'b> {
                     f_val,
                 ))
             }
-            Value::Boolean(b) => Ok(self
+            Value::Bool(b) => Ok(self
                 .builder
                 .ins()
                 .iconst(types::I64, if *b { 1 } else { 0 })),

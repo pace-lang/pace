@@ -22,10 +22,13 @@ impl<'a> TypeChecker<'a> {
             ExprKind::Float(v) => self.check_float_expr(*v),
             ExprKind::String(v) => self.check_string_expr(*v),
             ExprKind::InterpolatedString(pieces) => self.check_interpolated_string_expr(pieces),
-            ExprKind::Boolean(v) => self.check_boolean_expr(*v),
+            ExprKind::Bool(v) => self.check_boolean_expr(*v),
             ExprKind::Null => self.check_null_expr(),
             ExprKind::Variable(name) => self.check_variable_expr(*name, expr.span),
             ExprKind::Assign { name, value } => self.check_assign_expr(*name, value, expr.span),
+            ExprKind::CompoundAssign { target, operator, value } => {
+                self.check_compound_assign_expr(target, operator, value, expr.span)
+            }
             ExprKind::SelfRef => self.check_self_ref_expr(expr.span),
             ExprKind::ForceUnwrap(inner) => self.check_force_unwrap_expr(inner, expr.span),
             ExprKind::PostfixTry(inner) => self.check_postfix_try_expr(inner, expr.span),

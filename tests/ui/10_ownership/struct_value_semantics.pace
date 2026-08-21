@@ -8,11 +8,11 @@ struct Point {
 }
 
 struct Rect {
-    var top_left: Point;
-    var bottom_right: Point;
-    func init(top_left: Point, bottom_right: Point) {
-        self.top_left = top_left;
-        self.bottom_right = bottom_right;
+    var topLeft: Point;
+    var bottomRight: Point;
+    func init(topLeft: Point, bottomRight: Point) {
+        self.topLeft = topLeft;
+        self.bottomRight = bottomRight;
     }
 }
 
@@ -32,14 +32,14 @@ func main() {
     print(p2.x);
     print(p2.y);
     
-    let r1 = Rect { top_left: Point { x: 5, y: 5 }, bottom_right: Point { x: 15, y: 15 } };
+    let r1 = Rect { topLeft: Point { x: 5, y: 5 }, bottomRight: Point { x: 15, y: 15 } };
     let r2 = r1; // deep copy
     
-    r1.top_left.x = 99;
+    r1.topLeft.x = 99;
     
-    print("Rect1 top_left.x:");
-    print(r1.top_left.x);
+    print("Rect1 topLeft.x:");
+    print(r1.topLeft.x);
     
-    print("Rect2 top_left.x:");
-    print(r2.top_left.x);
+    print("Rect2 topLeft.x:");
+    print(r2.topLeft.x);
 }

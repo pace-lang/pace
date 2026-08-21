@@ -20,11 +20,11 @@ extend Int {
         return self;
     }
 
-    func isEven(): Boolean {
+    func isEven(): Bool {
         return (self - (self / 2) * 2) == 0;
     }
 
-    func isOdd(): Boolean {
+    func isOdd(): Bool {
         return self.isEven() == false;
     }
 
@@ -91,4 +91,4 @@ func parseInt(str: String): Option<Int> {
 }
 
 foreign func paceStringToInt(str: String): Int;
-foreign func paceStringIsInt(str: String): Boolean;
+foreign func paceStringIsInt(str: String): Bool;

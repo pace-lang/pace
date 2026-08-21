@@ -4,14 +4,14 @@ enum Result<T, E> {
     Ok(T),
     Err(E)
 
-    func isOk(): Boolean {
+    func isOk(): Bool {
         return match self {
             Result.Ok(_) => true,
             Result.Err(_) => false,
         };
     }
 
-    func isErr(): Boolean {
+    func isErr(): Bool {
         return match self {
             Result.Ok(_) => false,
             Result.Err(_) => true,

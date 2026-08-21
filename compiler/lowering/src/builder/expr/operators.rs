@@ -383,7 +383,7 @@ impl<'a> MirBuilder<'a> {
                 // False branch assigns false
                 self.current_block = else_block;
                 {
-                    let __inst = Inst::Assign(result_temp.clone(), RValue::Use(Value::Boolean(false)));
+                    let __inst = Inst::Assign(result_temp.clone(), RValue::Use(Value::Bool(false)));
                     self.current().instructions.push(__inst)
                 };
                 self.current().terminator = Some(Terminator::Jump(end_block));
@@ -392,7 +392,7 @@ impl<'a> MirBuilder<'a> {
                 // True branch assigns true
                 self.current_block = then_block;
                 {
-                    let __inst = Inst::Assign(result_temp.clone(), RValue::Use(Value::Boolean(true)));
+                    let __inst = Inst::Assign(result_temp.clone(), RValue::Use(Value::Bool(true)));
                     self.current().instructions.push(__inst)
                 };
                 self.current().terminator = Some(Terminator::Jump(end_block));

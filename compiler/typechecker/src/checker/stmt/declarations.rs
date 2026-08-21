@@ -125,13 +125,13 @@ impl<'a> TypeChecker<'a> {
                 }
 
                 let is_valid = match self.get_type(field_ty_id) {
-                    Type::Int | Type::Float | Type::Boolean | Type::Error | Type::Any => true,
+                    Type::Int | Type::Float | Type::Bool | Type::Error | Type::Any => true,
                     Type::Instance(name) => self.classes.contains_key(&name),
                     _ => false,
                 };
 
                 if !is_valid {
-                    self.error(span, DiagnosticCode::TypeMismatch, &format!("Struct '{}' cannot contain field '{}' of type '{}'. Structs can only contain primitives (Int, Float, Boolean) or other structs.", self.session.interner.borrow().lookup(*name), self.session.interner.borrow().lookup(field_name), self.session.format_type(field_ty_id)));
+                    self.error(span, DiagnosticCode::TypeMismatch, &format!("Struct '{}' cannot contain field '{}' of type '{}'. Structs can only contain primitives (Int, Float, Bool) or other structs.", self.session.interner.borrow().lookup(*name), self.session.interner.borrow().lookup(field_name), self.session.format_type(field_ty_id)));
                 }
             }
         }

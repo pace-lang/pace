@@ -9,7 +9,7 @@ pub enum Type {
     Int,
     Float,
     String,
-    Boolean,
+    Bool,
     Void,
     Error,
     Any,

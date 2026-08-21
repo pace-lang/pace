@@ -19,7 +19,7 @@ class TlsStream {
         self.ptr = paceNullPointer();
     }
     
-    func connect(addr: String, domain: String): Boolean {
+    func connect(addr: String, domain: String): Bool {
         self.ptr = paceTlsConnect(addr, domain);
         return self.ptr != paceNullPointer();
     }
@@ -49,7 +49,7 @@ class TcpStream {
         self.ptr = paceNullPointer();
     }
     
-    func connect(addr: String): Boolean {
+    func connect(addr: String): Bool {
         self.ptr = paceTcpConnect(addr);
         return self.ptr != paceNullPointer();
     }
@@ -93,7 +93,7 @@ class TcpListener {
         self.ptr = paceNullPointer();
     }
     
-    func bind(addr: String): Boolean {
+    func bind(addr: String): Bool {
         self.ptr = paceTcpBind(addr);
         return self.ptr != paceNullPointer();
     }

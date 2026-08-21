@@ -134,16 +134,36 @@ impl<'a> Scanner<'a> {
             }
             ':' => TokenKind::Colon,
             ';' => TokenKind::Semicolon,
-            '+' => TokenKind::Plus,
+            '+' => {
+                if self.match_char('=') {
+                    TokenKind::PlusEqual
+                } else {
+                    TokenKind::Plus
+                }
+            }
             '-' => {
                 if self.match_char('>') {
                     TokenKind::Arrow
+                } else if self.match_char('=') {
+                    TokenKind::MinusEqual
                 } else {
                     TokenKind::Minus
                 }
             }
-            '*' => TokenKind::Star,
-            '%' => TokenKind::Percent,
+            '*' => {
+                if self.match_char('=') {
+                    TokenKind::StarEqual
+                } else {
+                    TokenKind::Star
+                }
+            }
+            '%' => {
+                if self.match_char('=') {
+                    TokenKind::PercentEqual
+                } else {
+                    TokenKind::Percent
+                }
+            }
             '/' => {
                 if self.match_char('/') {
                     // A comment goes until the end of the line.
@@ -151,6 +171,8 @@ impl<'a> Scanner<'a> {
                         self.advance();
                     }
                     return None;
+                } else if self.match_char('=') {
+                    TokenKind::SlashEqual
                 } else {
                     TokenKind::Slash
                 }
@@ -174,6 +196,12 @@ impl<'a> Scanner<'a> {
             '<' => {
                 if self.match_char('=') {
                     TokenKind::LessEqual
+                } else if self.match_char('<') {
+                    if self.match_char('=') {
+                        TokenKind::LessLessEqual
+                    } else {
+                        TokenKind::LessLess
+                    }
                 } else {
                     TokenKind::Less
                 }
@@ -181,6 +209,12 @@ impl<'a> Scanner<'a> {
             '>' => {
                 if self.match_char('=') {
                     TokenKind::GreaterEqual
+                } else if self.match_char('>') {
+                    if self.match_char('=') {
+                        TokenKind::GreaterGreaterEqual
+                    } else {
+                        TokenKind::GreaterGreater
+                    }
                 } else {
                     TokenKind::Greater
                 }
@@ -201,17 +235,29 @@ impl<'a> Scanner<'a> {
             '&' => {
                 if self.match_char('&') {
                     TokenKind::AndAnd
+                } else if self.match_char('=') {
+                    TokenKind::AmpersandEqual
                 } else {
-                    TokenKind::Error(format!("Unexpected character '{}'", c))
+                    TokenKind::Ampersand
                 }
             }
             '|' => {
                 if self.match_char('|') {
                     TokenKind::OrOr
+                } else if self.match_char('=') {
+                    TokenKind::PipeEqual
                 } else {
-                    TokenKind::Error(format!("Unexpected character '{}'", c))
+                    TokenKind::Pipe
                 }
             }
+            '^' => {
+                if self.match_char('=') {
+                    TokenKind::CaretEqual
+                } else {
+                    TokenKind::Caret
+                }
+            }
+            '~' => TokenKind::Tilde,
             '_' => {
                 if self
                     .peek()

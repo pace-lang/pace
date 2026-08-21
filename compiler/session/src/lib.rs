@@ -32,7 +32,7 @@ impl CompilerSession {
             Type::Int => "Int".to_string(),
             Type::Float => "Float".to_string(),
             Type::String => "String".to_string(),
-            Type::Boolean => "Boolean".to_string(),
+            Type::Bool => "Bool".to_string(),
             Type::Void => "Void".to_string(),
             Type::Error => "<ErrorType>".to_string(),
             Type::Any => "Any".to_string(),

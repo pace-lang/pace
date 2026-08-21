@@ -12,7 +12,7 @@ foreign func stringFindStringEnd(s: String, start: Int): Int;
 foreign func stringToInt(s: String): Int;
 foreign func paceStringIndexOf(s: String, sub: String, start: Int): Int;
 foreign func stringToFloat(s: String): Float;
-foreign func paceStringToBool(s: String): Boolean;
+foreign func paceStringToBool(s: String): Bool;
 foreign func stringFindNumberEnd(s: String, start: Int): Int;
 foreign func stringMatchKeywordAt(s: String, start: Int, keyword: String): Int;
 foreign func stringSubstringToInt(s: String, start: Int, end: Int): Int;
@@ -46,7 +46,7 @@ extend String {
         return paceStringIndexOf(self, sub, start);
     }
 
-    func contains(sub: String): Boolean {
+    func contains(sub: String): Bool {
         let subLen = sub.len();
         if subLen == 0 { return true; }
         let len = self.len();
@@ -219,15 +219,15 @@ extend String {
         return builder.toString();
     }
 
-    func isEmpty(): Boolean {
+    func isEmpty(): Bool {
         return self.len() == 0;
     }
 
-    func toBool(): Boolean {
+    func toBool(): Bool {
         return paceStringToBool(self);
     }
 
-    func startsWith(prefix: String): Boolean {
+    func startsWith(prefix: String): Bool {
         let prefixLen = prefix.len();
         if prefixLen == 0 { return true; }
         let len = self.len();
@@ -243,7 +243,7 @@ extend String {
         return true;
     }
 
-    func endsWith(suffix: String): Boolean {
+    func endsWith(suffix: String): Bool {
         let suffixLen = suffix.len();
         if suffixLen == 0 { return true; }
         let len = self.len();

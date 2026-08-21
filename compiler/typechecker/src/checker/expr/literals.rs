@@ -34,9 +34,9 @@ impl<'a> TypeChecker<'a> {
         for piece in pieces {
             let typed_piece = self.check_expr(piece);
             match self.get_type(typed_piece.ty) {
-                Type::Int | Type::Float | Type::String | Type::Boolean | Type::Error => {}
+                Type::Int | Type::Float | Type::String | Type::Bool | Type::Error => {}
                 _ => {
-                    self.error(piece.span, DiagnosticCode::TypeMismatch, &format!("Cannot interpolate type '{}'. Only Int, Float, String, and Boolean are supported.", self.session.format_type(typed_piece.ty)));
+                    self.error(piece.span, DiagnosticCode::TypeMismatch, &format!("Cannot interpolate type '{}'. Only Int, Float, String, and Bool are supported.", self.session.format_type(typed_piece.ty)));
                 }
             }
             typed_pieces.push(typed_piece);
@@ -49,8 +49,8 @@ impl<'a> TypeChecker<'a> {
 
     pub(crate) fn check_boolean_expr(&mut self, v: bool) -> (TypedExprKind<'a>, TypeId) {
         (
-            TypedExprKind::Boolean(v),
-            self.session.types.borrow_mut().intern(Type::Boolean),
+            TypedExprKind::Bool(v),
+            self.session.types.borrow_mut().intern(Type::Bool),
         )
     }
 

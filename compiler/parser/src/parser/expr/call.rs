@@ -23,7 +23,18 @@ impl<'a> Parser<'a> {
                         }
                     }
                 }
-                if !self.match_token(&[TokenKind::Greater]) {
+                let matched_greater = if self.match_token(&[TokenKind::Greater]) {
+                    true
+                } else if self.check(&TokenKind::GreaterGreater) {
+                    self.tokens[self.current].kind = TokenKind::Greater;
+                    self.tokens[self.current].span.start += 1;
+                    self.tokens[self.current].span.start_loc.column += 1;
+                    true
+                } else {
+                    false
+                };
+
+                if !matched_greater {
                     self.error_at_current("Expected '>' after generic type arguments.");
                     return None;
                 }
@@ -189,6 +200,17 @@ impl<'a> Parser<'a> {
                     depth -= 1;
                     if depth == 0 {
                         // Check if the next token is '(' or '.'
+                        return i + 1 < self.tokens.len()
+                            && (self.tokens[i + 1].kind == TokenKind::LeftParen
+                                || self.tokens[i + 1].kind == TokenKind::Dot);
+                    }
+                }
+                TokenKind::GreaterGreater => {
+                    depth -= 2;
+                    if depth < 0 {
+                        return false;
+                    }
+                    if depth == 0 {
                         return i + 1 < self.tokens.len()
                             && (self.tokens[i + 1].kind == TokenKind::LeftParen
                                 || self.tokens[i + 1].kind == TokenKind::Dot);

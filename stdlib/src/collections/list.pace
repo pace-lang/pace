@@ -118,11 +118,11 @@ class List<T> {
         return Option.Some(val);
     }
 
-    func isEmpty(): Boolean {
+    func isEmpty(): Bool {
         return self.length == 0;
     }
 
-    func contains(value: T): Boolean {
+    func contains(value: T): Bool {
         var i = 0;
         while i < self.length {
             let v = ptrRead<T>(self.ptr, i);

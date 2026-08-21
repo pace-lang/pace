@@ -302,6 +302,36 @@ impl<'a> TypeChecker<'a> {
                     self.session.types.borrow_mut().intern(Type::Error)
                 }
             }
+            UnaryOp::Not => {
+                if typed_right.ty == self.session.types.borrow_mut().intern(Type::Bool) {
+                    typed_right.ty
+                } else {
+                    self.error(
+                        span,
+                        DiagnosticCode::TypeMismatch,
+                        &format!(
+                            "Cannot apply logical NOT to type '{}'. Expected Bool.",
+                            self.session.format_type(typed_right.ty)
+                        ),
+                    );
+                    self.session.types.borrow_mut().intern(Type::Error)
+                }
+            }
+            UnaryOp::BitwiseNot => {
+                if typed_right.ty == self.session.types.borrow_mut().intern(Type::Int) {
+                    typed_right.ty
+                } else {
+                    self.error(
+                        span,
+                        DiagnosticCode::TypeMismatch,
+                        &format!(
+                            "Cannot apply bitwise NOT to type '{}'. Expected Int.",
+                            self.session.format_type(typed_right.ty)
+                        ),
+                    );
+                    self.session.types.borrow_mut().intern(Type::Error)
+                }
+            }
         };
         (
             TypedExprKind::Unary(op.clone(), self.alloc(typed_right)),
@@ -350,7 +380,30 @@ impl<'a> TypeChecker<'a> {
                         span,
                         DiagnosticCode::TypeMismatch,
                         &format!(
-                            "Cannot apply operator to types '{}' and '{}'.",
+                            "Cannot apply arithmetic operator to types '{}' and '{}'.",
+                            self.session.format_type(typed_left.ty),
+                            self.session.format_type(typed_right.ty)
+                        ),
+                    );
+                    self.session.types.borrow_mut().intern(Type::Error)
+                }
+            }
+            BinaryOp::BitwiseAnd
+            | BinaryOp::BitwiseOr
+            | BinaryOp::BitwiseXor
+            | BinaryOp::ShiftLeft
+            | BinaryOp::ShiftRight => {
+                let int_ty = self.session.types.borrow_mut().intern(Type::Int);
+                if self.is_assignable(typed_left.ty, int_ty)
+                    && self.is_assignable(typed_right.ty, int_ty)
+                {
+                    int_ty
+                } else {
+                    self.error(
+                        span,
+                        DiagnosticCode::TypeMismatch,
+                        &format!(
+                            "Cannot apply bitwise operator to types '{}' and '{}'. Expected Int.",
                             self.session.format_type(typed_left.ty),
                             self.session.format_type(typed_right.ty)
                         ),
@@ -373,7 +426,7 @@ impl<'a> TypeChecker<'a> {
                     );
                     self.session.types.borrow_mut().intern(Type::Error)
                 } else {
-                    self.session.types.borrow_mut().intern(Type::Boolean)
+                    self.session.types.borrow_mut().intern(Type::Bool)
                 }
             }
             BinaryOp::Less | BinaryOp::LessEqual | BinaryOp::Greater | BinaryOp::GreaterEqual => {
@@ -390,7 +443,7 @@ impl<'a> TypeChecker<'a> {
                         ),
                     );
                 }
-                self.session.types.borrow_mut().intern(Type::Boolean)
+                self.session.types.borrow_mut().intern(Type::Bool)
             }
         };
         (
@@ -435,7 +488,7 @@ impl<'a> TypeChecker<'a> {
         right: &Expr<'a>,
         span: Span,
     ) -> (TypedExprKind<'a>, TypeId) {
-        let bool_ty = self.session.types.borrow_mut().intern(Type::Boolean);
+        let bool_ty = self.session.types.borrow_mut().intern(Type::Bool);
         let typed_left = self.check_expr_with_expected(left, Some(bool_ty));
         let typed_right = self.check_expr_with_expected(right, Some(bool_ty));
 

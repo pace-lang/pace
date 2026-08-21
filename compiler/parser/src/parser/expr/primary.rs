@@ -5,10 +5,10 @@ use lexer::*;
 impl<'a> Parser<'a> {
     pub(crate) fn primary(&mut self) -> Option<Expr<'a>> {
         if self.match_token(&[TokenKind::False]) {
-            return Some(Expr::new(ExprKind::Boolean(false), self.previous().span));
+            return Some(Expr::new(ExprKind::Bool(false), self.previous().span));
         }
         if self.match_token(&[TokenKind::True]) {
-            return Some(Expr::new(ExprKind::Boolean(true), self.previous().span));
+            return Some(Expr::new(ExprKind::Bool(true), self.previous().span));
         }
         if self.match_token(&[TokenKind::Null]) {
             return Some(Expr::new(ExprKind::Null, self.previous().span));

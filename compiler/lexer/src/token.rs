@@ -84,6 +84,22 @@ pub enum TokenKind {
     Bang,                  // !
     AndAnd,                // &&
     OrOr,                  // ||
+    Ampersand,             // &
+    Pipe,                  // |
+    Caret,                 // ^
+    Tilde,                 // ~
+    LessLess,              // <<
+    GreaterGreater,        // >>
+    PlusEqual,             // +=
+    MinusEqual,            // -=
+    StarEqual,             // *=
+    SlashEqual,            // /=
+    PercentEqual,          // %=
+    AmpersandEqual,        // &=
+    PipeEqual,             // |=
+    CaretEqual,            // ^=
+    LessLessEqual,         // <<=
+    GreaterGreaterEqual,   // >>=
 
     // Special
     Error(String),

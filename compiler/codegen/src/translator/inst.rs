@@ -70,6 +70,11 @@ impl<'a, 'b> Translator<'a, 'b> {
                                 );
                                 self.builder.ins().uextend(types::I64, c)
                             }
+                            BinaryOp::BitwiseAnd => self.builder.ins().band(cl_left, cl_right),
+                            BinaryOp::BitwiseOr => self.builder.ins().bor(cl_left, cl_right),
+                            BinaryOp::BitwiseXor => self.builder.ins().bxor(cl_left, cl_right),
+                            BinaryOp::ShiftLeft => self.builder.ins().ishl(cl_left, cl_right),
+                            BinaryOp::ShiftRight => self.builder.ins().sshr(cl_left, cl_right),
                         }
                     }
                     RValue::UnaryOp(op, right) => {
@@ -85,12 +90,32 @@ impl<'a, 'b> Translator<'a, 'b> {
                                 let cl_right = self.translate_value(right)?;
                                 match op {
                                     UnaryOp::Negate => self.builder.ins().ineg(cl_right),
+                                    UnaryOp::Not => {
+                                        let zero = self.builder.ins().iconst(types::I64, 0);
+                                        let c = self.builder.ins().icmp(
+                                            ir::condcodes::IntCC::Equal,
+                                            cl_right,
+                                            zero,
+                                        );
+                                        self.builder.ins().uextend(types::I64, c)
+                                    }
+                                    UnaryOp::BitwiseNot => self.builder.ins().bnot(cl_right),
                                 }
                             }
                         } else {
                             let cl_right = self.translate_value(right)?;
                             match op {
                                 UnaryOp::Negate => self.builder.ins().ineg(cl_right),
+                                UnaryOp::Not => {
+                                    let zero = self.builder.ins().iconst(types::I64, 0);
+                                    let c = self.builder.ins().icmp(
+                                        ir::condcodes::IntCC::Equal,
+                                        cl_right,
+                                        zero,
+                                    );
+                                    self.builder.ins().uextend(types::I64, c)
+                                }
+                                UnaryOp::BitwiseNot => self.builder.ins().bnot(cl_right),
                             }
                         }
                     }
@@ -244,10 +269,10 @@ impl<'a, 'b> Translator<'a, 'b> {
                                 }
                             }
                             self.builder.ins().iconst(types::I64, size_bytes as i64)
-                        } else if target_func_name == "hash_Int" || target_func_name == "hash_Boolean" {
+                        } else if target_func_name == "hash_Int" || target_func_name == "hash_Bool" {
                             // Simple identity hash for primitives
                             self.translate_value(&args[0])?
-                        } else if target_func_name == "equals_Int" || target_func_name == "equals_Boolean" {
+                        } else if target_func_name == "equals_Int" || target_func_name == "equals_Bool" {
                             // Native equality for primitives
                             let left = self.translate_value(&args[0])?;
                             let right = self.translate_value(&args[1])?;

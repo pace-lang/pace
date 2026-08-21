@@ -4,7 +4,13 @@ use lexer::*;
 
 impl<'a> Parser<'a> {
     pub(crate) fn unary(&mut self) -> Option<Expr<'a>> {
-        if self.match_token(&[TokenKind::Minus]) {
+        if self.match_token(&[TokenKind::Minus, TokenKind::Bang, TokenKind::Tilde]) {
+            let operator = match self.previous().kind {
+                TokenKind::Minus => UnaryOp::Negate,
+                TokenKind::Bang => UnaryOp::Not,
+                TokenKind::Tilde => UnaryOp::BitwiseNot,
+                _ => unreachable!(),
+            };
             let start_span = self.previous().span;
             let right = self.unary()?;
             let span = Span::new(
@@ -15,7 +21,7 @@ impl<'a> Parser<'a> {
                 right.span.end_loc,
             );
             return Some(Expr::new(
-                ExprKind::Unary(UnaryOp::Negate, self.session.ast_arena.alloc(right)),
+                ExprKind::Unary(operator, self.session.ast_arena.alloc(right)),
                 span,
             ));
         }

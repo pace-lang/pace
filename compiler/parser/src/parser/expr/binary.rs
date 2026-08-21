@@ -78,10 +78,10 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn range(&mut self) -> Option<Expr<'a>> {
-        let mut expr = self.equality()?;
+        let mut expr = self.bitwise_or()?;
 
         while self.match_token(&[TokenKind::DotDot]) {
-            let right = self.equality()?;
+            let right = self.bitwise_or()?;
             let span = Span::new(
                 expr.span.file_id,
                 expr.span.start,
@@ -94,6 +94,81 @@ impl<'a> Parser<'a> {
                     start: self.session.ast_arena.alloc(expr),
                     end: self.session.ast_arena.alloc(right),
                 },
+                span,
+            );
+        }
+
+        Some(expr)
+    }
+
+    pub(crate) fn bitwise_or(&mut self) -> Option<Expr<'a>> {
+        let mut expr = self.bitwise_xor()?;
+
+        while self.match_token(&[TokenKind::Pipe]) {
+            let right = self.bitwise_xor()?;
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::Binary(
+                    self.session.ast_arena.alloc(expr),
+                    BinaryOp::BitwiseOr,
+                    self.session.ast_arena.alloc(right),
+                ),
+                span,
+            );
+        }
+
+        Some(expr)
+    }
+
+    pub(crate) fn bitwise_xor(&mut self) -> Option<Expr<'a>> {
+        let mut expr = self.bitwise_and()?;
+
+        while self.match_token(&[TokenKind::Caret]) {
+            let right = self.bitwise_and()?;
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::Binary(
+                    self.session.ast_arena.alloc(expr),
+                    BinaryOp::BitwiseXor,
+                    self.session.ast_arena.alloc(right),
+                ),
+                span,
+            );
+        }
+
+        Some(expr)
+    }
+
+    pub(crate) fn bitwise_and(&mut self) -> Option<Expr<'a>> {
+        let mut expr = self.equality()?;
+
+        while self.match_token(&[TokenKind::Ampersand]) {
+            let right = self.equality()?;
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::Binary(
+                    self.session.ast_arena.alloc(expr),
+                    BinaryOp::BitwiseAnd,
+                    self.session.ast_arena.alloc(right),
+                ),
                 span,
             );
         }
@@ -132,7 +207,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn comparison(&mut self) -> Option<Expr<'a>> {
-        let mut expr = self.term()?;
+        let mut expr = self.shift()?;
 
         while self.match_token(&[
             TokenKind::Greater,
@@ -145,6 +220,36 @@ impl<'a> Parser<'a> {
                 TokenKind::GreaterEqual => BinaryOp::GreaterEqual,
                 TokenKind::Less => BinaryOp::Less,
                 TokenKind::LessEqual => BinaryOp::LessEqual,
+                _ => unreachable!(),
+            };
+            let right = self.term()?;
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::Binary(
+                    self.session.ast_arena.alloc(expr),
+                    operator,
+                    self.session.ast_arena.alloc(right),
+                ),
+                span,
+            );
+        }
+
+        Some(expr)
+    }
+
+    pub(crate) fn shift(&mut self) -> Option<Expr<'a>> {
+        let mut expr = self.term()?;
+
+        while self.match_token(&[TokenKind::LessLess, TokenKind::GreaterGreater]) {
+            let operator = match self.previous().kind {
+                TokenKind::LessLess => BinaryOp::ShiftLeft,
+                TokenKind::GreaterGreater => BinaryOp::ShiftRight,
                 _ => unreachable!(),
             };
             let right = self.term()?;

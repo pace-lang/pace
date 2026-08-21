@@ -8,7 +8,7 @@ impl<'a> TypeChecker<'a> {
                 "Int" => self.session.types.borrow_mut().intern(Type::Int),
                 "Float" => self.session.types.borrow_mut().intern(Type::Float),
                 "String" => self.session.types.borrow_mut().intern(Type::String),
-                "Boolean" => self.session.types.borrow_mut().intern(Type::Boolean),
+                "Bool" => self.session.types.borrow_mut().intern(Type::Bool),
                 "Void" => self.session.types.borrow_mut().intern(Type::Void),
                 "Any" => self.session.types.borrow_mut().intern(Type::Any),
                 "Error" => self.session.types.borrow_mut().intern(Type::Error),
@@ -333,8 +333,8 @@ impl<'a> TypeChecker<'a> {
         match self.get_type(ty) {
             Type::Int => ast::TypeExpr::Named(self.session.interner.borrow_mut().intern("Int")),
             Type::Float => ast::TypeExpr::Named(self.session.interner.borrow_mut().intern("Float")),
-            Type::Boolean => {
-                ast::TypeExpr::Named(self.session.interner.borrow_mut().intern("Boolean"))
+            Type::Bool => {
+                ast::TypeExpr::Named(self.session.interner.borrow_mut().intern("Bool"))
             }
             Type::String => {
                 ast::TypeExpr::Named(self.session.interner.borrow_mut().intern("String"))

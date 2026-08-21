@@ -146,7 +146,19 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                if !self.match_token(&[TokenKind::Greater]) {
+                let matched_greater = if self.match_token(&[TokenKind::Greater]) {
+                    true
+                } else if self.check(&TokenKind::GreaterGreater) {
+                    // Turn >> into > to allow nested generics like List<List<T>>
+                    self.tokens[self.current].kind = TokenKind::Greater;
+                    self.tokens[self.current].span.start += 1;
+                    self.tokens[self.current].span.start_loc.column += 1;
+                    true
+                } else {
+                    false
+                };
+
+                if !matched_greater {
                     self.error_at_current("Expected '>' after generic type arguments.");
                     return None;
                 }

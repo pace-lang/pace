@@ -14,6 +14,11 @@ pub enum BinaryOp {
     LessEqual,
     Greater,
     GreaterEqual,
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseXor,
+    ShiftLeft,
+    ShiftRight,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,6 +30,8 @@ pub enum LogicalOp {
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
     Negate,
+    Not,
+    BitwiseNot,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -60,7 +67,7 @@ pub enum ExprKind<'a> {
     String(session::Symbol),
     InterpolatedString(Vec<Expr<'a>>),
     /// A boolean literal like `true` or `false`
-    Boolean(bool),
+    Bool(bool),
     /// A null literal `null`
     Null,
     /// A variable reference like `count`
@@ -97,6 +104,12 @@ pub enum ExprKind<'a> {
     /// Variable assignment: `name = value`
     Assign {
         name: session::Symbol,
+        value: &'a Expr<'a>,
+    },
+    /// Compound assignment: `target += value`
+    CompoundAssign {
+        target: &'a Expr<'a>,
+        operator: BinaryOp,
         value: &'a Expr<'a>,
     },
     /// Self reference: `self`

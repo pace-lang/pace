@@ -1,5 +1,5 @@
 func sieve(limit: Int): Int {
-    var primes = Map<Int, Boolean>();
+    var primes = Map<Int, Bool>();
     
     var i = 2;
     while i <= limit {

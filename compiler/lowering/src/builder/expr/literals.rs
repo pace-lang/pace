@@ -48,7 +48,7 @@ impl<'a> MirBuilder<'a> {
                     };
                     piece_val = Value::Place(temp);
                 }
-                session::types::Type::Boolean => {
+                session::types::Type::Bool => {
                     let temp = self.new_temp();
                     {
                         let __inst = Inst::Assign(
@@ -81,7 +81,7 @@ impl<'a> MirBuilder<'a> {
     }
 
     pub(crate) fn lower_boolean_expr(&mut self, b: bool) -> Value {
-        Value::Boolean(b)
+        Value::Bool(b)
     }
 
     pub(crate) fn lower_null_expr(&mut self) -> Value {
