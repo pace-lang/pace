@@ -1,4 +1,4 @@
-use crate::expr::{BinaryOp, Pattern, UnaryOp};
+use crate::expr::{BinaryOp, LogicalOp, Pattern, UnaryOp};
 use crate::stmt::{EnumVariant, TypeExpr};
 use diagnostics::Span;
 
@@ -22,6 +22,7 @@ pub enum TypedExprKind<'a> {
         end: &'a TypedExpr<'a>,
     },
     Binary(&'a TypedExpr<'a>, BinaryOp, &'a TypedExpr<'a>),
+    Logical(&'a TypedExpr<'a>, LogicalOp, &'a TypedExpr<'a>),
     Unary(UnaryOp, &'a TypedExpr<'a>),
     Grouping(&'a TypedExpr<'a>),
     Call {

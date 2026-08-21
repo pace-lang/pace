@@ -442,7 +442,7 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(start);
                 self.resolve_expr(end);
             }
-            ExprKind::Binary(left, _, right) => {
+            ExprKind::Binary(left, _, right) | ExprKind::Logical(left, _, right) => {
                 self.resolve_expr(left);
                 self.resolve_expr(right);
             }

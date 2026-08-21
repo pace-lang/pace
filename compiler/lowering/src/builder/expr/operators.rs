@@ -348,4 +348,67 @@ impl<'a> MirBuilder<'a> {
     pub(crate) fn lower_grouping_expr(&mut self, inner: &TypedExpr) -> Value {
         self.lower_expr(inner)
     }
+
+    pub(crate) fn lower_logical_expr(
+        &mut self,
+        left: &TypedExpr,
+        op: &ast::LogicalOp,
+        right: &TypedExpr,
+    ) -> Value {
+        let cond_val = self.lower_expr(left);
+
+        let then_block = self.new_block();
+        let else_block = self.new_block();
+        let end_block = self.new_block();
+        let result_temp = self.new_temp();
+
+        // Branch on the left hand side
+        self.current().terminator = Some(Terminator::Branch {
+            cond: cond_val,
+            then_block,
+            else_block,
+        });
+
+        match op {
+            ast::LogicalOp::And => {
+                // True branch evaluates right
+                self.current_block = then_block;
+                let right_val = self.lower_expr(right);
+                {
+                    let __inst = Inst::Assign(result_temp.clone(), RValue::Use(right_val));
+                    self.current().instructions.push(__inst)
+                };
+                self.current().terminator = Some(Terminator::Jump(end_block));
+
+                // False branch assigns false
+                self.current_block = else_block;
+                {
+                    let __inst = Inst::Assign(result_temp.clone(), RValue::Use(Value::Boolean(false)));
+                    self.current().instructions.push(__inst)
+                };
+                self.current().terminator = Some(Terminator::Jump(end_block));
+            }
+            ast::LogicalOp::Or => {
+                // True branch assigns true
+                self.current_block = then_block;
+                {
+                    let __inst = Inst::Assign(result_temp.clone(), RValue::Use(Value::Boolean(true)));
+                    self.current().instructions.push(__inst)
+                };
+                self.current().terminator = Some(Terminator::Jump(end_block));
+
+                // False branch evaluates right
+                self.current_block = else_block;
+                let right_val = self.lower_expr(right);
+                {
+                    let __inst = Inst::Assign(result_temp.clone(), RValue::Use(right_val));
+                    self.current().instructions.push(__inst)
+                };
+                self.current().terminator = Some(Terminator::Jump(end_block));
+            }
+        }
+
+        self.current_block = end_block;
+        Value::Place(result_temp)
+    }
 }

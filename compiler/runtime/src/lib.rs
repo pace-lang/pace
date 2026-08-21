@@ -871,7 +871,7 @@ pub extern "C" fn retainString(val: *mut u8) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn timeNow() -> f64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64()
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64() * 1000.0
 }
 
 #[unsafe(no_mangle)]
@@ -879,4 +879,51 @@ pub extern "C" fn timeSleep(ms: f64) {
     if ms > 0.0 {
         std::thread::sleep(std::time::Duration::from_millis(ms as u64));
     }
+}
+
+fn ms_to_datetime(ms: f64) -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::from_timestamp_millis(ms as i64).unwrap_or_default()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn timeYear(ms: f64) -> i64 {
+    use chrono::Datelike;
+    ms_to_datetime(ms).year() as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn timeMonth(ms: f64) -> i64 {
+    use chrono::Datelike;
+    ms_to_datetime(ms).month() as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn timeDay(ms: f64) -> i64 {
+    use chrono::Datelike;
+    ms_to_datetime(ms).day() as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn timeHour(ms: f64) -> i64 {
+    use chrono::Timelike;
+    ms_to_datetime(ms).hour() as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn timeMinute(ms: f64) -> i64 {
+    use chrono::Timelike;
+    ms_to_datetime(ms).minute() as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn timeSecond(ms: f64) -> i64 {
+    use chrono::Timelike;
+    ms_to_datetime(ms).second() as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn timeMillisecond(ms: f64) -> i64 {
+    // chrono doesn't have a direct millisecond() method, but we can get it via rem_euclid
+    let ms_int = ms as i64;
+    ms_int.rem_euclid(1000)
 }

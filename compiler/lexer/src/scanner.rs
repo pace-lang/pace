@@ -198,6 +198,20 @@ impl<'a> Scanner<'a> {
                     TokenKind::Question
                 }
             }
+            '&' => {
+                if self.match_char('&') {
+                    TokenKind::AndAnd
+                } else {
+                    TokenKind::Error(format!("Unexpected character '{}'", c))
+                }
+            }
+            '|' => {
+                if self.match_char('|') {
+                    TokenKind::OrOr
+                } else {
+                    TokenKind::Error(format!("Unexpected character '{}'", c))
+                }
+            }
             '_' => {
                 if self
                     .peek()

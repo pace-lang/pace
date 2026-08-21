@@ -74,6 +74,7 @@ impl<'a> MirBuilder<'a> {
             } => self.lower_call_expr(callee, arguments),
             TypedExprKind::Unary(op, right) => self.lower_unary_expr(op, right),
             TypedExprKind::Binary(left, op, right) => self.lower_binary_expr(left, op, right),
+            TypedExprKind::Logical(left, op, right) => self.lower_logical_expr(left, op, right),
             TypedExprKind::Range { .. } => self.lower_range_expr(),
             TypedExprKind::Await(inner) => {
                 let inner_val = self.lower_expr(inner);

@@ -4,10 +4,10 @@ use lexer::*;
 
 impl<'a> Parser<'a> {
     pub(crate) fn null_coalesce(&mut self) -> Option<Expr<'a>> {
-        let mut expr = self.range()?;
+        let mut expr = self.logical_or()?;
 
         while self.match_token(&[TokenKind::QuestionQuestion]) {
-            let right = self.range()?;
+            let right = self.logical_or()?;
             let span = Span::new(
                 expr.span.file_id,
                 expr.span.start,
@@ -20,6 +20,56 @@ impl<'a> Parser<'a> {
                     left: self.session.ast_arena.alloc(expr),
                     right: self.session.ast_arena.alloc(right),
                 },
+                span,
+            );
+        }
+
+        Some(expr)
+    }
+
+    pub(crate) fn logical_or(&mut self) -> Option<Expr<'a>> {
+        let mut expr = self.logical_and()?;
+
+        while self.match_token(&[TokenKind::OrOr]) {
+            let right = self.logical_and()?;
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::Logical(
+                    self.session.ast_arena.alloc(expr),
+                    LogicalOp::Or,
+                    self.session.ast_arena.alloc(right),
+                ),
+                span,
+            );
+        }
+
+        Some(expr)
+    }
+
+    pub(crate) fn logical_and(&mut self) -> Option<Expr<'a>> {
+        let mut expr = self.range()?;
+
+        while self.match_token(&[TokenKind::AndAnd]) {
+            let right = self.range()?;
+            let span = Span::new(
+                expr.span.file_id,
+                expr.span.start,
+                right.span.end,
+                expr.span.start_loc,
+                right.span.end_loc,
+            );
+            expr = Expr::new(
+                ExprKind::Logical(
+                    self.session.ast_arena.alloc(expr),
+                    LogicalOp::And,
+                    self.session.ast_arena.alloc(right),
+                ),
                 span,
             );
         }

@@ -84,6 +84,8 @@ pub enum TokenKind {
     QuestionQuestion,      // ??
     QuestionQuestionEqual, // ??=
     Bang,                  // !
+    AndAnd,                // &&
+    OrOr,                  // ||
 
     // Special
     Error(String),

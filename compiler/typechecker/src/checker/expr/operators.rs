@@ -427,4 +427,29 @@ impl<'a> TypeChecker<'a> {
             self.session.types.borrow_mut().intern(Type::Range),
         )
     }
+
+    pub(crate) fn check_logical_expr(
+        &mut self,
+        left: &Expr<'a>,
+        op: &ast::LogicalOp,
+        right: &Expr<'a>,
+        span: Span,
+    ) -> (TypedExprKind<'a>, TypeId) {
+        let bool_ty = self.session.types.borrow_mut().intern(Type::Boolean);
+        let typed_left = self.check_expr_with_expected(left, Some(bool_ty));
+        let typed_right = self.check_expr_with_expected(right, Some(bool_ty));
+
+        if typed_left.ty != bool_ty || typed_right.ty != bool_ty {
+            self.error(
+                span,
+                DiagnosticCode::TypeMismatch,
+                "Logical operators require boolean operands.",
+            );
+        }
+
+        (
+            TypedExprKind::Logical(self.alloc(typed_left), op.clone(), self.alloc(typed_right)),
+            bool_ty,
+        )
+    }
 }

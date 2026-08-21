@@ -17,6 +17,12 @@ pub enum BinaryOp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum LogicalOp {
+    And,
+    Or,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
     Negate,
 }
@@ -65,6 +71,8 @@ pub enum ExprKind<'a> {
     },
     /// A binary operation like `a + b`
     Binary(&'a Expr<'a>, BinaryOp, &'a Expr<'a>),
+    /// A logical operation with short-circuiting like `a && b` or `a || b`
+    Logical(&'a Expr<'a>, LogicalOp, &'a Expr<'a>),
     /// A unary operation like `-a`
     Unary(UnaryOp, &'a Expr<'a>),
     /// A grouped expression like `(a + b)`

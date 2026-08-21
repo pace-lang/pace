@@ -76,6 +76,7 @@ impl<'a> TypeChecker<'a> {
             ExprKind::Unary(op, right) => self.check_unary_expr(op, right, expr.span),
             ExprKind::Range { start, end } => self.check_range_expr(start, end, expr.span),
             ExprKind::Binary(left, op, right) => self.check_binary_expr(left, op, right, expr.span),
+            ExprKind::Logical(left, op, right) => self.check_logical_expr(left, op, right, expr.span),
             ExprKind::Await(inner) => self.check_await_expr(inner, expr.span),
             ExprKind::Spawn(inner) => self.check_spawn_expr(inner, expr.span),
         };

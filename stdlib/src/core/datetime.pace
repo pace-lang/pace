@@ -1,0 +1,44 @@
+foreign func timeNow(): Float;
+foreign func timeSleep(ms: Float);
+foreign func timeYear(ts: Float): Int;
+foreign func timeMonth(ts: Float): Int;
+foreign func timeDay(ts: Float): Int;
+foreign func timeHour(ts: Float): Int;
+foreign func timeMinute(ts: Float): Int;
+foreign func timeSecond(ts: Float): Int;
+foreign func timeMillisecond(ts: Float): Int;
+
+class DateTime {
+    var year: Int = 0;
+    var month: Int = 0;
+    var day: Int = 0;
+    var hour: Int = 0;
+    var minute: Int = 0;
+    var second: Int = 0;
+    var millisecond: Int = 0;
+    var timestamp: Float = 0.0;
+    
+    func init() {}
+
+    static func now(): DateTime {
+        let ts = timeNow();
+        return DateTime.fromTimestamp(ts);
+    }
+    
+    static func fromTimestamp(ts: Float): DateTime {
+        let dt = DateTime();
+        dt.timestamp = ts;
+        dt.year = timeYear(ts);
+        dt.month = timeMonth(ts);
+        dt.day = timeDay(ts);
+        dt.hour = timeHour(ts);
+        dt.minute = timeMinute(ts);
+        dt.second = timeSecond(ts);
+        dt.millisecond = timeMillisecond(ts);
+        return dt;
+    }
+    
+    static func sleep(ms: Float) {
+        timeSleep(ms);
+    }
+}

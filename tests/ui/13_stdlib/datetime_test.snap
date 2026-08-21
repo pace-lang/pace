@@ -1,0 +1,12 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+Year is valid
+Month is valid
+Day is valid
+Hour is valid
+Minute is valid
+Second is valid
+Millisecond is valid
+Sleep and timestamps work
