@@ -433,6 +433,48 @@ impl<'a, 'b> Translator<'a, 'b> {
                                 self.builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), val, addr, 0);
                             }
                             self.builder.ins().iconst(types::I64, 0)
+                        } else if target_func_name.starts_with("paceRetainRef_") {
+                            let type_name = &target_func_name[14..];
+                            let val = self.translate_value(&args[0])?;
+                            
+                            let mut is_ref = false;
+                            if let Some(class_def) = self.program.classes.get(type_name) {
+                                if !class_def.is_struct {
+                                    is_ref = true;
+                                }
+                            } else if self.program.enums.contains_key(type_name) {
+                                is_ref = true;
+                            } else if type_name == "String" || type_name.starts_with("Array_") {
+                                is_ref = true;
+                            }
+                            
+                            if is_ref {
+                                let retain_func = self.func_ids.get("pace_retain").unwrap();
+                                let local_retain = self.module.declare_func_in_func(*retain_func, self.builder.func);
+                                self.builder.ins().call(local_retain, &[val]);
+                            }
+                            self.builder.ins().iconst(types::I64, 0)
+                        } else if target_func_name.starts_with("paceReleaseRef_") {
+                            let type_name = &target_func_name[15..];
+                            let val = self.translate_value(&args[0])?;
+                            
+                            let mut is_ref = false;
+                            if let Some(class_def) = self.program.classes.get(type_name) {
+                                if !class_def.is_struct {
+                                    is_ref = true;
+                                }
+                            } else if self.program.enums.contains_key(type_name) {
+                                is_ref = true;
+                            } else if type_name == "String" || type_name.starts_with("Array_") {
+                                is_ref = true;
+                            }
+                            
+                            if is_ref {
+                                let release_func = self.func_ids.get("pace_release").unwrap();
+                                let local_release = self.module.declare_func_in_func(*release_func, self.builder.func);
+                                self.builder.ins().call(local_release, &[val]);
+                            }
+                            self.builder.ins().iconst(types::I64, 0)
                         } else if target_func_name.starts_with("sizeof_") {
                             let type_name = &target_func_name[7..];
                             let mut size_bytes = 8;

@@ -16,6 +16,7 @@ foreign func stringFindNumberEnd(s: String, start: Int): Int;
 foreign func stringMatchKeywordAt(s: String, start: Int, keyword: String): Int;
 foreign func stringSubstringToInt(s: String, start: Int, end: Int): Int;
 foreign func stringSubstringToFloat(s: String, start: Int, end: Int): Float;
+foreign func stringNumberHasDecimal(s: String, start: Int, end: Int): Int;
 extend String {
     func charCodeAt(index: Int): Int {
         return stringCharAt(self, index);

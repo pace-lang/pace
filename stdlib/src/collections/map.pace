@@ -26,6 +26,17 @@ class Map<K, V> {
 
     func deinit() {
         if self.capacity > 0 {
+            var i = 0;
+            while i < self.capacity {
+                let state = ptrRead<Int>(self.statePtr, i);
+                if state == 1 {
+                    let k = ptrRead<K>(self.keyPtr, i);
+                    let v = ptrRead<V>(self.valuePtr, i);
+                    paceReleaseRef<K>(k);
+                    paceReleaseRef<V>(v);
+                }
+                i = i + 1;
+            }
             free(self.keyPtr);
             free(self.valuePtr);
             free(self.statePtr);
@@ -57,7 +68,8 @@ class Map<K, V> {
             if state == 1 {
                 let k = ptrRead<K>(oldKeys, i);
                 let v = ptrRead<V>(oldValues, i);
-                self.set(k, v);
+                // Directly set without retain/release, as we are just moving elements
+                self.setInternalMove(k, v);
             }
             i = i + 1;
         }
@@ -81,12 +93,16 @@ class Map<K, V> {
         while true {
             let state = ptrRead<Int>(self.statePtr, index);
             if state == 0 {
+                paceRetainRef<K>(key);
+                paceRetainRef<V>(value);
                 ptrWrite<K>(self.keyPtr, index, key);
                 ptrWrite<V>(self.valuePtr, index, value);
                 ptrWrite<Int>(self.statePtr, index, 1);
                 self.length = self.length + 1;
                 return;
             } else if state == 2 {
+                paceRetainRef<K>(key);
+                paceRetainRef<V>(value);
                 ptrWrite<K>(self.keyPtr, index, key);
                 ptrWrite<V>(self.valuePtr, index, value);
                 ptrWrite<Int>(self.statePtr, index, 1);
@@ -95,9 +111,32 @@ class Map<K, V> {
             } else if state == 1 {
                 let existingKey = ptrRead<K>(self.keyPtr, index);
                 if existingKey == key {
+                    let oldVal = ptrRead<V>(self.valuePtr, index);
+                    paceReleaseRef<V>(oldVal);
+                    paceRetainRef<V>(value);
                     ptrWrite<V>(self.valuePtr, index, value);
                     return;
                 }
+            }
+            index = (index + 1) % self.capacity;
+        }
+    }
+
+    func setInternalMove(key: K, value: V) {
+        var h = hash<K>(key);
+        if h < 0 {
+            h = 0 - h;
+        }
+        var index = h % self.capacity;
+
+        while true {
+            let state = ptrRead<Int>(self.statePtr, index);
+            if state == 0 || state == 2 {
+                ptrWrite<K>(self.keyPtr, index, key);
+                ptrWrite<V>(self.valuePtr, index, value);
+                ptrWrite<Int>(self.statePtr, index, 1);
+                self.length = self.length + 1;
+                return;
             }
             index = (index + 1) % self.capacity;
         }
@@ -153,6 +192,9 @@ class Map<K, V> {
                     ptrWrite<Int>(self.statePtr, index, 2);
                     self.length = self.length - 1;
                     let existingVal = ptrRead<V>(self.valuePtr, index);
+                    // Don't release existingVal, as it's returned to caller
+                    let existingK = ptrRead<K>(self.keyPtr, index);
+                    paceReleaseRef<K>(existingK);
                     return Option.Some(existingVal);
                 }
             }
@@ -167,6 +209,13 @@ class Map<K, V> {
     func clear() {
         var i = 0;
         while i < self.capacity {
+            let state = ptrRead<Int>(self.statePtr, i);
+            if state == 1 {
+                let k = ptrRead<K>(self.keyPtr, i);
+                let v = ptrRead<V>(self.valuePtr, i);
+                paceReleaseRef<K>(k);
+                paceReleaseRef<V>(v);
+            }
             ptrWrite<Int>(self.statePtr, i, 0);
             i = i + 1;
         }

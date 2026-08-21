@@ -96,7 +96,8 @@ impl CraneliftGenerator {
         // Declare User FFI functions
         let intrinsics = [
             "hash", "equals", "sizeof", "ptrRead", "ptrWrite", "arrayGet", "arraySet", "arrayLen", "paceNullPointer",
-            "bitwiseAnd", "bitwiseOr", "bitwiseXor", "bitwiseNot", "bitwiseShl", "bitwiseShr"
+            "bitwiseAnd", "bitwiseOr", "bitwiseXor", "bitwiseNot", "bitwiseShl", "bitwiseShr",
+            "paceRetainRef", "paceReleaseRef"
         ];
         
         for (name, foreign_func) in &program.foreign_functions {

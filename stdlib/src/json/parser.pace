@@ -4,7 +4,6 @@ import "../core/string.pace";
 import "../collections/map.pace";
 import "../collections/list.pace";
 
-foreign func retainJsonValue(val: JsonValue);
 class JsonParser {
     var source: String;
     var pos: Int;
@@ -17,35 +16,21 @@ class JsonParser {
     }
 
     func parse(): Result<JsonValue, String> {
-        self.skipWhitespace();
+        self.pos = stringSkipWhitespace(self.source, self.pos);
         if self.pos >= self.len {
             return Result.Err("Empty JSON");
         }
         let value = self.parseValue();
-        self.skipWhitespace();
+        self.pos = stringSkipWhitespace(self.source, self.pos);
         if self.pos < self.len {
             return Result.Err("Unexpected trailing characters");
         }
         return Result.Ok(value);
     }
 
-    func peek(): Int {
-        return self.source.charCodeAt(self.pos);
-    }
-
-    func consume(): Int {
-        let c = self.peek();
-        self.pos = self.pos + 1;
-        return c;
-    }
-
-    func skipWhitespace() {
-        self.pos = stringSkipWhitespace(self.source, self.pos);
-    }
-
     func parseValue(): JsonValue {
-        self.skipWhitespace();
-        let c = self.peek();
+        self.pos = stringSkipWhitespace(self.source, self.pos);
+        let c = self.source.charCodeAt(self.pos);
         
         if c == 123 { // '{'
             return self.parseObject();
@@ -95,7 +80,7 @@ class JsonParser {
     }
 
     func parseString(): JsonValue {
-        self.consume(); // skip '"'
+        self.pos = self.pos + 1; // skip '"'
         let start = self.pos;
         
         let end = stringFindStringEnd(self.source, self.pos);
@@ -103,11 +88,13 @@ class JsonParser {
             return JsonValue.String("");
         }
         
-        self.pos = end;
-        self.consume(); // skip ending '"'
+        self.pos = end + 1; // skip ending '"'
         
-        let str = self.source.substring(start, end);
-        return JsonValue.String(str);
+        if end > start {
+            let str = self.source.substring(start, end);
+            return JsonValue.String(str);
+        }
+        return JsonValue.String("");
     }
 
     func parseNumber(): JsonValue {
@@ -117,15 +104,7 @@ class JsonParser {
         
         self.pos = end;
         
-        var hasDecimal = false;
-        var i = start;
-        while i < end {
-            let c = self.source.charCodeAt(i);
-            if c == 46 { hasDecimal = true; }
-            if c == 101 { hasDecimal = true; } // 'e'
-            if c == 69 { hasDecimal = true; }  // 'E'
-            i = i + 1;
-        }
+        let hasDecimal = stringNumberHasDecimal(self.source, start, end) == 1;
         
         if hasDecimal {
             return JsonValue.NumberFloat(stringSubstringToFloat(self.source, start, end));
@@ -135,77 +114,73 @@ class JsonParser {
     }
 
     func parseArray(): JsonValue {
-        self.consume(); // skip '['
+        self.pos = self.pos + 1; // skip '['
         let list = List<JsonValue>();
-        self.skipWhitespace();
+        self.pos = stringSkipWhitespace(self.source, self.pos);
         
-        if self.peek() == 93 { // ']'
-            self.consume();
+        if self.source.charCodeAt(self.pos) == 93 { // ']'
+            self.pos = self.pos + 1;
             return JsonValue.Array(list);
         }
         
         var parseMore = true;
         while parseMore {
-            let val = self.parseValue();
-            retainJsonValue(val);
-            list.push(val);
+            list.push(self.parseValue());
             
-            self.skipWhitespace();
-            let c = self.peek();
+            self.pos = stringSkipWhitespace(self.source, self.pos);
+            let c = self.source.charCodeAt(self.pos);
             if c == 44 { // ','
-                self.consume();
+                self.pos = self.pos + 1;
             } else {
                 parseMore = false;
             }
         }
         
-        if self.peek() == 93 {
-            self.consume();
+        if self.source.charCodeAt(self.pos) == 93 {
+            self.pos = self.pos + 1;
         }
         
         return JsonValue.Array(list);
     }
 
     func parseObject(): JsonValue {
-        self.consume(); // skip '{'
+        self.pos = self.pos + 1; // skip '{'
         let map = Map<String, JsonValue>();
-        self.skipWhitespace();
+        self.pos = stringSkipWhitespace(self.source, self.pos);
         
-        if self.peek() == 125 { // '}'
-            self.consume();
+        if self.source.charCodeAt(self.pos) == 125 { // '}'
+            self.pos = self.pos + 1;
             return JsonValue.Object(map);
         }
         
         var parseMore = true;
         while parseMore {
-            self.skipWhitespace();
+            self.pos = stringSkipWhitespace(self.source, self.pos);
             let keyNode = self.parseString();
             let keyStr = match keyNode {
                 JsonValue.String(s) => s,
                 _ => "",
             };
             
-            self.skipWhitespace();
-            if self.peek() == 58 { // ':'
-                self.consume();
+            self.pos = stringSkipWhitespace(self.source, self.pos);
+            if self.source.charCodeAt(self.pos) == 58 { // ':'
+                self.pos = self.pos + 1;
             }
             
             let valNode = self.parseValue();
-            retainJsonValue(valNode);
-            retainString(keyStr);
             map.set(keyStr, valNode);
             
-            self.skipWhitespace();
-            let c = self.peek();
+            self.pos = stringSkipWhitespace(self.source, self.pos);
+            let c = self.source.charCodeAt(self.pos);
             if c == 44 { // ','
-                self.consume();
+                self.pos = self.pos + 1;
             } else {
                 parseMore = false;
             }
         }
         
-        if self.peek() == 125 {
-            self.consume();
+        if self.source.charCodeAt(self.pos) == 125 {
+            self.pos = self.pos + 1;
         }
         
         return JsonValue.Object(map);

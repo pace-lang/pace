@@ -237,7 +237,7 @@ fn format_type_expr(session: &session::CompilerSession, ty: &ast::TypeExpr) -> S
 
         let mut actual_name = self.session.interner.borrow().lookup(func_name).to_string();
         
-        let intrinsics_with_types = ["hash", "equals", "sizeof", "ptrRead", "ptrWrite", "arrayLen"];
+        let intrinsics_with_types = ["hash", "equals", "sizeof", "ptrRead", "ptrWrite", "arrayLen", "paceRetainRef", "paceReleaseRef"];
         if intrinsics_with_types.contains(&actual_name.as_str()) {
             let type_name = if !type_args.is_empty() {
                 format_type_expr(self.session, &type_args[0])

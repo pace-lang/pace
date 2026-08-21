@@ -9,6 +9,8 @@ foreign func ptrRead<T>(ptr: Pointer<CChar>, offset: Int): T;
 foreign func ptrWrite<T>(ptr: Pointer<CChar>, offset: Int, val: T);
 foreign func sizeof<T>(): Int;
 foreign func hash<T>(val: T): Int;
+foreign func paceRetainRef<T>(val: T);
+foreign func paceReleaseRef<T>(val: T);
 
 class List<T> {
     var ptr: Pointer<CChar>;
@@ -23,6 +25,12 @@ class List<T> {
 
     func deinit() {
         if self.capacity > 0 {
+            var i = 0;
+            while i < self.length {
+                let val = ptrRead<T>(self.ptr, i);
+                paceReleaseRef<T>(val);
+                i = i + 1;
+            }
             free(self.ptr);
         }
     }
@@ -32,6 +40,7 @@ class List<T> {
             self.capacity = self.capacity * 2;
             self.ptr = realloc(self.ptr, self.capacity * sizeof<T>());
         }
+        paceRetainRef<T>(value);
         ptrWrite<T>(self.ptr, self.length, value);
         self.length = self.length + 1;
     }
@@ -59,6 +68,9 @@ class List<T> {
     func set(index: Int, value: T) {
         if index >= 0 {
             if index < self.length {
+                let oldVal = ptrRead<T>(self.ptr, index);
+                paceReleaseRef<T>(oldVal);
+                paceRetainRef<T>(value);
                 ptrWrite<T>(self.ptr, index, value);
             }
         }
@@ -74,6 +86,12 @@ class List<T> {
     }
 
     func clear() {
+        var i = 0;
+        while i < self.length {
+            let val = ptrRead<T>(self.ptr, i);
+            paceReleaseRef<T>(val);
+            i = i + 1;
+        }
         self.length = 0;
     }
 
@@ -96,6 +114,7 @@ class List<T> {
         }
         
         self.length = self.length - 1;
+        // Don't release val here, as it's being returned and ownership is passed
         return Option.Some(val);
     }
 
@@ -141,6 +160,7 @@ class List<T> {
             ptrWrite<T>(self.ptr, i, prevVal);
             i = i - 1;
         }
+        paceRetainRef<T>(value);
         ptrWrite<T>(self.ptr, index, value);
         self.length = self.length + 1;
     }

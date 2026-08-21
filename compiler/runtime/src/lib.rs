@@ -978,3 +978,21 @@ pub extern "C" fn timeMillisecond(ms: f64) -> i64 {
     let ms_int = ms as i64;
     ms_int.rem_euclid(1000)
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn stringNumberHasDecimal(s: *const c_char, start: i64, end: i64) -> i64 {
+    if s.is_null() || start < 0 || end <= start { return 0; }
+    unsafe {
+        let str_ptr = s.add(24) as *const u8;
+        let mut i = start as usize;
+        let end_idx = end as usize;
+        while i < end_idx {
+            let b = *(str_ptr.add(i));
+            if b == b'.' || b == b'e' || b == b'E' {
+                return 1;
+            }
+            i += 1;
+        }
+        0
+    }
+}
