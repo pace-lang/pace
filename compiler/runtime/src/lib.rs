@@ -779,6 +779,38 @@ pub extern "C" fn paceFloatToString(value: f64) -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn paceIntToHexString(value: i64) -> *const c_char {
+    let s = format!("{:x}", value);
+    let ptr = pace_alloc((24 + s.len() + 1) as i64, !1_u64 as *const ());
+    unsafe {
+        let payload = ptr.add(24);
+        std::ptr::copy_nonoverlapping(s.as_ptr(), payload, s.len());
+        *payload.add(s.len()) = 0;
+    }
+    ptr as *const c_char
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn paceIntToFloat(value: i64) -> f64 {
+    value as f64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn paceFloatToInt(value: f64) -> i64 {
+    value as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn paceStringToBool(s_ptr: *const c_char) -> bool {
+    if s_ptr.is_null() {
+        return false;
+    }
+    let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
+    let lower = s_str.trim().to_lowercase();
+    lower == "true" || lower == "1"
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn paceBoolToString(value: i64) -> *const c_char {
     let s = if value != 0 { "true" } else { "false" };
     let ptr = pace_alloc((24 + s.len() + 1) as i64, !1_u64 as *const ());

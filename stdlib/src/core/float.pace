@@ -1,0 +1,34 @@
+import "../math/math.pace";
+
+foreign func paceFloatToString(value: Float): String;
+foreign func paceFloatToInt(value: Float): Int;
+
+extend Float {
+    func abs(): Float {
+        return Math.abs(self);
+    }
+
+    func round(): Float {
+        return Math.round(self);
+    }
+
+    func floor(): Float {
+        return Math.floor(self);
+    }
+
+    func ceil(): Float {
+        return Math.ceil(self);
+    }
+
+    func trunc(): Float {
+        return Math.trunc(self);
+    }
+
+    func toInt(): Int {
+        return paceFloatToInt(self);
+    }
+
+    func toString(): String {
+        return paceFloatToString(self);
+    }
+}

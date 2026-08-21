@@ -2,26 +2,10 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-[33m[P5001] Warning:[0m Variable `str_list` does not follow Pace naming conventions
-    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/13_stdlib/list_advanced.pace:10:5 [38;5;246m][0m
+[31m[P1002] Error:[0m Expected expression.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/stdlib/src/core/int.pace:17:16 [38;5;246m][0m
     [38;5;246m│[0m
- [38;5;246m10 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[33mv[0m[33ma[0m[33mr[0m[33m [0m[33ms[0m[33mt[0m[33mr[0m[33m_[0m[33ml[0m[33mi[0m[33ms[0m[33mt[0m[33m [0m[33m=[0m[33m [0m[33m[[0m[33m"[0m[33mh[0m[33me[0m[33ml[0m[33ml[0m[33mo[0m[33m"[0m[33m,[0m[33m [0m[33m"[0m[33mw[0m[33mo[0m[33mr[0m[33ml[0m[33md[0m[33m"[0m[33m][0m[33m;[0m
- [38;5;240m   │[0m     [33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m┬[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m  
- [38;5;240m   │[0m                      [33m╰[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m Variable `str_list` does not follow Pace naming conventions
- [38;5;240m   │[0m 
- [38;5;240m   │[0m [38;5;115mHelp[0m: use camelCase for variables
-[38;5;246m────╯[0m
-[31m[P3001] Error:[0m Cannot compare types 'Option<String>' and 'Null' for equality.
-    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/13_stdlib/list_advanced.pace:17:8 [38;5;246m][0m
-    [38;5;246m│[0m
- [38;5;246m17 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[31ml[0m[31ma[0m[31ms[0m[31mt[0m[31m [0m[31m![0m[31m=[0m[31m [0m[31mn[0m[31mu[0m[31ml[0m[31ml[0m[38;5;249m [0m[38;5;249m{[0m
- [38;5;240m   │[0m        [31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m┬[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m  
- [38;5;240m   │[0m              [31m╰[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m Cannot compare types 'Option<String>' and 'Null' for equality.
-[38;5;246m────╯[0m
-[31m[P3001] Error:[0m Argument 1 expected type 'String', found 'Option<String>'.
-    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/13_stdlib/list_advanced.pace:19:9 [38;5;246m][0m
-    [38;5;246m│[0m
- [38;5;246m19 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[31mp[0m[31mr[0m[31mi[0m[31mn[0m[31mt[0m[31mS[0m[31mt[0m[31mr[0m[31m([0m[31ml[0m[31ma[0m[31ms[0m[31mt[0m[31m)[0m[38;5;249m;[0m
- [38;5;240m   │[0m         [31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m┬[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m  
- [38;5;240m   │[0m                [31m╰[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m Argument 1 expected type 'String', found 'Option<String>'.
+ [38;5;246m17 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m[31m![0m[38;5;249ms[0m[38;5;249me[0m[38;5;249ml[0m[38;5;249mf[0m[38;5;249m.[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249mE[0m[38;5;249mv[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m   │[0m                [31m┬[0m  
+ [38;5;240m   │[0m                [31m╰[0m[31m─[0m[31m─[0m Expected expression.
 [38;5;246m────╯[0m

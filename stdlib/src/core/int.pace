@@ -1,0 +1,31 @@
+import "../math/math.pace";
+
+foreign func paceIntToString(value: Int): String;
+foreign func paceIntToHexString(value: Int): String;
+foreign func paceIntToFloat(value: Int): Float;
+
+extend Int {
+    func abs(): Int {
+        return Math.abs(self.toFloat()).toInt();
+    }
+
+    func isEven(): Boolean {
+        return (self - (self / 2) * 2) == 0;
+    }
+
+    func isOdd(): Boolean {
+        return !self.isEven();
+    }
+
+    func toHexString(): String {
+        return paceIntToHexString(self);
+    }
+
+    func toFloat(): Float {
+        return paceIntToFloat(self);
+    }
+
+    func toString(): String {
+        return paceIntToString(self);
+    }
+}

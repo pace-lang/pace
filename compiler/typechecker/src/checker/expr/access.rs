@@ -441,7 +441,7 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
 
-                if let Type::Enum(n, params) = self.get_type(typed_obj.ty) {
+                if let Type::Enum(n, _params) = self.get_type(typed_obj.ty) {
                     if let Some(enum_variants) = self.enums.get(&n) {
                         if let Some(variant_ty) = enum_variants.get(&name) {
                             // Currently, we don't have generic arguments provided at the static access site for enum variants,

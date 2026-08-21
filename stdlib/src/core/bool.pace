@@ -1,0 +1,7 @@
+foreign func paceBoolToString(value: Boolean): String;
+
+extend Boolean {
+    func toString(): String {
+        return paceBoolToString(self);
+    }
+}

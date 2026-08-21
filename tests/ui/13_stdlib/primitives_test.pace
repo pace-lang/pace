@@ -1,0 +1,109 @@
+func main() {
+    print("--- String Tests ---");
+    let s = "Hello, Pace World!";
+    
+    if s.startsWith("Hello") {
+        print("Starts with Hello: true");
+    }
+    
+    if !s.startsWith("World") {
+        print("Starts with World: false");
+    }
+
+    if s.endsWith("World!") {
+        print("Ends with World!: true");
+    }
+
+    if !s.endsWith("Hello") {
+        print("Ends with Hello: false");
+    }
+
+    let idx = s.indexOf("Pace");
+    if idx == 7 {
+        print("indexOf Pace: 7");
+    }
+    
+    let missing = s.indexOf("Missing");
+    if missing == -1 {
+        print("indexOf Missing: -1");
+    }
+
+    let emptyStr = "";
+    if emptyStr.isEmpty() {
+        print("isEmpty: true");
+    }
+    
+    if !s.isEmpty() {
+        print("s is not empty: true");
+    }
+
+    let t = "true";
+    let f = "false";
+    
+    if t.toBool() {
+        print("t.toBool(): true");
+    }
+    
+    if !f.toBool() {
+        print("f.toBool(): false");
+    }
+
+    print("--- Int Tests ---");
+    let i = -42;
+    if i.abs() == 42 {
+        print("abs(-42) is 42");
+    }
+
+    let ev = 10;
+    if ev.isEven() {
+        print("10 is even");
+    }
+
+    if !ev.isOdd() {
+        print("10 is not odd");
+    }
+
+    let hex = 255;
+    if hex.toHexString() == "ff" {
+        print("255 to hex is ff");
+    }
+
+    let fCast = 10.toFloat();
+    if fCast > 9.9 && fCast < 10.1 {
+        print("10 toFloat is 10.0");
+    }
+
+    print("--- Float Tests ---");
+    let pi = 3.14159;
+    
+    let r = pi.round();
+    if r > 2.9 && r < 3.1 {
+        print("round(3.14) is 3");
+    }
+
+    let c = pi.ceil();
+    if c > 3.9 && c < 4.1 {
+        print("ceil(3.14) is 4");
+    }
+    
+    let neg = -4.5;
+    let fl = neg.floor();
+    if fl > -5.1 && fl < -4.9 {
+        print("floor(-4.5) is -5");
+    }
+    
+    let a = neg.abs();
+    if a > 4.4 && a < 4.6 {
+        print("abs(-4.5) is 4.5");
+    }
+
+    let tr = pi.trunc();
+    if tr > 2.9 && tr < 3.1 {
+        print("trunc(3.14) is 3");
+    }
+
+    let iCast = pi.toInt();
+    if iCast == 3 {
+        print("3.14 toInt is 3");
+    }
+}

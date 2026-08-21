@@ -11,31 +11,7 @@ foreign func stringSkipWhitespace(s: String, start: Int): Int;
 foreign func stringFindStringEnd(s: String, start: Int): Int;
 foreign func stringToInt(s: String): Int;
 foreign func stringToFloat(s: String): Float;
-foreign func paceIntToString(value: Int): String;
-foreign func paceFloatToString(value: Float): String;
-foreign func paceBoolToString(value: Boolean): String;
-foreign func stringFindNumberEnd(s: String, start: Int): Int;
-foreign func stringMatchKeywordAt(s: String, start: Int, keyword: String): Int;
-foreign func stringSubstringToInt(s: String, start: Int, end: Int): Int;
-foreign func stringSubstringToFloat(s: String, start: Int, end: Int): Float;
-extend Int {
-    func toString(): String {
-        return paceIntToString(self);
-    }
-}
-
-extend Float {
-    func toString(): String {
-        return paceFloatToString(self);
-    }
-}
-
-extend Boolean {
-    func toString(): String {
-        return paceBoolToString(self);
-    }
-}
-
+foreign func paceStringToBool(s: String): Boolean;
 extend String {
     func charCodeAt(index: Int): Int {
         return stringCharAt(self, index);
@@ -231,5 +207,72 @@ extend String {
             i = i + 1;
         }
         return builder.toString();
+    }
+
+    func isEmpty(): Boolean {
+        return self.len() == 0;
+    }
+
+    func toBool(): Boolean {
+        return paceStringToBool(self);
+    }
+
+    func startsWith(prefix: String): Boolean {
+        let prefixLen = prefix.len();
+        if prefixLen == 0 { return true; }
+        let len = self.len();
+        if prefixLen > len { return false; }
+
+        var i = 0;
+        while i < prefixLen {
+            if self.charCodeAt(i) != prefix.charCodeAt(i) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    func endsWith(suffix: String): Boolean {
+        let suffixLen = suffix.len();
+        if suffixLen == 0 { return true; }
+        let len = self.len();
+        if suffixLen > len { return false; }
+
+        var i = 0;
+        let offset = len - suffixLen;
+        while i < suffixLen {
+            if self.charCodeAt(offset + i) != suffix.charCodeAt(i) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    func indexOf(sub: String): Int {
+        let subLen = sub.len();
+        if subLen == 0 { return 0; }
+        let len = self.len();
+        if subLen > len { return -1; }
+
+        var i = 0;
+        while i <= len - subLen {
+            var isMatch = true;
+            var j = 0;
+            while j < subLen {
+                if self.charCodeAt(i + j) != sub.charCodeAt(j) {
+                    isMatch = false;
+                    j = subLen;
+                } else {
+                    j = j + 1;
+                }
+            }
+            if isMatch {
+                return i;
+            }
+            i = i + 1;
+        }
+        return -1;
     }
 }

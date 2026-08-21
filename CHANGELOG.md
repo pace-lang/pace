@@ -5,6 +5,10 @@ All notable changes to the Pace language will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Primitive Extensions (`Int`, `Float`, `Boolean`, `String`)**: Vastly expanded methods available on built-in primitives. Extracted primitives into dedicated `int.pace`, `float.pace`, `bool.pace` files. 
+  - `Int`: Added `abs()`, `isEven()`, `isOdd()`, `toHexString()`, and `toFloat()`.
+  - `Float`: Added `abs()`, `round()`, `floor()`, `ceil()`, `trunc()`, and `toInt()`.
+  - `String`: Added `startsWith()`, `endsWith()`, `indexOf()`, `isEmpty()`, and `toBool()`.
 - **Standard Library `DateTime` & `Math`**: Expanded the standard library with a `DateTime` class utilizing the `chrono` crate for accurate, natively-bound date and time properties (`year`, `month`, `day`, `timestamp`, etc.). Refactored `Math` into a static class and significantly expanded its mathematical function suite.
 - **Logical Operators `&&` and `||`**: Added native support for short-circuiting logical AND (`&&`) and logical OR (`||`) operators to the language syntax, seamlessly lowering into branch operations for optimal performance.
 - **Static Members**: Added full support for static properties and static methods on Classes, Structs, and Enums via the `static` keyword. Static members are accessed directly via the type name (e.g., `Math.PI`, `Point.create()`), and are hoisted as global variables in the Cranelift compiler backend.
