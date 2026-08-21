@@ -33,7 +33,7 @@ impl<'a> MirBuilder<'a> {
         Value::Place(temp)
     }
 
-    pub(crate) fn lower_call_expr(&mut self, callee: &TypedExpr, arguments: &[TypedExpr]) -> Value {
+    pub(crate) fn lower_call_expr(&mut self, callee: &TypedExpr, type_args: &[ast::TypeExpr], arguments: &[TypedExpr]) -> Value {
         let mut arg_values = Vec::new();
         for arg in arguments {
             arg_values.push(self.lower_expr(arg));
@@ -218,20 +218,47 @@ impl<'a> MirBuilder<'a> {
             }
         }
 
+fn format_type_expr(session: &session::CompilerSession, ty: &ast::TypeExpr) -> String {
+    match ty {
+        ast::TypeExpr::Named(name) => session.interner.borrow().lookup(*name).to_string(),
+        ast::TypeExpr::GenericInstance(name, args) => {
+            let name_str = session.interner.borrow().lookup(*name).to_string();
+            let mut args_str = String::new();
+            for a in args {
+                args_str.push_str(&format!("_{}", format_type_expr(session, a)));
+            }
+            format!("{}{}", name_str, args_str)
+        }
+        ast::TypeExpr::Array(inner) => format!("Array_{}", format_type_expr(session, inner)),
+        ast::TypeExpr::Optional(inner) => format!("Option_{}", format_type_expr(session, inner)),
+        ast::TypeExpr::Function(_, _) => "Function".to_string(),
+    }
+}
+
         let mut actual_name = self.session.interner.borrow().lookup(func_name).to_string();
-        if actual_name == "hash" || actual_name == "equals" {
-            let type_name = self.session.format_type(arguments[0].ty);
+        
+        let intrinsics_with_types = ["hash", "equals", "sizeof", "ptrRead", "ptrWrite", "arrayLen"];
+        if intrinsics_with_types.contains(&actual_name.as_str()) {
+            let type_name = if !type_args.is_empty() {
+                format_type_expr(self.session, &type_args[0])
+            } else if !arguments.is_empty() {
+                self.session.format_type(arguments[0].ty)
+            } else {
+                "Unknown".to_string()
+            };
             actual_name = format!("{}_{}", actual_name, type_name);
         }
 
         let temp = self.new_temp();
+        let rvalue = if actual_name.starts_with("arrayLen_") {
+            RValue::ArrayLength(arg_values[0].clone())
+        } else {
+            RValue::Call(actual_name, arg_values)
+        };
         {
             let __inst = Inst::Assign(
                 temp.clone(),
-                RValue::Call(
-                    actual_name,
-                    arg_values,
-                ),
+                rvalue,
             );
             self.current().instructions.push(__inst)
         };

@@ -6,6 +6,6 @@ func main() {
         i = i + 1;
     }
     
-    printStr("Finished map insertions. Size:");
+    print("Finished map insertions. Size:");
     print(map.length);
 }

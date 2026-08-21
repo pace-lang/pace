@@ -192,8 +192,9 @@ impl<'a> TypeChecker<'a> {
         let typed_obj = self.check_expr(object);
         let ty = match self.get_type(typed_obj.ty) {
             Type::Optional(inner) => {
-                if let Type::Instance(class_name) = self.session.types.borrow().get(inner) {
-                    if let Some(fields) = self.classes.get(class_name) {
+                let inner_type = self.session.types.borrow().get(inner).clone();
+                if let Type::Instance(class_name) = inner_type {
+                    if let Some(fields) = self.classes.get(&class_name) {
                         if let Some(field_ty) = fields.get(&name) {
                             self.session
                                 .types
@@ -206,7 +207,7 @@ impl<'a> TypeChecker<'a> {
                                 &format!(
                                     "Property '{}' not found on '{}'.",
                                     self.session.interner.borrow().lookup(name),
-                                    self.session.interner.borrow().lookup(*class_name)
+                                    self.session.interner.borrow().lookup(class_name)
                                 ),
                             );
                             self.session.types.borrow_mut().intern(Type::Error)

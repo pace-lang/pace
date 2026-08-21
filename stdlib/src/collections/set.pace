@@ -3,8 +3,6 @@ import "list.pace";
 
 
 
-foreign func hash<T>(val: T): Int;
-foreign func equals<T>(a: T, b: T): Boolean;
 
 class Set<T> {
     var itemPtr: Pointer<CChar>;
@@ -87,7 +85,7 @@ class Set<T> {
                 return;
             } else if state == 1 {
                 let existingVal = ptrRead<T>(self.itemPtr, index);
-                if equals<T>(existingVal, value) {
+                if existingVal == value {
                     return; // already exists
                 }
             }
@@ -109,7 +107,7 @@ class Set<T> {
                 return false;
             } else if state == 1 {
                 let existingVal = ptrRead<T>(self.itemPtr, index);
-                if equals<T>(existingVal, value) {
+                if existingVal == value {
                     return true;
                 }
             }
@@ -135,7 +133,7 @@ class Set<T> {
                 return false;
             } else if state == 1 {
                 let existingVal = ptrRead<T>(self.itemPtr, index);
-                if equals<T>(existingVal, value) {
+                if existingVal == value {
                     ptrWrite<Int>(self.statePtr, index, 2);
                     self.length = self.length - 1;
                     return true;

@@ -2,31 +2,5 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-[31m[P1002] Error:[0m Expected property or method inside class.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/02_types/optional_assignment.pace:2:5 [38;5;246m][0m
-   [38;5;246m│[0m
- [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[31mn[0m[31ma[0m[31mm[0m[31me[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249mS[0m[38;5;249mt[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249m;[0m
- [38;5;240m  │[0m     [31m─[0m[31m─[0m[31m┬[0m[31m─[0m  
- [38;5;240m  │[0m       [31m╰[0m[31m─[0m[31m─[0m[31m─[0m Expected property or method inside class.
-[38;5;246m───╯[0m
-[31m[P1002] Error:[0m Expected property or method inside class.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/02_types/optional_assignment.pace:2:9 [38;5;246m][0m
-   [38;5;246m│[0m
- [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[31m:[0m[38;5;249m [0m[38;5;249mS[0m[38;5;249mt[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249m;[0m
- [38;5;240m  │[0m         [31m┬[0m  
- [38;5;240m  │[0m         [31m╰[0m[31m─[0m[31m─[0m Expected property or method inside class.
-[38;5;246m───╯[0m
-[31m[P1002] Error:[0m Expected property or method inside class.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/02_types/optional_assignment.pace:2:11 [38;5;246m][0m
-   [38;5;246m│[0m
- [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m:[0m[38;5;249m [0m[31mS[0m[31mt[0m[31mr[0m[31mi[0m[31mn[0m[31mg[0m[38;5;249m;[0m
- [38;5;240m  │[0m           [31m─[0m[31m─[0m[31m─[0m[31m┬[0m[31m─[0m[31m─[0m  
- [38;5;240m  │[0m              [31m╰[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m Expected property or method inside class.
-[38;5;246m───╯[0m
-[31m[P1002] Error:[0m Expected property or method inside class.
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/02_types/optional_assignment.pace:2:17 [38;5;246m][0m
-   [38;5;246m│[0m
- [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249mS[0m[38;5;249mt[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[31m;[0m
- [38;5;240m  │[0m                 [31m┬[0m  
- [38;5;240m  │[0m                 [31m╰[0m[31m─[0m[31m─[0m Expected property or method inside class.
-[38;5;246m───╯[0m
+true
+true

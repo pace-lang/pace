@@ -12,6 +12,10 @@ foreign func stringFindStringEnd(s: String, start: Int): Int;
 foreign func stringToInt(s: String): Int;
 foreign func stringToFloat(s: String): Float;
 foreign func paceStringToBool(s: String): Boolean;
+foreign func stringFindNumberEnd(s: String, start: Int): Int;
+foreign func stringMatchKeywordAt(s: String, start: Int, keyword: String): Int;
+foreign func stringSubstringToInt(s: String, start: Int, end: Int): Int;
+foreign func stringSubstringToFloat(s: String, start: Int, end: Int): Float;
 extend String {
     func charCodeAt(index: Int): Int {
         return stringCharAt(self, index);

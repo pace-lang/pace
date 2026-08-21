@@ -353,6 +353,29 @@ impl<'a, 'b> Translator<'a, 'b> {
                             let addr = self.builder.ins().iadd(ptr_val, index_val);
                             self.builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), val_i8, addr, 0);
                             self.builder.ins().iconst(types::I64, 0)
+                        } else if target_func_name == "bitwiseAnd" {
+                            let a = self.translate_value(&args[0])?;
+                            let b = self.translate_value(&args[1])?;
+                            self.builder.ins().band(a, b)
+                        } else if target_func_name == "bitwiseOr" {
+                            let a = self.translate_value(&args[0])?;
+                            let b = self.translate_value(&args[1])?;
+                            self.builder.ins().bor(a, b)
+                        } else if target_func_name == "bitwiseXor" {
+                            let a = self.translate_value(&args[0])?;
+                            let b = self.translate_value(&args[1])?;
+                            self.builder.ins().bxor(a, b)
+                        } else if target_func_name == "bitwiseNot" {
+                            let a = self.translate_value(&args[0])?;
+                            self.builder.ins().bnot(a)
+                        } else if target_func_name == "bitwiseShl" {
+                            let a = self.translate_value(&args[0])?;
+                            let b = self.translate_value(&args[1])?;
+                            self.builder.ins().ishl(a, b)
+                        } else if target_func_name == "bitwiseShr" {
+                            let a = self.translate_value(&args[0])?;
+                            let b = self.translate_value(&args[1])?;
+                            self.builder.ins().sshr(a, b)
                         } else if target_func_name.starts_with("ptrRead_") {
                             let type_name = &target_func_name[8..];
                             let ptr_val = self.translate_value(&args[0])?;

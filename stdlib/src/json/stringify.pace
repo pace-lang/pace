@@ -1,45 +1,61 @@
 import "json.pace";
 import "../core/string.pace";
+import "../core/string_builder.pace";
 
 func stringifyJson(value: JsonValue): String {
-    return match value {
-        JsonValue.Null() => "null",
-        JsonValue.Boolean(b) => b.toString(),
-        JsonValue.NumberInt(i) => i.toString(),
-        JsonValue.NumberFloat(f) => f.toString(),
-        JsonValue.String(s) => "\"".concat(s).concat("\""),
-        JsonValue.Array(list) => stringifyArray(list),
-        JsonValue.Object(map) => stringifyObject(map)
-    };
+    let builder = StringBuilder();
+    stringifyJsonBuilder(value, builder);
+    return builder.toString();
 }
 
-func stringifyArray(list: List<JsonValue>): String {
-    var result = "[";
+func stringifyJsonBuilder(value: JsonValue, builder: StringBuilder) {
+    match value {
+        JsonValue.Null() => builder.append("null"),
+        JsonValue.Boolean(b) => builder.append(b.toString()),
+        JsonValue.NumberInt(i) => builder.append(i.toString()),
+        JsonValue.NumberFloat(f) => builder.append(f.toString()),
+        JsonValue.String(s) => stringifyStringNode(s, builder),
+        JsonValue.Array(list) => stringifyArrayBuilder(list, builder),
+        JsonValue.Object(map) => stringifyObjectBuilder(map, builder)
+    }
+}
+
+func stringifyStringNode(s: String, builder: StringBuilder) {
+    builder.append("\"");
+    builder.append(s);
+    builder.append("\"");
+}
+
+func stringifyArrayBuilder(list: List<JsonValue>, builder: StringBuilder) {
+    builder.append("[");
     let len = list.len();
     var i = 0;
     while i < len {
-        result = result.concat(stringifyJson(list.get(i).unwrap()));
+        stringifyJsonBuilder(list.get(i).unwrap(), builder);
         if i < len - 1 {
-            result = result.concat(",");
+            builder.append(",");
         }
         i = i + 1;
     }
-    return result.concat("]");
+    builder.append("]");
 }
 
-func stringifyObject(map: Map<String, JsonValue>): String {
-    var result = "{";
+func stringifyObjectBuilder(map: Map<String, JsonValue>, builder: StringBuilder) {
+    builder.append("{");
     let keys = map.keys();
     let len = keys.len();
     var i = 0;
     while i < len {
         let key = keys.get(i).unwrap();
         let val = map.get(key).unwrap();
-        result = result.concat("\"").concat(key).concat("\":").concat(stringifyJson(val));
+        builder.append("\"");
+        builder.append(key);
+        builder.append("\":");
+        stringifyJsonBuilder(val, builder);
         if i < len - 1 {
-            result = result.concat(",");
+            builder.append(",");
         }
         i = i + 1;
     }
-    return result.concat("}");
+    builder.append("}");
 }

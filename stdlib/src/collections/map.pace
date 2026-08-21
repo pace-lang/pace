@@ -3,8 +3,6 @@ import "list.pace";
 
 
 
-foreign func hash<T>(val: T): Int;
-foreign func equals<T>(a: T, b: T): Boolean;
 
 class Map<K, V> {
     var keyPtr: Pointer<CChar>;
@@ -96,7 +94,7 @@ class Map<K, V> {
                 return;
             } else if state == 1 {
                 let existingKey = ptrRead<K>(self.keyPtr, index);
-                if equals<K>(existingKey, key) {
+                if existingKey == key {
                     ptrWrite<V>(self.valuePtr, index, value);
                     return;
                 }
@@ -119,7 +117,7 @@ class Map<K, V> {
                 return Option.None();
             } else if state == 1 {
                 let existingKey = ptrRead<K>(self.keyPtr, index);
-                if equals<K>(existingKey, key) {
+                if existingKey == key {
                     let v = ptrRead<V>(self.valuePtr, index);
                     return Option.Some(v);
                 }
@@ -151,7 +149,7 @@ class Map<K, V> {
                 return Option.None();
             } else if state == 1 {
                 let existingKey = ptrRead<K>(self.keyPtr, index);
-                if equals<K>(existingKey, key) {
+                if existingKey == key {
                     ptrWrite<Int>(self.statePtr, index, 2);
                     self.length = self.length - 1;
                     let existingVal = ptrRead<V>(self.valuePtr, index);

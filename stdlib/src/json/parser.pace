@@ -216,3 +216,9 @@ func parseJson(source: String): Result<JsonValue, String> {
     let parser = JsonParser(source);
     return parser.parse();
 }
+
+extend String {
+    func parseJson(): Result<JsonValue, String> {
+        return parseJson(self);
+    }
+}

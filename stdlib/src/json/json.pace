@@ -1,4 +1,5 @@
 import "../collections/map.pace";
+import "../core/option.pace";
 import "../collections/list.pace";
 
 enum JsonValue {
@@ -9,4 +10,114 @@ enum JsonValue {
     String(String),
     Array(List<JsonValue>),
     Object(Map<String, JsonValue>)
+}
+
+extend JsonValue {
+    func isNull(): Boolean {
+        return match self {
+            JsonValue.Null() => true,
+            _ => false
+        };
+    }
+
+    func isBoolean(): Boolean {
+        return match self {
+            JsonValue.Boolean(_) => true,
+            _ => false
+        };
+    }
+
+    func isNumber(): Boolean {
+        return match self {
+            JsonValue.NumberInt(_) => true,
+            JsonValue.NumberFloat(_) => true,
+            _ => false
+        };
+    }
+
+    func isString(): Boolean {
+        return match self {
+            JsonValue.String(_) => true,
+            _ => false
+        };
+    }
+
+    func isArray(): Boolean {
+        return match self {
+            JsonValue.Array(_) => true,
+            _ => false
+        };
+    }
+
+    func isObject(): Boolean {
+        return match self {
+            JsonValue.Object(_) => true,
+            _ => false
+        };
+    }
+
+    func asBoolean(): Option<Boolean> {
+        let none: Option<Boolean> = Option.None();
+        return match self {
+            JsonValue.Boolean(b) => Option.Some(b),
+            _ => none
+        };
+    }
+
+    func asInt(): Option<Int> {
+        let none: Option<Int> = Option.None();
+        return match self {
+            JsonValue.NumberInt(i) => Option.Some(i),
+            _ => none
+        };
+    }
+
+    func asFloat(): Option<Float> {
+        let none: Option<Float> = Option.None();
+        return match self {
+            JsonValue.NumberFloat(f) => Option.Some(f),
+            JsonValue.NumberInt(i) => Option.Some(i.toFloat()),
+            _ => none
+        };
+    }
+
+    func asString(): Option<String> {
+        let none: Option<String> = Option.None();
+        return match self {
+            JsonValue.String(s) => Option.Some(s),
+            _ => none
+        };
+    }
+
+    func asArray(): Option<List<JsonValue>> {
+        let none: Option<List<JsonValue>> = Option.None();
+        return match self {
+            JsonValue.Array(a) => Option.Some(a),
+            _ => none
+        };
+    }
+
+    func asObject(): Option<Map<String, JsonValue>> {
+        let none: Option<Map<String, JsonValue>> = Option.None();
+        return match self {
+            JsonValue.Object(o) => Option.Some(o),
+            _ => none
+        };
+    }
+
+    func get(key: String): Option<JsonValue> {
+        let none: Option<JsonValue> = Option.None();
+        return match self {
+            JsonValue.Object(m) => m.get(key),
+            _ => none
+        };
+    }
+
+    func getIndex(index: Int): Option<JsonValue> {
+        let none: Option<JsonValue> = Option.None();
+        return match self {
+            JsonValue.Array(a) => a.get(index),
+            _ => none
+        };
+    }
 }

@@ -9,7 +9,7 @@ func main() {
     }
 
     if errRes.isErr() {
-        printStr(errRes.unwrapErr());
+        print(errRes.unwrapErr());
     }
 
     let defaultVal = errRes.unwrapOr(100);

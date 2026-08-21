@@ -10,5 +10,5 @@ func main() {
     var a = DummyActor(1);
     var b = DummyActor(2);
     var c = DummyActor(3);
-    printStr("Created 3 actors without loops.");
+    print("Created 3 actors without loops.");
 }

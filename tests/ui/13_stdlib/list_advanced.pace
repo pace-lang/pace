@@ -3,19 +3,20 @@ func main() {
     list.push(4);
     list.push(5);
     
-    printStr("List Length:");
+    print("List Length:");
     print(list.len());
     
-    // Using string arrays
-    var str_list = ["hello", "world"];
-    str_list.push("pace");
+    let list2 = List<String>();
+    list2.push("Hello");
+    list2.push("World");
     
-    printStr("String List Length:");
-    print(str_list.len());
+    print("String List Length:");
+    print(list2.len());
     
-    var last = str_list.pop();
-    if last != null {
-        printStr("Popped:");
-        printStr(last);
+    let popped = list2.pop();
+    if popped.isSome() {
+        print("Popped:");
+        let last = popped.unwrap();
+        print(last);
     }
 }

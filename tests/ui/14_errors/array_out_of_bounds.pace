@@ -1,4 +1,4 @@
-fn main() {
+func main() {
     let arr = [1, 2, 3];
     
     // This should panic at runtime (unwrap_user 2)

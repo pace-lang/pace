@@ -4,5 +4,5 @@ func main() {
         i = i + 1;
     }
     print(i);
-    printStr("Done with heavy loop");
+    print("Done with heavy loop");
 }

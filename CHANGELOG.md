@@ -5,6 +5,10 @@ All notable changes to the Pace language will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **JSON Module Improvements**: Refactored the `json` standard library for better ergonomics and performance.
+  - `JsonValue`: Added ergonomic querying methods (`isNull`, `isString`, `isArray`, etc.), extraction methods returning `Option<T>` (`asString`, `asInt`, `asFloat`, etc.), and traversal methods (`get(key)`, `getIndex(index)`).
+  - `String`: Added a `parseJson()` extension method natively delegating to the `JsonParser`.
+  - `stringifyJson`: Completely rewritten to use `StringBuilder`, heavily reducing memory allocations during large JSON serialization.
 - **Collections API Extensions**: Vastly improved `List`, `Map`, and `Set` in `stdlib/src/collections`.
   - `List`: Added `isEmpty()`, `contains()`, `indexOf()`, `insert()`, `first()`, `last()`, and `reverse()`.
   - `Map`: Added `isEmpty()`, `len()`, and refactored `remove()` to return `Option<V>`.

@@ -1,26 +1,32 @@
 class Address {
-    city: String;
+    var city: String;
+    func init(city: String) {
+        self.city = city;
+    }
 }
 
 class User {
-    address: Address?;
+    var address: Address?;
+    func init(address: Address?) {
+        self.address = address;
+    }
 }
 
 func main() {
-    let addr = init Address { city: "New York" };
-    let u = init User { address: addr };
+    let addr = Address("New York");
+    let u = User(addr);
     
     // Optional chaining
     let c: String? = u?.address?.city;
     print(c);
     
     // Force unwrap
-    let unwrapped_city: String = c!;
-    print(unwrapped_city);
+    let unwrappedCity: String = c!;
+    print(unwrappedCity);
     
     // Panic on null unwrap
-    let null_addr: Address? = null;
-    let city2 = null_addr?.city; // This is null
+    let nullAddr: Address? = null;
+    let city2 = nullAddr?.city; // This is null
     print(city2);
     
     let crash = city2!; // Should trap/panic

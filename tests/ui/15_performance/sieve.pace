@@ -33,8 +33,8 @@ func sieve(limit: Int): Int {
 }
 
 func main() {
-    printStr("Calculating primes up to 100,000...");
+    print("Calculating primes up to 100,000...");
     let numPrimes = sieve(100000);
-    printStr("Number of primes found:");
+    print("Number of primes found:");
     print(numPrimes);
 }

@@ -94,7 +94,19 @@ impl CraneliftGenerator {
         }
 
         // Declare User FFI functions
+        let intrinsics = [
+            "hash", "equals", "sizeof", "ptrRead", "ptrWrite", "arrayGet", "arraySet", "arrayLen", "paceNullPointer",
+            "bitwiseAnd", "bitwiseOr", "bitwiseXor", "bitwiseNot", "bitwiseShl", "bitwiseShr"
+        ];
+        
         for (name, foreign_func) in &program.foreign_functions {
+            // Skip declaring intrinsic functions as they are handled natively by codegen or lowered to MIR operations
+            let symbol_name = foreign_func.symbol.as_str();
+            let is_intrinsic = intrinsics.iter().any(|i| symbol_name == *i || symbol_name.starts_with(&format!("{}_", i)));
+            if is_intrinsic {
+                continue;
+            }
+            
             let mut sig = module.make_signature();
             for param_ty in &foreign_func.param_types {
                 sig.params

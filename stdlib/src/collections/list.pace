@@ -8,7 +8,7 @@ foreign func free(ptr: Pointer<CChar>);
 foreign func ptrRead<T>(ptr: Pointer<CChar>, offset: Int): T;
 foreign func ptrWrite<T>(ptr: Pointer<CChar>, offset: Int, val: T);
 foreign func sizeof<T>(): Int;
-foreign func equals<T>(a: T, b: T): Boolean;
+foreign func hash<T>(val: T): Int;
 
 class List<T> {
     var ptr: Pointer<CChar>;
@@ -107,7 +107,7 @@ class List<T> {
         var i = 0;
         while i < self.length {
             let v = ptrRead<T>(self.ptr, i);
-            if equals<T>(v, value) {
+            if v == value {
                 return true;
             }
             i = i + 1;
@@ -119,7 +119,7 @@ class List<T> {
         var i = 0;
         while i < self.length {
             let v = ptrRead<T>(self.ptr, i);
-            if equals<T>(v, value) {
+            if v == value {
                 return i;
             }
             i = i + 1;

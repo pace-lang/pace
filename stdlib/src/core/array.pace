@@ -1,29 +1,26 @@
 import "./option.pace";
 
 foreign func arrayLen<T>(arr: [T]): Int;
-foreign func arrayPush<T>(arr: [T], item: T);
-foreign func arrayPop<T>(arr: [T]): Option<T>;
-foreign func arrayGet<T>(arr: [T], index: Int): Option<T>;
-foreign func arraySet<T>(arr: [T], index: Int, item: T);
+
+
 
 extend<T> [T] {
     func len(): Int {
         return arrayLen<T>(self);
     }
 
-    func push(item: T) {
-        arrayPush<T>(self, item);
-    }
-
-    func pop(): Option<T> {
-        return arrayPop<T>(self);
-    }
-
     func get(index: Int): Option<T> {
-        return arrayGet<T>(self, index);
+        if index < 0 || index >= self.len() {
+            return Option.None();
+        }
+        return Option.Some(self[index]);
     }
 
     func set(index: Int, item: T) {
-        arraySet<T>(self, index, item);
+        if index >= 0 {
+            if index < self.len() {
+                self[index] = item;
+            }
+        }
     }
 }

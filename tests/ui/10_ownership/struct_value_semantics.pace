@@ -24,23 +24,22 @@ func main() {
     p2.x = 100;
     p2.y = 200;
     
-    printStr("Point p1:");
+    print("Point p1:");
     print(p1.x);
     print(p1.y);
     
-    printStr("Point p2:");
+    print("Point p2:");
     print(p2.x);
     print(p2.y);
     
-    var rect1 = Rect(p1, p2);
-    var rect2 = rect1;
+    let r1 = Rect { top_left: Point { x: 5, y: 5 }, bottom_right: Point { x: 15, y: 15 } };
+    let r2 = r1; // deep copy
     
-    // Modifying deeply nested field
-    rect2.top_left.x = 999;
+    r1.top_left.x = 99;
     
-    printStr("Rect1 top_left.x:");
-    print(rect1.top_left.x);
+    print("Rect1 top_left.x:");
+    print(r1.top_left.x);
     
-    printStr("Rect2 top_left.x:");
-    print(rect2.top_left.x);
+    print("Rect2 top_left.x:");
+    print(r2.top_left.x);
 }

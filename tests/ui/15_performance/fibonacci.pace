@@ -6,8 +6,8 @@ func fib(n: Int): Int {
 }
 
 func main() {
-    printStr("Calculating fib(35)...");
+    print("Calculating fib(35)...");
     let result = fib(35);
-    printStr("Result:");
+    print("Result:");
     print(result);
 }

@@ -3,7 +3,7 @@ import "../../../stdlib/src/json/parser.pace";
 import "../../../stdlib/src/json/stringify.pace";
 
 func testCase(source: String) {
-    let result = parseJson(source);
+    let result = source.parseJson();
     if result.isOk() {
         print(stringifyJson(result.unwrap()));
     } else {
@@ -18,4 +18,30 @@ func main() {
     testCase("\"hello\"");
     testCase("[1, 2]");
     testCase("{\"a\": 1}");
+
+    print("--- Ext Tests ---");
+    let objResult = "{\"name\": \"Alice\", \"age\": 30}".parseJson();
+    if objResult.isOk() {
+        let val = objResult.unwrap();
+        if val.isObject() {
+            let name = val.get("name").unwrap().asString().unwrap();
+            print(name);
+            
+            let age = val.get("age").unwrap().asInt().unwrap();
+            if age == 30 {
+                print("Age is 30");
+            }
+        }
+    }
+
+    let arrResult = "[10, 20]".parseJson();
+    if arrResult.isOk() {
+        let val = arrResult.unwrap();
+        if val.isArray() {
+            let first = val.getIndex(0).unwrap().asInt().unwrap();
+            if first == 10 {
+                print("First is 10");
+            }
+        }
+    }
 }

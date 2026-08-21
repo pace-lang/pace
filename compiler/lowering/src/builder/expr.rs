@@ -69,9 +69,9 @@ impl<'a> MirBuilder<'a> {
             TypedExprKind::SelfRef => self.lower_self_ref_expr(),
             TypedExprKind::Call {
                 callee,
-                type_args: _,
+                type_args,
                 arguments,
-            } => self.lower_call_expr(callee, arguments),
+            } => self.lower_call_expr(callee, type_args, arguments),
             TypedExprKind::Unary(op, right) => self.lower_unary_expr(op, right),
             TypedExprKind::Binary(left, op, right) => self.lower_binary_expr(left, op, right),
             TypedExprKind::Logical(left, op, right) => self.lower_logical_expr(left, op, right),

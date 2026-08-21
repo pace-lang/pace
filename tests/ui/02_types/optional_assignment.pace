@@ -1,11 +1,15 @@
+class Address {
+    var city: String;
+}
+
 class User {
-    name: String;
+    var address: Address?;
 }
 
 func main() {
     let u: User? = null;
     let s: String? = "hello";
-    let empty_str: String? = null;
+    let emptyStr: String? = null;
     
     // Valid assignments
     let u2: User? = u;
@@ -13,6 +17,6 @@ func main() {
     // Implicit promotion
     let s2: String? = "world";
     
-    print(s);
-    print(empty_str);
+    print(s != null);
+    print(emptyStr == null);
 }

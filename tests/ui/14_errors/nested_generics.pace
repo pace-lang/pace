@@ -6,7 +6,7 @@ class Box<T> {
     }
 }
 
-fn main() {
+func main() {
     let inner = Box<Int>(42);
     let outer = Box<Box<Int>>(inner);
     

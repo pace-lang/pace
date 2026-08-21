@@ -724,6 +724,25 @@ pub extern "C" fn fileOpen(path_ptr: *const c_char, mode_ptr: *const c_char) -> 
     }
     std::ptr::null_mut()
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn paceStringToInt(s: *const c_char) -> i64 {
+    if s.is_null() {
+        return 0;
+    }
+    let str_slice = unsafe { CStr::from_ptr(s.add(24)) }.to_str().unwrap_or("");
+    str_slice.parse::<i64>().unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn paceStringIsInt(s: *const c_char) -> bool {
+    if s.is_null() {
+        return false;
+    }
+    let str_slice = unsafe { CStr::from_ptr(s.add(24)) }.to_str().unwrap_or("");
+    str_slice.parse::<i64>().is_ok()
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_string_concat(s1: *const c_char, s2: *const c_char) -> *const c_char {
     if s1.is_null() && s2.is_null() {
