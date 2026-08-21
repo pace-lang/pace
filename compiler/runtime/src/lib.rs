@@ -594,6 +594,25 @@ pub extern "C" fn stringSubstringToInt(s: *const c_char, start: i64, end: i64) -
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn paceStringIndexOf(s_ptr: *const c_char, sub_ptr: *const c_char, start: i64) -> i64 {
+    if s_ptr.is_null() || sub_ptr.is_null() || start < 0 {
+        return -1;
+    }
+    let s_str = unsafe { CStr::from_ptr(s_ptr.add(24)) }.to_string_lossy();
+    let sub_str = unsafe { CStr::from_ptr(sub_ptr.add(24)) }.to_string_lossy();
+    
+    if start as usize >= s_str.len() {
+        return -1;
+    }
+    
+    let slice = &s_str[(start as usize)..];
+    match slice.find(sub_str.as_ref()) {
+        Some(idx) => (start as usize + idx) as i64,
+        None => -1,
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn stringSubstringToFloat(s: *const c_char, start: i64, end: i64) -> f64 {
     if s.is_null() || start < 0 || end <= start { return 0.0; }
     unsafe {

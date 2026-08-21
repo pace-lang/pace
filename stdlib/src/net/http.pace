@@ -1,7 +1,29 @@
 import "../core/string.pace";
 import "../core/string_builder.pace";
+import "../core/option.pace";
 import "../collections/list.pace";
 import "socket.pace";
+
+enum HttpStatus {
+    StatusOk,
+    StatusCreated,
+    StatusBadRequest,
+    StatusNotFound,
+    StatusInternalServerError
+}
+
+extend HttpStatus {
+    func toInt(): Int {
+        return match self {
+            HttpStatus.StatusOk() => 200,
+            HttpStatus.StatusCreated() => 201,
+            HttpStatus.StatusBadRequest() => 400,
+            HttpStatus.StatusNotFound() => 404,
+            HttpStatus.StatusInternalServerError() => 500,
+            _ => 500
+        };
+    }
+}
 
 class HttpServerResponse {
     var status: Int;
@@ -18,6 +40,16 @@ class HttpServerResponse {
         self.headers.push(key + ": " + value);
     }
     
+    func setJson(jsonBody: String) {
+        self.addHeader("Content-Type", "application/json");
+        self.body = jsonBody;
+    }
+
+    func setHtml(htmlBody: String) {
+        self.addHeader("Content-Type", "text/html");
+        self.body = htmlBody;
+    }
+    
     func toString(): String {
         let builder = StringBuilder();
         builder.append("HTTP/1.1 ");
@@ -26,6 +58,8 @@ class HttpServerResponse {
             builder.append(" OK\r\n");
         } else if self.status == 404 {
             builder.append(" Not Found\r\n");
+        } else if self.status == 500 {
+            builder.append(" Internal Server Error\r\n");
         } else {
             builder.append(" Unknown\r\n");
         }
@@ -50,17 +84,50 @@ class HttpRequest {
     var method: String;
     var path: String;
     var stream: TcpStream;
+    var isValid: Boolean;
     
     func init() {
         self.method = "";
         self.path = "";
         self.stream = TcpStream();
+        self.isValid = false;
     }
     
     func respondWith(resp: HttpServerResponse) {
         let respStr = resp.toString();
         self.stream.writeString(respStr);
         self.stream.close();
+    }
+    
+    func getQueryParam(key: String): Option<String> {
+        let queryStart = self.path.indexOfFrom("?", 0);
+        if queryStart == -1 {
+            return Option.None();
+        }
+        let queryString = self.path.substring(queryStart + 1, self.path.len());
+        
+        var paramsStart = 0;
+        while paramsStart < queryString.len() {
+            let nextAmp = queryString.indexOfFrom("&", paramsStart);
+            var paramEnd = queryString.len();
+            if nextAmp != -1 {
+                paramEnd = nextAmp;
+            }
+            let param = queryString.substring(paramsStart, paramEnd);
+            let eqIdx = param.indexOfFrom("=", 0);
+            if eqIdx != -1 {
+                let pKey = param.substring(0, eqIdx);
+                if pKey == key {
+                    return Option.Some(param.substring(eqIdx + 1, param.len()));
+                }
+            }
+            if nextAmp == -1 {
+                paramsStart = queryString.len();
+            } else {
+                paramsStart = nextAmp + 1;
+            }
+        }
+        return Option.None();
     }
 }
 
@@ -82,10 +149,14 @@ class HttpServer {
         
         let requestStr = stream.readString(4096);
         if requestStr != "" {
-            let parts = requestStr.split(" ");
-            if parts.len() >= 2 {
-                req.method = parts.get(0).unwrap();
-                req.path = parts.get(1).unwrap();
+            let space1 = requestStr.indexOfFrom(" ", 0);
+            if space1 != -1 {
+                req.method = requestStr.substring(0, space1);
+                let space2 = requestStr.indexOfFrom(" ", space1 + 1);
+                if space2 != -1 {
+                    req.path = requestStr.substring(space1 + 1, space2);
+                    req.isValid = true;
+                }
             }
         }
         return req;
@@ -152,68 +223,72 @@ class HttpClient {
     
     func send(req: ClientHttpRequest): HttpResult {
         let isHttps = req.url.contains("https://");
-        var domain = "";
+        var host = "";
         var path = "/";
-        var port = "";
-        
-        var urlStrip = "";
+        var portStr = "80";
         if isHttps {
-            urlStrip = req.url.substring(8, req.url.len());
-            port = "443";
-        } else {
-            urlStrip = req.url.substring(7, req.url.len());
-            port = "80";
+            portStr = "443";
         }
         
-        // Find path
-        let parts = urlStrip.split("/");
-        if parts.len() > 0 {
-            domain = parts.get(0).unwrap();
-        }
-        if parts.len() > 1 {
-            path = "/" + parts.get(1).unwrap();
-        }
-        
-        let addr = domain + ":" + port;
-        let requestStr = req.method + " " + path + " HTTP/1.1\r\nHost: " + domain + "\r\nUser-Agent: " + self.options.userAgent + "\r\nConnection: close\r\n\r\n";
-        
-        var responseStr = "";
+        var protocolLen = 7;
         if isHttps {
-            let stream = TlsStream();
-            if stream.connect(addr, domain) {
-                stream.writeString(requestStr);
-                responseStr = stream.readString(65536);
-                stream.close();
-            }
+            protocolLen = 8;
+        }
+        
+        let pathIdx = req.url.indexOfFrom("/", protocolLen);
+        if pathIdx == -1 {
+            host = req.url.substring(protocolLen, req.url.len());
         } else {
-            let stream = TcpStream();
-            if stream.connect(addr) {
-                stream.writeString(requestStr);
-                responseStr = stream.readString(65536);
-                stream.close();
+            host = req.url.substring(protocolLen, pathIdx);
+            path = req.url.substring(pathIdx, req.url.len());
+        }
+        
+        let portIdx = host.indexOfFrom(":", 0);
+        if portIdx != -1 {
+            portStr = host.substring(portIdx + 1, host.len());
+            host = host.substring(0, portIdx);
+        }
+        
+        let stream = TcpStream();
+        let connected = stream.connect(host + ":" + portStr);
+        
+        if connected == false {
+            return HttpResult(false, HttpServerResponse(500, "Connection failed"));
+        }
+        
+        let builder = StringBuilder();
+        builder.append(req.method);
+        builder.append(" ");
+        builder.append(path);
+        builder.append(" HTTP/1.1\r\nHost: ");
+        builder.append(host);
+        builder.append("\r\nUser-Agent: ");
+        builder.append(self.options.userAgent);
+        builder.append("\r\nConnection: close\r\n\r\n");
+        
+        stream.writeString(builder.toString());
+        
+        let respStr = stream.readString(65535);
+        stream.close();
+        
+        let bodyStart = respStr.indexOfFrom("\r\n\r\n", 0);
+        var body = "";
+        if bodyStart != -1 {
+            body = respStr.substring(bodyStart + 4, respStr.len());
+        }
+        
+        var status = 200;
+        let spaceIdx = respStr.indexOfFrom(" ", 0);
+        if spaceIdx != -1 {
+            let space2Idx = respStr.indexOfFrom(" ", spaceIdx + 1);
+            if space2Idx != -1 {
+                let statusStr = respStr.substring(spaceIdx + 1, space2Idx);
+                if statusStr == "404" { status = 404; }
+                else if statusStr == "500" { status = 500; }
+                else if statusStr == "400" { status = 400; }
             }
         }
         
-        if responseStr == "" {
-            return HttpResult(false, HttpServerResponse(0, ""));
-        }
-        
-        // Parse HTTP/1.1 200 OK
-        var status = 0;
-        let lines = responseStr.split("\r\n");
-        if lines.len() > 0 {
-            let firstLine = lines.get(0).unwrap();
-            let firstLineParts = firstLine.split(" ");
-            if firstLineParts.len() >= 2 {
-                status = firstLineParts.get(1).unwrap().toInt();
-            }
-        }
-        
-        let resp = HttpServerResponse(status, responseStr);
-        return HttpResult(true, resp);
-    }
-    
-    func close() {
-        // Nothing to close for now
+        return HttpResult(true, HttpServerResponse(status, body));
     }
 }

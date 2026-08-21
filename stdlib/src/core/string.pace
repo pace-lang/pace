@@ -10,6 +10,7 @@ foreign func stringCharAt(s: String, index: Int): Int;
 foreign func stringSkipWhitespace(s: String, start: Int): Int;
 foreign func stringFindStringEnd(s: String, start: Int): Int;
 foreign func stringToInt(s: String): Int;
+foreign func paceStringIndexOf(s: String, sub: String, start: Int): Int;
 foreign func stringToFloat(s: String): Float;
 foreign func paceStringToBool(s: String): Boolean;
 foreign func stringFindNumberEnd(s: String, start: Int): Int;
@@ -39,6 +40,10 @@ extend String {
 
     func substring(start: Int, end: Int): String {
         return stringSubstring(self, start, end);
+    }
+    
+    func indexOfFrom(sub: String, start: Int): Int {
+        return paceStringIndexOf(self, sub, start);
     }
 
     func contains(sub: String): Boolean {
