@@ -121,7 +121,7 @@ class Set<T> {
         return false;
     }
 
-    func remove(value: T) {
+    func remove(value: T): Boolean {
         var h = hash<T>(value);
         if h < 0 {
             h = 0 - h;
@@ -132,20 +132,21 @@ class Set<T> {
         while true {
             let state = ptrRead<Int>(self.statePtr, index);
             if state == 0 {
-                return;
+                return false;
             } else if state == 1 {
                 let existingVal = ptrRead<T>(self.itemPtr, index);
                 if equals<T>(existingVal, value) {
                     ptrWrite<Int>(self.statePtr, index, 2);
                     self.length = self.length - 1;
-                    return;
+                    return true;
                 }
             }
             index = (index + 1) % self.capacity;
             if index == startIndex {
-                return;
+                return false;
             }
         }
+        return false;
     }
 
     func clear() {
@@ -172,5 +173,9 @@ class Set<T> {
 
     func len(): Int {
         return self.length;
+    }
+
+    func isEmpty(): Boolean {
+        return self.length == 0;
     }
 }

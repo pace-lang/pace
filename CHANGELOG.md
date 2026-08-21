@@ -5,6 +5,10 @@ All notable changes to the Pace language will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Collections API Extensions**: Vastly improved `List`, `Map`, and `Set` in `stdlib/src/collections`.
+  - `List`: Added `isEmpty()`, `contains()`, `indexOf()`, `insert()`, `first()`, `last()`, and `reverse()`.
+  - `Map`: Added `isEmpty()`, `len()`, and refactored `remove()` to return `Option<V>`.
+  - `Set`: Added `isEmpty()`, and refactored `remove()` to return `Boolean`.
 - **Primitive Extensions (`Int`, `Float`, `Boolean`, `String`)**: Vastly expanded methods available on built-in primitives. Extracted primitives into dedicated `int.pace`, `float.pace`, `bool.pace` files. 
   - `Int`: Added `abs()`, `isEven()`, `isOdd()`, `toHexString()`, and `toFloat()`.
   - `Float`: Added `abs()`, `round()`, `floor()`, `ceil()`, `trunc()`, and `toInt()`.

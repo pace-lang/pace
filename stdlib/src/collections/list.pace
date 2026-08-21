@@ -8,6 +8,7 @@ foreign func free(ptr: Pointer<CChar>);
 foreign func ptrRead<T>(ptr: Pointer<CChar>, offset: Int): T;
 foreign func ptrWrite<T>(ptr: Pointer<CChar>, offset: Int, val: T);
 foreign func sizeof<T>(): Int;
+foreign func equals<T>(a: T, b: T): Boolean;
 
 class List<T> {
     var ptr: Pointer<CChar>;
@@ -96,6 +97,81 @@ class List<T> {
         
         self.length = self.length - 1;
         return Option.Some(val);
+    }
+
+    func isEmpty(): Boolean {
+        return self.length == 0;
+    }
+
+    func contains(value: T): Boolean {
+        var i = 0;
+        while i < self.length {
+            let v = ptrRead<T>(self.ptr, i);
+            if equals<T>(v, value) {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    func indexOf(value: T): Int {
+        var i = 0;
+        while i < self.length {
+            let v = ptrRead<T>(self.ptr, i);
+            if equals<T>(v, value) {
+                return i;
+            }
+            i = i + 1;
+        }
+        return -1;
+    }
+
+    func insert(index: Int, value: T) {
+        if index < 0 || index > self.length {
+            return;
+        }
+        if self.length >= self.capacity {
+            self.capacity = self.capacity * 2;
+            self.ptr = realloc(self.ptr, self.capacity * sizeof<T>());
+        }
+        var i = self.length;
+        while i > index {
+            let prevVal = ptrRead<T>(self.ptr, i - 1);
+            ptrWrite<T>(self.ptr, i, prevVal);
+            i = i - 1;
+        }
+        ptrWrite<T>(self.ptr, index, value);
+        self.length = self.length + 1;
+    }
+
+    func first(): Option<T> {
+        if self.length == 0 {
+            return Option.None();
+        }
+        let val = ptrRead<T>(self.ptr, 0);
+        return Option.Some(val);
+    }
+
+    func last(): Option<T> {
+        if self.length == 0 {
+            return Option.None();
+        }
+        let val = ptrRead<T>(self.ptr, self.length - 1);
+        return Option.Some(val);
+    }
+
+    func reverse() {
+        var left = 0;
+        var right = self.length - 1;
+        while left < right {
+            let lVal = ptrRead<T>(self.ptr, left);
+            let rVal = ptrRead<T>(self.ptr, right);
+            ptrWrite<T>(self.ptr, left, rVal);
+            ptrWrite<T>(self.ptr, right, lVal);
+            left = left + 1;
+            right = right - 1;
+        }
     }
 }
 

@@ -137,7 +137,7 @@ class Map<K, V> {
         return opt.isSome();
     }
 
-    func remove(key: K) {
+    func remove(key: K): Option<V> {
         var h = hash<K>(key);
         if h < 0 {
             h = 0 - h;
@@ -148,20 +148,22 @@ class Map<K, V> {
         while true {
             let state = ptrRead<Int>(self.statePtr, index);
             if state == 0 {
-                return;
+                return Option.None();
             } else if state == 1 {
                 let existingKey = ptrRead<K>(self.keyPtr, index);
                 if equals<K>(existingKey, key) {
                     ptrWrite<Int>(self.statePtr, index, 2);
                     self.length = self.length - 1;
-                    return;
+                    let existingVal = ptrRead<V>(self.valuePtr, index);
+                    return Option.Some(existingVal);
                 }
             }
             index = (index + 1) % self.capacity;
             if index == startIndex {
-                return;
+                return Option.None();
             }
         }
+        return Option.None();
     }
 
     func clear() {
@@ -197,5 +199,13 @@ class Map<K, V> {
             i = i + 1;
         }
         return list;
+    }
+
+    func len(): Int {
+        return self.length;
+    }
+
+    func isEmpty(): Boolean {
+        return self.length == 0;
     }
 }

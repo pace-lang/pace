@@ -1,0 +1,94 @@
+import "std/collections/list.pace";
+import "std/collections/map.pace";
+import "std/collections/set.pace";
+
+func main() {
+    print("--- List Ext Tests ---");
+    let l = List<String>();
+    if l.isEmpty() {
+        print("List is empty");
+    }
+
+    l.push("A");
+    l.push("C");
+    l.insert(1, "B");
+    
+    if l.len() == 3 {
+        print("List len is 3");
+    }
+
+    if l.contains("B") {
+        print("List contains B");
+    }
+
+    let idx = l.indexOf("C");
+    if idx == 2 {
+        print("List indexOf C is 2");
+    }
+
+    let first = l.first();
+    if first.unwrap() == "A" {
+        print("List first is A");
+    }
+
+    let last = l.last();
+    if last.unwrap() == "C" {
+        print("List last is C");
+    }
+
+    l.reverse();
+    if l.first().unwrap() == "C" {
+        print("List reversed, first is C");
+    }
+    if l.last().unwrap() == "A" {
+        print("List reversed, last is A");
+    }
+
+    print("--- Map Ext Tests ---");
+    let m = Map<String, Int>();
+    if m.isEmpty() {
+        print("Map is empty");
+    }
+
+    m.set("One", 1);
+    m.set("Two", 2);
+
+    if m.len() == 2 {
+        print("Map len is 2");
+    }
+
+    let rem = m.remove("Two");
+    if rem.isSome() {
+        if rem.unwrap() == 2 {
+            print("Map remove returned Two (2)");
+        }
+    }
+    
+    let none = m.remove("Three");
+    if none.isNone() {
+        print("Map remove returned None for Three");
+    }
+
+    print("--- Set Ext Tests ---");
+    let s = Set<Int>();
+    if s.isEmpty() {
+        print("Set is empty");
+    }
+
+    s.insert(10);
+    s.insert(20);
+
+    if s.len() == 2 {
+        print("Set len is 2");
+    }
+
+    let srem = s.remove(20);
+    if srem {
+        print("Set remove returned true for 20");
+    }
+
+    let sremFalse = s.remove(30);
+    if !sremFalse {
+        print("Set remove returned false for 30");
+    }
+}
