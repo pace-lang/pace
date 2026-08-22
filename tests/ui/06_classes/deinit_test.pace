@@ -1,5 +1,5 @@
 class DropMe {
-    var id: Int;
+    id: Int;
 
     func init(id: Int) {
         self.id = id;
@@ -12,7 +12,7 @@ class DropMe {
 }
 
 func testDrop() {
-    let a = DropMe(42);
+    final a := DropMe(42);
     // a goes out of scope here, should print "Dropped!\n42"
 }
 

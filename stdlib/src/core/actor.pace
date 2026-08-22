@@ -2,8 +2,8 @@ import "task.pace";
 import "../collections/list.pace";
 
 class Mailbox {
-    var queue: List<Pointer<CChar>>;
-    var waker: Pointer<CChar>;
+    queue: List<Pointer<CChar>>;
+    waker: Pointer<CChar>;
     
     func init() {
         self.queue = List<Pointer<CChar>>();

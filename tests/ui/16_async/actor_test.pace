@@ -1,5 +1,5 @@
 actor Counter {
-    var count: Int;
+    count: Int;
 
     func init() {
         self.count = 0;
@@ -16,12 +16,12 @@ actor Counter {
 
 func main() {
     print("Creating actor");
-    let c = Counter();
+    final c := Counter();
     print("Sending increment");
     c.increment();
     c.increment();
     print("Getting count");
-    let result = c.getCount();
+    final result := c.getCount();
     // Getting count doesn't actually block here since we don't have await in main, but it's just a syntax/lowering test for now
     // print(result); // Removing this line because it prints a memory address which changes every run and breaks snapshot testing
 }

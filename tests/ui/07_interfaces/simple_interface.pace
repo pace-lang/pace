@@ -15,8 +15,8 @@ class Cat implements Animal {
 }
 
 func main() {
-    let dog = Dog();
-    let cat = Cat();
+    final dog := Dog();
+    final cat := Cat();
     
     dog.speak();
     cat.speak();

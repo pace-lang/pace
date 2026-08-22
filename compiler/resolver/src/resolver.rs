@@ -38,12 +38,7 @@ impl<'a> Resolver<'a> {
             let mut exports = HashMap::new();
             for stmt in &module.ast {
                 match &stmt.kind {
-                    StmtKind::Let {
-                        name,
-                        is_private: false,
-                        ..
-                    }
-                    | StmtKind::Var {
+                    StmtKind::Binding {
                         name,
                         is_private: false,
                         ..
@@ -229,17 +224,11 @@ impl<'a> Resolver<'a> {
                 self.resolve(stmts);
                 self.scopes.pop_scope();
             }
-            StmtKind::Let {
+            StmtKind::Binding {
                 name,
                 type_annotation: _,
                 initializer,
-                is_private: _,
-                is_static: _,
-            }
-            | StmtKind::Var {
-                name,
-                type_annotation: _,
-                initializer,
+                mutability: _,
                 is_weak: _,
                 is_private: _,
                 is_static: _,

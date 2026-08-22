@@ -1,6 +1,6 @@
 
 func main() {
-    let s = Set<Int>();
+    final s := Set<Int>();
     
     print("Len before:");
     print(s.len());

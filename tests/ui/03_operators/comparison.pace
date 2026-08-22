@@ -1,6 +1,6 @@
 func main() {
-    let a = 10;
-    let b = 20;
+    final a := 10;
+    final b := 20;
     
     if a == 10 { print("a is 10"); }
     if a != b { print("a != b"); }

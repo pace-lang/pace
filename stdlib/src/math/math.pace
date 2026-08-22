@@ -13,11 +13,11 @@ foreign func mathAcos(x: Float): Float;
 foreign func mathAtan(x: Float): Float;
 
 class Math {
-    static let Pi: Float = 3.141592653589793;
-    static let E: Float = 2.718281828459045;
-    static let Ln2: Float = 0.6931471805599453;
-    static let Ln10: Float = 2.302585092994046;
-    static let Sqrt2: Float = 1.4142135623730951;
+    static final Pi: Float  = 3.141592653589793;
+    static final E: Float  = 2.718281828459045;
+    static final Ln2: Float  = 0.6931471805599453;
+    static final Ln10: Float  = 2.302585092994046;
+    static final Sqrt2: Float  = 1.4142135623730951;
 
     static func ceil(x: Float): Float {
         return mathCeil(x);

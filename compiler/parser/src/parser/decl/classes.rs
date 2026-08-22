@@ -49,24 +49,35 @@ impl<'a> Parser<'a> {
 
             let is_static = self.match_token(&[TokenKind::Static]);
 
-            if self.match_token(&[TokenKind::Let]) {
-                if let Some(field) = self.variable_declaration(false, false, item_is_private, is_static) {
+            if self.match_token(&[TokenKind::Final]) {
+                if let Some(field) = self.variable_declaration(Mutability::Final, false, item_is_private, is_static) {
                     fields.push(field);
                 }
-            } else if self.match_token(&[TokenKind::Var]) {
-                if let Some(field) = self.variable_declaration(true, false, item_is_private, is_static) {
+            } else if let Some(Token { kind: TokenKind::Identifier(_), .. }) = self.peek()
+                && let Some(Token { kind: next_kind, .. }) = self.peek_next()
+                && (matches!(next_kind, TokenKind::Colon) || matches!(next_kind, TokenKind::ColonEqual))
+            {
+                if let Some(field) = self.variable_declaration(Mutability::Mutable, false, item_is_private, is_static) {
                     fields.push(field);
                 }
+
             } else if self.match_token(&[TokenKind::Weak]) {
                 if is_static {
                     self.error_at_current("Static properties cannot be weak.");
                 }
-                if self.match_token(&[TokenKind::Var]) {
-                    if let Some(field) = self.variable_declaration(true, true, item_is_private, is_static) {
+                if self.match_token(&[TokenKind::Final]) {
+                    if let Some(field) = self.variable_declaration(Mutability::Final, true, item_is_private, is_static) {
+                        fields.push(field);
+                    }
+                } else if let Some(Token { kind: TokenKind::Identifier(_), .. }) = self.peek()
+                    && let Some(Token { kind: next_kind, .. }) = self.peek_next()
+                    && (matches!(next_kind, TokenKind::Colon) || matches!(next_kind, TokenKind::ColonEqual))
+                {
+                    if let Some(field) = self.variable_declaration(Mutability::Mutable, true, item_is_private, is_static) {
                         fields.push(field);
                     }
                 } else {
-                    self.error_at_current("Expected 'var' after 'weak'.");
+                    self.error_at_current("Expected variable declaration after 'weak'.");
                 }
             } else if self.match_token(&[TokenKind::Func]) {
                 if self.match_token(&[TokenKind::Init]) {
@@ -175,24 +186,35 @@ impl<'a> Parser<'a> {
 
             let is_static = self.match_token(&[TokenKind::Static]);
 
-            if self.match_token(&[TokenKind::Let]) {
-                if let Some(field) = self.variable_declaration(false, false, item_is_private, is_static) {
+            if self.match_token(&[TokenKind::Final]) {
+                if let Some(field) = self.variable_declaration(Mutability::Final, false, item_is_private, is_static) {
                     fields.push(field);
                 }
-            } else if self.match_token(&[TokenKind::Var]) {
-                if let Some(field) = self.variable_declaration(true, false, item_is_private, is_static) {
+            } else if let Some(Token { kind: TokenKind::Identifier(_), .. }) = self.peek()
+                && let Some(Token { kind: next_kind, .. }) = self.peek_next()
+                && (matches!(next_kind, TokenKind::Colon) || matches!(next_kind, TokenKind::ColonEqual))
+            {
+                if let Some(field) = self.variable_declaration(Mutability::Mutable, false, item_is_private, is_static) {
                     fields.push(field);
                 }
+
             } else if self.match_token(&[TokenKind::Weak]) {
                 if is_static {
                     self.error_at_current("Static properties cannot be weak.");
                 }
-                if self.match_token(&[TokenKind::Var]) {
-                    if let Some(field) = self.variable_declaration(true, true, item_is_private, is_static) {
+                if self.match_token(&[TokenKind::Final]) {
+                    if let Some(field) = self.variable_declaration(Mutability::Final, true, item_is_private, is_static) {
+                        fields.push(field);
+                    }
+                } else if let Some(Token { kind: TokenKind::Identifier(_), .. }) = self.peek()
+                    && let Some(Token { kind: next_kind, .. }) = self.peek_next()
+                    && (matches!(next_kind, TokenKind::Colon) || matches!(next_kind, TokenKind::ColonEqual))
+                {
+                    if let Some(field) = self.variable_declaration(Mutability::Mutable, true, item_is_private, is_static) {
                         fields.push(field);
                     }
                 } else {
-                    self.error_at_current("Expected 'var' after 'weak'.");
+                    self.error_at_current("Expected variable declaration after 'weak'.");
                 }
             } else if self.match_token(&[TokenKind::Func]) {
                 if self.match_token(&[TokenKind::Init]) {

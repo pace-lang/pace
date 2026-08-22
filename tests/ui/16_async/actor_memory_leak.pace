@@ -1,5 +1,5 @@
 actor DummyActor {
-    var id: Int;
+    id: Int;
 
     func init(id: Int) {
         self.id = id;
@@ -7,8 +7,8 @@ actor DummyActor {
 }
 
 func main() {
-    var a = DummyActor(1);
-    var b = DummyActor(2);
-    var c = DummyActor(3);
+    a := DummyActor(1);
+    b := DummyActor(2);
+    c := DummyActor(3);
     print("Created 3 actors without loops.");
 }

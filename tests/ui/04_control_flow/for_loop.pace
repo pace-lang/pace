@@ -1,7 +1,7 @@
 import "../../../stdlib/src/collections/list.pace";
 
 func main(): Int {
-    let list = List<Int>();
+    final list := List<Int>();
     list.push(10);
     list.push(20);
     list.push(30);

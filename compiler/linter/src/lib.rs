@@ -83,7 +83,7 @@ impl<'a> Linter<'a> {
                     "Foreign function",
                 );
             }
-            StmtKind::Let { name, .. } | StmtKind::Var { name, .. } => {
+            StmtKind::Binding { name, .. } => {
                 // If it's a global constant-like value that they wrote in UPPER_SNAKE_CASE,
                 // we warn them. For now, Pace prefers camelCase for variables/lets.
                 // However, they specifically mentioned they want constants to be PascalCase.

@@ -3,7 +3,7 @@ import "utils.pace";
 private class Helper {}
 
 func test() {
-    let x = get_value();
+    final x := get_value();
     print(x);
 }
 

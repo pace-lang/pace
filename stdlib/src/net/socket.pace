@@ -13,7 +13,7 @@ foreign func paceTcpClose(stream: Pointer<CChar>);
 foreign func paceTcpListenerClose(listener: Pointer<CChar>);
 
 class TlsStream {
-    var ptr: Pointer<CChar>;
+    ptr: Pointer<CChar>;
     
     func init() {
         self.ptr = paceNullPointer();

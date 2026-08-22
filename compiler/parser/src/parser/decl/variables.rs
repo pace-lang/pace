@@ -5,7 +5,7 @@ use lexer::*;
 impl<'a> Parser<'a> {
     pub(crate) fn variable_declaration(
         &mut self,
-        is_var: bool,
+        mutability: Mutability,
         is_weak: bool,
         is_private: bool,
         is_static: bool,
@@ -24,17 +24,19 @@ impl<'a> Parser<'a> {
             return None;
         };
 
-        let type_annotation = if self.match_token(&[TokenKind::Colon]) {
-            Some(self.parse_type_expr()?)
-        } else {
-            None
-        };
+        let mut type_annotation = None;
+        let mut initializer = None;
 
-        let initializer = if self.match_token(&[TokenKind::Equal]) {
-            Some(self.expression()?)
-        } else {
-            None
-        };
+        if self.match_token(&[TokenKind::ColonEqual]) {
+            initializer = Some(self.expression()?);
+        } else if self.match_token(&[TokenKind::Colon]) {
+            type_annotation = Some(self.parse_type_expr()?);
+            if self.match_token(&[TokenKind::Equal]) {
+                initializer = Some(self.expression()?);
+            }
+        } else if self.match_token(&[TokenKind::Equal]) {
+            initializer = Some(self.expression()?);
+        }
 
         self.match_token(&[TokenKind::Semicolon]);
 
@@ -47,23 +49,14 @@ impl<'a> Parser<'a> {
             end_span.end_loc,
         );
 
-        let kind = if is_var {
-            StmtKind::Var {
-                name,
-                type_annotation,
-                initializer: initializer.map(|e| &*self.session.ast_arena.alloc(e)),
-                is_weak,
-                is_private,
-                is_static,
-            }
-        } else {
-            StmtKind::Let {
-                name,
-                type_annotation,
-                initializer: initializer.map(|e| &*self.session.ast_arena.alloc(e)),
-                is_private,
-                is_static,
-            }
+        let kind = StmtKind::Binding {
+            name,
+            type_annotation,
+            initializer: initializer.map(|e| &*self.session.ast_arena.alloc(e)),
+            mutability,
+            is_weak,
+            is_private,
+            is_static,
         };
 
         Some(Stmt::new(kind, span))

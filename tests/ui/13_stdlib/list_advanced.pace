@@ -1,22 +1,22 @@
 func main() {
-    var list = [1, 2, 3];
+    list := [1, 2, 3];
     list.push(4);
     list.push(5);
     
     print("List Length:");
     print(list.len());
     
-    let list2 = List<String>();
+    final list2 := List<String>();
     list2.push("Hello");
     list2.push("World");
     
     print("String List Length:");
     print(list2.len());
     
-    let popped = list2.pop();
+    final popped := list2.pop();
     if popped.isSome() {
         print("Popped:");
-        let last = popped.unwrap();
+        final last := popped.unwrap();
         print(last);
     }
 }

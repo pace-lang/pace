@@ -1,6 +1,6 @@
 struct Point {
-    var x: Int;
-    var y: Int;
+    x: Int;
+    y: Int;
     func init(x: Int, y: Int) {
         self.x = x;
         self.y = y;
@@ -8,8 +8,8 @@ struct Point {
 }
 
 struct Rect {
-    var topLeft: Point;
-    var bottomRight: Point;
+    topLeft: Point;
+    bottomRight: Point;
     func init(topLeft: Point, bottomRight: Point) {
         self.topLeft = topLeft;
         self.bottomRight = bottomRight;
@@ -17,8 +17,8 @@ struct Rect {
 }
 
 func main() {
-    var p1 = Point(10, 20);
-    var p2 = p1;
+    p1 := Point(10, 20);
+    p2 := p1;
     
     // Modifying p2 should NOT modify p1
     p2.x = 100;

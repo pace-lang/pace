@@ -419,21 +419,13 @@ impl<'a> TypeChecker<'a> {
 
         self.env.declare_var(name, decl_type, is_mutable);
 
-        let kind = if is_weak || (initializer.is_none() && type_annotation.is_some()) {
-            TypedStmtKind::Var {
-                name,
-                type_annotation: type_annotation.clone(),
-                initializer: typed_init.map(|e| self.alloc(e)),
-                is_weak,
-                is_static,
-            }
-        } else {
-            TypedStmtKind::Let {
-                name,
-                type_annotation: type_annotation.clone(),
-                initializer: typed_init.map(|e| self.alloc(e)),
-                is_static,
-            }
+        let kind = TypedStmtKind::Binding {
+            name,
+            type_annotation: type_annotation.clone(),
+            initializer: typed_init.map(|e| self.alloc(e)),
+            mutability: if is_mutable { ast::Mutability::Mutable } else { ast::Mutability::Final },
+            is_weak,
+            is_static,
         };
         TypedStmt::new(kind, span)
     }

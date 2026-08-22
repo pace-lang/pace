@@ -5,8 +5,8 @@ import "list.pace";
 
 
 class Set<T> {
-    var itemPtr: Pointer<CChar>;
-    var statePtr: Pointer<CChar>; // 0: empty, 1: filled, 2: deleted
+    itemPtr: Pointer<CChar>;
+    statePtr: Pointer<CChar>; // 0: empty, 1: filled, 2: deleted
     var capacity: Int;
     var length: Int;
 

@@ -8,21 +8,7 @@ impl<'a> MirBuilder<'a> {
                     self.lower_stmt(s);
                 }
             }
-            TypedStmtKind::Let {
-                name, initializer, ..
-            } => {
-                if let Some(init) = initializer {
-                    let val = self.lower_expr(init);
-                    self.emit_assignment(Place::Var(self.session.interner.borrow().lookup(*name).to_string()), init.ty, RValue::Use(val));
-                } else {
-                    let __inst = Inst::Assign(
-                        Place::Var(self.session.interner.borrow().lookup(*name).to_string()),
-                        RValue::Use(Value::Void),
-                    );
-                    self.current().instructions.push(__inst);
-                }
-            }
-            TypedStmtKind::Var {
+            TypedStmtKind::Binding {
                 name,
                 initializer,
                 is_weak,

@@ -12,7 +12,7 @@ func main() {
 
 async func asyncMain() {
     print("Before await");
-    let val = await getValue();
+    final val := await getValue();
     print(val);
     print("After await");
 }

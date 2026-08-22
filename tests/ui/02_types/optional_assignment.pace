@@ -1,15 +1,15 @@
 class Address {
-    var city: String;
+    city: String;
 }
 
 class User {
-    var address: Address?;
+    address: Address?;
 }
 
 func main() {
-    let u: User? = null;
-    let s: String? = "hello";
-    let emptyStr: String? = null;
+    final u: User?  = null;
+    final s: String?  = "hello";
+    final emptyStr: String?  = null;
     
     // Valid assignments
     let u2: User? = u;

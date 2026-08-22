@@ -1,5 +1,5 @@
 func main() {
-    let x = 10;
-    let y = "hello";
-    let z = x + y;
+    final x := 10;
+    final y := "hello";
+    final z := x + y;
 }

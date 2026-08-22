@@ -8,7 +8,7 @@ foreign func fileClose(ptr: Pointer<CChar>);
 foreign func fileIsValid(ptr: Pointer<CChar>): Bool;
 
 class File {
-    var ptr: Pointer<CChar>;
+    ptr: Pointer<CChar>;
 
     func init(ptr: Pointer<CChar>) {
         self.ptr = ptr;
@@ -39,7 +39,7 @@ class File {
 }
 
 func open(path: String, mode: String): Result<File, String> {
-    let ptr = fileOpen(path, mode);
+    final ptr := fileOpen(path, mode);
     if fileIsValid(ptr) {
         return Result.Ok(File(ptr));
     } else {

@@ -9,24 +9,24 @@ foreign func timeSecond(ts: Float): Int;
 foreign func timeMillisecond(ts: Float): Int;
 
 class DateTime {
-    var year: Int = 0;
-    var month: Int = 0;
-    var day: Int = 0;
-    var hour: Int = 0;
-    var minute: Int = 0;
-    var second: Int = 0;
-    var millisecond: Int = 0;
-    var timestamp: Float = 0.0;
+    year: Int  = 0;
+    month: Int  = 0;
+    day: Int  = 0;
+    hour: Int  = 0;
+    minute: Int  = 0;
+    second: Int  = 0;
+    millisecond: Int  = 0;
+    timestamp: Float  = 0.0;
     
     func init() {}
 
     static func now(): DateTime {
-        let ts = timeNow();
+        final ts := timeNow();
         return DateTime.fromTimestamp(ts);
     }
     
     static func fromTimestamp(ts: Float): DateTime {
-        let dt = DateTime();
+        final dt := DateTime();
         dt.timestamp = ts;
         dt.year = timeYear(ts);
         dt.month = timeMonth(ts);

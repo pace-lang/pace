@@ -21,10 +21,10 @@ func makeSpeak(animal: Animal) {
 }
 
 func main(): Int {
-    let dog = Dog();
+    final dog := Dog();
     makeSpeak(dog);
     
-    let cat = Cat();
+    final cat := Cat();
     makeSpeak(cat);
     return 0;
 }

@@ -32,21 +32,15 @@ impl<'a> TypeChecker<'a> {
         for field in fields {
             let (f_name, type_annotation, initializer, _is_weak, is_mutable, is_static) =
                 match &field.kind {
-                    StmtKind::Var {
+                    StmtKind::Binding {
                         name,
                         type_annotation,
                         initializer,
+                        mutability,
                         is_weak,
                         is_private: _,
                         is_static,
-                    } => (name, type_annotation, initializer, *is_weak, true, *is_static),
-                    StmtKind::Let {
-                        name,
-                        type_annotation,
-                        initializer,
-                        is_private: _,
-                        is_static,
-                    } => (name, type_annotation, initializer, false, false, *is_static),
+                    } => (name, type_annotation, initializer, *is_weak, matches!(mutability, ast::Mutability::Mutable), *is_static),
                     _ => continue,
                 };
 
@@ -159,20 +153,14 @@ impl<'a> TypeChecker<'a> {
 
         for field in fields {
             let (f_name, type_annotation, initializer, is_mutable, is_static) = match &field.kind {
-                StmtKind::Var {
+                StmtKind::Binding {
                     name,
                     type_annotation,
                     initializer,
+                    mutability,
                     is_static,
                     ..
-                } => (name, type_annotation, initializer, true, *is_static),
-                StmtKind::Let {
-                    name,
-                    type_annotation,
-                    initializer,
-                    is_static,
-                    ..
-                } => (name, type_annotation, initializer, false, *is_static),
+                } => (name, type_annotation, initializer, matches!(mutability, ast::Mutability::Mutable), *is_static),
                 _ => continue,
             };
 

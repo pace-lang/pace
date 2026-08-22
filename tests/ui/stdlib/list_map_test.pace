@@ -2,21 +2,21 @@ import "../../../stdlib/src/collections/list.pace";
 import "../../../stdlib/src/collections/map.pace";
 
 func main() {
-    let list = List<Int>();
+    final list := List<Int>();
     list.push(1);
     list.push(2);
     list.push(3);
     
-    let a = list.get(0).unwrap();
-    let len = list.len();
+    final a := list.get(0).unwrap();
+    final len := list.len();
 
-    let map = Map<String, Int>();
-    let keyA = "a";
-    let keyB = "b";
+    final map := Map<String, Int>();
+    final keyA := "a";
+    final keyB := "b";
     map.set(keyA, 1);
     map.set(keyB, 2);
 
-    let b = map.get(keyA).unwrap();
-    let keys = map.keys();
-    let keyLen = keys.len();
+    final b := map.get(keyA).unwrap();
+    final keys := map.keys();
+    final keyLen := keys.len();
 }

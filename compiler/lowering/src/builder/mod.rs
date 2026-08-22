@@ -302,7 +302,7 @@ impl<'a> ProgramBuilder<'a> {
 
                 for field in fields {
                     match &field.kind {
-                        TypedStmtKind::Var {
+                        TypedStmtKind::Binding {
                             name: f_name,
                             is_weak,
                             type_annotation,
@@ -320,24 +320,6 @@ impl<'a> ProgramBuilder<'a> {
                                     self.session.interner.borrow().lookup(*f_name).to_string(),
                                 );
                             } else if is_ref_type_opt(type_annotation, self.session) {
-                                reference_fields.insert(
-                                    self.session.interner.borrow().lookup(*f_name).to_string(),
-                                );
-                            }
-                        }
-                        TypedStmtKind::Let {
-                            name: f_name,
-                            type_annotation,
-                            is_static,
-                            ..
-                        } => {
-                            if *is_static {
-                                static_fields.push(self.session.interner.borrow().lookup(*f_name).to_string());
-                                continue;
-                            }
-                            field_names
-                                .push(self.session.interner.borrow().lookup(*f_name).to_string());
-                            if is_ref_type_opt(type_annotation, self.session) {
                                 reference_fields.insert(
                                     self.session.interner.borrow().lookup(*f_name).to_string(),
                                 );

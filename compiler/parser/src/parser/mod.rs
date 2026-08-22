@@ -69,6 +69,10 @@ impl<'a> Parser<'a> {
         self.tokens.get(self.current)
     }
 
+    pub(crate) fn peek_next(&self) -> Option<&Token> {
+        self.tokens.get(self.current + 1)
+    }
+
     pub(crate) fn previous(&self) -> &Token {
         &self.tokens[self.current - 1]
     }
@@ -92,12 +96,11 @@ impl<'a> Parser<'a> {
                 match token.kind {
                     TokenKind::Class
                     | TokenKind::Func
-                    | TokenKind::Var
+                    | TokenKind::Final
                     | TokenKind::For
                     | TokenKind::If
                     | TokenKind::While
-                    | TokenKind::Return
-                    | TokenKind::Let => {
+                    | TokenKind::Return => {
                         return;
                     }
                     _ => {}

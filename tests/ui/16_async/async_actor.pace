@@ -1,5 +1,5 @@
 actor Counter {
-    var count: Int;
+    count: Int;
 
     func init() {
         self.count = 0;
@@ -24,14 +24,14 @@ async func worker(counter: Counter, iterations: Int) {
 
 func main() {
     print("Creating actor");
-    let c = Counter();
+    final c := Counter();
     
     print("Spawning workers");
     spawn worker(c, 3);
     
     spawn async {
         print("Wait before get");
-        let result = await c.getCount();
+        final result := await c.getCount();
         print("Final count:");
         print(result);
     }();

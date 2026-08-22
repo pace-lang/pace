@@ -1,5 +1,5 @@
 func main() {
-    let opt: Int? = null;
+    final opt: Int?  = null;
     
     // This should panic at runtime (unwrap_user 1)
     let bad = opt!;

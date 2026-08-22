@@ -2,7 +2,7 @@ import "../../../stdlib/src/core/datetime.pace";
 import "../../../stdlib/src/io/print.pace";
 
 func main() {
-    let now = DateTime.now();
+    final now := DateTime.now();
     
     if now.year >= 2024 {
         print("Year is valid");
@@ -32,9 +32,9 @@ func main() {
         print("Millisecond is valid");
     }
     
-    let start = DateTime.now().timestamp;
+    final start := DateTime.now().timestamp;
     DateTime.sleep(10.0);
-    let end = DateTime.now().timestamp;
+    final end := DateTime.now().timestamp;
     if end > start {
         print("Sleep and timestamps work");
     }

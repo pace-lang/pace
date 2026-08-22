@@ -1,5 +1,5 @@
 class Box<T> {
-    var value: T;
+    value: T;
     
     func init(val: T) {
         self.value = val;
@@ -7,10 +7,10 @@ class Box<T> {
 }
 
 func main() {
-    let inner = Box<Int>(42);
-    let outer = Box<Box<Int>>(inner);
+    final inner := Box<Int>(42);
+    final outer := Box<Box<Int>>(inner);
     
-    let arr = [outer];
+    final arr := [outer];
     
     print(arr[0].value.value);
 }

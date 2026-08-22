@@ -1,5 +1,5 @@
 class Box<T> {
-    var value: T;
+    value: T;
     
     func init(val: T) {
         self.value = val;
@@ -23,10 +23,10 @@ class ArrayWrapper<T> {
 }
 
 func main() {
-    let intBox = Box(100);
+    final intBox := Box(100);
     print(intBox.get());
     
-    let arr = [10, 20, 30];
-    let wrapper = ArrayWrapper(arr);
+    final arr := [10, 20, 30];
+    final wrapper := ArrayWrapper(arr);
     print(wrapper.getFirst());
 }

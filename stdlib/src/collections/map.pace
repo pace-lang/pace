@@ -5,11 +5,11 @@ import "list.pace";
 
 
 class Map<K, V> {
-    var keyPtr: Pointer<CChar>;
-    var valuePtr: Pointer<CChar>;
-    var statePtr: Pointer<CChar>;
-    var capacity: Int;
-    var length: Int;
+    keyPtr: Pointer<CChar>;
+    valuePtr: Pointer<CChar>;
+    statePtr: Pointer<CChar>;
+    capacity: Int;
+    length: Int;
 
     func init() {
         self.capacity = 16;
@@ -17,7 +17,7 @@ class Map<K, V> {
         self.keyPtr = malloc(self.capacity * sizeof<K>());
         self.valuePtr = malloc(self.capacity * sizeof<V>());
         self.statePtr = malloc(self.capacity * sizeof<Int>());
-        var i = 0;
+        i := 0;
         while i < self.capacity {
             ptrWrite<Int>(self.statePtr, i, 0);
             i = i + 1;
@@ -26,12 +26,12 @@ class Map<K, V> {
 
     func deinit() {
         if self.capacity > 0 {
-            var i = 0;
+            i := 0;
             while i < self.capacity {
-                let state = ptrRead<Int>(self.statePtr, i);
+                final state := ptrRead<Int>(self.statePtr, i);
                 if state == 1 {
-                    let k = ptrRead<K>(self.keyPtr, i);
-                    let v = ptrRead<V>(self.valuePtr, i);
+                    final k := ptrRead<K>(self.keyPtr, i);
+                    final v := ptrRead<V>(self.valuePtr, i);
                     paceReleaseRef<K>(k);
                     paceReleaseRef<V>(v);
                 }
@@ -45,10 +45,10 @@ class Map<K, V> {
     }
 
     func resize(newCapacity: Int) {
-        let oldKeys = self.keyPtr;
-        let oldValues = self.valuePtr;
-        let oldStates = self.statePtr;
-        let oldCapacity = self.capacity;
+        final oldKeys := self.keyPtr;
+        final oldValues := self.valuePtr;
+        final oldStates := self.statePtr;
+        final oldCapacity := self.capacity;
 
         self.capacity = newCapacity;
         self.length = 0;
@@ -56,7 +56,7 @@ class Map<K, V> {
         self.valuePtr = malloc(self.capacity * sizeof<V>());
         self.statePtr = malloc(self.capacity * sizeof<Int>());
 
-        var i = 0;
+        i := 0;
         while i < self.capacity {
             ptrWrite<Int>(self.statePtr, i, 0);
             i = i + 1;
@@ -64,10 +64,10 @@ class Map<K, V> {
 
         i = 0;
         while i < oldCapacity {
-            let state = ptrRead<Int>(oldStates, i);
+            final state := ptrRead<Int>(oldStates, i);
             if state == 1 {
-                let k = ptrRead<K>(oldKeys, i);
-                let v = ptrRead<V>(oldValues, i);
+                final k := ptrRead<K>(oldKeys, i);
+                final v := ptrRead<V>(oldValues, i);
                 // Directly set without retain/release, as we are just moving elements
                 self.setInternalMove(k, v);
             }

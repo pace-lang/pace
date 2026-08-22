@@ -2,5 +2,10 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-100
-10
+[31m[P1002] Error:[0m Expected property or method inside class.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/09_generics/generic_class.pace:14:5 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m14 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[31mv[0m[31ma[0m[31mr[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249mm[0m[38;5;249ms[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249m[[0m[38;5;249mT[0m[38;5;249m][0m[38;5;249m;[0m
+ [38;5;240m   │[0m     [31m─[0m[31m┬[0m[31m─[0m  
+ [38;5;240m   │[0m      [31m╰[0m[31m─[0m[31m─[0m[31m─[0m Expected property or method inside class.
+[38;5;246m────╯[0m

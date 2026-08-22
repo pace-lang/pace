@@ -1,6 +1,6 @@
 struct Point {
-    var x: Int;
-    var y: Int;
+    x: Int;
+    y: Int;
 
     func init(x: Int, y: Int) {
         self.x = x;
@@ -13,5 +13,5 @@ struct Point {
     }
 }
 
-let p = Point(10, 20);
+final p := Point(10, 20);
 p.printPoint();

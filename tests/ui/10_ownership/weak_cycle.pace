@@ -1,13 +1,13 @@
 class User {
     var id: Int
-    weak var friend: User?
+    weak friend: User?
 }
 
 func main() {
-    let alice = User()
+    final alice := User()
     alice.id = 1
     
-    let bob = User()
+    final bob := User()
     bob.id = 2
     
     alice.friend = bob

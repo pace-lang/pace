@@ -13,21 +13,15 @@ impl<'a> TypeChecker<'a> {
                 self.env.pop_scope();
                 TypedStmtKind::Block(typed_stmts)
             }
-            StmtKind::Let {
+            StmtKind::Binding {
                 name,
                 type_annotation,
                 initializer,
-                is_private: _,
-                is_static,
-            } => self.check_var_decl(*name, type_annotation, initializer, false, false, *is_static, stmt.span).kind,
-            StmtKind::Var {
-                name,
-                type_annotation,
-                initializer,
+                mutability,
                 is_weak,
                 is_private: _,
                 is_static,
-            } => self.check_var_decl(*name, type_annotation, initializer, *is_weak, true, *is_static, stmt.span).kind,
+            } => self.check_var_decl(*name, type_annotation, initializer, *is_weak, matches!(mutability, ast::Mutability::Mutable), *is_static, stmt.span).kind,
             StmtKind::Class {
                 name,
                 type_params,

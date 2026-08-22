@@ -132,7 +132,13 @@ impl<'a> Scanner<'a> {
                     TokenKind::Dot
                 }
             }
-            ':' => TokenKind::Colon,
+            ':' => {
+                if self.match_char('=') {
+                    TokenKind::ColonEqual
+                } else {
+                    TokenKind::Colon
+                }
+            }
             ';' => TokenKind::Semicolon,
             '+' => {
                 if self.match_char('=') {
@@ -481,8 +487,7 @@ impl<'a> Scanner<'a> {
 
         let text = &self.source[self.start_idx..self.current_idx];
         match text {
-            "let" => TokenKind::Let,
-            "var" => TokenKind::Var,
+            "final" => TokenKind::Final,
             "func" => TokenKind::Func,
             "init" => TokenKind::Init,
             "self" => TokenKind::SelfKeyword,
@@ -539,13 +544,13 @@ mod tests {
 
     #[test]
     fn test_basic_tokens() {
-        let source = "let count = 10;";
+        let source = "final count = 10;";
         let session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
         let tokens = scanner.scan_tokens(&session);
 
-        assert_eq!(tokens.len(), 6); // let, count, =, 10, ;, EOF
-        assert_eq!(tokens[0].kind, TokenKind::Let);
+        assert_eq!(tokens.len(), 6); // final, count, =, 10, ;, EOF
+        assert_eq!(tokens[0].kind, TokenKind::Final);
         assert_eq!(
             tokens[1].kind,
             TokenKind::Identifier(session.interner.borrow_mut().intern("count"))
@@ -558,7 +563,7 @@ mod tests {
 
     #[test]
     fn test_error_token() {
-        let source = "let x = @;";
+        let source = "final x = @;";
         let session = session::CompilerSession::new();
         let mut scanner = Scanner::new(0, source);
         let tokens = scanner.scan_tokens(&session);

@@ -1,3 +1,3 @@
 func main() {
-    let opt: Option<Int> = Option.None();
+    final opt: Option<Int>  = Option.None();
 }

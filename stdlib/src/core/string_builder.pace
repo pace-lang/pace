@@ -8,9 +8,9 @@ foreign func ptrWriteByte(ptr: Pointer<CChar>, offset: Int, val: Int);
 
 
 class StringBuilder {
-    var ptr: Pointer<CChar>;
-    var length: Int;
-    var capacity: Int;
+    ptr: Pointer<CChar>;
+    length: Int;
+    capacity: Int;
 
     func init() {
         self.capacity = 16;
@@ -25,12 +25,12 @@ class StringBuilder {
     }
 
     func append(s: String) {
-        var sLen = stringLen(s);
+        sLen := stringLen(s);
         if sLen == 0 {
             return;
         }
 
-        var newLen = self.length + sLen;
+        newLen := self.length + sLen;
         if newLen > self.capacity {
             while self.capacity < newLen {
                 self.capacity = self.capacity * 2;
@@ -38,9 +38,9 @@ class StringBuilder {
             self.ptr = realloc(self.ptr, self.capacity);
         }
 
-        var i = 0;
+        i := 0;
         while i < sLen {
-            var charCode = stringCharAt(s, i);
+            charCode := stringCharAt(s, i);
             ptrWriteByte(self.ptr, self.length + i, charCode);
             i = i + 1;
         }
@@ -49,7 +49,7 @@ class StringBuilder {
     }
 
     func appendChar(c: Int) {
-        var newLen = self.length + 1;
+        newLen := self.length + 1;
         if newLen > self.capacity {
             while self.capacity < newLen {
                 self.capacity = self.capacity * 2;

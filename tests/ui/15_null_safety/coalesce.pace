@@ -1,7 +1,7 @@
 func main() {
-    let a: Int? = null;
-    let b: Int? = 42;
-    let c: Int = 100;
+    final a: Int?  = null;
+    final b: Int?  = 42;
+    final c: Int  = 100;
     
     // Test ??
     let result1 = a ?? 10;

@@ -51,15 +51,24 @@ impl<'a> Parser<'a> {
             }
         } else if self.match_token(&[TokenKind::Func]) {
             self.function_declaration(is_private, false, false)
-        } else if self.match_token(&[TokenKind::Let]) {
-            self.variable_declaration(false, false, is_private, false)
-        } else if self.match_token(&[TokenKind::Var]) {
-            self.variable_declaration(true, false, is_private, false)
+        } else if self.match_token(&[TokenKind::Final]) {
+            self.variable_declaration(Mutability::Final, false, is_private, false)
+        } else if let Some(Token { kind: TokenKind::Identifier(_), .. }) = self.peek()
+            && let Some(Token { kind: next_kind, .. }) = self.peek_next()
+            && (matches!(next_kind, TokenKind::Colon) || matches!(next_kind, TokenKind::ColonEqual))
+        {
+            self.variable_declaration(Mutability::Mutable, false, is_private, false)
+
         } else if self.match_token(&[TokenKind::Weak]) {
-            if self.match_token(&[TokenKind::Var]) {
-                self.variable_declaration(true, true, is_private, false)
+            if self.match_token(&[TokenKind::Final]) {
+                self.variable_declaration(Mutability::Final, true, is_private, false)
+            } else if let Some(Token { kind: TokenKind::Identifier(_), .. }) = self.peek()
+                && let Some(Token { kind: next_kind, .. }) = self.peek_next()
+                && (matches!(next_kind, TokenKind::Colon) || matches!(next_kind, TokenKind::ColonEqual))
+            {
+                self.variable_declaration(Mutability::Mutable, true, is_private, false)
             } else {
-                self.error_at_current("Expected 'var' after 'weak'.");
+                self.error_at_current("Expected variable declaration after 'weak'.");
                 None
             }
         } else if self.match_token(&[TokenKind::Foreign]) {

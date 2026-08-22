@@ -5,7 +5,7 @@ extend String {
 }
 
 class MyBox<T> {
-    var item: T;
+    item: T;
     func init(val: T) {
         self.item = val;
     }
@@ -18,10 +18,10 @@ extend<T> MyBox<T> {
 }
 
 func main() {
-    let s = "Hello";
+    final s := "Hello";
     print(s.shout());
 
-    let l = MyBox<Int>(42);
-    let l2 = l.duplicate();
+    final l := MyBox<Int>(42);
+    final l2 := l.duplicate();
     print(l2.item);
 }

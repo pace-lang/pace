@@ -1,5 +1,5 @@
 func main() {
-    var map = Map<Int, Int>();
+    map := Map<Int, Int>();
     
     // Test insertions and resizing
     var i = 0;

@@ -1,6 +1,6 @@
 
 func test() {
-    let arr = [10, 20, 30];
+    final arr := [10, 20, 30];
     let res: Result<[Int], Int> = Ok(arr);
     // When `test` returns, `res` will fall out of scope.
     // The GC should drop the `Result`, which should drop the `Array`.

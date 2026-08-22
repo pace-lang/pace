@@ -22,6 +22,12 @@ pub struct EnumVariant<'a> {
     pub fields: Option<Vec<EnumField<'a>>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum Mutability {
+    Mutable,
+    Final,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum StmtKind<'a> {
     /// An enum declaration: `enum Name<T> { Variant(Int), Unit }`
@@ -43,19 +49,12 @@ pub enum StmtKind<'a> {
     },
     /// An export statement: `export "path"`
     Export { path: session::Symbol },
-    /// A let declaration: `let name = expression;`
-    Let {
+    /// A variable binding declaration: `name := value` or `final name = value`
+    Binding {
         name: session::Symbol,
         type_annotation: Option<TypeExpr<'a>>,
         initializer: Option<&'a Expr<'a>>,
-        is_private: bool,
-        is_static: bool,
-    },
-    /// A var declaration: `[weak] var name: type = expression;`
-    Var {
-        name: session::Symbol,
-        type_annotation: Option<TypeExpr<'a>>,
-        initializer: Option<&'a Expr<'a>>,
+        mutability: Mutability,
         is_weak: bool,
         is_private: bool,
         is_static: bool,

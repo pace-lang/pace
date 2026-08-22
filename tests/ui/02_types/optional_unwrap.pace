@@ -1,20 +1,20 @@
 class Address {
-    var city: String;
+    city: String;
     func init(city: String) {
         self.city = city;
     }
 }
 
 class User {
-    var address: Address?;
+    address: Address?;
     func init(address: Address?) {
         self.address = address;
     }
 }
 
 func main() {
-    let addr = Address("New York");
-    let u = User(addr);
+    final addr := Address("New York");
+    final u := User(addr);
     
     // Optional chaining
     let c: String? = u?.address?.city;

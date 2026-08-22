@@ -7,13 +7,13 @@ func pair<A, B>(first: A, second: B): A {
 }
 
 func main() {
-    let x = id(10);
+    final x := id(10);
     print(x);
     
-    let arr = [100, 200];
-    let y = id(arr);
+    final arr := [100, 200];
+    final y := id(arr);
     print(y[0]);
     
-    let z = pair(42, arr);
+    final z := pair(42, arr);
     print(z);
 }

@@ -1,5 +1,5 @@
 func main(): Int {
-    let immutable_var = 10;
+    final immutable_var := 10;
     // immutable_var = 20; // This would cause an error
     
     var mutable_var = 20;

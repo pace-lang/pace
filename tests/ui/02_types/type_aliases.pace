@@ -7,8 +7,8 @@ func testAlias(code: StatusCode, msg: Message): StatusCode {
 }
 
 func main() {
-    let x: StatusCode = 404;
-    let s: Message = "Not Found";
+    final x: StatusCode  = 404;
+    final s: Message  = "Not Found";
     
     // Type aliases are completely transparent, so passing Int/String directly is fine
     testAlias(200, "OK");

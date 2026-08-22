@@ -1,20 +1,20 @@
 class MathUtils {
-    static let Pi = 3.14159;
-    static var lastCalculation = 0;
+    static final Pi := 3.14159;
+    static lastCalculation := 0;
 
     static func add(a: Int, b: Int): Int {
-        let result = a + b;
+        final result := a + b;
         MathUtils.lastCalculation = result;
         return result;
     }
 }
 
 struct Point {
-    static let OriginX: Int = 0;
-    static let OriginY: Int = 0;
+    static final OriginX: Int  = 0;
+    static final OriginY: Int  = 0;
     
-    var x: Int;
-    var y: Int;
+    x: Int;
+    y: Int;
     
     func init(x: Int, y: Int) {
         self.x = x;
@@ -39,13 +39,13 @@ func main() {
     print(MathUtils.Pi);
     print(MathUtils.lastCalculation);
     
-    let sum = MathUtils.add(10, 20);
+    final sum := MathUtils.add(10, 20);
     print(sum);
     print(MathUtils.lastCalculation);
     
-    let p = Point.createOrigin();
+    final p := Point.createOrigin();
     print(p.x);
     print(p.y);
     
-    let defaultStatus = MyStatus.getDefault();
+    final defaultStatus := MyStatus.getDefault();
 }

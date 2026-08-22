@@ -1,6 +1,6 @@
 
 func main() {
-    let s = "Hello World";
+    final s := "Hello World";
     
     print("toLower:");
     print(s.toLower());
@@ -8,27 +8,27 @@ func main() {
     print("toUpper:");
     print(s.toUpper());
 
-    let replaced = s.replace("World", "Pace");
+    final replaced := s.replace("World", "Pace");
     print("replace:");
     print(replaced);
 
-    let spaced = "   Pace   ";
+    final spaced := "   Pace   ";
     print("trim:");
     print(spaced.trim());
 
-    let csv = "a,b,c";
-    let parts = csv.split(",");
+    final csv := "a,b,c";
+    final parts := csv.split(",");
     print("split len:");
     print(parts.len());
-    let opt0 = parts.get(0);
+    final opt0 := parts.get(0);
     if opt0.isSome() {
         print(opt0.unwrap());
     }
-    let opt1 = parts.get(1);
+    final opt1 := parts.get(1);
     if opt1.isSome() {
         print(opt1.unwrap());
     }
-    let opt2 = parts.get(2);
+    final opt2 := parts.get(2);
     if opt2.isSome() {
         print(opt2.unwrap());
     }

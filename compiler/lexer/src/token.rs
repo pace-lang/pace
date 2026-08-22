@@ -3,8 +3,7 @@ use ast::Span;
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Keywords
-    Let,
-    Var,
+    Final,
     Func,
     Init,
     SelfKeyword,
@@ -73,6 +72,7 @@ pub enum TokenKind {
     Dot,
     DotDot,
     Colon,
+    ColonEqual, // :=
     Semicolon,
     Underscore,
     Arrow,    // ->

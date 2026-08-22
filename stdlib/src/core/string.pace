@@ -47,15 +47,15 @@ extend String {
     }
 
     func contains(sub: String): Bool {
-        let subLen = sub.len();
+        final subLen := sub.len();
         if subLen == 0 { return true; }
-        let len = self.len();
+        final len := self.len();
         if subLen > len { return false; }
 
-        var i = 0;
+        i := 0;
         while i <= len - subLen {
-            var isMatch = true;
-            var j = 0;
+            isMatch := true;
+            j := 0;
             while j < subLen {
                 if self.charCodeAt(i + j) != sub.charCodeAt(j) {
                     isMatch = false;
@@ -73,21 +73,21 @@ extend String {
     }
 
     func split(sub: String): List<String> {
-        let list = List<String>();
-        let subLen = sub.len();
+        final list := List<String>();
+        final subLen := sub.len();
         if subLen == 0 {
             retainString(self);
             list.push(self);
             return list;
         }
 
-        var i = 0;
-        var start = 0;
-        let len = self.len();
+        i := 0;
+        start := 0;
+        final len := self.len();
         
         while i <= len - subLen {
-            var isMatch = true;
-            var j = 0;
+            isMatch := true;
+            j := 0;
             while j < subLen {
                 if self.charCodeAt(i + j) != sub.charCodeAt(j) {
                     isMatch = false;
@@ -97,7 +97,7 @@ extend String {
                 }
             }
             if isMatch {
-                let part = self.substring(start, i);
+                final part := self.substring(start, i);
                 retainString(part);
                 list.push(part);
                 i = i + subLen;
@@ -106,24 +106,24 @@ extend String {
                 i = i + 1;
             }
         }
-        let lastPart = self.substring(start, len);
+        final lastPart := self.substring(start, len);
         retainString(lastPart);
         list.push(lastPart);
         return list;
     }
 
     func replace(old: String, newStr: String): String {
-        let oldLen = old.len();
+        final oldLen := old.len();
         if oldLen == 0 { return self; }
         
-        let builder = StringBuilder();
-        var i = 0;
-        var start = 0;
-        let len = self.len();
+        final builder := StringBuilder();
+        i := 0;
+        start := 0;
+        final len := self.len();
         
         while i <= len - oldLen {
-            var isMatch = true;
-            var j = 0;
+            isMatch := true;
+            j := 0;
             while j < oldLen {
                 if self.charCodeAt(i + j) != old.charCodeAt(j) {
                     isMatch = false;
@@ -147,13 +147,13 @@ extend String {
     }
 
     func trim(): String {
-        var start = 0;
-        let len = self.len();
-        var continueStart = true;
+        start := 0;
+        final len := self.len();
+        continueStart := true;
         
         while continueStart {
             if start < len {
-                let c = self.charCodeAt(start);
+                final c := self.charCodeAt(start);
                 if c == 32 { start = start + 1; }
                 else if c == 10 { start = start + 1; }
                 else if c == 13 { start = start + 1; }
@@ -164,11 +164,11 @@ extend String {
             }
         }
         
-        var end = len - 1;
-        var continueEnd = true;
+        end := len - 1;
+        continueEnd := true;
         while continueEnd {
             if end >= start {
-                let c = self.charCodeAt(end);
+                final c := self.charCodeAt(end);
                 if c == 32 { end = end - 1; }
                 else if c == 10 { end = end - 1; }
                 else if c == 13 { end = end - 1; }
@@ -184,12 +184,12 @@ extend String {
     }
 
     func toLower(): String {
-        let builder = StringBuilder();
-        var i = 0;
-        let len = self.len();
+        final builder := StringBuilder();
+        i := 0;
+        final len := self.len();
         
         while i < len {
-            var c = self.charCodeAt(i);
+            c := self.charCodeAt(i);
             if c >= 65 {
                 if c <= 90 {
                     c = c + 32;
@@ -202,12 +202,12 @@ extend String {
     }
 
     func toUpper(): String {
-        let builder = StringBuilder();
-        var i = 0;
-        let len = self.len();
+        final builder := StringBuilder();
+        i := 0;
+        final len := self.len();
         
         while i < len {
-            var c = self.charCodeAt(i);
+            c := self.charCodeAt(i);
             if c >= 97 {
                 if c <= 122 {
                     c = c - 32;
@@ -228,12 +228,12 @@ extend String {
     }
 
     func startsWith(prefix: String): Bool {
-        let prefixLen = prefix.len();
+        final prefixLen := prefix.len();
         if prefixLen == 0 { return true; }
-        let len = self.len();
+        final len := self.len();
         if prefixLen > len { return false; }
 
-        var i = 0;
+        i := 0;
         while i < prefixLen {
             if self.charCodeAt(i) != prefix.charCodeAt(i) {
                 return false;
@@ -244,13 +244,13 @@ extend String {
     }
 
     func endsWith(suffix: String): Bool {
-        let suffixLen = suffix.len();
+        final suffixLen := suffix.len();
         if suffixLen == 0 { return true; }
-        let len = self.len();
+        final len := self.len();
         if suffixLen > len { return false; }
 
-        var i = 0;
-        let offset = len - suffixLen;
+        i := 0;
+        final offset := len - suffixLen;
         while i < suffixLen {
             if self.charCodeAt(offset + i) != suffix.charCodeAt(i) {
                 return false;
@@ -261,15 +261,15 @@ extend String {
     }
 
     func indexOf(sub: String): Int {
-        let subLen = sub.len();
+        final subLen := sub.len();
         if subLen == 0 { return 0; }
-        let len = self.len();
+        final len := self.len();
         if subLen > len { return -1; }
 
-        var i = 0;
+        i := 0;
         while i <= len - subLen {
-            var isMatch = true;
-            var j = 0;
+            isMatch := true;
+            j := 0;
             while j < subLen {
                 if self.charCodeAt(i + j) != sub.charCodeAt(j) {
                     isMatch = false;

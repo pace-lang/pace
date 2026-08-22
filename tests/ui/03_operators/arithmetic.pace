@@ -1,12 +1,12 @@
 func main() {
-    let a = 10;
-    let b = 3;
+    final a := 10;
+    final b := 3;
     
     print(a + b);
     print(a - b);
     print(a * b);
     print(a / b);
     
-    let c = -a;
+    final c := -a;
     print(c);
 }

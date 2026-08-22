@@ -29,11 +29,11 @@ func runProcess<T>(proc: Processor<T>, item: T) {
 }
 
 func main(): Int {
-    let p1 = IntProcessor();
+    final p1 := IntProcessor();
     runProcess<Int>(p1, 42);
     runProcess<Int>(p1, 99);
 
-    let p2 = StringProcessor();
+    final p2 := StringProcessor();
     runProcess<String>(p2, "Hello");
     runProcess<String>(p2, "World");
 

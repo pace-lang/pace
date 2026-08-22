@@ -1,5 +1,5 @@
 class Counter {
-    var count: Int;
+    count: Int;
 
     init(start: Int) {
         self.count = start;
@@ -15,7 +15,7 @@ class Counter {
 }
 
 func main() {
-    let c = Counter(10);
+    final c := Counter(10);
     print(c.get());
     c.increment();
     c.increment();

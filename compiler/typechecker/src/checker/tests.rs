@@ -17,10 +17,12 @@ fn test_valid_math() {
     let sym_x = session.interner.borrow_mut().intern("x");
     // let x = 10 + 5;
     let stmt = Stmt::new(
-        StmtKind::Let {
+        StmtKind::Binding {
             name: sym_x,
             is_private: false,
             is_static: false,
+            mutability: ast::Mutability::Final,
+            is_weak: false,
             type_annotation: None,
             initializer: Some(checker.alloc(Expr::new(
                 ExprKind::Binary(
@@ -50,12 +52,14 @@ fn test_type_mismatch() {
     let mut checker = TypeChecker::new(&session, &mut generic_registry, &mut spec_registry);
     let sym_x = session.interner.borrow_mut().intern("x");
     let sym_hello = session.interner.borrow_mut().intern("hello");
-    // let x = 10 + "hello";
+    // final x := 10 + "hello";
     let stmt = Stmt::new(
-        StmtKind::Let {
+        StmtKind::Binding {
             name: sym_x,
             is_private: false,
             is_static: false,
+            mutability: ast::Mutability::Final,
+            is_weak: false,
             type_annotation: None,
             initializer: Some(checker.alloc(Expr::new(
                 ExprKind::Binary(
@@ -106,12 +110,14 @@ fn test_immutable_assignment() {
     let mut spec_registry = generics::SpecializationRegistry::new();
     let mut checker = TypeChecker::new(&session, &mut generic_registry, &mut spec_registry);
     let sym_x = session.interner.borrow_mut().intern("x");
-    // let x = 10;
+    // final x := 10;
     let stmt1 = Stmt::new(
-        StmtKind::Let {
+        StmtKind::Binding {
             name: sym_x,
             is_private: false,
             is_static: false,
+            mutability: ast::Mutability::Final,
+            is_weak: false,
             type_annotation: None,
             initializer: Some(checker.alloc(Expr::new(ExprKind::Integer(10), make_span()))),
         },
@@ -146,25 +152,29 @@ fn test_block_scope() {
     let mut spec_registry = generics::SpecializationRegistry::new();
     let mut checker = TypeChecker::new(&session, &mut generic_registry, &mut spec_registry);
     let sym_x = session.interner.borrow_mut().intern("x");
-    // let x = 10;
+    // final x := 10;
     let stmt1 = Stmt::new(
-        StmtKind::Let {
+        StmtKind::Binding {
             name: sym_x,
             is_private: false,
             is_static: false,
+            mutability: ast::Mutability::Final,
+            is_weak: false,
             type_annotation: None,
             initializer: Some(checker.alloc(Expr::new(ExprKind::Integer(10), make_span()))),
         },
         make_span(),
     );
 
-    // { let x = "hello"; }
+    // { final x := "hello"; }
     let sym_y = session.interner.borrow_mut().intern("hello");
     let inner_stmt = Stmt::new(
-        StmtKind::Let {
+        StmtKind::Binding {
             name: sym_x,
             is_private: false,
             is_static: false,
+            mutability: ast::Mutability::Final,
+            is_weak: false,
             type_annotation: None,
             initializer: Some(checker.alloc(Expr::new(ExprKind::String(sym_y), make_span()))),
         },

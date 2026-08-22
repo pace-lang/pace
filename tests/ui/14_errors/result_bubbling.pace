@@ -9,18 +9,18 @@ func testOk(): Result<Int, String> {
 }
 
 func mainOk(): Result<Int, String> {
-    let val = testOk()?;
+    final val := testOk()?;
     return Ok(val * 2);
 }
 
 func mainErr(): Result<Int, String> {
-    let val = testErr()?;
+    final val := testErr()?;
     return Ok(val * 2);
 }
 
 func main() {
-    let a = mainOk();
-    let b = mainErr();
+    final a := mainOk();
+    final b := mainErr();
 
     match a {
         Ok(v) => print(v),

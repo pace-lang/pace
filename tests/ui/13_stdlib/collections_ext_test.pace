@@ -4,7 +4,7 @@ import "std/collections/set.pace";
 
 func main() {
     print("--- List Ext Tests ---");
-    let l = List<String>();
+    final l := List<String>();
     if l.isEmpty() {
         print("List is empty");
     }
@@ -21,17 +21,17 @@ func main() {
         print("List contains B");
     }
 
-    let idx = l.indexOf("C");
+    final idx := l.indexOf("C");
     if idx == 2 {
         print("List indexOf C is 2");
     }
 
-    let first = l.first();
+    final first := l.first();
     if first.unwrap() == "A" {
         print("List first is A");
     }
 
-    let last = l.last();
+    final last := l.last();
     if last.unwrap() == "C" {
         print("List last is C");
     }
@@ -45,7 +45,7 @@ func main() {
     }
 
     print("--- Map Ext Tests ---");
-    let m = Map<String, Int>();
+    final m := Map<String, Int>();
     if m.isEmpty() {
         print("Map is empty");
     }
@@ -57,20 +57,20 @@ func main() {
         print("Map len is 2");
     }
 
-    let rem = m.remove("Two");
+    final rem := m.remove("Two");
     if rem.isSome() {
         if rem.unwrap() == 2 {
             print("Map remove returned Two (2)");
         }
     }
     
-    let none = m.remove("Three");
+    final none := m.remove("Three");
     if none.isNone() {
         print("Map remove returned None for Three");
     }
 
     print("--- Set Ext Tests ---");
-    let s = Set<Int>();
+    final s := Set<Int>();
     if s.isEmpty() {
         print("Set is empty");
     }
@@ -82,12 +82,12 @@ func main() {
         print("Set len is 2");
     }
 
-    let srem = s.remove(20);
+    final srem := s.remove(20);
     if srem {
         print("Set remove returned true for 20");
     }
 
-    let sremFalse = s.remove(30);
+    final sremFalse := s.remove(30);
     if !sremFalse {
         print("Set remove returned false for 30");
     }

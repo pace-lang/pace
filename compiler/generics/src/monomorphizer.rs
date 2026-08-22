@@ -139,34 +139,21 @@ impl<'a> Monomorphizer<'a> {
                     is_static: *is_static,
                 }
             }
-            StmtKind::Let {
+            StmtKind::Binding {
                 name,
                 type_annotation,
                 initializer,
-                is_private,
-                is_static,
-            } => StmtKind::Let {
-                name: *name,
-                type_annotation: type_annotation.as_ref().map(|t| self.subst.substitute(t)),
-                initializer: initializer
-                    .as_ref()
-                    .map(|e| &*self.subst.arena.alloc(self.monomorphize_expr(e))),
-                is_private: *is_private,
-                is_static: *is_static,
-            },
-            StmtKind::Var {
-                name,
-                type_annotation,
-                initializer,
+                mutability,
                 is_weak,
                 is_private,
                 is_static,
-            } => StmtKind::Var {
+            } => StmtKind::Binding {
                 name: *name,
                 type_annotation: type_annotation.as_ref().map(|t| self.subst.substitute(t)),
                 initializer: initializer
                     .as_ref()
                     .map(|e| &*self.subst.arena.alloc(self.monomorphize_expr(e))),
+                mutability: *mutability,
                 is_weak: *is_weak,
                 is_private: *is_private,
                 is_static: *is_static,

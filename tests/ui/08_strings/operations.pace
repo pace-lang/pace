@@ -1,6 +1,6 @@
 func main(): Int {
-    let s1 = "Hello, ";
-    let s2 = "World!";
+    final s1 := "Hello, ";
+    final s2 := "World!";
     
     // Concatenation
     let s3 = s1 + s2;

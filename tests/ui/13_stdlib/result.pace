@@ -1,8 +1,8 @@
 
 
 func main() {
-    let okRes: Result<Int, String> = Result.Ok(42);
-    let errRes: Result<Int, String> = Result.Err("error");
+    final okRes: Result<Int, String>  = Result.Ok(42);
+    final errRes: Result<Int, String>  = Result.Err("error");
 
     if okRes.isOk() {
         printInt(okRes.unwrap());
@@ -12,6 +12,6 @@ func main() {
         print(errRes.unwrapErr());
     }
 
-    let defaultVal = errRes.unwrapOr(100);
+    final defaultVal := errRes.unwrapOr(100);
     printInt(defaultVal);
 }

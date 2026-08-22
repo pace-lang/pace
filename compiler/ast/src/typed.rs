@@ -111,16 +111,11 @@ impl<'a> TypedExpr<'a> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypedStmtKind<'a> {
-    Let {
+    Binding {
         name: session::Symbol,
         type_annotation: Option<TypeExpr<'a>>,
         initializer: Option<&'a TypedExpr<'a>>,
-        is_static: bool,
-    },
-    Var {
-        name: session::Symbol,
-        type_annotation: Option<TypeExpr<'a>>,
-        initializer: Option<&'a TypedExpr<'a>>,
+        mutability: crate::stmt::Mutability,
         is_weak: bool,
         is_static: bool,
     },

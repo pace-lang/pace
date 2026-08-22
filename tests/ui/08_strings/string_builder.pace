@@ -1,10 +1,10 @@
 import "../../../stdlib/src/core/string_builder.pace";
 
 func main() {
-    let builder = StringBuilder();
+    final builder := StringBuilder();
     builder.append("Hello");
     builder.append(", ");
     builder.append("World!");
-    let result = builder.toString();
+    final result := builder.toString();
     print(result);
 }
