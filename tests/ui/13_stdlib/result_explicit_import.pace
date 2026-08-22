@@ -1,5 +1,0 @@
-
-func test(): Result<String, Int> {
-    return Ok("hello");
-}
-func main() { test(); }

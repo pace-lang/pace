@@ -1,7 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-15
-This function has no return value.
-120

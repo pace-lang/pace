@@ -1,7 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-42
-error
-100

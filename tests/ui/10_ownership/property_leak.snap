@@ -1,5 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-[31m[E001] Error:[0m Codegen failed: Function Parent::init not found

@@ -1,8 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-Processed 42
-Processed other Int
-Processed other String
-Processed other String

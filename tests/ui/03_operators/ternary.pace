@@ -1,6 +1,0 @@
-func main() {
-    final condition := true;
-    final result1 := condition ? 10 : 20;
-    
-    final result2 := false ? "Hello" : "World";
-}

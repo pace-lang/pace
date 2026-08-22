@@ -1,7 +1,0 @@
-foreign func paceBoolToString(value: Bool): String;
-
-extend Bool {
-    func toString(): String {
-        return paceBoolToString(self);
-    }
-}

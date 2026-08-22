@@ -1,9 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-13
-7
-30
-3
--10

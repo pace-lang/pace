@@ -1,7 +1,0 @@
-// skip-test
-import "math/calc";
-
-func main() {
-    final result := add(10, 32);
-    print(result);
-}

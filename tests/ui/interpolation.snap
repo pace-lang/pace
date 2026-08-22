@@ -1,5 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-Hello World, you are 10 years old!

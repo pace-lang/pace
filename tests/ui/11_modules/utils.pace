@@ -1,6 +1,0 @@
-// skip-test
-func getValue(): Int {
-    return 42;
-}
-
-class Utils {}

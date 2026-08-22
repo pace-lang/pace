@@ -1,6 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-a is less than 10
-a is 5

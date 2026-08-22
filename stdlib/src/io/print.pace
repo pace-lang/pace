@@ -1,5 +1,0 @@
-foreign func printInt(val: Int);
-foreign func printFloat(val: Float);
-foreign func printBool(val: Bool);
-foreign func printStr(val: String);
-foreign func printEnum(val: Int);

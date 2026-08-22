@@ -1,7 +1,0 @@
-// skip-test
-class Box<T> {
-    value: T;
-    func init(val: T) {
-        self.value = val;
-    }
-}

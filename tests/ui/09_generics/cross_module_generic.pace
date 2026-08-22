@@ -1,7 +1,0 @@
-// cross_module_generic.pace
-import "cross_module_generic_def.pace";
-
-func main() {
-    final b := Box<Int>(10);
-    print(b.value);
-}

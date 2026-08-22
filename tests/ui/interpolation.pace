@@ -1,5 +1,0 @@
-func main() {
-    final name: String = "World";
-    final age: Int = 10;
-    print("Hello ${name}, you are ${age} years old!");
-}

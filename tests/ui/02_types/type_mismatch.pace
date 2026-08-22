@@ -1,5 +1,0 @@
-func main() {
-    final x := 10;
-    final y := "hello";
-    final z := x + y;
-}

@@ -1,7 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-Main start
-Hello from spawned task!
-Main end

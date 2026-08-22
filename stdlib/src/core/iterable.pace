@@ -1,3 +1,0 @@
-interface Iterable<T> {
-    func iter(): Iterator<T>;
-}

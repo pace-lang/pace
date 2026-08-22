@@ -1,25 +1,12 @@
 [workspace]
-members = [
-    "compiler/lexer",
-    "compiler/parser",
-    "compiler/ast",
-    "compiler/resolver",
-    "compiler/typechecker",
-    "compiler/mir",
-    "compiler/lowering",
-    "compiler/cli",
-    "compiler/linker",
-    "compiler/codegen",
-    "compiler/arc",
-    "compiler/diagnostics", "compiler/generics", "compiler/module", "compiler/package", "compiler/runtime", "compiler/linter", "compiler/session"
-]
+members = []
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 authors = ["Pace Contributors"]
-rust-version = "1.97.1"
+rust-version = "1.98.0"
 license = "MIT"
 
 [workspace.dependencies]

@@ -1,5 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-Pace Runtime Error: Array index out of bounds

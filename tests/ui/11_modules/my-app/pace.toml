@@ -1,6 +1,0 @@
-[package]
-name = "my_app"
-version = "1.0"
-
-[dependencies]
-math = { path = "../pace-math" }

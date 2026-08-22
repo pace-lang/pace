@@ -1,1 +1,0 @@
-foreign func pacePanic(code: Int);

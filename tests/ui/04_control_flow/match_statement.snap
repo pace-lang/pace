@@ -1,8 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-expression: normalized_stderr
----
-Has value
-No value
-Success
-Error
