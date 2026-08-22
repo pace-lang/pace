@@ -1,5 +1,5 @@
 class User {
-    var id: Int
+    id: Int
     weak friend: User?
 }
 
@@ -14,6 +14,6 @@ func main() {
     bob.friend = alice
     
     // Test WeakUpgrade
-    let bobsFriend = bob.friend!
+    final bobsFriend := bob.friend!
     print(bobsFriend.id)
 }

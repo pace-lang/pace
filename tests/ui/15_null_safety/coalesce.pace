@@ -4,13 +4,13 @@ func main() {
     final c: Int  = 100;
     
     // Test ??
-    let result1 = a ?? 10;
+    final result1 := a ?? 10;
     print(result1); // should be 10
     
-    let result2 = b ?? 10;
+    final result2 := b ?? 10;
     print(result2); // should be 42
     
-    let result3 = a ?? b ?? c;
+    final result3 := a ?? b ?? c;
     print(result3); // should be 42
     
     // Test ??=

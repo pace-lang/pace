@@ -7,16 +7,16 @@ func main() {
     print(5.shr(1));
 
     // Math methods
-    let a: Int = -42;
+    final a: Int = -42;
     print(a.abs());
     print(10.min(20));
     print(10.max(20));
     print(2.pow(3));
 
     // Parse methods
-    let val: Option<Int> = parseInt("12345");
+    final val: Option<Int> = parseInt("12345");
     print(val.unwrapOr(0));
 
-    let invalid: Option<Int> = parseInt("hello");
+    final invalid: Option<Int> = parseInt("hello");
     print(invalid.isNone());
 }

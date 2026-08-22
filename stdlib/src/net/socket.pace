@@ -43,7 +43,7 @@ class TlsStream {
 }
 
 class TcpStream {
-    var ptr: Pointer<CChar>;
+    ptr: Pointer<CChar>;
     
     func init() {
         self.ptr = paceNullPointer();
@@ -87,7 +87,7 @@ class TcpStream {
 }
 
 class TcpListener {
-    var ptr: Pointer<CChar>;
+    ptr: Pointer<CChar>;
     
     func init() {
         self.ptr = paceNullPointer();
@@ -100,8 +100,8 @@ class TcpListener {
     
     func accept(): TcpStream {
         if self.ptr == paceNullPointer() { return TcpStream(); }
-        let clientPtr = paceTcpAccept(self.ptr);
-        let stream = TcpStream();
+        final clientPtr := paceTcpAccept(self.ptr);
+        final stream := TcpStream();
         stream.ptr = clientPtr;
         return stream;
     }

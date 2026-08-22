@@ -8,7 +8,7 @@ func main() {
     putchar(10);
     
     // Generate a random number
-    let r = rand();
+    final r := rand();
     if r > 0 {
         // Just checking that rand works and returns something positive
         putchar(82); // 'R'

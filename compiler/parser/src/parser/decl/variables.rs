@@ -10,7 +10,13 @@ impl<'a> Parser<'a> {
         is_private: bool,
         is_static: bool,
     ) -> Option<Stmt<'a>> {
-        let start_span = self.previous().span;
+        let mut start_span = self.previous().span;
+        // If there are no modifiers for this mutable binding, the previous token is from the last statement!
+        if mutability == Mutability::Mutable && !is_weak && !is_private && !is_static {
+            if let Some(tok) = self.peek() {
+                start_span = tok.span;
+            }
+        }
 
         let name = if let Some(Token {
             kind: TokenKind::Identifier(n),

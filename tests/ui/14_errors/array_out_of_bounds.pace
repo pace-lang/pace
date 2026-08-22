@@ -2,7 +2,7 @@ func main() {
     final arr := [1, 2, 3];
     
     // This should panic at runtime (unwrap_user 2)
-    let bad = arr[3];
+    final bad := arr[3];
     
     print(bad);
 }

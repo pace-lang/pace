@@ -14,20 +14,20 @@ class User {
 
 func main() {
     final addr := Address("New York");
-    final u := User(addr);
+    final u: User? = User(addr);
     
     // Optional chaining
-    let c: String? = u?.address?.city;
+    final c: String? = u?.address?.city;
     print(c);
     
     // Force unwrap
-    let unwrappedCity: String = c!;
+    final unwrappedCity: String = c!;
     print(unwrappedCity);
     
     // Panic on null unwrap
-    let nullAddr: Address? = null;
-    let city2 = nullAddr?.city; // This is null
+    final nullAddr: Address? = null;
+    final city2 := nullAddr?.city; // This is null
     print(city2);
     
-    let crash = city2!; // Should trap/panic
+    final crash := city2!; // Should trap/panic
 }

@@ -1,6 +1,6 @@
 // skip-test
 class Box<T> {
-    var value: T;
+    value: T;
     func init(val: T) {
         self.value = val;
     }

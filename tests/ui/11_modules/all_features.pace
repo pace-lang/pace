@@ -1,16 +1,16 @@
 // --- Variables and Data Types ---
-let greeting: String = "Welcome to Pace!";
+final greeting: String = "Welcome to Pace!";
 var counter: Int = 10;
-let pi: Float = 3.14159;
-let isAwesome: Bool = true;
+final pi: Float = 3.14159;
+final isAwesome: Bool = true;
 
 print(greeting);
 print("Pi is approximately", pi);
 
 // --- Functions and Control Flow ---
 func calculateFactorial(n: Int): Int {
-    var result = 1;
-    var current = n;
+    result := 1;
+    current := n;
     
     while current > 0 {
         result = result * current;
@@ -20,14 +20,14 @@ func calculateFactorial(n: Int): Int {
     return result;
 }
 
-let fact5 = calculateFactorial(5);
+final fact5 := calculateFactorial(5);
 print("Factorial of 5 is:", fact5);
 
 func checkMagnitude(num: Int) {
     if num > 10 {
         print(num, "is greater than 10");
     } else {
-        print(num, "is 10 or less");
+        print(num.toString() + " is 10 or less");
     }
 }
 
@@ -36,86 +36,86 @@ checkMagnitude(counter);
 
 // --- Classes and Objects ---
 class BankAccount {
-    var owner: String;
-    var balance: Float;
+    owner: String;
+    balance: Float;
 
-    init(owner: String, initialDeposit: Float) {
+    func init(owner: String, initialDeposit: Float) {
         self.owner = owner;
         self.balance = initialDeposit;
     }
 
     func deposit(amount: Float) {
         self.balance = self.balance + amount;
-        print("Deposited", amount, "New balance:", self.balance);
+        print("Deposited " + amount.toString() + " New balance: " + self.balance.toString());
     }
 
     func withdraw(amount: Float) {
         if self.balance > amount {
             self.balance = self.balance - amount;
-            print("Withdrew", amount, "Remaining balance:", self.balance);
+            print("Withdrew " + amount.toString() + " Remaining balance: " + self.balance.toString());
         } else {
-            print("Insufficient funds for", self.owner);
+            print("Insufficient funds for " + self.owner);
         }
     }
 }
 
-let aliceAccount = BankAccount("Alice", 100.5);
-print("Account owner:", aliceAccount.owner);
+final aliceAccount := BankAccount("Alice", 100.5);
+print("Account owner: " + aliceAccount.owner);
 aliceAccount.deposit(50.25);
 aliceAccount.withdraw(200.0);
 aliceAccount.withdraw(30.0);
 
 // --- Generics ---
 class Box<T> {
-    var value: T;
+    value: T;
 
-    init(value: T) {
+    func init(value: T) {
         self.value = value;
     }
 }
 
-let intBox = Box(10); // Inferred Box<Int>
-print("Int Box value:", intBox.value);
+final intBox := Box(10); // Inferred Box<Int>
+print("Int Box value: " + intBox.value.toString());
 
-let stringBox = Box("Hello Generics!"); // Inferred Box<String>
-print("String Box value:", stringBox.value);
+final stringBox := Box("Hello Generics!"); // Inferred Box<String>
+print("String Box value: " + stringBox.value);
 
-let explicitBox = Box<Int>(42); // Explicit Type Argument
-print("Explicit Box value:", explicitBox.value);
+final explicitBox := Box<Int>(42); // Explicit Type Argument
+print("Explicit Box value: " + explicitBox.value.toString());
 
 func identity<T>(val: T): T {
     return val;
 }
 
-let idVal = identity(99);
-print("Identity value:", idVal);
+final idVal := identity(99);
+print("Identity value: " + idVal.toString());
 
 // --- Interfaces ---
 interface Drawable {
-    func draw()
+    func draw();
 }
 
 class Circle implements Drawable {
-    var radius: Float;
+    radius: Float;
 
-    init(radius: Float) {
+    func init(radius: Float) {
         self.radius = radius;
     }
 
     func draw() {
-        print("Drawing a circle with radius:", self.radius);
+        print("Drawing a circle with radius: " + self.radius.toString());
     }
 }
 
 class Square implements Drawable {
-    var side: Int;
+    side: Int;
 
-    init(side: Int) {
+    func init(side: Int) {
         self.side = side;
     }
 
     func draw() {
-        print("Drawing a square with side:", self.side);
+        print("Drawing a square with side: " + self.side.toString());
     }
 }
 
@@ -123,8 +123,8 @@ func render(item: Drawable) {
     item.draw();
 }
 
-let c = Circle(5.5);
-let s = Square(10);
+final c := Circle(5.5);
+final s := Square(10);
 
 render(c);
 render(s);

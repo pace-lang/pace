@@ -1,7 +1,7 @@
 // skip-test
 func main(): Int {
-    let a = 10;
-    let b = 20;
-    let c = a + b;
+    final a := 10;
+    final b := 20;
+    final c := a + b;
     return 0;
 }

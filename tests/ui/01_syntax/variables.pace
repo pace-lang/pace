@@ -1,12 +1,12 @@
 func main(): Int {
-    final immutable_var := 10;
-    // immutable_var = 20; // This would cause an error
+    final immutableVar := 10;
+    // immutableVar = 20; // This would cause an error
     
-    var mutable_var = 20;
-    mutable_var = 30;
+    mutableVar := 20;
+    mutableVar = 30;
     
-    let typed_var: String = "Hello Pace";
+    final typedVar: String = "Hello Pace";
     
-    print(typed_var);
+    print(typedVar);
     return 0;
 }

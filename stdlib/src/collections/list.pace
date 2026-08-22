@@ -1,4 +1,6 @@
 import "../core/option.pace";
+import "../core/iterable.pace";
+import "../core/iterator.pace";
 // Raw C-runtime allocation bindings
 foreign func malloc(size: Int): Pointer<CChar>;
 foreign func realloc(ptr: Pointer<CChar>, newSize: Int): Pointer<CChar>;
@@ -12,10 +14,10 @@ foreign func hash<T>(val: T): Int;
 foreign func paceRetainRef<T>(val: T);
 foreign func paceReleaseRef<T>(val: T);
 
-class List<T> {
-    var ptr: Pointer<CChar>;
-    var length: Int;
-    var capacity: Int;
+class List<T> implements Iterable<T> {
+    ptr: Pointer<CChar>;
+    length: Int;
+    capacity: Int;
 
     func init() {
         self.capacity = 8;
@@ -25,9 +27,9 @@ class List<T> {
 
     func deinit() {
         if self.capacity > 0 {
-            var i = 0;
+            i := 0;
             while i < self.length {
-                let val = ptrRead<T>(self.ptr, i);
+                final val := ptrRead<T>(self.ptr, i);
                 paceReleaseRef<T>(val);
                 i = i + 1;
             }
@@ -50,7 +52,7 @@ class List<T> {
             return Option.None();
         }
         self.length = self.length - 1;
-        let val = ptrRead<T>(self.ptr, self.length);
+        final val := ptrRead<T>(self.ptr, self.length);
         return Option.Some(val);
     }
 
@@ -61,14 +63,14 @@ class List<T> {
         if index >= self.length {
             return Option.None();
         }
-        let val = ptrRead<T>(self.ptr, index);
+        final val := ptrRead<T>(self.ptr, index);
         return Option.Some(val);
     }
 
     func set(index: Int, value: T) {
         if index >= 0 {
             if index < self.length {
-                let oldVal = ptrRead<T>(self.ptr, index);
+                final oldVal := ptrRead<T>(self.ptr, index);
                 paceReleaseRef<T>(oldVal);
                 paceRetainRef<T>(value);
                 ptrWrite<T>(self.ptr, index, value);
@@ -86,9 +88,9 @@ class List<T> {
     }
 
     func clear() {
-        var i = 0;
+        i := 0;
         while i < self.length {
-            let val = ptrRead<T>(self.ptr, i);
+            final val := ptrRead<T>(self.ptr, i);
             paceReleaseRef<T>(val);
             i = i + 1;
         }
@@ -103,12 +105,12 @@ class List<T> {
             return Option.None();
         }
         
-        let val = ptrRead<T>(self.ptr, index);
+        final val := ptrRead<T>(self.ptr, index);
         
         // Shift elements to the left
-        var i = index;
+        i := index;
         while i < self.length - 1 {
-            let nextVal = ptrRead<T>(self.ptr, i + 1);
+            final nextVal := ptrRead<T>(self.ptr, i + 1);
             ptrWrite<T>(self.ptr, i, nextVal);
             i = i + 1;
         }
@@ -123,9 +125,9 @@ class List<T> {
     }
 
     func contains(value: T): Bool {
-        var i = 0;
+        i := 0;
         while i < self.length {
-            let v = ptrRead<T>(self.ptr, i);
+            final v := ptrRead<T>(self.ptr, i);
             if v == value {
                 return true;
             }
@@ -135,9 +137,9 @@ class List<T> {
     }
 
     func indexOf(value: T): Int {
-        var i = 0;
+        i := 0;
         while i < self.length {
-            let v = ptrRead<T>(self.ptr, i);
+            final v := ptrRead<T>(self.ptr, i);
             if v == value {
                 return i;
             }
@@ -154,9 +156,9 @@ class List<T> {
             self.capacity = self.capacity * 2;
             self.ptr = realloc(self.ptr, self.capacity * sizeof<T>());
         }
-        var i = self.length;
+        i := self.length;
         while i > index {
-            let prevVal = ptrRead<T>(self.ptr, i - 1);
+            final prevVal := ptrRead<T>(self.ptr, i - 1);
             ptrWrite<T>(self.ptr, i, prevVal);
             i = i - 1;
         }
@@ -169,7 +171,7 @@ class List<T> {
         if self.length == 0 {
             return Option.None();
         }
-        let val = ptrRead<T>(self.ptr, 0);
+        final val := ptrRead<T>(self.ptr, 0);
         return Option.Some(val);
     }
 
@@ -177,21 +179,43 @@ class List<T> {
         if self.length == 0 {
             return Option.None();
         }
-        let val = ptrRead<T>(self.ptr, self.length - 1);
+        final val := ptrRead<T>(self.ptr, self.length - 1);
         return Option.Some(val);
     }
 
     func reverse() {
-        var left = 0;
-        var right = self.length - 1;
+        left := 0;
+        right := self.length - 1;
         while left < right {
-            let lVal = ptrRead<T>(self.ptr, left);
-            let rVal = ptrRead<T>(self.ptr, right);
+            final lVal := ptrRead<T>(self.ptr, left);
+            final rVal := ptrRead<T>(self.ptr, right);
             ptrWrite<T>(self.ptr, left, rVal);
             ptrWrite<T>(self.ptr, right, lVal);
             left = left + 1;
             right = right - 1;
         }
     }
+
+    func iter(): Iterator<T> {
+        return ListIterator<T>(self);
+    }
 }
 
+class ListIterator<T> implements Iterator<T> {
+    list: List<T>;
+    index: Int;
+    
+    func init(list: List<T>) {
+        self.list = list;
+        self.index = 0;
+    }
+    
+    func next(): Option<T> {
+        if self.index < self.list.len() {
+            final val := self.list.getUnsafe(self.index);
+            self.index = self.index + 1;
+            return Option.Some(val);
+        }
+        return Option.None();
+    }
+}

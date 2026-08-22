@@ -2,23 +2,23 @@ func main() {
     map := Map<Int, Int>();
     
     // Test insertions and resizing
-    var i = 0;
+    i := 0;
     while i < 100 {
         map.set(i, i * 10);
         i = i + 1;
     }
     
     print("Map Size:");
-    print(m.len());
+    print(map.len());
     
-    let a = m.get(10);
+    final a := map.get(10);
     print(a.unwrap());
     
-    m.insert(50, "Updated");
+    map.set(50, 500);
     print("Overwritten key 50:");
     
     // Test missing key
-    var missing = map.get(999);
+    missing := map.get(999);
     
     // Test delete (if implemented, otherwise wait, is map.remove() implemented? Let's check runtime)
 }

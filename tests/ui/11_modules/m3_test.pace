@@ -7,7 +7,7 @@ func fib(n: Int): Int {
 }
 
 func main(): Int {
-    let result = fib(10);
+    final result := fib(10);
     if result == 55 {
         return 0; // Success
     } else {

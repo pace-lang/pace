@@ -2,5 +2,4 @@
 source: compiler/cli/tests/golden_tests.rs
 expression: normalized_stderr
 ---
-Woof!
-Meow!
+Hello World, you are 10 years old!

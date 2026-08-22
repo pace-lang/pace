@@ -31,7 +31,7 @@ impl<'a> MirBuilder<'a> {
                     {
                         let __inst = Inst::Assign(
                             temp.clone(),
-                            RValue::Call("pace_int_to_string".to_string(), vec![piece_val]),
+                            RValue::Call("paceIntToString".to_string(), vec![piece_val]),
                         );
                         self.current().instructions.push(__inst)
                     };
@@ -42,7 +42,7 @@ impl<'a> MirBuilder<'a> {
                     {
                         let __inst = Inst::Assign(
                             temp.clone(),
-                            RValue::Call("pace_float_to_string".to_string(), vec![piece_val]),
+                            RValue::Call("paceFloatToString".to_string(), vec![piece_val]),
                         );
                         self.current().instructions.push(__inst)
                     };
@@ -53,7 +53,7 @@ impl<'a> MirBuilder<'a> {
                     {
                         let __inst = Inst::Assign(
                             temp.clone(),
-                            RValue::Call("pace_bool_to_string".to_string(), vec![piece_val]),
+                            RValue::Call("paceBoolToString".to_string(), vec![piece_val]),
                         );
                         self.current().instructions.push(__inst)
                     };

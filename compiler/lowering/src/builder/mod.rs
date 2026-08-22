@@ -473,7 +473,9 @@ impl<'a> ProgramBuilder<'a> {
                         let mut ref_params = std::collections::HashSet::new();
                         if !*is_static {
                             param_names.push("self".to_string());
-                            ref_params.insert("self".to_string());
+                            if !["Int", "Float", "Bool"].contains(&target_name.as_str()) {
+                                ref_params.insert("self".to_string());
+                            }
                         }
                         for (p, ty) in params {
                             param_names.push(self.session.interner.borrow().lookup(*p).to_string());

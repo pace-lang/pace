@@ -11,7 +11,7 @@ class Box<T> {
 }
 
 class ArrayWrapper<T> {
-    var items: [T];
+    items: [T];
     
     func init(arr: [T]) {
         self.items = arr;

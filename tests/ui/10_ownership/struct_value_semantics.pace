@@ -32,8 +32,8 @@ func main() {
     print(p2.x);
     print(p2.y);
     
-    let r1 = Rect { topLeft: Point { x: 5, y: 5 }, bottomRight: Point { x: 15, y: 15 } };
-    let r2 = r1; // deep copy
+    final r1 := Rect(Point(5, 5), Point(15, 15));
+    final r2 := r1; // deep copy
     
     r1.topLeft.x = 99;
     

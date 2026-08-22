@@ -34,7 +34,7 @@ func main() {
     }
 
     // Edge cases
-    let optOut = parts.get(10);
+    final optOut := parts.get(10);
     if optOut.isNone() {
         print("out of bounds is None");
     }

@@ -1,4 +1,4 @@
 func main() {
-    let arr: [Int] = [1, 2, 3];
+    final arr: [Int] = [1, 2, 3];
     print(arr[5]);
 }

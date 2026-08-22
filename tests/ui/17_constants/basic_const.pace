@@ -1,19 +1,19 @@
-const MAX_CONNECTIONS: Int = 100;
-const API_URL = "https://api.example.com";
-const IS_DEBUG = true;
+const MaxConnections: Int = 100;
+const ApiUrl = "https://api.example.com";
+const IsDebug = true;
 
 class Config {
-    const DEFAULT_PORT: Int = 8080;
+    const DefaultPort: Int = 8080;
     
-    func print_port() {
-        print(self.DEFAULT_PORT);
+    func printPort() {
+        print(self.DefaultPort);
     }
 }
 
 func main() {
-    const LOCAL_VAL = 42;
-    print(MAX_CONNECTIONS);
-    print(API_URL);
-    print(IS_DEBUG);
-    print(LOCAL_VAL);
+    const LocalVal = 42;
+    print(MaxConnections);
+    print(ApiUrl);
+    print(IsDebug);
+    print(LocalVal);
 }

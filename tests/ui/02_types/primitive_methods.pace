@@ -1,18 +1,18 @@
 func main() {
     final intVal: Int  = 10;
-    print("intVal.toString():", intVal.toString());
+    print("intVal.toString(): " + intVal.toString());
     
     final negVal: Int  = 0 - 5;
-    print("negVal.abs():", negVal.abs());
+    print("negVal.abs(): " + negVal.abs().toString());
     
     final floatVal: Float  = 3.14;
-    print("floatVal.toString():", floatVal.toString());
-    print("floatVal.round():", floatVal.round());
+    print("floatVal.toString(): " + floatVal.toString());
+    print("floatVal.round(): " + floatVal.round().toString());
     
     final boolVal: Bool  = true;
-    print("boolVal.toString():", boolVal.toString());
+    print("boolVal.toString(): " + boolVal.toString());
     
     final strVal: String  = "hello world";
-    print("strVal.len():", strVal.len());
-    print("strVal.toUpper():", strVal.toUpper());
+    print("strVal.len(): " + strVal.len().toString());
+    print("strVal.toUpper(): " + strVal.toUpper());
 }

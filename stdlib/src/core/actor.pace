@@ -23,7 +23,7 @@ class Mailbox {
 }
 
 class Actor {
-    var mailbox: Mailbox;
+    mailbox: Mailbox;
     
     func init() {
         self.mailbox = Mailbox();

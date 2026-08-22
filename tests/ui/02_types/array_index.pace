@@ -1,5 +1,5 @@
 func main() {
-    let arr: [Int] = [10, 20, 30];
+    final arr: [Int] = [10, 20, 30];
     print(arr[1]);
     arr[1] = 99;
     print(arr[1]);

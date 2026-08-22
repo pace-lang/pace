@@ -12,10 +12,10 @@ func main() {
     final emptyStr: String?  = null;
     
     // Valid assignments
-    let u2: User? = u;
+    final u2: User? = u;
     
     // Implicit promotion
-    let s2: String? = "world";
+    final s2: String? = "world";
     
     print(s != null);
     print(emptyStr == null);

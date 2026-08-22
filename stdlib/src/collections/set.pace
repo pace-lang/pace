@@ -7,15 +7,15 @@ import "list.pace";
 class Set<T> {
     itemPtr: Pointer<CChar>;
     statePtr: Pointer<CChar>; // 0: empty, 1: filled, 2: deleted
-    var capacity: Int;
-    var length: Int;
+    capacity: Int;
+    length: Int;
 
     func init() {
         self.capacity = 16;
         self.length = 0;
         self.itemPtr = malloc(self.capacity * sizeof<T>());
         self.statePtr = malloc(self.capacity * sizeof<Int>());
-        var i = 0;
+        i := 0;
         while i < self.capacity {
             ptrWrite<Int>(self.statePtr, i, 0);
             i = i + 1;
@@ -31,16 +31,16 @@ class Set<T> {
     }
 
     func resize(newCapacity: Int) {
-        let oldItems = self.itemPtr;
-        let oldStates = self.statePtr;
-        let oldCapacity = self.capacity;
+        final oldItems := self.itemPtr;
+        final oldStates := self.statePtr;
+        final oldCapacity := self.capacity;
 
         self.capacity = newCapacity;
         self.length = 0;
         self.itemPtr = malloc(self.capacity * sizeof<T>());
         self.statePtr = malloc(self.capacity * sizeof<Int>());
 
-        var i = 0;
+        i := 0;
         while i < self.capacity {
             ptrWrite<Int>(self.statePtr, i, 0);
             i = i + 1;
@@ -48,9 +48,9 @@ class Set<T> {
 
         i = 0;
         while i < oldCapacity {
-            let state = ptrRead<Int>(oldStates, i);
+            final state := ptrRead<Int>(oldStates, i);
             if state == 1 {
-                let v = ptrRead<T>(oldItems, i);
+                final v := ptrRead<T>(oldItems, i);
                 self.insert(v);
             }
             i = i + 1;
@@ -65,14 +65,14 @@ class Set<T> {
             self.resize(self.capacity * 2);
         }
 
-        var h = hash<T>(value);
+        h := hash<T>(value);
         if h < 0 {
             h = 0 - h;
         }
-        var index = h % self.capacity;
+        index := h % self.capacity;
 
         while true {
-            let state = ptrRead<Int>(self.statePtr, index);
+            final state := ptrRead<Int>(self.statePtr, index);
             if state == 0 {
                 ptrWrite<T>(self.itemPtr, index, value);
                 ptrWrite<Int>(self.statePtr, index, 1);
@@ -84,7 +84,7 @@ class Set<T> {
                 self.length = self.length + 1;
                 return;
             } else if state == 1 {
-                let existingVal = ptrRead<T>(self.itemPtr, index);
+                final existingVal := ptrRead<T>(self.itemPtr, index);
                 if existingVal == value {
                     return; // already exists
                 }
@@ -94,19 +94,19 @@ class Set<T> {
     }
 
     func contains(value: T): Bool {
-        var h = hash<T>(value);
+        h := hash<T>(value);
         if h < 0 {
             h = 0 - h;
         }
-        var index = h % self.capacity;
-        var startIndex = index;
+        index := h % self.capacity;
+        startIndex := index;
 
         while true {
-            let state = ptrRead<Int>(self.statePtr, index);
+            final state := ptrRead<Int>(self.statePtr, index);
             if state == 0 {
                 return false;
             } else if state == 1 {
-                let existingVal = ptrRead<T>(self.itemPtr, index);
+                final existingVal := ptrRead<T>(self.itemPtr, index);
                 if existingVal == value {
                     return true;
                 }
@@ -120,19 +120,19 @@ class Set<T> {
     }
 
     func remove(value: T): Bool {
-        var h = hash<T>(value);
+        h := hash<T>(value);
         if h < 0 {
             h = 0 - h;
         }
-        var index = h % self.capacity;
-        var startIndex = index;
+        index := h % self.capacity;
+        startIndex := index;
 
         while true {
-            let state = ptrRead<Int>(self.statePtr, index);
+            final state := ptrRead<Int>(self.statePtr, index);
             if state == 0 {
                 return false;
             } else if state == 1 {
-                let existingVal = ptrRead<T>(self.itemPtr, index);
+                final existingVal := ptrRead<T>(self.itemPtr, index);
                 if existingVal == value {
                     ptrWrite<Int>(self.statePtr, index, 2);
                     self.length = self.length - 1;
@@ -148,7 +148,7 @@ class Set<T> {
     }
 
     func clear() {
-        var i = 0;
+        i := 0;
         while i < self.capacity {
             ptrWrite<Int>(self.statePtr, i, 0);
             i = i + 1;
@@ -157,10 +157,10 @@ class Set<T> {
     }
 
     func values(): List<T> {
-        let list = List<T>();
-        var i = 0;
+        final list := List<T>();
+        i := 0;
         while i < self.capacity {
-            let state = ptrRead<Int>(self.statePtr, i);
+            final state := ptrRead<Int>(self.statePtr, i);
             if state == 1 {
                 list.push(ptrRead<T>(self.itemPtr, i));
             }

@@ -11,7 +11,7 @@ func main() {
     print("string substring:");
     print(sub);
 
-    let arr: [Int] = [1];
+    final arr: [Int] = [1];
     arr.push(10);
     print("array get 1:");
     print(arr.get(1));

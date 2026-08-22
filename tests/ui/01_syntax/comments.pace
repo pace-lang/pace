@@ -5,6 +5,6 @@ func main(): Int {
       This is a
       multi-line comment
     */
-    let x = 42; // Another comment here
+    final x := 42; // Another comment here
     return 0;
 }

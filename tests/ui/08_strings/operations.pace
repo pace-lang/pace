@@ -3,7 +3,7 @@ func main(): Int {
     final s2 := "World!";
     
     // Concatenation
-    let s3 = s1 + s2;
+    final s3 := s1 + s2;
     print(s3);
     
     // Equality

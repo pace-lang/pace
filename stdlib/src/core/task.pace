@@ -1,7 +1,7 @@
 // Task definitions and primitives
 
 class Waker {
-    var ptr: Pointer<CChar>;
+    ptr: Pointer<CChar>;
     
     func init(ptr: Pointer<CChar>) {
         self.ptr = ptr;
@@ -15,11 +15,11 @@ foreign func paceSleep(ms: Int);
 
 // The internal Task object that the Executor schedules
 class Task {
-    var state: Int;
-    var context: Pointer<CChar>;
-    var pollFn: Pointer<CChar>;
-    var waker: Pointer<CChar>;
-    var result: Pointer<CChar>; // Will point to dynamically typed result
+    state: Int;
+    context: Pointer<CChar>;
+    pollFn: Pointer<CChar>;
+    waker: Pointer<CChar>;
+    result: Pointer<CChar>; // Will point to dynamically typed result
     
     func init() {
         self.state = 0;
