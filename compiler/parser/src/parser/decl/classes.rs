@@ -53,6 +53,10 @@ impl<'a> Parser<'a> {
                 if let Some(field) = self.variable_declaration(Mutability::Final, false, item_is_private, is_static) {
                     fields.push(field);
                 }
+            } else if self.match_token(&[TokenKind::Const]) {
+                if let Some(field) = self.variable_declaration(Mutability::Const, false, item_is_private, is_static) {
+                    fields.push(field);
+                }
             } else if let Some(Token { kind: TokenKind::Identifier(_), .. }) = self.peek()
                 && let Some(Token { kind: next_kind, .. }) = self.peek_next()
                 && (matches!(next_kind, TokenKind::Colon) || matches!(next_kind, TokenKind::ColonEqual))
@@ -188,6 +192,10 @@ impl<'a> Parser<'a> {
 
             if self.match_token(&[TokenKind::Final]) {
                 if let Some(field) = self.variable_declaration(Mutability::Final, false, item_is_private, is_static) {
+                    fields.push(field);
+                }
+            } else if self.match_token(&[TokenKind::Const]) {
+                if let Some(field) = self.variable_declaration(Mutability::Const, false, item_is_private, is_static) {
                     fields.push(field);
                 }
             } else if let Some(Token { kind: TokenKind::Identifier(_), .. }) = self.peek()

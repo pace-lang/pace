@@ -488,6 +488,7 @@ impl<'a> Scanner<'a> {
         let text = &self.source[self.start_idx..self.current_idx];
         match text {
             "final" => TokenKind::Final,
+            "const" => TokenKind::Const,
             "func" => TokenKind::Func,
             "init" => TokenKind::Init,
             "self" => TokenKind::SelfKeyword,

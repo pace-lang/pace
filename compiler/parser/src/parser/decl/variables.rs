@@ -38,6 +38,10 @@ impl<'a> Parser<'a> {
             initializer = Some(self.expression()?);
         }
 
+        if mutability == Mutability::Const && initializer.is_none() {
+            self.error_at_current("Constants must be initialized at declaration.");
+        }
+
         self.match_token(&[TokenKind::Semicolon]);
 
         let end_span = self.previous().span;

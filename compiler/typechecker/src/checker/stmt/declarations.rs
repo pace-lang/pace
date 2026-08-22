@@ -361,7 +361,7 @@ impl<'a> TypeChecker<'a> {
         type_annotation: &Option<TypeExpr<'a>>,
         initializer: &Option<&Expr<'a>>,
         is_weak: bool,
-        is_mutable: bool,
+        mutability: ast::Mutability,
         is_static: bool,
         span: Span,
     ) -> TypedStmt<'a> {
@@ -369,14 +369,31 @@ impl<'a> TypeChecker<'a> {
             .as_ref()
             .map(|ann| self.parse_type(ann, span));
 
-        let typed_init = initializer
-            .as_ref()
-            .map(|init| self.check_expr_with_expected(init, expected_ty));
+        let mut typed_init = None;
+        let mut init_type = self.session.types.borrow_mut().intern(Type::Any);
 
-        let init_type = typed_init
-            .as_ref()
-            .map(|t| t.ty)
-            .unwrap_or(self.session.types.borrow_mut().intern(Type::Any));
+        if let Some(init) = initializer {
+            let checked_init = if let Some(expected) = expected_ty {
+                self.check_expr_with_expected(init, Some(expected))
+            } else {
+                self.check_expr(init)
+            };
+            init_type = checked_init.ty;
+            
+            if mutability == ast::Mutability::Const {
+                if !matches!(checked_init.kind, TypedExprKind::Integer(_) | TypedExprKind::Float(_) | TypedExprKind::String(_) | TypedExprKind::Bool(_)) {
+                    self.error(
+                        span,
+                        DiagnosticCode::TypeMismatch,
+                        "Constants can only be initialized with primitive literals (Int, Float, String, Boolean).",
+                    );
+                }
+            }
+
+            typed_init = Some(checked_init);
+        } else if mutability == ast::Mutability::Const {
+             self.error(span, DiagnosticCode::UnexpectedToken, "Constants must be initialized at declaration.");
+        }
 
         let decl_type = if let Some(ann_type) = expected_ty {
             if init_type != self.session.types.borrow_mut().intern(Type::Any)
@@ -417,13 +434,13 @@ impl<'a> TypeChecker<'a> {
             init_type
         };
 
-        self.env.declare_var(name, decl_type, is_mutable);
+        self.env.declare_var(name, decl_type, mutability == ast::Mutability::Mutable);
 
         let kind = TypedStmtKind::Binding {
             name,
             type_annotation: type_annotation.clone(),
             initializer: typed_init.map(|e| self.alloc(e)),
-            mutability: if is_mutable { ast::Mutability::Mutable } else { ast::Mutability::Final },
+            mutability,
             is_weak,
             is_static,
         };

@@ -97,6 +97,7 @@ impl<'a> Parser<'a> {
                     TokenKind::Class
                     | TokenKind::Func
                     | TokenKind::Final
+                    | TokenKind::Const
                     | TokenKind::For
                     | TokenKind::If
                     | TokenKind::While

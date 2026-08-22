@@ -26,6 +26,7 @@ pub struct EnumVariant<'a> {
 pub enum Mutability {
     Mutable,
     Final,
+    Const,
 }
 
 #[derive(Debug, Clone, PartialEq)]

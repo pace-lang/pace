@@ -53,6 +53,8 @@ impl<'a> Parser<'a> {
             self.function_declaration(is_private, false, false)
         } else if self.match_token(&[TokenKind::Final]) {
             self.variable_declaration(Mutability::Final, false, is_private, false)
+        } else if self.match_token(&[TokenKind::Const]) {
+            self.variable_declaration(Mutability::Const, false, is_private, false)
         } else if let Some(Token { kind: TokenKind::Identifier(_), .. }) = self.peek()
             && let Some(Token { kind: next_kind, .. }) = self.peek_next()
             && (matches!(next_kind, TokenKind::Colon) || matches!(next_kind, TokenKind::ColonEqual))

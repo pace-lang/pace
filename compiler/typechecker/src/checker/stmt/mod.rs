@@ -21,7 +21,7 @@ impl<'a> TypeChecker<'a> {
                 is_weak,
                 is_private: _,
                 is_static,
-            } => self.check_var_decl(*name, type_annotation, initializer, *is_weak, matches!(mutability, ast::Mutability::Mutable), *is_static, stmt.span).kind,
+            } => self.check_var_decl(*name, type_annotation, initializer, *is_weak, *mutability, *is_static, stmt.span).kind,
             StmtKind::Class {
                 name,
                 type_params,

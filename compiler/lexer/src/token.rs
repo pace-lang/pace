@@ -4,6 +4,7 @@ use ast::Span;
 pub enum TokenKind {
     // Keywords
     Final,
+    Const,
     Func,
     Init,
     SelfKeyword,
