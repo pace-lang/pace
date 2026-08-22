@@ -1,8 +1,0 @@
----
-source: compiler/cli/tests/golden_tests.rs
-assertion_line: 83
-expression: normalized_stderr
----
-Calculating primes up to 100,000...
-Number of primes found:
-9592

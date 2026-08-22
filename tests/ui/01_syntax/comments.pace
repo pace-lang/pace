@@ -1,0 +1,10 @@
+// This is a single-line comment
+func main(): Int {
+    // We are returning zero
+    /* 
+      This is a
+      multi-line comment
+    */
+    let x = 42; // Another comment here
+    return 0;
+}

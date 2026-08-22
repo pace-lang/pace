@@ -1,0 +1,29 @@
+func process_option(opt: Option<Int>): String {
+    return match opt {
+        Some(val) => "Has value",
+        None => "No value"
+    };
+}
+
+func process_result(res: Result<Int, String>): String {
+    return match res {
+        Ok(val) => "Success",
+        Err(e) => "Error"
+    };
+}
+
+func main(): Int {
+    let opt1 = Some(5);
+    let opt2: Option<Int> = None();
+    
+    print(process_option(opt1));
+    print(process_option(opt2));
+    
+    let res1: Result<Int, String> = Ok(10);
+    let res2: Result<Int, String> = Err("Failed");
+    
+    print(process_result(res1));
+    print(process_result(res2));
+    
+    return 0;
+}

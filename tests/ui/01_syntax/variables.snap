@@ -1,0 +1,32 @@
+---
+source: compiler/cli/tests/golden_tests.rs
+expression: normalized_stderr
+---
+[33m[P5001] Warning:[0m Variable `immutable_var` does not follow Pace naming conventions
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/01_syntax/variables.pace:2:5 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[33ml[0m[33me[0m[33mt[0m[33m [0m[33mi[0m[33mm[0m[33mm[0m[33mu[0m[33mt[0m[33ma[0m[33mb[0m[33ml[0m[33me[0m[33m_[0m[33mv[0m[33ma[0m[33mr[0m[33m [0m[33m=[0m[33m [0m[33m1[0m[33m0[0m[33m;[0m
+ [38;5;240m  │[0m     [33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m┬[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m  
+ [38;5;240m  │[0m                [33m╰[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m Variable `immutable_var` does not follow Pace naming conventions
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: use camelCase for variables
+[38;5;246m───╯[0m
+[33m[P5001] Warning:[0m Variable `mutable_var` does not follow Pace naming conventions
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/01_syntax/variables.pace:5:5 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m5 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[33mv[0m[33ma[0m[33mr[0m[33m [0m[33mm[0m[33mu[0m[33mt[0m[33ma[0m[33mb[0m[33ml[0m[33me[0m[33m_[0m[33mv[0m[33ma[0m[33mr[0m[33m [0m[33m=[0m[33m [0m[33m2[0m[33m0[0m[33m;[0m
+ [38;5;240m  │[0m     [33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m┬[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m  
+ [38;5;240m  │[0m               [33m╰[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m Variable `mutable_var` does not follow Pace naming conventions
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: use camelCase for variables
+[38;5;246m───╯[0m
+[33m[P5001] Warning:[0m Variable `typed_var` does not follow Pace naming conventions
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m $WORKSPACE/tests/ui/01_syntax/variables.pace:8:5 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m8 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[33ml[0m[33me[0m[33mt[0m[33m [0m[33mt[0m[33my[0m[33mp[0m[33me[0m[33md[0m[33m_[0m[33mv[0m[33ma[0m[33mr[0m[33m:[0m[33m [0m[33mS[0m[33mt[0m[33mr[0m[33mi[0m[33mn[0m[33mg[0m[33m [0m[33m=[0m[33m [0m[33m"[0m[33mH[0m[33me[0m[33ml[0m[33ml[0m[33mo[0m[33m [0m[33mP[0m[33ma[0m[33mc[0m[33me[0m[33m"[0m[33m;[0m
+ [38;5;240m  │[0m     [33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m┬[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m  
+ [38;5;240m  │[0m                       [33m╰[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m[33m─[0m Variable `typed_var` does not follow Pace naming conventions
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: use camelCase for variables
+[38;5;246m───╯[0m
+Hello Pace

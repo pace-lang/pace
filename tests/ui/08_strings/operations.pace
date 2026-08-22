@@ -1,0 +1,15 @@
+func main(): Int {
+    let s1 = "Hello, ";
+    let s2 = "World!";
+    
+    // Concatenation
+    let s3 = s1 + s2;
+    print(s3);
+    
+    // Equality
+    if s1 == "Hello, " {
+        print("Strings are equal");
+    }
+    
+    return 0;
+}

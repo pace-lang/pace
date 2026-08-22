@@ -1,0 +1,21 @@
+func add(a: Int, b: Int): Int {
+    return a + b;
+}
+
+func no_return_func() {
+    print("This function has no return value.");
+}
+
+func factorial(n: Int): Int {
+    if n <= 1 {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+func main(): Int {
+    print(add(5, 10));
+    no_return_func();
+    print(factorial(5));
+    return 0;
+}

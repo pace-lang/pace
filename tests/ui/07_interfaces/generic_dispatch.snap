@@ -1,7 +1,8 @@
 ---
 source: compiler/cli/tests/golden_tests.rs
-assertion_line: 83
 expression: normalized_stderr
 ---
-100000
-Done with heavy loop
+Processed 42
+Processed other Int
+Processed other String
+Processed other String

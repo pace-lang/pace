@@ -84,7 +84,7 @@ class HttpRequest {
     var method: String;
     var path: String;
     var stream: TcpStream;
-    var isValid: Boolean;
+    var isValid: Bool;
     
     func init() {
         self.method = "";
@@ -138,7 +138,7 @@ class HttpServer {
         self.listener = TcpListener();
     }
     
-    func bind(addr: String): Boolean {
+    func bind(addr: String): Bool {
         return self.listener.bind(addr);
     }
     
@@ -187,15 +187,15 @@ class ClientHttpRequest {
 }
 
 class HttpResult {
-    var ok: Boolean;
+    var ok: Bool;
     var value: HttpServerResponse;
     
-    func init(ok: Boolean, value: HttpServerResponse) {
+    func init(ok: Bool, value: HttpServerResponse) {
         self.ok = ok;
         self.value = value;
     }
     
-    func isOk(): Boolean {
+    func isOk(): Bool {
         return self.ok;
     }
     
