@@ -1,9 +1,7 @@
 use cranelift::prelude::*;
 use cranelift_object::{ObjectBuilder, ObjectModule};
-use cranelift_module::{Module, FuncId, DataId, Linkage, DataDescription};
+use cranelift_module::{Module, FuncId, Linkage, DataDescription};
 use pace_ast::Stmt;
-use miette::Diagnostic;
-use thiserror::Error;
 use std::collections::HashMap;
 use crate::translator::VarType;
 use crate::compiler::{CodegenError, ClassLayout, InterfaceLayout, StructLayout};
@@ -145,7 +143,7 @@ impl AotCompiler {
     }
 
     fn register_classes(&mut self, stmts: &[Stmt]) -> Result<(), CodegenError> {
-        let ptr_ty = self.module.target_config().pointer_type();
+        let _ptr_ty = self.module.target_config().pointer_type();
         
         for stmt in stmts {
             if let Stmt::ClassDecl { name: class_name, fields, methods, .. } = stmt {

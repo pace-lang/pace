@@ -1,3 +1,4 @@
+use pace_ast::Visibility;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -26,6 +27,8 @@ pub struct FunctionSignature {
     pub return_type: Type,
     pub span: (usize, usize),
     pub is_used: bool,
+    pub visibility: Visibility,
+    pub module: String,
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +74,8 @@ impl Environment {
                 return_type: Type::Void,
                 span: (0, 0),
                 is_used: true, // Always consider built-ins used
+                visibility: Visibility::Public,
+                module: "std".to_string(),
             },
         );
     }

@@ -179,7 +179,7 @@ impl JITCompiler {
     }
 
     fn register_classes(&mut self, stmts: &[Stmt]) -> Result<(), CodegenError> {
-        let ptr_ty = self.module.target_config().pointer_type();
+        let _ptr_ty = self.module.target_config().pointer_type();
         
         for stmt in stmts {
             if let Stmt::ClassDecl { name: class_name, fields, methods, .. } = stmt {

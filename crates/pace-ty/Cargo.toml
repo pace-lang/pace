@@ -10,4 +10,4 @@ license.workspace = true
 pace-ast = { workspace = true }
 pace-errors = { workspace = true }
 miette = { workspace = true }
-thiserror = "1.0"
+thiserror = "2"

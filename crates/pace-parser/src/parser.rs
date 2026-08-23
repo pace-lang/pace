@@ -76,7 +76,7 @@ impl<'a> Parser<'a> {
         } else if self.match_token(Token::Private) {
             Visibility::Private
         } else {
-            Visibility::Private // Default could be internal/private
+            Visibility::Public // Default is public
         };
 
         let is_async = self.match_token(Token::Async);
@@ -221,62 +221,43 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_unquoted_path(&mut self) -> Result<String, (String, (usize, usize))> {
+        let mut path = String::new();
+        loop {
+            match &self.current_token {
+                Token::Dot => path.push('.'),
+                Token::Slash => path.push('/'),
+                Token::Minus => path.push('-'),
+                Token::Ident(id) => path.push_str(id),
+                Token::Int(n) => path.push_str(&n.to_string()),
+                _ => break,
+            }
+            self.advance();
+        }
+        if path.is_empty() {
+            Err(("Expected path".to_string(), self.current_span))
+        } else {
+            Ok(path)
+        }
+    }
+
     fn parse_import_stmt(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume 'import'
         
-        let mut items = None;
-        let path;
-
-        // Check if it's a specific import: `import { ... } from "path";`
-        if self.match_token(Token::LBrace) {
-            let mut import_items = Vec::new();
-            if self.current_token != Token::RBrace {
-                loop {
-                    match &self.current_token {
-                        Token::Ident(id) => import_items.push(id.clone()),
-                        _ => return Err(("Expected identifier in import list".to_string(), self.current_span)),
-                    }
-                    self.advance();
-
-                    if !self.match_token(Token::Comma) {
-                        break;
-                    }
-                }
+        let path = match &self.current_token {
+            Token::String(s) => {
+                let p = s.clone();
+                self.advance();
+                p
             }
-            if !self.match_token(Token::RBrace) {
-                return Err(("Expected '}' after import list".to_string(), self.current_span));
-            }
-
-            if !self.match_token(Token::From) {
-                return Err(("Expected 'from' after import list".to_string(), self.current_span));
-            }
-
-            path = match &self.current_token {
-                Token::String(s) => s.clone(),
-                _ => return Err(("Expected string literal for import path".to_string(), self.current_span)),
-            };
-            self.advance();
-            items = Some(import_items);
-        } else {
-            // Namespace or side-effect import: `import "path";` or `import ident;`
-            match &self.current_token {
-                Token::String(s) => {
-                    path = s.clone();
-                    self.advance();
-                }
-                Token::Ident(id) => {
-                    path = id.clone();
-                    self.advance();
-                }
-                _ => return Err(("Expected string literal or identifier for import path".to_string(), self.current_span)),
-            }
-        }
+            _ => self.parse_unquoted_path()?,
+        };
 
         if !self.match_token(Token::Semi) {
             return Err(("Expected ';' after import statement".to_string(), self.current_span));
         }
 
-        Ok(Stmt::Import { path, items })
+        Ok(Stmt::Import { path, items: None })
     }
 
     fn parse_func_decl(&mut self, is_async: bool, visibility: Visibility) -> Result<Stmt, (String, (usize, usize))> {

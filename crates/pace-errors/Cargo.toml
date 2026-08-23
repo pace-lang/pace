@@ -8,4 +8,4 @@ license.workspace = true
 
 [dependencies]
 miette = { workspace = true }
-thiserror = "2.0.20"
+thiserror = "2"

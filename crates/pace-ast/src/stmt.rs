@@ -73,6 +73,11 @@ pub enum Stmt {
     Import {
         path: String,
         items: Option<Vec<String>>,
+    },
+    /// A module containing statements
+    Module {
+        name: String,
+        body: Vec<Stmt>,
     }
 }
 

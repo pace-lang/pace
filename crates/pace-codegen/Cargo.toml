@@ -16,5 +16,5 @@ cranelift-native = { workspace = true }
 cranelift-object = { workspace = true }
 object = { workspace = true }
 miette = { workspace = true }
-thiserror = "2.0.20"
+thiserror = "2"
 pace-runtime = { version = "0.1.0", path = "../pace-runtime" }

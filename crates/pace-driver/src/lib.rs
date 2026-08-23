@@ -1,7 +1,7 @@
 use miette::{Result, IntoDiagnostic, Report};
 use pace_ast::Stmt;
 use pace_errors::ParseError;
-use miette::{Diagnostic, NamedSource};
+use miette::Diagnostic;
 use thiserror::Error;
 
 #[derive(Error, Diagnostic, Debug)]
@@ -35,7 +35,7 @@ impl CompilerSession {
         let src = std::fs::read_to_string(&path_buf)
             .into_diagnostic()?;
         
-        let mut ast = match pace_parser::parse(&src) {
+        let ast = match pace_parser::parse(&src) {
             Ok(ast) => ast,
             Err(errors) => {
                 let parse_errors = errors.into_iter().map(|(msg, span)| {
@@ -55,19 +55,19 @@ impl CompilerSession {
             if let Stmt::Import { path: import_path, .. } = stmt {
                 let resolved_path;
                 
-                if import_path.starts_with("std/") {
+                if import_path.starts_with("./") || import_path.starts_with("../") {
+                    let parent_dir = path_buf.parent().unwrap_or(std::path::Path::new(""));
+                    resolved_path = parent_dir.join(format!("{}.pace", import_path));
+                } else {
                     if let Ok(stdlib_path) = std::env::var("PACE_STDLIB") {
-                        let path_without_std = import_path.strip_prefix("std/").unwrap();
+                        let path_without_std = import_path.strip_prefix("std/").unwrap_or(import_path);
                         resolved_path = std::path::Path::new(&stdlib_path).join(format!("{}.pace", path_without_std));
                     } else if let Ok(home_path) = std::env::var("PACE_HOME") {
-                        let path_without_std = import_path.strip_prefix("std/").unwrap();
+                        let path_without_std = import_path.strip_prefix("std/").unwrap_or(import_path);
                         resolved_path = std::path::Path::new(&home_path).join("stdlib").join(format!("{}.pace", path_without_std));
                     } else {
                         return Err(miette::miette!("Package Error: Standard library not found. Please set PACE_STDLIB or PACE_HOME."));
                     }
-                } else {
-                    let parent_dir = path_buf.parent().unwrap_or(std::path::Path::new(""));
-                    resolved_path = parent_dir.join(format!("{}.pace", import_path));
                 }
                 
                 if resolved_path.exists() {
@@ -80,7 +80,8 @@ impl CompilerSession {
         }
         
         // Append current file's AST after its dependencies
-        final_ast.append(&mut ast);
+        let module_name = path_buf.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+        final_ast.push(Stmt::Module { name: module_name, body: ast });
 
         Ok(final_ast)
     }
@@ -113,11 +114,24 @@ impl CompilerSession {
     }
     
 
+    fn flatten_ast(ast: &[Stmt]) -> Vec<Stmt> {
+        let mut flat = Vec::new();
+        for stmt in ast {
+            if let Stmt::Module { body, .. } = stmt {
+                flat.append(&mut Self::flatten_ast(body));
+            } else {
+                flat.push(stmt.clone());
+            }
+        }
+        flat
+    }
+
     pub fn run_file(&self, path: &str) -> Result<()> {
         let ast = self.check_file(path)?;
+        let flat_ast = Self::flatten_ast(&ast);
         let mut compiler = pace_codegen::JITCompiler::new();
         
-        compiler.compile_and_run(&ast).map_err(|e| {
+        compiler.compile_and_run(&flat_ast).map_err(|e| {
             Report::new(e)
         })?;
         
@@ -126,9 +140,10 @@ impl CompilerSession {
 
     pub fn run_source(&self, src: &str) -> Result<()> {
         let ast = self.check_source(src)?;
+        let flat_ast = Self::flatten_ast(&ast);
         let mut compiler = pace_codegen::JITCompiler::new();
         
-        compiler.compile_and_run(&ast).map_err(|e| {
+        compiler.compile_and_run(&flat_ast).map_err(|e| {
             Report::new(e)
         })?;
         
@@ -148,7 +163,8 @@ impl CompilerSession {
     fn build_from_ast(&self, ast: &[Stmt], output: &str) -> Result<()> {
         let compiler = pace_codegen::AotCompiler::new();
         
-        let obj_bytes = compiler.compile_to_object(ast).map_err(|e| {
+        let flat_ast = Self::flatten_ast(ast);
+        let obj_bytes = compiler.compile_to_object(&flat_ast).map_err(|e| {
             Report::new(e)
         })?;
         

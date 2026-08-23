@@ -164,12 +164,12 @@ impl Translator {
                 builder.seal_block(exit);
                 Ok((builder.ins().iconst(types::I64, 0), false))
             }
-            Stmt::Block(stmts) => {
+            Stmt::Module { body, .. } | Stmt::Block(body) => {
                 let initial_vars: Vec<String> = variables.keys().cloned().collect();
                 
                 let mut last_val = builder.ins().iconst(types::I64, 0);
                 let mut terminated = false;
-                for s in stmts {
+                for s in body {
                     let (val, term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, builder, s, variables, var_index, func_returns)?;
                     last_val = val;
                     if term {

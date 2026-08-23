@@ -1,4 +1,4 @@
-use pace_ast::{Expr, Stmt, BinaryOp};
+use pace_ast::{Expr, Stmt, BinaryOp, Visibility};
 use crate::env::{Environment, Type, FunctionSignature, ClassSignature};
 use miette::Diagnostic;
 use thiserror::Error;
@@ -15,6 +15,7 @@ pub struct TypeChecker {
     env: Environment,
     current_return_type: Option<Type>,
     current_class: Option<String>,
+    current_module: String,
     pub warnings: Vec<pace_errors::SemanticWarning>,
     pub errors: Vec<TypeError>,
 }
@@ -25,6 +26,7 @@ impl TypeChecker {
             env: Environment::new(),
             current_return_type: None,
             current_class: None,
+            current_module: "main".to_string(),
             warnings: Vec::new(),
             errors: Vec::new(),
         }
@@ -69,6 +71,12 @@ impl TypeChecker {
         // Pre-register names so resolve_type_name knows what is a class/struct/interface
         for stmt in stmts {
             match stmt {
+                Stmt::Module { name, body } => {
+                    let old_module = self.current_module.clone();
+                    self.current_module = name.clone();
+                    self.hoist_declarations(body)?;
+                    self.current_module = old_module;
+                }
                 Stmt::ClassDecl { name, .. } | Stmt::InterfaceDecl { name, .. } => {
                     self.env.classes.insert(name.clone(), ClassSignature { fields: HashMap::new(), methods: HashMap::new() });
                 }
@@ -81,7 +89,7 @@ impl TypeChecker {
 
         for stmt in stmts {
             match stmt {
-                Stmt::FuncDecl { name, params, return_type, span, .. } => {
+                Stmt::FuncDecl { name, params, return_type, span, visibility, .. } => {
                     let mut param_types = Vec::new();
                     for param in params {
                         param_types.push(self.resolve_type_name(&param.type_annotation));
@@ -103,6 +111,8 @@ impl TypeChecker {
                         return_type: ret_ty,
                         span: *span,
                         is_used: false,
+                        visibility: visibility.clone(),
+                        module: self.current_module.clone(),
                     };
                     self.env.register_function(name.clone(), sig);
                 }
@@ -121,7 +131,7 @@ impl TypeChecker {
 
                     let mut method_map = HashMap::new();
                     for m in methods {
-                        if let Stmt::FuncDecl { name: m_name, params, return_type, .. } = m {
+                        if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, .. } = m {
                             let mut param_types = Vec::new();
                             for param in params {
                                 param_types.push(self.resolve_type_name(&param.type_annotation));
@@ -136,6 +146,8 @@ impl TypeChecker {
                                 return_type: ret_ty,
                                 span: (0, 0),
                                 is_used: true,
+                                visibility: visibility.clone(),
+                                module: self.current_module.clone(),
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
@@ -168,7 +180,7 @@ impl TypeChecker {
                 Stmt::InterfaceDecl { name, methods } => {
                     let mut method_map = HashMap::new();
                     for m in methods {
-                        if let Stmt::FuncDecl { name: m_name, params, return_type, .. } = m {
+                        if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, .. } = m {
                             let mut param_types = Vec::new();
                             for param in params {
                                 param_types.push(self.resolve_type_name(&param.type_annotation));
@@ -183,6 +195,8 @@ impl TypeChecker {
                                 return_type: ret_ty,
                                 span: (0, 0),
                                 is_used: true,
+                                visibility: visibility.clone(),
+                                module: self.current_module.clone(),
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
@@ -215,6 +229,14 @@ impl TypeChecker {
 
     fn check_stmt(&mut self, stmt: &Stmt) -> Result<(), TypeError> {
         match stmt {
+            Stmt::Module { name, body } => {
+                let old = self.current_module.clone();
+                self.current_module = name.clone();
+                for s in body {
+                    self.check_stmt(s)?;
+                }
+                self.current_module = old;
+            }
             Stmt::Expr(expr) => {
                 self.check_expr(expr)?;
             }
@@ -539,6 +561,11 @@ impl TypeChecker {
                 // For direct global function calls
                 if let Expr::Identifier(func_name) = &**callee {
                     if let Some(sig) = self.env.functions.get(func_name) {
+                        if sig.visibility == Visibility::Private && sig.module != self.current_module {
+                            return Err(TypeError {
+                                message: format!("Function '{}' is private and cannot be accessed outside of module '{}'", func_name, sig.module)
+                            });
+                        }
                         if sig.params.len() != args.len() {
                             return Err(TypeError {
                                 message: format!("Function '{}' expects {} arguments, got {}", func_name, sig.params.len(), args.len())
@@ -589,6 +616,13 @@ impl TypeChecker {
                     return Ok(f_ty.clone());
                 }
                 if let Some(m_sig) = sig.methods.get(property) {
+                    if m_sig.visibility == Visibility::Private {
+                        if self.current_class.as_ref() != Some(class_name) {
+                            return Err(TypeError {
+                                message: format!("Method '{}' is private and cannot be accessed from outside class '{}'", property, class_name)
+                            });
+                        }
+                    }
                     return Ok(m_sig.return_type.clone());
                 }
                 Err(TypeError {
