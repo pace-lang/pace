@@ -1,27 +1,13 @@
-struct User {
-    let id: Int;
-}
-
-class HttpClient {
-    func get(id: Int) -> User {
-        return User();
+func fib(n: Int) -> Int {
+    if n == 0 {
+        return 0;
     }
-}
-
-interface Repository {
-    func getUser(id: Int) -> User
-}
-
-class UserService implement Repository {
-    private let client: HttpClient;
-
-    func getUser(id: Int) -> User {
-        return self.client.get(id);
+    if n == 1 {
+        return 1;
     }
+    return fib(n - 1) + fib(n - 2);
 }
 
-async func main() {
-    let x: Int = 42;
-    let service = UserService();
-    let user = service.getUser(10);
+func main() -> Int {
+    return fib(10);
 }
