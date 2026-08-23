@@ -185,11 +185,19 @@ impl AotCompiler {
             }
         }
 
+        let mut func_returns = HashMap::new();
+        for stmt in stmts {
+            if let Stmt::FuncDecl { name, return_type, .. } = stmt {
+                let ret = return_type.as_deref().unwrap_or("Int");
+                func_returns.insert(name.clone(), crate::translator::parse_vartype(ret));
+            }
+        }
+
         // Pass 2: Define all functions and class methods
         for stmt in stmts {
             if let Stmt::FuncDecl { name, params, body, .. } = stmt {
                 let id = *self.funcs.get(name).unwrap();
-                self.compile_function(name, params, body, id)?;
+                self.compile_function(name, params, body, id, &func_returns)?;
             } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
                 for method_stmt in methods {
                     if let Stmt::FuncDecl { name, params, body, .. } = method_stmt {
@@ -202,7 +210,7 @@ impl AotCompiler {
                         }];
                         new_params.extend(params.clone());
                         
-                        self.compile_function(&full_name, &new_params, body, id)?;
+                        self.compile_function(&full_name, &new_params, body, id, &func_returns)?;
                     }
                 }
             }
@@ -220,6 +228,7 @@ impl AotCompiler {
         params: &[pace_ast::Param],
         body: &[Stmt],
         func_id: FuncId,
+        func_returns: &HashMap<String, crate::translator::VarType>,
     ) -> Result<(), CodegenError> {
         self.ctx.func.signature.returns.push(AbiParam::new(types::I64));
         for _ in params {
@@ -240,14 +249,15 @@ impl AotCompiler {
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
             
-            variables.insert(param.name.clone(), (var, VarType::Unknown));
+            let param_ty = crate::translator::parse_vartype(&param.type_annotation);
+            variables.insert(param.name.clone(), (var, param_ty));
             var_index += 1;
         }
 
         let mut last_val = None;
         let mut terminated = false;
         for stmt in body {
-            let (val, term) = Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &mut builder, stmt, &mut variables, &mut var_index)?;
+            let (val, term) = Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &mut builder, stmt, &mut variables, &mut var_index, func_returns)?;
             last_val = Some(val);
             if term {
                 terminated = true;

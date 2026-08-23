@@ -81,11 +81,51 @@ impl<'a> Lexer<'a> {
     }
 
     fn skip_whitespace(&mut self) {
-        while let Some(&c) = self.peek() {
-            if c.is_whitespace() {
-                self.advance();
-            } else {
-                break;
+        loop {
+            match self.peek() {
+                Some(&c) if c.is_whitespace() => {
+                    self.advance();
+                }
+                Some(&'/') => {
+                    // Let's check the next character without advancing the first '/' yet, 
+                    // unless we're sure it's a comment.
+                    // To do this properly with peekable, we need a custom lookahead, 
+                    // but we can just use `as_str()` since `src` is essentially an iterator over chars,
+                    // wait, `std::iter::Peekable<std::str::Chars>` doesn't have `as_str()`.
+                    // So we must temporarily advance to see the second char.
+                    // Since it's complex to un-advance in standard Rust iterators without a specific design,
+                    // let's do a simple workaround: If we see '/', we can clone the iterator to peek ahead.
+                    let mut lookahead = self.src.clone();
+                    lookahead.next(); // Consume '/'
+                    match lookahead.next() {
+                        Some('/') => {
+                            // Line comment
+                            self.advance(); // consume '/'
+                            self.advance(); // consume '/'
+                            while let Some(&ch) = self.peek() {
+                                if ch == '\n' {
+                                    break;
+                                }
+                                self.advance();
+                            }
+                        }
+                        Some('*') => {
+                            // Block comment
+                            self.advance(); // consume '/'
+                            self.advance(); // consume '*'
+                            let mut prev = '\0';
+                            while let Some(&ch) = self.peek() {
+                                self.advance();
+                                if prev == '*' && ch == '/' {
+                                    break;
+                                }
+                                prev = ch;
+                            }
+                        }
+                        _ => break, // Not a comment, break loop
+                    }
+                }
+                _ => break,
             }
         }
     }
