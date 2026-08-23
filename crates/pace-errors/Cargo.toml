@@ -1,0 +1,11 @@
+[package]
+name = "pace-errors"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+miette = { workspace = true }
+thiserror = "2.0.20"

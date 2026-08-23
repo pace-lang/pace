@@ -1,5 +1,5 @@
 [workspace]
-members = []
+members = ["crates/pace-ast","crates/pace-cli", "crates/pace-driver", "crates/pace-errors", "crates/pace-parser"]
 resolver = "2"
 
 [workspace.package]
@@ -10,4 +10,15 @@ rust-version = "1.98.0"
 license = "MIT"
 
 [workspace.dependencies]
-bumpalo = "3.16"
+bumpalo = "3.20.3"
+clap = { version = "4.6.6", features = ["derive"] }
+chumsky = "0.13.0"
+ariadne = "0.6.0"
+miette = { version = "7.6.0", features = ["fancy"] }
+insta = { version = "1.48", features = ["yaml"] }
+
+# Local workspace crates
+pace-ast = { path = "crates/pace-ast" }
+pace-parser = { path = "crates/pace-parser" }
+pace-errors = { path = "crates/pace-errors" }
+pace-driver = { path = "crates/pace-driver" }

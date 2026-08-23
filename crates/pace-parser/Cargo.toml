@@ -1,0 +1,13 @@
+[package]
+name = "pace-parser"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+pace-ast = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }

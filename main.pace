@@ -1,0 +1,12 @@
+class UserService implement Repository {
+    private let client: HttpClient;
+
+    func getUser(id: Int) -> User {
+        return client.get(id);
+    }
+}
+
+async func main() {
+    let x: Int = 42;
+    let service = UserService();
+}
