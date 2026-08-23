@@ -205,7 +205,7 @@ impl TypeChecker {
             Stmt::Expr(expr) => {
                 self.check_expr(expr)?;
             }
-            Stmt::VarDecl { name, type_annotation, initializer, span, .. } => {
+            Stmt::VarDecl { name, is_mutable, type_annotation, initializer, span, .. } => {
                 let mut inferred_type = Type::Unknown;
                 
                 if let Some(init_expr) = initializer {
@@ -215,7 +215,7 @@ impl TypeChecker {
                 if let Some(annotation) = type_annotation {
                     let expected_type = self.resolve_type_name(annotation);
                     if inferred_type != Type::Unknown && inferred_type != expected_type {
-                        self.env.define(name.clone(), expected_type.clone(), *span);
+                        self.env.define(name.clone(), expected_type.clone(), *span, *is_mutable);
                         return Err(TypeError {
                             message: format!(
                                 "Type mismatch: expected {:?}, found {:?}",
@@ -239,7 +239,7 @@ impl TypeChecker {
                         span: *span,
                     });
                 }
-                self.env.define(name.clone(), inferred_type, *span);
+                self.env.define(name.clone(), inferred_type, *span, *is_mutable);
             }
             Stmt::Block(stmts) => {
                 self.env.push_scope();
@@ -320,13 +320,13 @@ impl TypeChecker {
                 
                 // Add `self` if we are inside a class
                 if let Some(class_name) = &self.current_class {
-                    self.env.define("self".to_string(), Type::Custom(class_name.clone()), (0, 0));
+                    self.env.define("self".to_string(), Type::Custom(class_name.clone()), (0, 0), false);
                 }
                 
                 // Add parameters to scope
                 for param in params {
                     let param_type = self.resolve_type_name(&param.type_annotation);
-                    self.env.define(param.name.clone(), param_type, (0, 0));
+                    self.env.define(param.name.clone(), param_type, (0, 0), false);
                 }
                 
                 // Check body
@@ -438,6 +438,58 @@ impl TypeChecker {
                         }
                     }
                     BinaryOp::Eq | BinaryOp::NotEq => Ok(Type::Bool),
+                    BinaryOp::Less | BinaryOp::LessEq | BinaryOp::Greater | BinaryOp::GreaterEq => {
+                        if left_ty == Type::Int || left_ty == Type::Float {
+                            Ok(Type::Bool)
+                        } else {
+                            Err(TypeError {
+                                message: "Relational operations require numeric types".to_string()
+                            })
+                        }
+                    }
+                    BinaryOp::And | BinaryOp::Or => {
+                        if left_ty == Type::Bool {
+                            Ok(Type::Bool)
+                        } else {
+                            Err(TypeError {
+                                message: "Logical operations require boolean types".to_string()
+                            })
+                        }
+                    }
+                }
+            }
+            Expr::Assign { target, value } => {
+                let val_ty = self.check_expr(value)?;
+                
+                if let Expr::Identifier(name) = &**target {
+                    if let Some(var_info) = self.env.get_mut(name) {
+                        if !var_info.is_mutable {
+                            return Err(TypeError {
+                                message: format!("Cannot assign to immutable variable '{}'", name)
+                            });
+                        }
+                        
+                        if var_info.ty != val_ty && var_info.ty != Type::Unknown && val_ty != Type::Unknown {
+                            return Err(TypeError {
+                                message: format!("Type mismatch: cannot assign {:?} to variable of type {:?}", val_ty, var_info.ty)
+                            });
+                        }
+                        
+                        var_info.is_used = true;
+                        Ok(val_ty)
+                    } else {
+                        Err(TypeError {
+                            message: format!("Undefined variable '{}'", name)
+                        })
+                    }
+                } else if let Expr::MemberAccess { object, property, .. } = &**target {
+                    let obj_ty = self.check_expr(object)?;
+                    // Simple validation for now - real validation needs class layout check
+                    Ok(val_ty)
+                } else {
+                    Err(TypeError {
+                        message: "Invalid assignment target".to_string()
+                    })
                 }
             }
             Expr::Call { callee, args } => {

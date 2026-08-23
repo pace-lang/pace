@@ -33,6 +33,7 @@ pub struct VarInfo {
     pub ty: Type,
     pub span: (usize, usize),
     pub is_used: bool,
+    pub is_mutable: bool,
 }
 
 #[derive(Clone, Default)]
@@ -79,9 +80,9 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, name: String, ty: Type, span: (usize, usize)) {
+    pub fn define(&mut self, name: String, ty: Type, span: (usize, usize), is_mutable: bool) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, VarInfo { ty, span, is_used: false });
+            scope.insert(name, VarInfo { ty, span, is_used: false, is_mutable });
         }
     }
 
@@ -106,11 +107,11 @@ impl Environment {
     pub fn register_function(&mut self, name: String, sig: FunctionSignature) {
         let span = sig.span;
         self.functions.insert(name.clone(), sig);
-        self.define(name, Type::Custom("Function".to_string()), span);
+        self.define(name, Type::Custom("Function".to_string()), span, false);
     }
     
     pub fn register_class(&mut self, name: String, sig: ClassSignature) {
         self.classes.insert(name.clone(), sig);
-        self.define(name.clone(), Type::Custom(name), (0, 0));
+        self.define(name.clone(), Type::Custom(name), (0, 0), false);
     }
 }

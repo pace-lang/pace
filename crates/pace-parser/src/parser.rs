@@ -587,13 +587,80 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, (String, (usize, usize))> {
-        self.parse_equality()
+        self.parse_assignment()
+    }
+
+    fn parse_assignment(&mut self) -> Result<Expr, (String, (usize, usize))> {
+        let expr = self.parse_logical_or()?;
+        
+        if self.match_token(Token::Eq) {
+            let value = self.parse_assignment()?; // Right-associative
+            
+            match expr {
+                Expr::Identifier(_) | Expr::MemberAccess { .. } => {
+                    return Ok(Expr::Assign {
+                        target: Box::new(expr),
+                        value: Box::new(value),
+                    });
+                }
+                _ => return Err(("Invalid assignment target".to_string(), self.current_span)),
+            }
+        }
+        
+        Ok(expr)
+    }
+
+    fn parse_logical_or(&mut self) -> Result<Expr, (String, (usize, usize))> {
+        let mut expr = self.parse_logical_and()?;
+        while self.match_token(Token::PipePipe) {
+            let right = self.parse_logical_and()?;
+            expr = Expr::Binary {
+                left: Box::new(expr),
+                op: BinaryOp::Or,
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_logical_and(&mut self) -> Result<Expr, (String, (usize, usize))> {
+        let mut expr = self.parse_equality()?;
+        while self.match_token(Token::AndAnd) {
+            let right = self.parse_equality()?;
+            expr = Expr::Binary {
+                left: Box::new(expr),
+                op: BinaryOp::And,
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
     }
 
     fn parse_equality(&mut self) -> Result<Expr, (String, (usize, usize))> {
-        let mut expr = self.parse_term()?;
+        let mut expr = self.parse_relational()?;
         while self.current_token == Token::EqEq || self.current_token == Token::NotEq {
             let op = if self.current_token == Token::EqEq { BinaryOp::Eq } else { BinaryOp::NotEq };
+            self.advance();
+            let right = self.parse_relational()?;
+            expr = Expr::Binary {
+                left: Box::new(expr),
+                op,
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn parse_relational(&mut self) -> Result<Expr, (String, (usize, usize))> {
+        let mut expr = self.parse_term()?;
+        while matches!(self.current_token, Token::Less | Token::LessEq | Token::Greater | Token::GreaterEq) {
+            let op = match self.current_token {
+                Token::Less => BinaryOp::Less,
+                Token::LessEq => BinaryOp::LessEq,
+                Token::Greater => BinaryOp::Greater,
+                Token::GreaterEq => BinaryOp::GreaterEq,
+                _ => unreachable!(),
+            };
             self.advance();
             let right = self.parse_term()?;
             expr = Expr::Binary {

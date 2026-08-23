@@ -41,6 +41,12 @@ pub enum Token {
     Slash,
     EqEq,
     NotEq,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+    AndAnd,
+    PipePipe,
     LParen,
     RParen,
     LBrace,
@@ -131,6 +137,42 @@ impl<'a> Lexer<'a> {
                         Token::Arrow
                     } else {
                         Token::Minus
+                    }
+                }
+                '<' => {
+                    self.advance();
+                    if self.peek() == Some(&'=') {
+                        self.advance();
+                        Token::LessEq
+                    } else {
+                        Token::Less
+                    }
+                }
+                '>' => {
+                    self.advance();
+                    if self.peek() == Some(&'=') {
+                        self.advance();
+                        Token::GreaterEq
+                    } else {
+                        Token::Greater
+                    }
+                }
+                '&' => {
+                    self.advance();
+                    if self.peek() == Some(&'&') {
+                        self.advance();
+                        Token::AndAnd
+                    } else {
+                        Token::Ident("&".to_string())
+                    }
+                }
+                '|' => {
+                    self.advance();
+                    if self.peek() == Some(&'|') {
+                        self.advance();
+                        Token::PipePipe
+                    } else {
+                        Token::Ident("|".to_string())
                     }
                 }
                 '*' => { self.advance(); Token::Star }

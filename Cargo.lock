@@ -702,6 +702,7 @@ dependencies = [
  "pace-parser",
  "pace-runtime",
  "pace-ty",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

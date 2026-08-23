@@ -20,10 +20,14 @@ pub enum Expr {
         op: BinaryOp,
         right: Box<Expr>,
     },
-    /// A function call (e.g., foo(x))
     Call {
         callee: Box<Expr>,
         args: Vec<Expr>,
+    },
+    /// An assignment operation (e.g., x = 5 or foo.bar = 10)
+    Assign {
+        target: Box<Expr>,
+        value: Box<Expr>,
     },
     /// A member access (e.g., foo.bar)
     MemberAccess {
@@ -41,4 +45,10 @@ pub enum BinaryOp {
     Div,
     Eq,
     NotEq,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+    And,
+    Or,
 }

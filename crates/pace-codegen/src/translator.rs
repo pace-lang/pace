@@ -187,8 +187,9 @@ impl Translator {
                 bytes.push(0); // Null terminator
                 data_ctx.define(bytes.into_boxed_slice());
                 
-                let string_name = format!("__str_const_{}", *var_index);
-                *var_index += 1;
+                static STRING_ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+                let id = STRING_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let string_name = format!("__str_const_{}", id);
                 
                 let data_id = module.declare_data(&string_name, Linkage::Local, false, false).unwrap();
                 module.define_data(data_id, &data_ctx).unwrap();
@@ -201,8 +202,9 @@ impl Translator {
                 if parts.is_empty() {
                     let mut data_ctx = DataDescription::new();
                     data_ctx.define(vec![0].into_boxed_slice());
-                    let string_name = format!("__empty_str_{}", *var_index);
-                    *var_index += 1;
+                    static EMPTY_STRING_ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+                    let id = EMPTY_STRING_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let string_name = format!("__empty_str_{}", id);
                     let data_id = module.declare_data(&string_name, Linkage::Local, false, false).unwrap();
                     module.define_data(data_id, &data_ctx).unwrap();
                     let local_id = module.declare_data_in_func(data_id, &mut builder.func);
@@ -291,6 +293,64 @@ impl Translator {
                             Ok(builder.ins().uextend(types::I64, c))
                         }
                     }
+                    BinaryOp::Less => {
+                        if is_float {
+                            let c = builder.ins().fcmp(FloatCC::LessThan, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        } else {
+                            let c = builder.ins().icmp(IntCC::SignedLessThan, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        }
+                    }
+                    BinaryOp::LessEq => {
+                        if is_float {
+                            let c = builder.ins().fcmp(FloatCC::LessThanOrEqual, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        } else {
+                            let c = builder.ins().icmp(IntCC::SignedLessThanOrEqual, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        }
+                    }
+                    BinaryOp::Greater => {
+                        if is_float {
+                            let c = builder.ins().fcmp(FloatCC::GreaterThan, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        } else {
+                            let c = builder.ins().icmp(IntCC::SignedGreaterThan, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        }
+                    }
+                    BinaryOp::GreaterEq => {
+                        if is_float {
+                            let c = builder.ins().fcmp(FloatCC::GreaterThanOrEqual, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        } else {
+                            let c = builder.ins().icmp(IntCC::SignedGreaterThanOrEqual, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        }
+                    }
+                    BinaryOp::And => {
+                        Ok(builder.ins().band(lhs, rhs)) // bitwise AND works for booleans represented as 0/1 integers
+                    }
+                    BinaryOp::Or => {
+                        Ok(builder.ins().bor(lhs, rhs)) // bitwise OR works for booleans represented as 0/1 integers
+                    }
+                }
+            }
+            Expr::Assign { target, value } => {
+                let val = Self::translate_expr(module, funcs, class_layouts, builder, value, variables, var_index)?;
+                if let Expr::Identifier(name) = &**target {
+                    if let Some((var, _)) = variables.get(name) {
+                        builder.def_var(*var, val);
+                        Ok(val)
+                    } else {
+                        Err(CodegenError { message: format!("Variable '{}' not found in JIT environment", name) })
+                    }
+                } else if let Expr::MemberAccess { .. } = &**target {
+                    // For now, struct field mutation requires writing to memory pointer, which we haven't fully implemented in the test framework.
+                    Err(CodegenError { message: "Field assignment not fully supported in JIT yet".to_string() })
+                } else {
+                    Err(CodegenError { message: "Invalid assignment target".to_string() })
                 }
             }
             Expr::Call { callee, args } => {
