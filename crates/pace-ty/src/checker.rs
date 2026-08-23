@@ -16,6 +16,7 @@ pub struct TypeChecker {
     current_return_type: Option<Type>,
     current_class: Option<String>,
     pub warnings: Vec<pace_errors::SemanticWarning>,
+    pub errors: Vec<TypeError>,
 }
 
 impl TypeChecker {
@@ -25,21 +26,24 @@ impl TypeChecker {
             current_return_type: None,
             current_class: None,
             warnings: Vec::new(),
+            errors: Vec::new(),
         }
     }
 
-    pub fn check(&mut self, stmts: &[Stmt]) -> Result<(), TypeError> {
+    pub fn check(&mut self, stmts: &[Stmt]) {
         // Pass 1: Hoisting
-        self.hoist_declarations(stmts)?;
+        if let Err(e) = self.hoist_declarations(stmts) {
+            self.errors.push(e);
+        }
 
         // Pass 2: Checking bodies
         for stmt in stmts {
-            self.check_stmt(stmt)?;
+            if let Err(e) = self.check_stmt(stmt) {
+                self.errors.push(e);
+            }
         }
         
         self.pop_scope_and_check_unused();
-        
-        Ok(())
     }
 
     fn pop_scope_and_check_unused(&mut self) {
@@ -211,6 +215,7 @@ impl TypeChecker {
                 if let Some(annotation) = type_annotation {
                     let expected_type = self.resolve_type_name(annotation);
                     if inferred_type != Type::Unknown && inferred_type != expected_type {
+                        self.env.define(name.clone(), expected_type.clone(), *span);
                         return Err(TypeError {
                             message: format!(
                                 "Type mismatch: expected {:?}, found {:?}",
@@ -239,7 +244,9 @@ impl TypeChecker {
             Stmt::Block(stmts) => {
                 self.env.push_scope();
                 for s in stmts {
-                    self.check_stmt(s)?;
+                    if let Err(e) = self.check_stmt(s) {
+                        self.errors.push(e);
+                    }
                 }
                 self.pop_scope_and_check_unused();
             }
@@ -322,8 +329,11 @@ impl TypeChecker {
                     self.env.define(param.name.clone(), param_type, (0, 0));
                 }
                 
+                // Check body
                 for s in body {
-                    self.check_stmt(s)?;
+                    if let Err(e) = self.check_stmt(s) {
+                        self.errors.push(e);
+                    }
                 }
                 
                 self.pop_scope_and_check_unused();
@@ -356,7 +366,9 @@ impl TypeChecker {
                 
                 self.env.push_scope();
                 for m in methods {
-                    self.check_stmt(m)?;
+                    if let Err(e) = self.check_stmt(m) {
+                        self.errors.push(e);
+                    }
                 }
                 self.pop_scope_and_check_unused();
                 

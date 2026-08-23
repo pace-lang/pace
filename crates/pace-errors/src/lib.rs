@@ -18,6 +18,14 @@ pub struct ParseError {
 }
 
 #[derive(Error, Diagnostic, Debug)]
+#[error("Found multiple syntax errors")]
+#[diagnostic(code(pace::multiple_syntax_errors))]
+pub struct MultipleSyntaxErrors {
+    #[related]
+    pub errors: Vec<ParseError>,
+}
+
+#[derive(Error, Diagnostic, Debug)]
 pub enum SemanticWarning {
     #[error("Variable or function '{name}' should use camelCase")]
     #[diagnostic(code(pace::naming_convention), severity(warning))]

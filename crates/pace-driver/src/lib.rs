@@ -1,6 +1,16 @@
 use miette::{Result, IntoDiagnostic, Report};
 use pace_ast::Stmt;
 use pace_errors::ParseError;
+use miette::{Diagnostic, NamedSource};
+use thiserror::Error;
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("Found multiple type errors")]
+#[diagnostic(code(pace::multiple_type_errors))]
+pub struct MultipleTypeErrors {
+    #[related]
+    pub errors: Vec<pace_ty::TypeError>,
+}
 
 pub struct CompilerSession;
 
@@ -27,13 +37,15 @@ impl CompilerSession {
         
         let mut ast = match pace_parser::parse(&src) {
             Ok(ast) => ast,
-            Err((msg, span)) => {
-                let err = ParseError {
-                    message: msg,
-                    src: miette::NamedSource::new(path.display().to_string(), src),
-                    span,
-                };
-                return Err(Report::new(err));
+            Err(errors) => {
+                let parse_errors = errors.into_iter().map(|(msg, span)| {
+                    ParseError {
+                        message: msg,
+                        src: miette::NamedSource::new(path.display().to_string(), src.clone()),
+                        span,
+                    }
+                }).collect();
+                return Err(Report::new(pace_errors::MultipleSyntaxErrors { errors: parse_errors }));
             }
         };
 
@@ -92,8 +104,8 @@ impl CompilerSession {
                     eprintln!("{:?}", miette::Report::new(warning));
                 }
             }
-            Err(type_err) => {
-                return Err(Report::new(type_err));
+            Err(type_errors) => {
+                return Err(Report::new(MultipleTypeErrors { errors: type_errors }));
             }
         }
         
@@ -176,13 +188,15 @@ impl CompilerSession {
     pub fn check_source(&self, src: &str) -> Result<Vec<Stmt>> {
         let ast = match pace_parser::parse(src) {
             Ok(ast) => ast,
-            Err((msg, span)) => {
-                let err = ParseError {
-                    message: msg,
-                    src: miette::NamedSource::new("source", src.to_string()),
-                    span,
-                };
-                return Err(Report::new(err));
+            Err(errors) => {
+                let parse_errors = errors.into_iter().map(|(msg, span)| {
+                    ParseError {
+                        message: msg,
+                        src: miette::NamedSource::new("source", src.to_string()),
+                        span,
+                    }
+                }).collect();
+                return Err(Report::new(pace_errors::MultipleSyntaxErrors { errors: parse_errors }));
             }
         };
 
@@ -199,8 +213,8 @@ impl CompilerSession {
                     eprintln!("{:?}", miette::Report::new(warning));
                 }
             }
-            Err(type_err) => {
-                return Err(Report::new(type_err));
+            Err(type_errors) => {
+                return Err(Report::new(MultipleTypeErrors { errors: type_errors }));
             }
         }
 

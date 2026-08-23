@@ -5,6 +5,7 @@ pub struct Parser<'a> {
     lexer: Lexer<'a>,
     current_token: Token,
     current_span: (usize, usize),
+    pub errors: Vec<(String, (usize, usize))>,
 }
 
 impl<'a> Parser<'a> {
@@ -15,6 +16,7 @@ impl<'a> Parser<'a> {
             lexer,
             current_token,
             current_span,
+            errors: Vec::new(),
         }
     }
 
@@ -33,12 +35,39 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Stmt>, (String, (usize, usize))> {
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, Vec<(String, (usize, usize))>> {
         let mut stmts = Vec::new();
         while self.current_token != Token::Eof {
-            stmts.push(self.parse_stmt()?);
+            match self.parse_stmt() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(e) => {
+                    self.errors.push(e);
+                    self.synchronize();
+                }
+            }
         }
-        Ok(stmts)
+        
+        if self.errors.is_empty() {
+            Ok(stmts)
+        } else {
+            Err(self.errors.clone())
+        }
+    }
+    
+    fn synchronize(&mut self) {
+        self.advance();
+        while self.current_token != Token::Eof {
+            if self.current_token == Token::Semi {
+                self.advance();
+                return;
+            }
+            
+            match self.current_token {
+                Token::Class | Token::Func | Token::Var | Token::Let |
+                Token::For | Token::If | Token::While | Token::Return | Token::RBrace => return,
+                _ => self.advance(),
+            }
+        }
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, (String, (usize, usize))> {
@@ -92,7 +121,13 @@ impl<'a> Parser<'a> {
         self.advance(); // consume '{'
         let mut stmts = Vec::new();
         while self.current_token != Token::RBrace && self.current_token != Token::Eof {
-            stmts.push(self.parse_stmt()?);
+            match self.parse_stmt() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(e) => {
+                    self.errors.push(e);
+                    self.synchronize();
+                }
+            }
         }
         if !self.match_token(Token::RBrace) {
             return Err(("Expected '}' after block".to_string(), self.current_span));
@@ -307,7 +342,13 @@ impl<'a> Parser<'a> {
 
         let mut body = Vec::new();
         while self.current_token != Token::RBrace && self.current_token != Token::Eof {
-            body.push(self.parse_stmt()?);
+            match self.parse_stmt() {
+                Ok(stmt) => body.push(stmt),
+                Err(e) => {
+                    self.errors.push(e);
+                    self.synchronize();
+                }
+            }
         }
 
         if !self.match_token(Token::RBrace) {
@@ -351,11 +392,21 @@ impl<'a> Parser<'a> {
         let mut methods = Vec::new();
 
         while self.current_token != Token::RBrace && self.current_token != Token::Eof {
-            let stmt = self.parse_stmt()?;
-            match stmt {
-                Stmt::VarDecl { .. } => fields.push(stmt),
-                Stmt::FuncDecl { .. } => methods.push(stmt),
-                _ => return Err(("Classes can only contain fields and methods".to_string(), self.current_span)),
+            match self.parse_stmt() {
+                Ok(stmt) => {
+                    match stmt {
+                        Stmt::VarDecl { .. } => fields.push(stmt),
+                        Stmt::FuncDecl { .. } => methods.push(stmt),
+                        _ => {
+                            self.errors.push(("Classes can only contain fields and methods".to_string(), self.current_span));
+                            self.synchronize();
+                        }
+                    }
+                }
+                Err(e) => {
+                    self.errors.push(e);
+                    self.synchronize();
+                }
             }
         }
 
@@ -692,10 +743,19 @@ impl<'a> Parser<'a> {
                     expr_str.push(inner_c);
                 }
                 
+                if depth > 0 {
+                    return Err(("Unclosed string interpolation block, expected '}'".to_string(), base_span));
+                }
+                
                 let mut nested_parser = Parser::new(&expr_str);
                 let expr = nested_parser.parse_expr().map_err(|(msg, _)| {
                     (format!("In interpolated string: {}", msg), base_span)
                 })?;
+                
+                if nested_parser.current_token != Token::Eof {
+                    return Err(("Unexpected tokens in interpolated string".to_string(), base_span));
+                }
+                
                 parts.push(expr);
             } else {
                 current_text.push(c);
