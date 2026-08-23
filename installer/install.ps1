@@ -1,8 +1,40 @@
+[CmdletBinding()]
+param(
+    [switch]$Interactive,
+    [switch]$Uninstall
+)
+
 $ErrorActionPreference = "Stop"
 
 $Repo = "pace-lang/pace"
 $InstallDir = "$env:USERPROFILE\.pace"
 $BinDir = "$InstallDir\bin"
+
+if ($Uninstall) {
+    Write-Host "-> Uninstalling Pace Toolchain..." -ForegroundColor Cyan
+    if ($Interactive) {
+        $Title = "Uninstall Pace"
+        $Message = "Are you sure you want to remove $InstallDir?"
+        $Choices = [System.Management.Automation.Host.ChoiceDescription[]]@(
+            "&Yes",
+            "&No"
+        )
+        $Decision = $Host.UI.PromptForChoice($Title, $Message, $Choices, 1)
+        if ($Decision -ne 0) {
+            Write-Host "Uninstall cancelled." -ForegroundColor Gray
+            exit
+        }
+    }
+
+    if (Test-Path $InstallDir) {
+        Remove-Item -Recurse -Force $InstallDir
+        Write-Host "✅ Pace Toolchain removed from $InstallDir" -ForegroundColor Green
+    } else {
+        Write-Host "Pace Toolchain is not installed at $InstallDir" -ForegroundColor Gray
+    }
+    Write-Host "⚠️  Note: You may need to manually remove the PATH entry from your environment variables." -ForegroundColor Yellow
+    exit
+}
 
 Write-Host "✨ Installing Pace Toolchain..." -ForegroundColor Cyan
 
@@ -26,6 +58,20 @@ try {
     Write-Warning "Could not determine the latest release version from GitHub API. Falling back to $LatestRelease."
 }
 
+if ($Interactive) {
+    $Title = "Install Pace"
+    $Message = "Install Pace $LatestRelease to $InstallDir?"
+    $Choices = [System.Management.Automation.Host.ChoiceDescription[]]@(
+        "&Yes",
+        "&No"
+    )
+    $Decision = $Host.UI.PromptForChoice($Title, $Message, $Choices, 0)
+    if ($Decision -ne 0) {
+        Write-Host "Installation cancelled." -ForegroundColor Gray
+        exit
+    }
+}
+
 $FileName = "pace-${LatestRelease}-windows-${ArchName}.zip"
 $DownloadUrl = "https://github.com/$Repo/releases/download/$LatestRelease/$FileName"
 
@@ -34,29 +80,37 @@ Write-Host "-> Downloading Pace $LatestRelease for windows-$ArchName..." -Foregr
 # Create temp dir for download
 $TempDir = Join-Path $env:TEMP "pace-installer-$(New-Guid)"
 New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
-$ZipPath = Join-Path $TempDir $FileName
 
-Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -UseBasicParsing
-
-Write-Host "-> Extracting toolchain..." -ForegroundColor Gray
-if (Test-Path $InstallDir) {
-    Remove-Item -Recurse -Force $InstallDir
+try {
+    $ZipPath = Join-Path $TempDir $FileName
+    
+    Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -UseBasicParsing
+    
+    Write-Host "-> Extracting toolchain..." -ForegroundColor Gray
+    if (Test-Path $InstallDir) {
+        Remove-Item -Recurse -Force $InstallDir
+    }
+    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+    
+    # Expand archive
+    Expand-Archive -Path $ZipPath -DestinationPath $TempDir\extracted -Force
+    
+    # The zip contains a 'pace' folder, move its contents to InstallDir
+    $ExtractedPaceFolder = Join-Path $TempDir\extracted "pace"
+    if (Test-Path $ExtractedPaceFolder) {
+        Move-Item -Path "$ExtractedPaceFolder\*" -Destination $InstallDir -Force
+    } else {
+        Move-Item -Path "$TempDir\extracted\*" -Destination $InstallDir -Force
+    }
+} catch {
+    Write-Error "❌ Error during installation: $_"
+    exit 1
+} finally {
+    # Clean up
+    if (Test-Path $TempDir) {
+        Remove-Item -Recurse -Force $TempDir
+    }
 }
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-
-# Expand archive
-Expand-Archive -Path $ZipPath -DestinationPath $TempDir\extracted -Force
-
-# The zip contains a 'pace' folder, move its contents to InstallDir
-$ExtractedPaceFolder = Join-Path $TempDir\extracted "pace"
-if (Test-Path $ExtractedPaceFolder) {
-    Move-Item -Path "$ExtractedPaceFolder\*" -Destination $InstallDir -Force
-} else {
-    Move-Item -Path "$TempDir\extracted\*" -Destination $InstallDir -Force
-}
-
-# Clean up
-Remove-Item -Recurse -Force $TempDir
 
 Write-Host "-> Configuring PATH..." -ForegroundColor Gray
 # Check if BinDir is already in User Path
@@ -64,14 +118,36 @@ $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 $BinDirPattern = [regex]::Escape($BinDir)
 
 if ($UserPath -notmatch "(^|;)$BinDirPattern($|;)") {
-    $NewPath = if ($UserPath.EndsWith(";")) { "$UserPath$BinDir" } else { "$UserPath;$BinDir" }
-    [Environment]::SetEnvironmentVariable("Path", $NewPath, "User")
-    # Also update current session path so it works immediately (in theory)
-    $env:Path = if ($env:Path.EndsWith(";")) { "$env:Path$BinDir" } else { "$env:Path;$BinDir" }
-    
-    Write-Host ""
-    Write-Host "✅ Pace Toolchain installed successfully!" -ForegroundColor Green
-    Write-Host "Please restart your PowerShell terminal for the PATH changes to take full effect." -ForegroundColor Yellow
+    $UpdatePath = $true
+    if ($Interactive) {
+        $Title = "Update PATH"
+        $Message = "Do you want to automatically add Pace to your user PATH variable?"
+        $Choices = [System.Management.Automation.Host.ChoiceDescription[]]@(
+            "&Yes",
+            "&No"
+        )
+        $Decision = $Host.UI.PromptForChoice($Title, $Message, $Choices, 0)
+        if ($Decision -ne 0) {
+            $UpdatePath = $false
+        }
+    }
+
+    if ($UpdatePath) {
+        $NewPath = if ($UserPath.EndsWith(";")) { "$UserPath$BinDir" } else { "$UserPath;$BinDir" }
+        [Environment]::SetEnvironmentVariable("Path", $NewPath, "User")
+        # Also update current session path so it works immediately (in theory)
+        $env:Path = if ($env:Path.EndsWith(";")) { "$env:Path$BinDir" } else { "$env:Path;$BinDir" }
+        
+        Write-Host ""
+        Write-Host "✅ Pace Toolchain installed successfully!" -ForegroundColor Green
+        Write-Host "Please restart your PowerShell terminal for the PATH changes to take full effect." -ForegroundColor Yellow
+    } else {
+        Write-Host ""
+        Write-Host "✅ Pace Toolchain installed successfully!" -ForegroundColor Green
+        Write-Host "⚠️  You chose not to update PATH automatically." -ForegroundColor Yellow
+        Write-Host "Please add the following path to your environment variables:"
+        Write-Host "    $BinDir"
+    }
 } else {
     Write-Host ""
     Write-Host "✅ Pace Toolchain installed successfully!" -ForegroundColor Green
