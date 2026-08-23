@@ -54,6 +54,13 @@ impl<'a> Parser<'a> {
             Token::Func => self.parse_func_decl(is_async, visibility),
             Token::Class => self.parse_class_decl(),
             Token::Interface => self.parse_interface_decl(),
+            Token::Struct => self.parse_struct_decl(),
+            Token::If => self.parse_if_stmt(),
+            Token::While => self.parse_while_stmt(),
+            Token::Loop => self.parse_loop_stmt(),
+            Token::For => self.parse_for_stmt(),
+            Token::Match => self.parse_match_stmt(),
+            Token::LBrace => self.parse_block(),
             Token::Return => {
                 self.advance();
                 let expr = if self.current_token != Token::Semi {
@@ -74,6 +81,104 @@ impl<'a> Parser<'a> {
                 Ok(Stmt::Expr(expr))
             }
         }
+    }
+
+    fn parse_block(&mut self) -> Result<Stmt, String> {
+        self.advance(); // consume '{'
+        let mut stmts = Vec::new();
+        while self.current_token != Token::RBrace && self.current_token != Token::Eof {
+            stmts.push(self.parse_stmt()?);
+        }
+        if !self.match_token(Token::RBrace) {
+            return Err("Expected '}' after block".to_string());
+        }
+        Ok(Stmt::Block(stmts))
+    }
+
+    fn parse_if_stmt(&mut self) -> Result<Stmt, String> {
+        self.advance(); // consume if
+        let condition = self.parse_expr()?;
+        
+        let then_branch = Box::new(self.parse_stmt()?);
+        
+        let mut else_branch = None;
+        if self.match_token(Token::Else) {
+            else_branch = Some(Box::new(self.parse_stmt()?));
+        }
+
+        Ok(Stmt::If {
+            condition,
+            then_branch,
+            else_branch,
+        })
+    }
+
+    fn parse_while_stmt(&mut self) -> Result<Stmt, String> {
+        self.advance(); // consume while
+        let condition = self.parse_expr()?;
+        let body = Box::new(self.parse_stmt()?);
+        Ok(Stmt::While {
+            condition,
+            body,
+        })
+    }
+
+    fn parse_loop_stmt(&mut self) -> Result<Stmt, String> {
+        self.advance(); // consume loop
+        let body = Box::new(self.parse_stmt()?);
+        Ok(Stmt::Loop {
+            body,
+        })
+    }
+
+    fn parse_for_stmt(&mut self) -> Result<Stmt, String> {
+        self.advance(); // consume for
+        let item = match &self.current_token {
+            Token::Ident(id) => id.clone(),
+            _ => return Err("Expected identifier in for loop".to_string()),
+        };
+        self.advance();
+
+        if !self.match_token(Token::In) {
+            return Err("Expected 'in' in for loop".to_string());
+        }
+
+        let iterable = self.parse_expr()?;
+        let body = Box::new(self.parse_stmt()?);
+
+        Ok(Stmt::ForIn {
+            item,
+            iterable,
+            body,
+        })
+    }
+
+    fn parse_match_stmt(&mut self) -> Result<Stmt, String> {
+        self.advance(); // consume match
+        let expr = self.parse_expr()?;
+        
+        if !self.match_token(Token::LBrace) {
+            return Err("Expected '{' before match arms".to_string());
+        }
+
+        let mut arms = Vec::new();
+        while self.current_token != Token::RBrace && self.current_token != Token::Eof {
+            let pattern = self.parse_expr()?;
+            if !self.match_token(Token::Arrow) {
+                return Err("Expected '=>' after match pattern".to_string());
+            }
+            let body = Box::new(self.parse_stmt()?);
+            arms.push((pattern, body));
+        }
+
+        if !self.match_token(Token::RBrace) {
+            return Err("Expected '}' after match arms".to_string());
+        }
+
+        Ok(Stmt::Match {
+            expr,
+            arms,
+        })
     }
 
     fn parse_func_decl(&mut self, is_async: bool, visibility: Visibility) -> Result<Stmt, String> {
@@ -217,7 +322,6 @@ impl<'a> Parser<'a> {
         let mut methods = Vec::new();
 
         while self.current_token != Token::RBrace && self.current_token != Token::Eof {
-            // Interfaces only have method signatures (no bodies)
             let is_async = self.match_token(Token::Async);
             
             if !self.match_token(Token::Func) {
@@ -277,14 +381,13 @@ impl<'a> Parser<'a> {
                 self.advance();
             }
 
-            // No body for interface methods, just a method declaration
             methods.push(Stmt::FuncDecl {
                 name: method_name,
                 params,
                 return_type,
                 body: vec![],
                 is_async,
-                visibility: Visibility::Public, // Interfaces are public contracts
+                visibility: Visibility::Public,
             });
         }
 
@@ -295,6 +398,38 @@ impl<'a> Parser<'a> {
         Ok(Stmt::InterfaceDecl {
             name,
             methods,
+        })
+    }
+
+    fn parse_struct_decl(&mut self) -> Result<Stmt, String> {
+        self.advance(); // consume struct
+
+        let name = match &self.current_token {
+            Token::Ident(id) => id.clone(),
+            _ => return Err("Expected struct name".to_string()),
+        };
+        self.advance();
+
+        if !self.match_token(Token::LBrace) {
+            return Err("Expected '{' before struct body".to_string());
+        }
+
+        let mut fields = Vec::new();
+        while self.current_token != Token::RBrace && self.current_token != Token::Eof {
+            let stmt = self.parse_stmt()?;
+            match stmt {
+                Stmt::VarDecl { .. } => fields.push(stmt),
+                _ => return Err("Structs can only contain fields".to_string()),
+            }
+        }
+
+        if !self.match_token(Token::RBrace) {
+            return Err("Expected '}' after struct body".to_string());
+        }
+
+        Ok(Stmt::StructDecl {
+            name,
+            fields,
         })
     }
 

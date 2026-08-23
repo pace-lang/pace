@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/pace-ast","crates/pace-cli", "crates/pace-driver", "crates/pace-errors", "crates/pace-parser"]
+members = ["crates/pace-ast","crates/pace-cli", "crates/pace-driver", "crates/pace-errors", "crates/pace-parser", "crates/pace-ty"]
 resolver = "2"
 
 [workspace.package]
@@ -22,3 +22,4 @@ pace-ast = { path = "crates/pace-ast" }
 pace-parser = { path = "crates/pace-parser" }
 pace-errors = { path = "crates/pace-errors" }
 pace-driver = { path = "crates/pace-driver" }
+pace-ty = { path = "crates/pace-ty" }

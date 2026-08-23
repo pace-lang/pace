@@ -23,6 +23,11 @@ pub enum Token {
     Actor,
     Struct,
     Import,
+    For,
+    In,
+    While,
+    Loop,
+    Match,
     Arrow,
     Comma,
     Colon,
@@ -161,6 +166,11 @@ impl<'a> Lexer<'a> {
             "actor" => Token::Actor,
             "struct" => Token::Struct,
             "import" => Token::Import,
+            "for" => Token::For,
+            "in" => Token::In,
+            "while" => Token::While,
+            "loop" => Token::Loop,
+            "match" => Token::Match,
             _ => Token::Ident(s),
         }
     }

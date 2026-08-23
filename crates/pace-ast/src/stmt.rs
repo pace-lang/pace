@@ -41,6 +41,31 @@ pub enum Stmt {
     InterfaceDecl {
         name: String,
         methods: Vec<Stmt>, // FuncDecl without body
+    },
+    /// A struct declaration
+    StructDecl {
+        name: String,
+        fields: Vec<Stmt>, // VarDecl
+    },
+    /// A while loop
+    While {
+        condition: Expr,
+        body: Box<Stmt>,
+    },
+    /// An infinite loop
+    Loop {
+        body: Box<Stmt>,
+    },
+    /// A for-in loop
+    ForIn {
+        item: String,
+        iterable: Expr,
+        body: Box<Stmt>,
+    },
+    /// A pattern matching statement
+    Match {
+        expr: Expr,
+        arms: Vec<(Expr, Box<Stmt>)>,
     }
 }
 

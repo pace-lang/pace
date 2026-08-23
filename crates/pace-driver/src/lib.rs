@@ -17,15 +17,21 @@ impl CompilerSession {
     }
 
     pub fn check_source(&self, src: &str) -> Result<Vec<Stmt>> {
-        match pace_parser::parse(src) {
-            Ok(ast) => Ok(ast),
+        let ast = match pace_parser::parse(src) {
+            Ok(ast) => ast,
             Err(err_msg) => {
                 let err = ParseError {
                     message: err_msg,
                 };
-                // In the future, we will attach source spans to this error
-                Err(Report::new(err))
+                return Err(Report::new(err));
             }
+        };
+
+        // Run typechecker on the parsed AST
+        if let Err(type_err) = pace_ty::check(&ast) {
+            return Err(Report::new(type_err));
         }
+
+        Ok(ast)
     }
 }
