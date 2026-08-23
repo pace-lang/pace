@@ -155,6 +155,7 @@ impl Translator {
             Expr::IntLiteral(_) => VarType::Int,
             Expr::FloatLiteral(_) => VarType::Float,
             Expr::StringLiteral(_) => VarType::String,
+            Expr::InterpolatedString(_) => VarType::String,
             Expr::BoolLiteral(_) => VarType::Bool,
             Expr::Identifier(name) => {
                 if let Some((_, ty)) = variables.get(name) {
@@ -195,6 +196,51 @@ impl Translator {
                 let local_id = module.declare_data_in_func(data_id, &mut builder.func);
                 let ptr_ty = module.target_config().pointer_type();
                 Ok(builder.ins().symbol_value(ptr_ty, local_id))
+            }
+            Expr::InterpolatedString(parts) => {
+                if parts.is_empty() {
+                    let mut data_ctx = DataDescription::new();
+                    data_ctx.define(vec![0].into_boxed_slice());
+                    let string_name = format!("__empty_str_{}", *var_index);
+                    *var_index += 1;
+                    let data_id = module.declare_data(&string_name, Linkage::Local, false, false).unwrap();
+                    module.define_data(data_id, &data_ctx).unwrap();
+                    let local_id = module.declare_data_in_func(data_id, &mut builder.func);
+                    let ptr_ty = module.target_config().pointer_type();
+                    return Ok(builder.ins().symbol_value(ptr_ty, local_id));
+                }
+                
+                let mut current_val = None;
+                for part in parts {
+                    let part_ty = Self::get_expr_type(part, variables);
+                    let val = Self::translate_expr(module, funcs, class_layouts, builder, part, variables, var_index)?;
+                    
+                    let str_val = if part_ty == VarType::String {
+                        val
+                    } else if part_ty == VarType::Float {
+                        let to_str = module.declare_func_in_func(*funcs.get("float_to_string").unwrap(), &mut builder.func);
+                        let call = builder.ins().call(to_str, &[val]);
+                        builder.inst_results(call)[0]
+                    } else if part_ty == VarType::Bool {
+                        let to_str = module.declare_func_in_func(*funcs.get("bool_to_string").unwrap(), &mut builder.func);
+                        let call = builder.ins().call(to_str, &[val]);
+                        builder.inst_results(call)[0]
+                    } else { // Assume Int
+                        let to_str = module.declare_func_in_func(*funcs.get("int_to_string").unwrap(), &mut builder.func);
+                        let call = builder.ins().call(to_str, &[val]);
+                        builder.inst_results(call)[0]
+                    };
+                    
+                    if let Some(prev) = current_val {
+                        let concat = module.declare_func_in_func(*funcs.get("concat_strings").unwrap(), &mut builder.func);
+                        let call = builder.ins().call(concat, &[prev, str_val]);
+                        current_val = Some(builder.inst_results(call)[0]);
+                    } else {
+                        current_val = Some(str_val);
+                    }
+                }
+                
+                Ok(current_val.unwrap())
             }
             Expr::BoolLiteral(b) => {
                 let val = if *b { 1 } else { 0 };

@@ -6,6 +6,8 @@ pub enum Expr {
     FloatLiteral(f64),
     /// A literal string (e.g., "hello")
     StringLiteral(String),
+    /// An interpolated string (e.g., "hello ${name}")
+    InterpolatedString(Vec<Expr>),
     /// A boolean literal (true / false)
     BoolLiteral(bool),
     /// A null literal

@@ -638,8 +638,9 @@ impl<'a> Parser<'a> {
             }
             Token::String(s) => {
                 let v = s.clone();
+                let span = self.current_span;
                 self.advance();
-                Ok(Expr::StringLiteral(v))
+                Self::parse_interpolated_string(v, span)
             }
             Token::Bool(b) => {
                 let v = *b;
@@ -665,5 +666,54 @@ impl<'a> Parser<'a> {
             }
             _ => Err((format!("Unexpected token: {:?}", self.current_token), self.current_span)),
         }
+    }
+
+    fn parse_interpolated_string(s: String, base_span: (usize, usize)) -> Result<Expr, (String, (usize, usize))> {
+        let mut parts = Vec::new();
+        let mut current_text = String::new();
+        let mut chars = s.chars().peekable();
+        
+        while let Some(c) = chars.next() {
+            if c == '$' && chars.peek() == Some(&'{') {
+                chars.next(); // consume '{'
+                if !current_text.is_empty() {
+                    parts.push(Expr::StringLiteral(current_text.clone()));
+                    current_text.clear();
+                }
+                
+                let mut expr_str = String::new();
+                let mut depth = 1;
+                while let Some(inner_c) = chars.next() {
+                    if inner_c == '{' { depth += 1; }
+                    if inner_c == '}' {
+                        depth -= 1;
+                        if depth == 0 { break; }
+                    }
+                    expr_str.push(inner_c);
+                }
+                
+                let mut nested_parser = Parser::new(&expr_str);
+                let expr = nested_parser.parse_expr().map_err(|(msg, _)| {
+                    (format!("In interpolated string: {}", msg), base_span)
+                })?;
+                parts.push(expr);
+            } else {
+                current_text.push(c);
+            }
+        }
+        
+        if !current_text.is_empty() {
+            parts.push(Expr::StringLiteral(current_text));
+        }
+        
+        if parts.len() == 1 {
+            if let Expr::StringLiteral(_) = parts[0] {
+                return Ok(parts.pop().unwrap());
+            }
+        } else if parts.is_empty() {
+            return Ok(Expr::StringLiteral(String::new()));
+        }
+        
+        Ok(Expr::InterpolatedString(parts))
     }
 }

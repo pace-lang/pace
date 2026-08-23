@@ -50,6 +50,10 @@ impl JITCompiler {
         builder.symbol("__pace_print_int", pace_runtime::__pace_print_int as *const u8);
         builder.symbol("__pace_print_float", pace_runtime::__pace_print_float as *const u8);
         builder.symbol("__pace_print_string", pace_runtime::__pace_print_string as *const u8);
+        builder.symbol("__pace_concat_strings", pace_runtime::__pace_concat_strings as *const u8);
+        builder.symbol("__pace_int_to_string", pace_runtime::__pace_int_to_string as *const u8);
+        builder.symbol("__pace_float_to_string", pace_runtime::__pace_float_to_string as *const u8);
+        builder.symbol("__pace_bool_to_string", pace_runtime::__pace_bool_to_string as *const u8);
         builder.symbol("__pace_malloc", pace_runtime::__pace_malloc as *const u8);
         
         let mut module = JITModule::new(builder);
@@ -72,11 +76,36 @@ impl JITCompiler {
         sig_malloc.returns.push(AbiParam::new(ptr_ty));
         let malloc_id = module.declare_function("__pace_malloc", Linkage::Import, &sig_malloc).unwrap();
 
+        let mut sig_concat = module.make_signature();
+        sig_concat.params.push(AbiParam::new(ptr_ty));
+        sig_concat.params.push(AbiParam::new(ptr_ty));
+        sig_concat.returns.push(AbiParam::new(ptr_ty));
+        let concat_id = module.declare_function("__pace_concat_strings", Linkage::Import, &sig_concat).unwrap();
+
+        let mut sig_int_to_string = module.make_signature();
+        sig_int_to_string.params.push(AbiParam::new(types::I64));
+        sig_int_to_string.returns.push(AbiParam::new(ptr_ty));
+        let int_to_str_id = module.declare_function("__pace_int_to_string", Linkage::Import, &sig_int_to_string).unwrap();
+
+        let mut sig_float_to_string = module.make_signature();
+        sig_float_to_string.params.push(AbiParam::new(types::F64));
+        sig_float_to_string.returns.push(AbiParam::new(ptr_ty));
+        let float_to_str_id = module.declare_function("__pace_float_to_string", Linkage::Import, &sig_float_to_string).unwrap();
+
+        let mut sig_bool_to_string = module.make_signature();
+        sig_bool_to_string.params.push(AbiParam::new(types::I64));
+        sig_bool_to_string.returns.push(AbiParam::new(ptr_ty));
+        let bool_to_str_id = module.declare_function("__pace_bool_to_string", Linkage::Import, &sig_bool_to_string).unwrap();
+
         let mut funcs = HashMap::new();
         funcs.insert("print_int".to_string(), print_int_id);
         funcs.insert("print_float".to_string(), print_float_id);
         funcs.insert("print_string".to_string(), print_string_id);
         funcs.insert("malloc".to_string(), malloc_id);
+        funcs.insert("concat_strings".to_string(), concat_id);
+        funcs.insert("int_to_string".to_string(), int_to_str_id);
+        funcs.insert("float_to_string".to_string(), float_to_str_id);
+        funcs.insert("bool_to_string".to_string(), bool_to_str_id);
 
         Self {
             builder_context: FunctionBuilderContext::new(),

@@ -374,6 +374,17 @@ impl TypeChecker {
             Expr::IntLiteral(_) => Ok(Type::Int),
             Expr::FloatLiteral(_) => Ok(Type::Float),
             Expr::StringLiteral(_) => Ok(Type::String),
+            Expr::InterpolatedString(parts) => {
+                for part in parts {
+                    let ty = self.check_expr(part)?;
+                    if ty != Type::String && ty != Type::Int && ty != Type::Float && ty != Type::Bool {
+                        return Err(TypeError {
+                            message: format!("Cannot interpolate value of type {:?}", ty)
+                        });
+                    }
+                }
+                Ok(Type::String)
+            }
             Expr::BoolLiteral(_) => Ok(Type::Bool),
             Expr::Null => Ok(Type::Null),
             Expr::Identifier(name) => {
