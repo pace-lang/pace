@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/pace-ast","crates/pace-cli", "crates/pace-driver", "crates/pace-errors", "crates/pace-parser", "crates/pace-ty"]
+members = ["crates/pace-ast","crates/pace-cli", "crates/pace-codegen", "crates/pace-driver", "crates/pace-errors", "crates/pace-parser", "crates/pace-ty"]
 resolver = "2"
 
 [workspace.package]
@@ -23,3 +23,9 @@ pace-parser = { path = "crates/pace-parser" }
 pace-errors = { path = "crates/pace-errors" }
 pace-driver = { path = "crates/pace-driver" }
 pace-ty = { path = "crates/pace-ty" }
+pace-codegen = { path = "crates/pace-codegen" }
+
+cranelift = "0.106.0"
+cranelift-module = "0.106.0"
+cranelift-jit = "0.106.0"
+cranelift-native = "0.106.0"

@@ -16,6 +16,23 @@ impl CompilerSession {
         self.check_source(&src)
     }
 
+    pub fn run_file(&self, path: &str) -> Result<()> {
+        let src = std::fs::read_to_string(path)
+            .into_diagnostic()?;
+        self.run_source(&src)
+    }
+
+    pub fn run_source(&self, src: &str) -> Result<()> {
+        let ast = self.check_source(src)?;
+        let mut compiler = pace_codegen::JITCompiler::new();
+        
+        compiler.compile_and_run(&ast).map_err(|e| {
+            Report::new(e)
+        })?;
+        
+        Ok(())
+    }
+
     pub fn check_source(&self, src: &str) -> Result<Vec<Stmt>> {
         let ast = match pace_parser::parse(src) {
             Ok(ast) => ast,

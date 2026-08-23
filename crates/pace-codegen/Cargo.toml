@@ -1,5 +1,5 @@
 [package]
-name = "pace-driver"
+name = "pace-codegen"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -8,8 +8,10 @@ license.workspace = true
 
 [dependencies]
 pace-ast = { workspace = true }
-pace-parser = { workspace = true }
 pace-errors = { workspace = true }
-pace-ty = { workspace = true }
-pace-codegen = { workspace = true }
+cranelift = { workspace = true }
+cranelift-module = { workspace = true }
+cranelift-jit = { workspace = true }
+cranelift-native = { workspace = true }
 miette = { workspace = true }
+thiserror = "1.0"

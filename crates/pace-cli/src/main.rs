@@ -44,7 +44,8 @@ fn main() -> Result<()> {
             println!("Building {}... (Not yet implemented)", file);
         }
         Commands::Run { file } => {
-            println!("Running {}... (Not yet implemented)", file);
+            println!("Compiling and running {}...", file);
+            session.run_file(&file)?;
         }
     }
 
