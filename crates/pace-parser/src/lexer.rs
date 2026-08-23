@@ -51,6 +51,10 @@ pub enum Token {
     RParen,
     LBrace,
     RBrace,
+    Question,
+    Bang,
+    QuestionDot,
+    QuestionQuestion,
     Eof,
 }
 
@@ -160,13 +164,25 @@ impl<'a> Lexer<'a> {
                         Token::Eq
                     }
                 }
+                '?' => {
+                    self.advance();
+                    if self.peek() == Some(&'.') {
+                        self.advance();
+                        Token::QuestionDot
+                    } else if self.peek() == Some(&'?') {
+                        self.advance();
+                        Token::QuestionQuestion
+                    } else {
+                        Token::Question
+                    }
+                }
                 '!' => {
                     self.advance();
                     if self.peek() == Some(&'=') {
                         self.advance();
                         Token::NotEq
                     } else {
-                        Token::Ident("!".to_string())
+                        Token::Bang
                     }
                 }
                 '+' => { self.advance(); Token::Plus }

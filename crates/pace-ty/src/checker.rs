@@ -50,7 +50,7 @@ impl TypeChecker {
         let unused = self.env.pop_scope();
         for (name, var_info) in unused {
             if !var_info.is_used && !name.starts_with('_') && name != "self" {
-                let kind = if var_info.ty == Type::Custom("Function".to_string()) {
+                let kind = if var_info.ty == Type::Function {
                     "function"
                 } else {
                     "variable"
@@ -66,6 +66,19 @@ impl TypeChecker {
     }
 
     fn hoist_declarations(&mut self, stmts: &[Stmt]) -> Result<(), TypeError> {
+        // Pre-register names so resolve_type_name knows what is a class/struct/interface
+        for stmt in stmts {
+            match stmt {
+                Stmt::ClassDecl { name, .. } | Stmt::InterfaceDecl { name, .. } => {
+                    self.env.classes.insert(name.clone(), ClassSignature { fields: HashMap::new(), methods: HashMap::new() });
+                }
+                Stmt::StructDecl { name, .. } => {
+                    self.env.structs.insert(name.clone(), ClassSignature { fields: HashMap::new(), methods: HashMap::new() });
+                }
+                _ => {}
+            }
+        }
+
         for stmt in stmts {
             match stmt {
                 Stmt::FuncDecl { name, params, return_type, span, .. } => {
@@ -150,7 +163,7 @@ impl TypeChecker {
                         fields: field_map,
                         methods: HashMap::new(),
                     };
-                    self.env.register_class(name.clone(), sig);
+                    self.env.register_struct(name.clone(), sig);
                 }
                 Stmt::InterfaceDecl { name, methods } => {
                     let mut method_map = HashMap::new();
@@ -318,9 +331,14 @@ impl TypeChecker {
                 
                 self.env.push_scope();
                 
-                // Add `self` if we are inside a class
+                // Add `self` if we are inside a class/struct
                 if let Some(class_name) = &self.current_class {
-                    self.env.define("self".to_string(), Type::Custom(class_name.clone()), (0, 0), false);
+                    let self_ty = if self.env.structs.contains_key(class_name) {
+                        Type::Struct(class_name.clone())
+                    } else {
+                        Type::Class(class_name.clone())
+                    };
+                    self.env.define("self".to_string(), self_ty, (0, 0), false);
                 }
                 
                 // Add parameters to scope
@@ -407,8 +425,10 @@ impl TypeChecker {
                     Some(ty) => Ok(ty.clone()),
                     None => {
                         // Check if it's a class/struct for instantiation
-                        if self.env.classes.contains_key(name) {
-                            Ok(Type::Custom(name.clone()))
+                        if self.env.structs.contains_key(name) {
+                            Ok(Type::Struct(name.clone()))
+                        } else if self.env.classes.contains_key(name) {
+                            Ok(Type::Class(name.clone()))
                         } else {
                             Err(TypeError {
                                 message: format!("Undefined variable '{}'", name)
@@ -482,8 +502,8 @@ impl TypeChecker {
                             message: format!("Undefined variable '{}'", name)
                         })
                     }
-                } else if let Expr::MemberAccess { object, property, .. } = &**target {
-                    let obj_ty = self.check_expr(object)?;
+                } else if let Expr::MemberAccess { object, property: _, .. } = &**target {
+                    let _obj_ty = self.check_expr(object)?;
                     // Simple validation for now - real validation needs class layout check
                     Ok(val_ty)
                 } else {
@@ -500,10 +520,14 @@ impl TypeChecker {
                     arg_types.push(self.check_expr(arg)?);
                 }
                 
-                // If callee is a known class, it's a constructor call
-                if let Type::Custom(name) = &callee_ty {
+                // If callee is a known class/struct, it's a constructor call
+                if let Type::Class(name) = &callee_ty {
                     if let Some(_sig) = self.env.classes.get(name) {
-                        return Ok(Type::Custom(name.clone()));
+                        return Ok(Type::Class(name.clone()));
+                    }
+                } else if let Type::Struct(name) = &callee_ty {
+                    if let Some(_sig) = self.env.structs.get(name) {
+                        return Ok(Type::Struct(name.clone()));
                     }
                 }
                 
@@ -541,40 +565,116 @@ impl TypeChecker {
             Expr::MemberAccess { object, property, .. } => {
                 let obj_ty = self.check_expr(object)?;
                 
-                if let Type::Custom(class_name) = obj_ty {
-                    if let Some(sig) = self.env.classes.get(&class_name) {
-                        if let Some(f_ty) = sig.fields.get(property) {
-                            return Ok(f_ty.clone());
-                        }
-                        if let Some(m_sig) = sig.methods.get(property) {
-                            // Ideally return the function signature as a Type
-                            return Ok(m_sig.return_type.clone());
-                        }
+                let (class_name, sig) = match obj_ty {
+                    Type::Class(ref name) => {
+                        let sig = self.env.classes.get(name).ok_or_else(|| TypeError {
+                            message: format!("Type '{}' is not defined", name)
+                        })?;
+                        (name, sig)
+                    },
+                    Type::Struct(ref name) => {
+                        let sig = self.env.structs.get(name).ok_or_else(|| TypeError {
+                            message: format!("Type '{}' is not defined", name)
+                        })?;
+                        (name, sig)
+                    },
+                    _ => {
                         return Err(TypeError {
-                            message: format!("Property '{}' not found on type '{}'", property, class_name)
-                        });
-                    } else {
-                        return Err(TypeError {
-                            message: format!("Type '{}' is not defined", class_name)
+                            message: format!("Cannot access property '{}' on non-object type", property)
                         });
                     }
-                }
+                };
                 
+                if let Some(f_ty) = sig.fields.get(property) {
+                    return Ok(f_ty.clone());
+                }
+                if let Some(m_sig) = sig.methods.get(property) {
+                    return Ok(m_sig.return_type.clone());
+                }
                 Err(TypeError {
-                    message: format!("Cannot access property '{}' on non-object type", property)
+                    message: format!("Property '{}' not found on type '{}'", property, class_name)
                 })
+            }
+            Expr::Unwrap(inner) => {
+                let inner_ty = self.check_expr(inner)?;
+                if let Type::Nullable(t) = inner_ty {
+                    Ok(*t)
+                } else {
+                    Err(TypeError { message: "Cannot unwrap a non-nullable type".to_string() })
+                }
+            }
+            Expr::NullCoalesce { left, right } => {
+                let left_ty = self.check_expr(left)?;
+                let right_ty = self.check_expr(right)?;
+                if let Type::Nullable(inner) = left_ty {
+                    if *inner == right_ty {
+                        Ok(*inner)
+                    } else if right_ty == Type::Null {
+                        Ok(Type::Nullable(inner))
+                    } else {
+                        Err(TypeError { message: format!("Null coalesce type mismatch: {:?} and {:?}", *inner, right_ty) })
+                    }
+                } else {
+                    Err(TypeError { message: "Left side of ?? must be nullable".to_string() })
+                }
+            }
+            Expr::OptionalMemberAccess { object, property } => {
+                let obj_ty = self.check_expr(object)?;
+                if let Type::Nullable(inner) = obj_ty {
+                    // Check property on inner type
+                    let _inner_expr = Expr::MemberAccess {
+                        object: Box::new(Expr::Null), // Dummy object to bypass recursive check_expr if we extracted logic
+                        property: property.clone(),
+                        computed_class: None,
+                    };
+                    // Instead of full check, we can manually check if it's Class or Struct
+                    let (class_name, sig) = match &*inner {
+                        Type::Class(name) => (name, self.env.classes.get(name).unwrap()),
+                        Type::Struct(name) => (name, self.env.structs.get(name).unwrap()),
+                        _ => return Err(TypeError { message: "Optional access on non-object".to_string() }),
+                    };
+                    
+                    if let Some(f_ty) = sig.fields.get(property) {
+                        return Ok(Type::Nullable(Box::new(f_ty.clone())));
+                    }
+                    if let Some(m_sig) = sig.methods.get(property) {
+                        return Ok(Type::Nullable(Box::new(m_sig.return_type.clone())));
+                    }
+                    Err(TypeError { message: format!("Property '{}' not found on type '{}'", property, class_name) })
+                } else {
+                    Err(TypeError { message: "Optional member access on non-nullable type".to_string() })
+                }
             }
         }
     }
 
     fn resolve_type_name(&self, name: &str) -> Type {
-        match name {
+        let is_nullable = name.ends_with('?');
+        let base_name = if is_nullable {
+            &name[..name.len() - 1]
+        } else {
+            name
+        };
+
+        let base_type = match base_name {
             "Int" => Type::Int,
             "Float" => Type::Float,
             "String" => Type::String,
             "Bool" => Type::Bool,
             "Void" => Type::Void,
-            _ => Type::Custom(name.to_string()),
+            _ => {
+                if self.env.structs.contains_key(base_name) {
+                    Type::Struct(base_name.to_string())
+                } else {
+                    Type::Class(base_name.to_string())
+                }
+            }
+        };
+
+        if is_nullable {
+            Type::Nullable(Box::new(base_type))
+        } else {
+            base_type
         }
     }
 }

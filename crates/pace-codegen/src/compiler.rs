@@ -8,6 +8,13 @@ use thiserror::Error;
 use crate::translator::VarType;
 
 #[derive(Debug, Clone)]
+pub struct StructLayout {
+    pub name: String,
+    pub fields: HashMap<String, (usize, VarType)>,
+    pub size: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct ClassLayout {
     pub name: String,
     pub fields: HashMap<String, (usize, VarType)>,
@@ -34,6 +41,7 @@ pub struct JITCompiler {
     module: JITModule,
     funcs: HashMap<String, FuncId>,
     class_layouts: HashMap<String, ClassLayout>,
+    struct_layouts: HashMap<String, StructLayout>,
     interface_layouts: HashMap<String, InterfaceLayout>,
 }
 
@@ -132,6 +140,7 @@ impl JITCompiler {
             module,
             funcs,
             class_layouts: HashMap::new(),
+            struct_layouts: HashMap::new(),
             interface_layouts: HashMap::new(),
         }
     }
@@ -262,6 +271,24 @@ impl JITCompiler {
                     vtable_id,
                 };
                 self.class_layouts.insert(class_name.clone(), layout);
+            } else if let Stmt::StructDecl { name: struct_name, fields } = stmt {
+                let mut field_map = HashMap::new();
+                let mut offset = 0; // Structs have no header (0 bytes for ARC/VTable)
+                for field in fields {
+                    if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
+                        let ty_str = type_annotation.as_deref().unwrap_or("Unknown");
+                        let field_ty = crate::translator::parse_vartype(ty_str);
+                        field_map.insert(field_name.clone(), (offset, field_ty));
+                        offset += 8; // All fields are currently 8 bytes (i64/f64/ptr)
+                    }
+                }
+                
+                let layout = StructLayout {
+                    name: struct_name.clone(),
+                    fields: field_map,
+                    size: offset,
+                };
+                self.struct_layouts.insert(struct_name.clone(), layout);
             }
         }
         Ok(())
@@ -358,7 +385,7 @@ impl JITCompiler {
         for stmt in stmts {
             match stmt {
                 Stmt::VarDecl { .. } | Stmt::Expr(_) | Stmt::If { .. } | Stmt::While { .. } | Stmt::Loop { .. } => {
-                    let (val, _) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &mut builder, stmt, &mut variables, &mut var_index, &func_returns)?;
+                    let (val, _) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &mut builder, stmt, &mut variables, &mut var_index, &func_returns)?;
                     last_val = Some(val);
                 }
                 _ => {}
@@ -467,7 +494,7 @@ impl JITCompiler {
         let mut last_val = None;
         let mut terminated = false;
         for stmt in body {
-            let (val, term) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &mut builder, stmt, &mut variables, &mut var_index, func_returns)?;
+            let (val, term) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &mut builder, stmt, &mut variables, &mut var_index, func_returns)?;
             last_val = Some(val);
             if term {
                 terminated = true;

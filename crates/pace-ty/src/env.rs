@@ -7,8 +7,14 @@ pub enum Type {
     String,
     Bool,
     Null,
-    /// A custom type like a Class or Struct (e.g. `UserService`)
-    Custom(String),
+    /// A nullable wrapper around a type (e.g. `Int?`)
+    Nullable(Box<Type>),
+    /// A reference type (heap-allocated, ARC)
+    Class(String),
+    /// A value type (stack-allocated)
+    Struct(String),
+    /// A function type
+    Function,
     Unknown, // Used for auto-inference before resolution or error state
     Void,    // Used for functions that don't return anything
     Any,     // Used for built-ins like print that take multiple types
@@ -41,6 +47,7 @@ pub struct Environment {
     scopes: Vec<HashMap<String, VarInfo>>,
     pub functions: HashMap<String, FunctionSignature>,
     pub classes: HashMap<String, ClassSignature>,
+    pub structs: HashMap<String, ClassSignature>,
 }
 
 impl Environment {
@@ -49,6 +56,7 @@ impl Environment {
             scopes: vec![HashMap::new()], // Start with a global scope
             functions: HashMap::new(),
             classes: HashMap::new(),
+            structs: HashMap::new(),
         };
         e.inject_prelude();
         e
@@ -107,11 +115,16 @@ impl Environment {
     pub fn register_function(&mut self, name: String, sig: FunctionSignature) {
         let span = sig.span;
         self.functions.insert(name.clone(), sig);
-        self.define(name, Type::Custom("Function".to_string()), span, false);
+        self.define(name, Type::Function, span, false);
     }
     
     pub fn register_class(&mut self, name: String, sig: ClassSignature) {
         self.classes.insert(name.clone(), sig);
-        self.define(name.clone(), Type::Custom(name), (0, 0), false);
+        self.define(name.clone(), Type::Class(name), (0, 0), false);
+    }
+
+    pub fn register_struct(&mut self, name: String, sig: ClassSignature) {
+        self.structs.insert(name.clone(), sig);
+        self.define(name.clone(), Type::Struct(name), (0, 0), false);
     }
 }

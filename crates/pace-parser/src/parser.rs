@@ -306,11 +306,14 @@ impl<'a> Parser<'a> {
                     return Err(("Expected ':' after parameter name".to_string(), self.current_span));
                 }
 
-                let param_type = match &self.current_token {
+                let mut param_type = match &self.current_token {
                     Token::Ident(id) => id.clone(),
                     _ => return Err(("Expected parameter type".to_string(), self.current_span)),
                 };
                 self.advance();
+                if self.match_token(Token::Question) {
+                    param_type.push('?');
+                }
 
                 params.push(Param {
                     name: param_name,
@@ -329,11 +332,15 @@ impl<'a> Parser<'a> {
 
         let mut return_type = None;
         if self.match_token(Token::Arrow) {
-            return_type = match &self.current_token {
-                Token::Ident(id) => Some(id.clone()),
+            let mut ret_type = match &self.current_token {
+                Token::Ident(id) => id.clone(),
                 _ => return Err(("Expected return type after '->'".to_string(), self.current_span)),
             };
             self.advance();
+            if self.match_token(Token::Question) {
+                ret_type.push('?');
+            }
+            return_type = Some(ret_type);
         }
 
         if !self.match_token(Token::LBrace) {
@@ -467,11 +474,14 @@ impl<'a> Parser<'a> {
                         return Err(("Expected ':' after parameter name".to_string(), self.current_span));
                     }
 
-                    let param_type = match &self.current_token {
+                    let mut param_type = match &self.current_token {
                         Token::Ident(id) => id.clone(),
                         _ => return Err(("Expected parameter type".to_string(), self.current_span)),
                     };
                     self.advance();
+                    if self.match_token(Token::Question) {
+                        param_type.push('?');
+                    }
 
                     params.push(Param {
                         name: param_name,
@@ -490,11 +500,15 @@ impl<'a> Parser<'a> {
 
             let mut return_type = None;
             if self.match_token(Token::Arrow) {
-                return_type = match &self.current_token {
-                    Token::Ident(id) => Some(id.clone()),
+                let mut ret_type = match &self.current_token {
+                    Token::Ident(id) => id.clone(),
                     _ => return Err(("Expected return type after '->'".to_string(), self.current_span)),
                 };
                 self.advance();
+                if self.match_token(Token::Question) {
+                    ret_type.push('?');
+                }
+                return_type = Some(ret_type);
             }
 
             methods.push(Stmt::FuncDecl {
@@ -561,11 +575,15 @@ impl<'a> Parser<'a> {
 
         let mut type_annotation = None;
         if self.match_token(Token::Colon) {
-            type_annotation = match &self.current_token {
-                Token::Ident(id) => Some(id.clone()),
+            let mut ty_str = match &self.current_token {
+                Token::Ident(id) => id.clone(),
                 _ => return Err(("Expected type identifier after ':'".to_string(), self.current_span)),
             };
             self.advance();
+            if self.match_token(Token::Question) {
+                ty_str.push('?');
+            }
+            type_annotation = Some(ty_str);
         }
 
         let mut initializer = None;
@@ -591,7 +609,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_assignment(&mut self) -> Result<Expr, (String, (usize, usize))> {
-        let expr = self.parse_logical_or()?;
+        let expr = self.parse_null_coalesce()?;
         
         if self.match_token(Token::Eq) {
             let value = self.parse_assignment()?; // Right-associative
@@ -607,6 +625,18 @@ impl<'a> Parser<'a> {
             }
         }
         
+        Ok(expr)
+    }
+
+    fn parse_null_coalesce(&mut self) -> Result<Expr, (String, (usize, usize))> {
+        let mut expr = self.parse_logical_or()?;
+        while self.match_token(Token::QuestionQuestion) {
+            let right = self.parse_logical_or()?;
+            expr = Expr::NullCoalesce {
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
         Ok(expr)
     }
 
@@ -706,7 +736,9 @@ impl<'a> Parser<'a> {
         let mut expr = self.parse_primary()?;
         
         loop {
-            if self.match_token(Token::Dot) {
+            if self.match_token(Token::Bang) {
+                expr = Expr::Unwrap(Box::new(expr));
+            } else if self.match_token(Token::Dot) {
                 let property = match &self.current_token {
                     Token::Ident(id) => id.clone(),
                     _ => return Err(("Expected property name after '.'".to_string(), self.current_span)),
@@ -716,6 +748,16 @@ impl<'a> Parser<'a> {
                     object: Box::new(expr),
                     property: property,
                     computed_class: None,
+                };
+            } else if self.match_token(Token::QuestionDot) {
+                let property = match &self.current_token {
+                    Token::Ident(id) => id.clone(),
+                    _ => return Err(("Expected property name after '?.'".to_string(), self.current_span)),
+                };
+                self.advance();
+                expr = Expr::OptionalMemberAccess {
+                    object: Box::new(expr),
+                    property: property,
                 };
             } else if self.match_token(Token::LParen) {
                 let mut args = Vec::new();

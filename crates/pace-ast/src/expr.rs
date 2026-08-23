@@ -35,6 +35,18 @@ pub enum Expr {
         property: String,
         computed_class: Option<String>,
     },
+    /// A forced unwrap (e.g., foo!)
+    Unwrap(Box<Expr>),
+    /// An optional member access (e.g., foo?.bar)
+    OptionalMemberAccess {
+        object: Box<Expr>,
+        property: String,
+    },
+    /// A null coalesce operation (e.g., a ?? b)
+    NullCoalesce {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
