@@ -50,17 +50,24 @@ pub enum Token {
 
 pub struct Lexer<'a> {
     src: std::iter::Peekable<std::str::Chars<'a>>,
+    pub byte_pos: usize,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(src: &'a str) -> Self {
         Self {
             src: src.chars().peekable(),
+            byte_pos: 0,
         }
     }
 
     fn advance(&mut self) -> Option<char> {
-        self.src.next()
+        if let Some(c) = self.src.next() {
+            self.byte_pos += c.len_utf8();
+            Some(c)
+        } else {
+            None
+        }
     }
 
     fn peek(&mut self) -> Option<&char> {
@@ -77,8 +84,15 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> (Token, (usize, usize)) {
         self.skip_whitespace();
+        let start = self.byte_pos;
+        let token = self.next_token_inner();
+        let end = self.byte_pos;
+        (token, (start, end - start))
+    }
+
+    fn next_token_inner(&mut self) -> Token {
 
         if let Some(&c) = self.peek() {
             if c.is_alphabetic() {

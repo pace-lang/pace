@@ -27,9 +27,11 @@ impl CompilerSession {
         
         let mut ast = match pace_parser::parse(&src) {
             Ok(ast) => ast,
-            Err(err_msg) => {
+            Err((msg, span)) => {
                 let err = ParseError {
-                    message: format!("In {}:\n{}", path.display(), err_msg),
+                    message: msg,
+                    src: miette::NamedSource::new(path.display().to_string(), src),
+                    span,
                 };
                 return Err(Report::new(err));
             }
@@ -73,11 +75,26 @@ impl CompilerSession {
 
     pub fn check_file(&self, path: &str) -> Result<Vec<Stmt>> {
         let mut visited = std::collections::HashSet::new();
-        let ast = self.load_file(std::path::Path::new(path), &mut visited)?;
+        let path_buf = std::path::Path::new(path);
+        let ast = self.load_file(path_buf, &mut visited)?;
+        let src = std::fs::read_to_string(path).into_diagnostic()?;
         
-        // Run typechecker on the merged AST
-        if let Err(type_err) = pace_ty::check(&ast) {
-            return Err(Report::new(type_err));
+        // Run typechecker on the parsed AST
+        match pace_ty::check(&ast) {
+            Ok(warnings) => {
+                for mut warning in warnings {
+                    match &mut warning {
+                        pace_errors::SemanticWarning::NamingConvention { src: s, .. } |
+                        pace_errors::SemanticWarning::UnusedItem { src: s, .. } => {
+                            *s = miette::NamedSource::new(path_buf.display().to_string(), src.clone());
+                        }
+                    }
+                    eprintln!("{:?}", miette::Report::new(warning));
+                }
+            }
+            Err(type_err) => {
+                return Err(Report::new(type_err));
+            }
         }
         
         Ok(ast)
@@ -159,17 +176,32 @@ impl CompilerSession {
     pub fn check_source(&self, src: &str) -> Result<Vec<Stmt>> {
         let ast = match pace_parser::parse(src) {
             Ok(ast) => ast,
-            Err(err_msg) => {
+            Err((msg, span)) => {
                 let err = ParseError {
-                    message: err_msg,
+                    message: msg,
+                    src: miette::NamedSource::new("source", src.to_string()),
+                    span,
                 };
                 return Err(Report::new(err));
             }
         };
 
         // Run typechecker on the parsed AST
-        if let Err(type_err) = pace_ty::check(&ast) {
-            return Err(Report::new(type_err));
+        match pace_ty::check(&ast) {
+            Ok(warnings) => {
+                for mut warning in warnings {
+                    match &mut warning {
+                        pace_errors::SemanticWarning::NamingConvention { src: s, .. } |
+                        pace_errors::SemanticWarning::UnusedItem { src: s, .. } => {
+                            *s = miette::NamedSource::new("source", src.to_string());
+                        }
+                    }
+                    eprintln!("{:?}", miette::Report::new(warning));
+                }
+            }
+            Err(type_err) => {
+                return Err(Report::new(type_err));
+            }
         }
 
         Ok(ast)

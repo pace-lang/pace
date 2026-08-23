@@ -1,10 +1,11 @@
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Module, FuncId, DataId, Linkage, DataDescription};
-use pace_ast::Stmt;
 use std::collections::HashMap;
+use pace_ast::Stmt;
 use miette::Diagnostic;
 use thiserror::Error;
+use crate::translator::VarType;
 
 #[derive(Debug, Clone)]
 pub struct ClassLayout {
@@ -278,7 +279,9 @@ impl JITCompiler {
             let val = builder.block_params(entry_block)[i];
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
-            variables.insert(param.name.clone(), var);
+            
+            // Assume params are ints for now, this could be extended to check param.type_annotation
+            variables.insert(param.name.clone(), (var, VarType::Unknown));
             var_index += 1;
         }
 

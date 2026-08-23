@@ -1,8 +1,11 @@
 use cranelift::prelude::*;
 use cranelift_object::{ObjectBuilder, ObjectModule};
-use cranelift_module::{Module, FuncId, Linkage, DataDescription};
+use cranelift_module::{Module, FuncId, DataId, Linkage, DataDescription};
 use pace_ast::Stmt;
+use miette::Diagnostic;
+use thiserror::Error;
 use std::collections::HashMap;
+use crate::translator::VarType;
 use crate::compiler::{CodegenError, ClassLayout};
 use crate::translator::Translator;
 
@@ -211,7 +214,8 @@ impl AotCompiler {
             let val = builder.block_params(entry_block)[i];
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
-            variables.insert(param.name.clone(), var);
+            
+            variables.insert(param.name.clone(), (var, VarType::Unknown));
             var_index += 1;
         }
 

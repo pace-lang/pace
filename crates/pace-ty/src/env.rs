@@ -18,6 +18,8 @@ pub enum Type {
 pub struct FunctionSignature {
     pub params: Vec<Type>,
     pub return_type: Type,
+    pub span: (usize, usize),
+    pub is_used: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -26,9 +28,16 @@ pub struct ClassSignature {
     pub methods: HashMap<String, FunctionSignature>,
 }
 
+#[derive(Debug, Clone)]
+pub struct VarInfo {
+    pub ty: Type,
+    pub span: (usize, usize),
+    pub is_used: bool,
+}
+
 #[derive(Clone, Default)]
 pub struct Environment {
-    scopes: Vec<HashMap<String, Type>>,
+    scopes: Vec<HashMap<String, VarInfo>>,
     pub functions: HashMap<String, FunctionSignature>,
     pub classes: HashMap<String, ClassSignature>,
 }
@@ -51,6 +60,8 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Any], // Accept any type
                 return_type: Type::Void,
+                span: (0, 0),
+                is_used: true, // Always consider built-ins used
             },
         );
     }
@@ -59,34 +70,47 @@ impl Environment {
         self.scopes.push(HashMap::new());
     }
 
-    pub fn pop_scope(&mut self) {
+    pub fn pop_scope(&mut self) -> Vec<(String, VarInfo)> {
         if self.scopes.len() > 1 {
-            self.scopes.pop();
+            let scope = self.scopes.pop().unwrap();
+            scope.into_iter().collect()
+        } else {
+            Vec::new()
         }
     }
 
-    pub fn define(&mut self, name: String, ty: Type) {
+    pub fn define(&mut self, name: String, ty: Type, span: (usize, usize)) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, ty);
+            scope.insert(name, VarInfo { ty, span, is_used: false });
         }
+    }
+
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut VarInfo> {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(var_info) = scope.get_mut(name) {
+                return Some(var_info);
+            }
+        }
+        None
     }
 
     pub fn get(&self, name: &str) -> Option<&Type> {
         for scope in self.scopes.iter().rev() {
-            if let Some(ty) = scope.get(name) {
-                return Some(ty);
+            if let Some(var_info) = scope.get(name) {
+                return Some(&var_info.ty);
             }
         }
         None
     }
     
     pub fn register_function(&mut self, name: String, sig: FunctionSignature) {
+        let span = sig.span;
         self.functions.insert(name.clone(), sig);
-        self.define(name, Type::Custom("Function".to_string()));
+        self.define(name, Type::Custom("Function".to_string()), span);
     }
     
     pub fn register_class(&mut self, name: String, sig: ClassSignature) {
         self.classes.insert(name.clone(), sig);
-        self.define(name.clone(), Type::Custom(name));
+        self.define(name.clone(), Type::Custom(name), (0, 0));
     }
 }

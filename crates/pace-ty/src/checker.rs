@@ -15,6 +15,7 @@ pub struct TypeChecker {
     env: Environment,
     current_return_type: Option<Type>,
     current_class: Option<String>,
+    pub warnings: Vec<pace_errors::SemanticWarning>,
 }
 
 impl TypeChecker {
@@ -23,6 +24,7 @@ impl TypeChecker {
             env: Environment::new(),
             current_return_type: None,
             current_class: None,
+            warnings: Vec::new(),
         }
     }
 
@@ -34,13 +36,35 @@ impl TypeChecker {
         for stmt in stmts {
             self.check_stmt(stmt)?;
         }
+        
+        self.pop_scope_and_check_unused();
+        
         Ok(())
+    }
+
+    fn pop_scope_and_check_unused(&mut self) {
+        let unused = self.env.pop_scope();
+        for (name, var_info) in unused {
+            if !var_info.is_used && !name.starts_with('_') && name != "self" {
+                let kind = if var_info.ty == Type::Custom("Function".to_string()) {
+                    "function"
+                } else {
+                    "variable"
+                };
+                self.warnings.push(pace_errors::SemanticWarning::UnusedItem {
+                    kind: kind.to_string(),
+                    name,
+                    src: miette::NamedSource::new("", String::new()),
+                    span: var_info.span,
+                });
+            }
+        }
     }
 
     fn hoist_declarations(&mut self, stmts: &[Stmt]) -> Result<(), TypeError> {
         for stmt in stmts {
             match stmt {
-                Stmt::FuncDecl { name, params, return_type, .. } => {
+                Stmt::FuncDecl { name, params, return_type, span, .. } => {
                     let mut param_types = Vec::new();
                     for param in params {
                         param_types.push(self.resolve_type_name(&param.type_annotation));
@@ -50,9 +74,18 @@ impl TypeChecker {
                     } else {
                         Type::Void
                     };
+                    if !is_camel_case(name) && name != "main" {
+                        self.warnings.push(pace_errors::SemanticWarning::NamingConvention {
+                            name: name.clone(),
+                            src: miette::NamedSource::new("", String::new()),
+                            span: *span,
+                        });
+                    }
                     let sig = FunctionSignature {
                         params: param_types,
                         return_type: ret_ty,
+                        span: *span,
+                        is_used: false,
                     };
                     self.env.register_function(name.clone(), sig);
                 }
@@ -84,6 +117,8 @@ impl TypeChecker {
                             let sig = FunctionSignature {
                                 params: param_types,
                                 return_type: ret_ty,
+                                span: (0, 0),
+                                is_used: true,
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
@@ -129,6 +164,8 @@ impl TypeChecker {
                             let sig = FunctionSignature {
                                 params: param_types,
                                 return_type: ret_ty,
+                                span: (0, 0),
+                                is_used: true,
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
@@ -164,7 +201,7 @@ impl TypeChecker {
             Stmt::Expr(expr) => {
                 self.check_expr(expr)?;
             }
-            Stmt::VarDecl { name, type_annotation, initializer, .. } => {
+            Stmt::VarDecl { name, type_annotation, initializer, span, .. } => {
                 let mut inferred_type = Type::Unknown;
                 
                 if let Some(init_expr) = initializer {
@@ -190,14 +227,21 @@ impl TypeChecker {
                     });
                 }
                 
-                self.env.define(name.clone(), inferred_type);
+                if !is_camel_case(name) {
+                    self.warnings.push(pace_errors::SemanticWarning::NamingConvention {
+                        name: name.clone(),
+                        src: miette::NamedSource::new("", String::new()),
+                        span: *span,
+                    });
+                }
+                self.env.define(name.clone(), inferred_type, *span);
             }
             Stmt::Block(stmts) => {
                 self.env.push_scope();
                 for s in stmts {
                     self.check_stmt(s)?;
                 }
-                self.env.pop_scope();
+                self.pop_scope_and_check_unused();
             }
             Stmt::Return(expr_opt) => {
                 let ret_ty = if let Some(expr) = expr_opt {
@@ -246,7 +290,7 @@ impl TypeChecker {
                 self.check_expr(iterable)?;
                 self.env.push_scope();
                 self.check_stmt(body)?;
-                self.env.pop_scope();
+                self.pop_scope_and_check_unused();
             }
             Stmt::Match { expr, arms } => {
                 self.check_expr(expr)?;
@@ -269,19 +313,20 @@ impl TypeChecker {
                 
                 // Add `self` if we are inside a class
                 if let Some(class_name) = &self.current_class {
-                    self.env.define("self".to_string(), Type::Custom(class_name.clone()));
+                    self.env.define("self".to_string(), Type::Custom(class_name.clone()), (0, 0));
                 }
                 
+                // Add parameters to scope
                 for param in params {
                     let param_type = self.resolve_type_name(&param.type_annotation);
-                    self.env.define(param.name.clone(), param_type);
+                    self.env.define(param.name.clone(), param_type, (0, 0));
                 }
                 
                 for s in body {
                     self.check_stmt(s)?;
                 }
                 
-                self.env.pop_scope();
+                self.pop_scope_and_check_unused();
                 self.current_return_type = prev_return;
             }
             Stmt::ClassDecl { name, methods, implements, .. } => {
@@ -313,7 +358,7 @@ impl TypeChecker {
                 for m in methods {
                     self.check_stmt(m)?;
                 }
-                self.env.pop_scope();
+                self.pop_scope_and_check_unused();
                 
                 self.current_class = prev_class;
             }
@@ -332,6 +377,9 @@ impl TypeChecker {
             Expr::BoolLiteral(_) => Ok(Type::Bool),
             Expr::Null => Ok(Type::Null),
             Expr::Identifier(name) => {
+                if let Some(var_info) = self.env.get_mut(name) {
+                    var_info.is_used = true;
+                }
                 match self.env.get(name) {
                     Some(ty) => Ok(ty.clone()),
                     None => {
@@ -454,4 +502,11 @@ impl TypeChecker {
             _ => Type::Custom(name.to_string()),
         }
     }
+}
+
+fn is_camel_case(s: &str) -> bool {
+    if s.is_empty() { return true; }
+    let first = s.chars().next().unwrap();
+    if first.is_uppercase() { return false; }
+    !s.contains('_')
 }

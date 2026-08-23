@@ -5,7 +5,7 @@ use pace_ast::Stmt;
 pub use lexer::{Lexer, Token};
 pub use parser::Parser;
 
-pub fn parse(src: &str) -> Result<Vec<Stmt>, String> {
+pub fn parse(src: &str) -> Result<Vec<Stmt>, (String, (usize, usize))> {
     let mut parser = Parser::new(src);
     parser.parse()
 }

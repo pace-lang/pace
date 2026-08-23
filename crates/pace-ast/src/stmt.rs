@@ -10,6 +10,7 @@ pub enum Stmt {
         is_mutable: bool,
         type_annotation: Option<String>,
         initializer: Option<Expr>,
+        span: (usize, usize),
     },
     /// A block of statements (e.g., { ... })
     Block(Vec<Stmt>),
@@ -29,6 +30,7 @@ pub enum Stmt {
         body: Vec<Stmt>,
         is_async: bool,
         visibility: Visibility,
+        span: (usize, usize),
     },
     /// A class declaration
     ClassDecl {

@@ -4,20 +4,24 @@ use crate::lexer::{Lexer, Token};
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     current_token: Token,
+    current_span: (usize, usize),
 }
 
 impl<'a> Parser<'a> {
     pub fn new(src: &'a str) -> Self {
         let mut lexer = Lexer::new(src);
-        let current_token = lexer.next_token();
+        let (current_token, current_span) = lexer.next_token();
         Self {
             lexer,
             current_token,
+            current_span,
         }
     }
 
     fn advance(&mut self) {
-        self.current_token = self.lexer.next_token();
+        let (tok, span) = self.lexer.next_token();
+        self.current_token = tok;
+        self.current_span = span;
     }
 
     fn match_token(&mut self, expected: Token) -> bool {
@@ -29,7 +33,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Stmt>, String> {
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, (String, (usize, usize))> {
         let mut stmts = Vec::new();
         while self.current_token != Token::Eof {
             stmts.push(self.parse_stmt()?);
@@ -37,7 +41,7 @@ impl<'a> Parser<'a> {
         Ok(stmts)
     }
 
-    fn parse_stmt(&mut self) -> Result<Stmt, String> {
+    fn parse_stmt(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         let visibility = if self.match_token(Token::Public) {
             Visibility::Public
         } else if self.match_token(Token::Private) {
@@ -70,33 +74,33 @@ impl<'a> Parser<'a> {
                     None
                 };
                 if !self.match_token(Token::Semi) {
-                    return Err("Expected ';' after return".to_string());
+                    return Err(("Expected ';' after return".to_string(), self.current_span));
                 }
                 Ok(Stmt::Return(expr))
             }
             _ => {
                 let expr = self.parse_expr()?;
                 if !self.match_token(Token::Semi) {
-                    return Err("Expected ';' after expression".to_string());
+                    return Err(("Expected ';' after expression".to_string(), self.current_span));
                 }
                 Ok(Stmt::Expr(expr))
             }
         }
     }
 
-    fn parse_block(&mut self) -> Result<Stmt, String> {
+    fn parse_block(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume '{'
         let mut stmts = Vec::new();
         while self.current_token != Token::RBrace && self.current_token != Token::Eof {
             stmts.push(self.parse_stmt()?);
         }
         if !self.match_token(Token::RBrace) {
-            return Err("Expected '}' after block".to_string());
+            return Err(("Expected '}' after block".to_string(), self.current_span));
         }
         Ok(Stmt::Block(stmts))
     }
 
-    fn parse_if_stmt(&mut self) -> Result<Stmt, String> {
+    fn parse_if_stmt(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume if
         let condition = self.parse_expr()?;
         
@@ -114,7 +118,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_while_stmt(&mut self) -> Result<Stmt, String> {
+    fn parse_while_stmt(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume while
         let condition = self.parse_expr()?;
         let body = Box::new(self.parse_stmt()?);
@@ -124,7 +128,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_loop_stmt(&mut self) -> Result<Stmt, String> {
+    fn parse_loop_stmt(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume loop
         let body = Box::new(self.parse_stmt()?);
         Ok(Stmt::Loop {
@@ -132,16 +136,16 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_for_stmt(&mut self) -> Result<Stmt, String> {
+    fn parse_for_stmt(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume for
         let item = match &self.current_token {
             Token::Ident(id) => id.clone(),
-            _ => return Err("Expected identifier in for loop".to_string()),
+            _ => return Err(("Expected identifier in for loop".to_string(), self.current_span)),
         };
         self.advance();
 
         if !self.match_token(Token::In) {
-            return Err("Expected 'in' in for loop".to_string());
+            return Err(("Expected 'in' in for loop".to_string(), self.current_span));
         }
 
         let iterable = self.parse_expr()?;
@@ -154,26 +158,26 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_match_stmt(&mut self) -> Result<Stmt, String> {
+    fn parse_match_stmt(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume match
         let expr = self.parse_expr()?;
         
         if !self.match_token(Token::LBrace) {
-            return Err("Expected '{' before match arms".to_string());
+            return Err(("Expected '{' before match arms".to_string(), self.current_span));
         }
 
         let mut arms = Vec::new();
         while self.current_token != Token::RBrace && self.current_token != Token::Eof {
             let pattern = self.parse_expr()?;
             if !self.match_token(Token::Arrow) {
-                return Err("Expected '=>' after match pattern".to_string());
+                return Err(("Expected '=>' after match pattern".to_string(), self.current_span));
             }
             let body = Box::new(self.parse_stmt()?);
             arms.push((pattern, body));
         }
 
         if !self.match_token(Token::RBrace) {
-            return Err("Expected '}' after match arms".to_string());
+            return Err(("Expected '}' after match arms".to_string(), self.current_span));
         }
 
         Ok(Stmt::Match {
@@ -182,7 +186,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_import_stmt(&mut self) -> Result<Stmt, String> {
+    fn parse_import_stmt(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume 'import'
         
         let mut items = None;
@@ -195,7 +199,7 @@ impl<'a> Parser<'a> {
                 loop {
                     match &self.current_token {
                         Token::Ident(id) => import_items.push(id.clone()),
-                        _ => return Err("Expected identifier in import list".to_string()),
+                        _ => return Err(("Expected identifier in import list".to_string(), self.current_span)),
                     }
                     self.advance();
 
@@ -205,16 +209,16 @@ impl<'a> Parser<'a> {
                 }
             }
             if !self.match_token(Token::RBrace) {
-                return Err("Expected '}' after import list".to_string());
+                return Err(("Expected '}' after import list".to_string(), self.current_span));
             }
 
             if !self.match_token(Token::From) {
-                return Err("Expected 'from' after import list".to_string());
+                return Err(("Expected 'from' after import list".to_string(), self.current_span));
             }
 
             path = match &self.current_token {
                 Token::String(s) => s.clone(),
-                _ => return Err("Expected string literal for import path".to_string()),
+                _ => return Err(("Expected string literal for import path".to_string(), self.current_span)),
             };
             self.advance();
             items = Some(import_items);
@@ -229,28 +233,29 @@ impl<'a> Parser<'a> {
                     path = id.clone();
                     self.advance();
                 }
-                _ => return Err("Expected string literal or identifier for import path".to_string()),
+                _ => return Err(("Expected string literal or identifier for import path".to_string(), self.current_span)),
             }
         }
 
         if !self.match_token(Token::Semi) {
-            return Err("Expected ';' after import statement".to_string());
+            return Err(("Expected ';' after import statement".to_string(), self.current_span));
         }
 
         Ok(Stmt::Import { path, items })
     }
 
-    fn parse_func_decl(&mut self, is_async: bool, visibility: Visibility) -> Result<Stmt, String> {
+    fn parse_func_decl(&mut self, is_async: bool, visibility: Visibility) -> Result<Stmt, (String, (usize, usize))> {
+        let start_pos = self.current_span.0;
         self.advance(); // consume func
 
         let name = match &self.current_token {
             Token::Ident(id) => id.clone(),
-            _ => return Err("Expected function name".to_string()),
+            _ => return Err(("Expected function name".to_string(), self.current_span)),
         };
         self.advance();
 
         if !self.match_token(Token::LParen) {
-            return Err("Expected '(' after function name".to_string());
+            return Err(("Expected '(' after function name".to_string(), self.current_span));
         }
 
         let mut params = Vec::new();
@@ -258,17 +263,17 @@ impl<'a> Parser<'a> {
             loop {
                 let param_name = match &self.current_token {
                     Token::Ident(id) => id.clone(),
-                    _ => return Err("Expected parameter name".to_string()),
+                    _ => return Err(("Expected parameter name".to_string(), self.current_span)),
                 };
                 self.advance();
 
                 if !self.match_token(Token::Colon) {
-                    return Err("Expected ':' after parameter name".to_string());
+                    return Err(("Expected ':' after parameter name".to_string(), self.current_span));
                 }
 
                 let param_type = match &self.current_token {
                     Token::Ident(id) => id.clone(),
-                    _ => return Err("Expected parameter type".to_string()),
+                    _ => return Err(("Expected parameter type".to_string(), self.current_span)),
                 };
                 self.advance();
 
@@ -284,20 +289,20 @@ impl<'a> Parser<'a> {
         }
 
         if !self.match_token(Token::RParen) {
-            return Err("Expected ')' after parameters".to_string());
+            return Err(("Expected ')' after parameters".to_string(), self.current_span));
         }
 
         let mut return_type = None;
         if self.match_token(Token::Arrow) {
             return_type = match &self.current_token {
                 Token::Ident(id) => Some(id.clone()),
-                _ => return Err("Expected return type after '->'".to_string()),
+                _ => return Err(("Expected return type after '->'".to_string(), self.current_span)),
             };
             self.advance();
         }
 
         if !self.match_token(Token::LBrace) {
-            return Err("Expected '{' before function body".to_string());
+            return Err(("Expected '{' before function body".to_string(), self.current_span));
         }
 
         let mut body = Vec::new();
@@ -306,7 +311,7 @@ impl<'a> Parser<'a> {
         }
 
         if !self.match_token(Token::RBrace) {
-            return Err("Expected '}' after function body".to_string());
+            return Err(("Expected '}' after function body".to_string(), self.current_span));
         }
 
         Ok(Stmt::FuncDecl {
@@ -316,15 +321,16 @@ impl<'a> Parser<'a> {
             body,
             is_async,
             visibility,
+            span: (start_pos, (self.current_span.0 + self.current_span.1).saturating_sub(start_pos)),
         })
     }
 
-    fn parse_class_decl(&mut self) -> Result<Stmt, String> {
+    fn parse_class_decl(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume class
 
         let name = match &self.current_token {
             Token::Ident(id) => id.clone(),
-            _ => return Err("Expected class name".to_string()),
+            _ => return Err(("Expected class name".to_string(), self.current_span)),
         };
         self.advance();
 
@@ -332,13 +338,13 @@ impl<'a> Parser<'a> {
         if self.match_token(Token::Implement) {
             implements = match &self.current_token {
                 Token::Ident(id) => Some(id.clone()),
-                _ => return Err("Expected interface name after 'implement'".to_string()),
+                _ => return Err(("Expected interface name after 'implement'".to_string(), self.current_span)),
             };
             self.advance();
         }
 
         if !self.match_token(Token::LBrace) {
-            return Err("Expected '{' before class body".to_string());
+            return Err(("Expected '{' before class body".to_string(), self.current_span));
         }
 
         let mut fields = Vec::new();
@@ -349,12 +355,12 @@ impl<'a> Parser<'a> {
             match stmt {
                 Stmt::VarDecl { .. } => fields.push(stmt),
                 Stmt::FuncDecl { .. } => methods.push(stmt),
-                _ => return Err("Classes can only contain fields and methods".to_string()),
+                _ => return Err(("Classes can only contain fields and methods".to_string(), self.current_span)),
             }
         }
 
         if !self.match_token(Token::RBrace) {
-            return Err("Expected '}' after class body".to_string());
+            return Err(("Expected '}' after class body".to_string(), self.current_span));
         }
 
         Ok(Stmt::ClassDecl {
@@ -365,17 +371,17 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_interface_decl(&mut self) -> Result<Stmt, String> {
+    fn parse_interface_decl(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume interface
 
         let name = match &self.current_token {
             Token::Ident(id) => id.clone(),
-            _ => return Err("Expected interface name".to_string()),
+            _ => return Err(("Expected interface name".to_string(), self.current_span)),
         };
         self.advance();
 
         if !self.match_token(Token::LBrace) {
-            return Err("Expected '{' before interface body".to_string());
+            return Err(("Expected '{' before interface body".to_string(), self.current_span));
         }
 
         let mut methods = Vec::new();
@@ -384,17 +390,17 @@ impl<'a> Parser<'a> {
             let is_async = self.match_token(Token::Async);
             
             if !self.match_token(Token::Func) {
-                return Err("Expected 'func' in interface definition".to_string());
+                return Err(("Expected 'func' in interface definition".to_string(), self.current_span));
             }
 
             let method_name = match &self.current_token {
                 Token::Ident(id) => id.clone(),
-                _ => return Err("Expected function name".to_string()),
+                _ => return Err(("Expected function name".to_string(), self.current_span)),
             };
             self.advance();
 
             if !self.match_token(Token::LParen) {
-                return Err("Expected '(' after function name".to_string());
+                return Err(("Expected '(' after function name".to_string(), self.current_span));
             }
 
             let mut params = Vec::new();
@@ -402,17 +408,17 @@ impl<'a> Parser<'a> {
                 loop {
                     let param_name = match &self.current_token {
                         Token::Ident(id) => id.clone(),
-                        _ => return Err("Expected parameter name".to_string()),
+                        _ => return Err(("Expected parameter name".to_string(), self.current_span)),
                     };
                     self.advance();
 
                     if !self.match_token(Token::Colon) {
-                        return Err("Expected ':' after parameter name".to_string());
+                        return Err(("Expected ':' after parameter name".to_string(), self.current_span));
                     }
 
                     let param_type = match &self.current_token {
                         Token::Ident(id) => id.clone(),
-                        _ => return Err("Expected parameter type".to_string()),
+                        _ => return Err(("Expected parameter type".to_string(), self.current_span)),
                     };
                     self.advance();
 
@@ -428,14 +434,14 @@ impl<'a> Parser<'a> {
             }
 
             if !self.match_token(Token::RParen) {
-                return Err("Expected ')' after parameters".to_string());
+                return Err(("Expected ')' after parameters".to_string(), self.current_span));
             }
 
             let mut return_type = None;
             if self.match_token(Token::Arrow) {
                 return_type = match &self.current_token {
                     Token::Ident(id) => Some(id.clone()),
-                    _ => return Err("Expected return type after '->'".to_string()),
+                    _ => return Err(("Expected return type after '->'".to_string(), self.current_span)),
                 };
                 self.advance();
             }
@@ -447,11 +453,12 @@ impl<'a> Parser<'a> {
                 body: vec![],
                 is_async,
                 visibility: Visibility::Public,
+                span: (0, 0),
             });
         }
 
         if !self.match_token(Token::RBrace) {
-            return Err("Expected '}' after interface body".to_string());
+            return Err(("Expected '}' after interface body".to_string(), self.current_span));
         }
 
         Ok(Stmt::InterfaceDecl {
@@ -460,17 +467,17 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_struct_decl(&mut self) -> Result<Stmt, String> {
+    fn parse_struct_decl(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume struct
 
         let name = match &self.current_token {
             Token::Ident(id) => id.clone(),
-            _ => return Err("Expected struct name".to_string()),
+            _ => return Err(("Expected struct name".to_string(), self.current_span)),
         };
         self.advance();
 
         if !self.match_token(Token::LBrace) {
-            return Err("Expected '{' before struct body".to_string());
+            return Err(("Expected '{' before struct body".to_string(), self.current_span));
         }
 
         let mut fields = Vec::new();
@@ -478,12 +485,12 @@ impl<'a> Parser<'a> {
             let stmt = self.parse_stmt()?;
             match stmt {
                 Stmt::VarDecl { .. } => fields.push(stmt),
-                _ => return Err("Structs can only contain fields".to_string()),
+                _ => return Err(("Structs can only contain fields".to_string(), self.current_span)),
             }
         }
 
         if !self.match_token(Token::RBrace) {
-            return Err("Expected '}' after struct body".to_string());
+            return Err(("Expected '}' after struct body".to_string(), self.current_span));
         }
 
         Ok(Stmt::StructDecl {
@@ -492,11 +499,12 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_var_decl(&mut self, is_mutable: bool) -> Result<Stmt, String> {
+    fn parse_var_decl(&mut self, is_mutable: bool) -> Result<Stmt, (String, (usize, usize))> {
+        let start_pos = self.current_span.0;
         self.advance(); // consume let/var
         let name = match &self.current_token {
             Token::Ident(id) => id.clone(),
-            _ => return Err("Expected identifier".to_string()),
+            _ => return Err(("Expected identifier".to_string(), self.current_span)),
         };
         self.advance();
 
@@ -504,7 +512,7 @@ impl<'a> Parser<'a> {
         if self.match_token(Token::Colon) {
             type_annotation = match &self.current_token {
                 Token::Ident(id) => Some(id.clone()),
-                _ => return Err("Expected type identifier after ':'".to_string()),
+                _ => return Err(("Expected type identifier after ':'".to_string(), self.current_span)),
             };
             self.advance();
         }
@@ -515,7 +523,7 @@ impl<'a> Parser<'a> {
         }
 
         if !self.match_token(Token::Semi) {
-            return Err("Expected ';' after variable declaration".to_string());
+            return Err(("Expected ';' after variable declaration".to_string(), self.current_span));
         }
 
         Ok(Stmt::VarDecl {
@@ -523,14 +531,15 @@ impl<'a> Parser<'a> {
             is_mutable,
             type_annotation,
             initializer,
+            span: (start_pos, (self.current_span.0 + self.current_span.1).saturating_sub(start_pos)),
         })
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, String> {
+    fn parse_expr(&mut self) -> Result<Expr, (String, (usize, usize))> {
         self.parse_equality()
     }
 
-    fn parse_equality(&mut self) -> Result<Expr, String> {
+    fn parse_equality(&mut self) -> Result<Expr, (String, (usize, usize))> {
         let mut expr = self.parse_term()?;
         while self.current_token == Token::EqEq || self.current_token == Token::NotEq {
             let op = if self.current_token == Token::EqEq { BinaryOp::Eq } else { BinaryOp::NotEq };
@@ -545,7 +554,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_term(&mut self) -> Result<Expr, String> {
+    fn parse_term(&mut self) -> Result<Expr, (String, (usize, usize))> {
         let mut expr = self.parse_factor()?;
         while self.current_token == Token::Plus || self.current_token == Token::Minus {
             let op = if self.current_token == Token::Plus { BinaryOp::Add } else { BinaryOp::Sub };
@@ -560,7 +569,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_factor(&mut self) -> Result<Expr, String> {
+    fn parse_factor(&mut self) -> Result<Expr, (String, (usize, usize))> {
         let mut expr = self.parse_postfix()?;
         while self.current_token == Token::Star || self.current_token == Token::Slash {
             let op = if self.current_token == Token::Star { BinaryOp::Mul } else { BinaryOp::Div };
@@ -575,14 +584,14 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_postfix(&mut self) -> Result<Expr, String> {
+    fn parse_postfix(&mut self) -> Result<Expr, (String, (usize, usize))> {
         let mut expr = self.parse_primary()?;
         
         loop {
             if self.match_token(Token::Dot) {
                 let property = match &self.current_token {
                     Token::Ident(id) => id.clone(),
-                    _ => return Err("Expected property name after '.'".to_string()),
+                    _ => return Err(("Expected property name after '.'".to_string(), self.current_span)),
                 };
                 self.advance();
                 expr = Expr::MemberAccess {
@@ -601,7 +610,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 if !self.match_token(Token::RParen) {
-                    return Err("Expected ')' after arguments".to_string());
+                    return Err(("Expected ')' after arguments".to_string(), self.current_span));
                 }
                 expr = Expr::Call {
                     callee: Box::new(expr),
@@ -615,7 +624,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_primary(&mut self) -> Result<Expr, String> {
+    fn parse_primary(&mut self) -> Result<Expr, (String, (usize, usize))> {
         match &self.current_token {
             Token::Int(n) => {
                 let v = *n;
@@ -650,11 +659,11 @@ impl<'a> Parser<'a> {
                 self.advance();
                 let expr = self.parse_expr()?;
                 if !self.match_token(Token::RParen) {
-                    return Err("Expected ')'".to_string());
+                    return Err(("Expected ')'".to_string(), self.current_span));
                 }
                 Ok(expr)
             }
-            _ => Err(format!("Unexpected token: {:?}", self.current_token)),
+            _ => Err((format!("Unexpected token: {:?}", self.current_token), self.current_span)),
         }
     }
 }

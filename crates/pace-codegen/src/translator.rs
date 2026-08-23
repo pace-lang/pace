@@ -5,6 +5,15 @@ use std::collections::HashMap;
 use crate::compiler::ClassLayout;
 use crate::compiler::CodegenError;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum VarType {
+    Int,
+    Float,
+    String,
+    Bool,
+    Unknown,
+}
+
 pub struct Translator;
 
 impl Translator {
@@ -14,12 +23,14 @@ impl Translator {
         class_layouts: &HashMap<String, ClassLayout>,
         builder: &mut FunctionBuilder,
         stmt: &Stmt,
-        variables: &mut HashMap<String, Variable>,
+        variables: &mut HashMap<String, (Variable, VarType)>,
         var_index: &mut usize,
     ) -> Result<(Value, bool), CodegenError> {
         match stmt {
             Stmt::VarDecl { name, initializer, .. } => {
+                let mut var_ty = VarType::Unknown;
                 let val = if let Some(expr) = initializer {
+                    var_ty = Self::get_expr_type(expr, variables);
                     Self::translate_expr(module, funcs, class_layouts, builder, expr, variables, var_index)?
                 } else {
                     builder.ins().iconst(types::I64, 0)
@@ -27,7 +38,7 @@ impl Translator {
                 let val_ty = builder.func.dfg.value_type(val);
                 let var = builder.declare_var(val_ty);
                 builder.def_var(var, val);
-                variables.insert(name.clone(), var);
+                variables.insert(name.clone(), (var, var_ty));
                 *var_index += 1;
                 Ok((val, false))
             }
@@ -138,6 +149,24 @@ impl Translator {
             _ => Ok((builder.ins().iconst(types::I64, 0), false))
         }
     }
+    
+    pub fn get_expr_type(expr: &Expr, variables: &HashMap<String, (Variable, VarType)>) -> VarType {
+        match expr {
+            Expr::IntLiteral(_) => VarType::Int,
+            Expr::FloatLiteral(_) => VarType::Float,
+            Expr::StringLiteral(_) => VarType::String,
+            Expr::BoolLiteral(_) => VarType::Bool,
+            Expr::Identifier(name) => {
+                if let Some((_, ty)) = variables.get(name) {
+                    *ty
+                } else {
+                    VarType::Unknown
+                }
+            }
+            Expr::Binary { left, .. } => Self::get_expr_type(left, variables), // simplified
+            _ => VarType::Unknown,
+        }
+    }
 
     pub fn translate_expr(
         module: &mut impl Module,
@@ -145,7 +174,7 @@ impl Translator {
         class_layouts: &HashMap<String, ClassLayout>,
         builder: &mut FunctionBuilder,
         expr: &Expr,
-        variables: &mut HashMap<String, Variable>,
+        variables: &mut HashMap<String, (Variable, VarType)>,
         var_index: &mut usize,
     ) -> Result<Value, CodegenError> {
         match expr {
@@ -172,7 +201,7 @@ impl Translator {
                 Ok(builder.ins().iconst(types::I64, val))
             }
             Expr::Identifier(name) => {
-                if let Some(var) = variables.get(name) {
+                if let Some((var, _)) = variables.get(name) {
                     Ok(builder.use_var(*var))
                 } else {
                     Err(CodegenError { message: format!("Variable '{}' not found in JIT environment", name) })
@@ -221,12 +250,15 @@ impl Translator {
             Expr::Call { callee, args } => {
                 if let Expr::Identifier(func_name) = &**callee {
                     if func_name == "print" {
-                        let arg_val = Self::translate_expr(module, funcs, class_layouts, builder, &args[0], variables, var_index)?;
+                        let arg_expr = &args[0];
+                        let arg_ty = Self::get_expr_type(arg_expr, variables);
+                        
+                        let arg_val = Self::translate_expr(module, funcs, class_layouts, builder, arg_expr, variables, var_index)?;
                         let ty = builder.func.dfg.value_type(arg_val);
                         
                         let target_name = if ty == types::F64 {
                             "print_float"
-                        } else if ty == module.target_config().pointer_type() {
+                        } else if arg_ty == VarType::String {
                             "print_string"
                         } else {
                             "print_int" // Fallback to int
