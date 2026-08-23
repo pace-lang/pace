@@ -1,12 +1,27 @@
+struct User {
+    let id: Int;
+}
+
+class HttpClient {
+    func get(id: Int) -> User {
+        return User();
+    }
+}
+
+interface Repository {
+    func getUser(id: Int) -> User
+}
+
 class UserService implement Repository {
     private let client: HttpClient;
 
     func getUser(id: Int) -> User {
-        return client.get(id);
+        return self.client.get(id);
     }
 }
 
 async func main() {
     let x: Int = 42;
     let service = UserService();
+    let user = service.getUser(10);
 }

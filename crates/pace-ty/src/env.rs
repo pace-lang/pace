@@ -10,17 +10,34 @@ pub enum Type {
     /// A custom type like a Class or Struct (e.g. `UserService`)
     Custom(String),
     Unknown, // Used for auto-inference before resolution or error state
+    Void,    // Used for functions that don't return anything
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionSignature {
+    pub params: Vec<Type>,
+    pub return_type: Type,
+}
+
+#[derive(Debug, Clone)]
+pub struct ClassSignature {
+    pub fields: HashMap<String, Type>,
+    pub methods: HashMap<String, FunctionSignature>,
 }
 
 #[derive(Clone, Default)]
 pub struct Environment {
     scopes: Vec<HashMap<String, Type>>,
+    pub functions: HashMap<String, FunctionSignature>,
+    pub classes: HashMap<String, ClassSignature>,
 }
 
 impl Environment {
     pub fn new() -> Self {
         Self {
             scopes: vec![HashMap::new()], // Start with a global scope
+            functions: HashMap::new(),
+            classes: HashMap::new(),
         }
     }
 
@@ -47,5 +64,15 @@ impl Environment {
             }
         }
         None
+    }
+    
+    pub fn register_function(&mut self, name: String, sig: FunctionSignature) {
+        self.functions.insert(name.clone(), sig);
+        self.define(name, Type::Custom("Function".to_string()));
+    }
+    
+    pub fn register_class(&mut self, name: String, sig: ClassSignature) {
+        self.classes.insert(name.clone(), sig);
+        self.define(name.clone(), Type::Custom(name));
     }
 }
