@@ -41,7 +41,17 @@ fn main() -> Result<()> {
             println!("{:#?}", ast);
         }
         Commands::Build { file } => {
-            println!("Building {}... (Not yet implemented)", file);
+            let output_name = std::path::Path::new(&file)
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            
+            let output = if output_name.is_empty() { "output".to_string() } else { output_name };
+            
+            println!("Building {} to ./{}...", file, output);
+            session.build_file(&file, &output)?;
+            println!("✅ Build complete!");
         }
         Commands::Run { file } => {
             println!("Compiling and running {}...", file);

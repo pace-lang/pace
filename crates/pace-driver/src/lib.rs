@@ -33,6 +33,41 @@ impl CompilerSession {
         Ok(())
     }
 
+    pub fn build_file(&self, path: &str, output: &str) -> Result<()> {
+        let src = std::fs::read_to_string(path)
+            .into_diagnostic()?;
+        self.build_source(&src, output)
+    }
+
+    pub fn build_source(&self, src: &str, output: &str) -> Result<()> {
+        let ast = self.check_source(src)?;
+        let mut compiler = pace_codegen::AotCompiler::new();
+        
+        let obj_bytes = compiler.compile_to_object(&ast).map_err(|e| {
+            Report::new(e)
+        })?;
+        
+        let obj_path = format!("{}.o", output);
+        std::fs::write(&obj_path, obj_bytes).into_diagnostic()?;
+        
+        // Use gcc to link it
+        let status = std::process::Command::new("gcc")
+            .arg(&obj_path)
+            .arg("-o")
+            .arg(output)
+            .status()
+            .into_diagnostic()?;
+            
+        if !status.success() {
+            return Err(miette::miette!("Failed to link executable with gcc"));
+        }
+        
+        // Clean up the object file
+        let _ = std::fs::remove_file(obj_path);
+        
+        Ok(())
+    }
+
     pub fn check_source(&self, src: &str) -> Result<Vec<Stmt>> {
         let ast = match pace_parser::parse(src) {
             Ok(ast) => ast,
