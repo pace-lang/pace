@@ -247,8 +247,7 @@ impl JITCompiler {
         
         // Execute the code
         let entry_func: fn() -> i64 = unsafe { std::mem::transmute(code) };
-        let result = entry_func();
-        println!("{}", result);
+        let _result = entry_func();
 
         Ok(())
     }

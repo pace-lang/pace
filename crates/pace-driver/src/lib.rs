@@ -126,9 +126,13 @@ impl CompilerSession {
         let obj_path = format!("{}.o", output);
         std::fs::write(&obj_path, obj_bytes).into_diagnostic()?;
         
-        let runtime_path = std::env::current_dir()
-            .unwrap()
-            .join("target/debug/libpace_runtime.a");
+        let runtime_path = if let Ok(home) = std::env::var("PACE_HOME") {
+            std::path::PathBuf::from(home).join("target/debug/libpace_runtime.a")
+        } else {
+            std::env::current_dir()
+                .unwrap()
+                .join("target/debug/libpace_runtime.a")
+        };
             
         let mut cmd = std::process::Command::new("gcc");
         cmd.arg(&obj_path)

@@ -1,3 +1,6 @@
+pub mod commands;
+pub mod utils;
+
 use clap::{Parser, Subcommand};
 use miette::Result;
 use pace_driver::CompilerSession;
@@ -12,20 +15,25 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Create a new Pace project
+    New {
+        /// The name of the project
+        name: String,
+    },
     /// Check a Pace file for syntax and type errors
     Check {
-        /// The Pace file to check
-        file: String,
+        /// The Pace file to check (optional, defaults to src/main.pace if pace.toml exists)
+        file: Option<String>,
     },
     /// Compile a Pace file into an executable
     Build {
-        /// The Pace file to build
-        file: String,
+        /// The Pace file to build (optional, defaults to src/main.pace if pace.toml exists)
+        file: Option<String>,
     },
     /// Compile and run a Pace file
     Run {
-        /// The Pace file to run
-        file: String,
+        /// The Pace file to run (optional, defaults to src/main.pace if pace.toml exists)
+        file: Option<String>,
     },
 }
 
@@ -34,28 +42,10 @@ fn main() -> Result<()> {
     let session = CompilerSession::new();
 
     match cli.command {
-        Commands::Check { file } => {
-            println!("Checking {}...", file);
-            let ast = session.check_file(&file)?;
-            println!("✅ Syntax OK");
-            println!("{:#?}", ast);
-        }
-        Commands::Build { file } => {
-            let output_name = std::path::Path::new(&file)
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned();
-            
-            let output = if output_name.is_empty() { "output".to_string() } else { output_name };
-            
-            println!("Building {} to ./{}...", file, output);
-            session.build_file(&file, &output)?;
-            println!("✅ Build complete!");
-        }
-        Commands::Run { file } => {
-            session.run_file(&file)?;
-        }
+        Commands::New { name } => commands::new::execute(name)?,
+        Commands::Check { file } => commands::check::execute(&session, file)?,
+        Commands::Build { file } => commands::build::execute(&session, file)?,
+        Commands::Run { file } => commands::run::execute(&session, file)?,
     }
 
     Ok(())
