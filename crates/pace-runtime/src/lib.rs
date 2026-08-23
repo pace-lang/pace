@@ -66,3 +66,44 @@ pub extern "C" fn __pace_malloc(size: usize) -> *mut u8 {
         ptr
     }
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_retain(obj: *mut u8) {
+    if obj.is_null() {
+        return;
+    }
+    unsafe {
+        let rc_ptr = obj as *mut i64;
+        *rc_ptr += 1;
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_release(obj: *mut u8) {
+    if obj.is_null() {
+        return;
+    }
+    unsafe {
+        let rc_ptr = obj as *mut i64;
+        *rc_ptr -= 1;
+        if *rc_ptr == 0 {
+            // Load vtable pointer from Offset 8
+            let vtable_ptr_addr = obj.add(8) as *const *const u8;
+            let vtable_ptr = *vtable_ptr_addr;
+            
+            // Load drop function from VTable Offset 0
+            let drop_fn_addr = vtable_ptr as *const extern "C" fn(*mut u8);
+            let drop_fn = *drop_fn_addr;
+            
+            // Load size from VTable Offset 8
+            let size_addr = vtable_ptr.add(8) as *const i64;
+            let size = *size_addr as usize;
+            
+            // Call the drop function to release fields
+            drop_fn(obj);
+            
+            // Deallocate the memory
+            std::alloc::dealloc(obj, std::alloc::Layout::from_size_align(size, 8).unwrap());
+        }
+    }
+}

@@ -5,12 +5,13 @@ use std::collections::HashMap;
 use crate::compiler::ClassLayout;
 use crate::compiler::CodegenError;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum VarType {
     Int,
     Float,
     String,
     Bool,
+    Object(String),
     Unknown,
 }
 
@@ -20,7 +21,10 @@ pub fn parse_vartype(s: &str) -> VarType {
         "Float" => VarType::Float,
         "String" => VarType::String,
         "Bool" => VarType::Bool,
-        _ => VarType::Unknown,
+        _ => {
+            // Assume any other string is a class or interface name
+            VarType::Object(s.to_string())
+        }
     }
 }
 
@@ -54,7 +58,13 @@ impl Translator {
                 Ok((val, false))
             }
             Stmt::Expr(expr) => {
+                let ty = Self::get_expr_type(expr, variables, func_returns);
                 let val = Self::translate_expr(module, funcs, class_layouts, builder, expr, variables, var_index, func_returns)?;
+                if matches!(ty, VarType::Object(_)) {
+                    let release_id = *funcs.get("release").unwrap();
+                    let local_release = module.declare_func_in_func(release_id, &mut builder.func);
+                    builder.ins().call(local_release, &[val]);
+                }
                 Ok((val, false))
             }
             Stmt::If { condition, then_branch, else_branch } => {
@@ -136,6 +146,8 @@ impl Translator {
                 Ok((builder.ins().iconst(types::I64, 0), false))
             }
             Stmt::Block(stmts) => {
+                let initial_vars: Vec<String> = variables.keys().cloned().collect();
+                
                 let mut last_val = builder.ins().iconst(types::I64, 0);
                 let mut terminated = false;
                 for s in stmts {
@@ -146,6 +158,22 @@ impl Translator {
                         break;
                     }
                 }
+                
+                // Release local object variables
+                let current_vars: Vec<String> = variables.keys().cloned().collect();
+                for var_name in current_vars {
+                    if !initial_vars.contains(&var_name) {
+                        let (var, ty) = variables.get(&var_name).unwrap().clone();
+                        if matches!(ty, VarType::Object(_)) {
+                            let obj_val = builder.use_var(var);
+                            let release_id = *funcs.get("release").unwrap_or_else(|| panic!("release not found"));
+                            let local_release = module.declare_func_in_func(release_id, &mut builder.func);
+                            builder.ins().call(local_release, &[obj_val]);
+                        }
+                        variables.remove(&var_name);
+                    }
+                }
+                
                 Ok((last_val, terminated))
             }
             Stmt::Return(expr_opt) => {
@@ -170,7 +198,7 @@ impl Translator {
             Expr::BoolLiteral(_) => VarType::Bool,
             Expr::Identifier(name) => {
                 if let Some((_, ty)) = variables.get(name) {
-                    *ty
+                    ty.clone()
                 } else {
                     VarType::Unknown
                 }
@@ -179,7 +207,16 @@ impl Translator {
             Expr::Call { callee, .. } => {
                 if let Expr::Identifier(name) = &**callee {
                     if let Some(ty) = func_returns.get(name) {
-                        return *ty;
+                        return ty.clone();
+                    } else if name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                        return VarType::Object(name.clone());
+                    }
+                } else if let Expr::MemberAccess { object, property, .. } = &**callee {
+                    if let VarType::Object(obj_name) = Self::get_expr_type(object, variables, func_returns) {
+                        let full_name = format!("{}_{}", obj_name, property);
+                        if let Some(ty) = func_returns.get(&full_name) {
+                            return ty.clone();
+                        }
                     }
                 }
                 VarType::Unknown
@@ -269,10 +306,16 @@ impl Translator {
                 Ok(builder.ins().iconst(types::I64, val))
             }
             Expr::Identifier(name) => {
-                if let Some((var, _)) = variables.get(name) {
-                    Ok(builder.use_var(*var))
+                if let Some((var, ty)) = variables.get(name) {
+                    let val = builder.use_var(*var);
+                    if matches!(ty, VarType::Object(_)) {
+                        let retain_id = *funcs.get("retain").unwrap();
+                        let local_retain = module.declare_func_in_func(retain_id, &mut builder.func);
+                        builder.ins().call(local_retain, &[val]);
+                    }
+                    Ok(val)
                 } else {
-                    Err(CodegenError { message: format!("Variable '{}' not found in JIT environment", name) })
+                    Err(CodegenError { message: format!("Undefined variable: {}", name) })
                 }
             }
             Expr::Binary { left, op, right } => {
@@ -360,15 +403,44 @@ impl Translator {
             Expr::Assign { target, value } => {
                 let val = Self::translate_expr(module, funcs, class_layouts, builder, value, variables, var_index, func_returns)?;
                 if let Expr::Identifier(name) = &**target {
-                    if let Some((var, _)) = variables.get(name) {
+                    if let Some((var, ty)) = variables.get(name) {
+                        if matches!(ty, VarType::Object(_)) {
+                            // Release old value
+                            let old_val = builder.use_var(*var);
+                            let release_id = *funcs.get("release").unwrap();
+                            let local_release = module.declare_func_in_func(release_id, &mut builder.func);
+                            builder.ins().call(local_release, &[old_val]);
+                            
+                            // Retain new value for the variable (caller gets the original +1)
+                            let retain_id = *funcs.get("retain").unwrap();
+                            let local_retain = module.declare_func_in_func(retain_id, &mut builder.func);
+                            builder.ins().call(local_retain, &[val]);
+                        }
                         builder.def_var(*var, val);
                         Ok(val)
                     } else {
                         Err(CodegenError { message: format!("Variable '{}' not found in JIT environment", name) })
                     }
-                } else if let Expr::MemberAccess { .. } = &**target {
-                    // For now, struct field mutation requires writing to memory pointer, which we haven't fully implemented in the test framework.
-                    Err(CodegenError { message: "Field assignment not fully supported in JIT yet".to_string() })
+                } else if let Expr::MemberAccess { object, property, .. } = &**target {
+                    let obj_ptr = Self::translate_expr(module, funcs, class_layouts, builder, object, variables, var_index, func_returns)?;
+                    
+                    let layout = class_layouts.values().find(|l| l.fields.contains_key(property))
+                        .unwrap_or_else(|| panic!("Field {} not found in any class layout", property));
+                    let (f_offset, f_ty) = layout.fields.get(property).unwrap();
+                    
+                    if matches!(f_ty, VarType::Object(_)) {
+                        let old_val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, *f_offset as i32);
+                        let release_id = *funcs.get("release").unwrap();
+                        let local_release = module.declare_func_in_func(release_id, &mut builder.func);
+                        builder.ins().call(local_release, &[old_val]);
+                        
+                        let retain_id = *funcs.get("retain").unwrap();
+                        let local_retain = module.declare_func_in_func(retain_id, &mut builder.func);
+                        builder.ins().call(local_retain, &[val]);
+                    }
+                    
+                    builder.ins().store(cranelift::prelude::MemFlagsData::new(), val, obj_ptr, *f_offset as i32);
+                    Ok(val)
                 } else {
                     Err(CodegenError { message: "Invalid assignment target".to_string() })
                 }
@@ -421,19 +493,23 @@ impl Translator {
                         let malloc_id = *funcs.get("malloc").unwrap();
                         let local_malloc = module.declare_func_in_func(malloc_id, &mut builder.func);
                         
-                        let size = 8 + layout.fields.len() * 8;
+                        let size = 16 + layout.fields.len() * 8;
                         let size_val = builder.ins().iconst(types::I64, size as i64);
                         
                         let call = builder.ins().call(local_malloc, &[size_val]);
                         let obj_ptr = builder.inst_results(call)[0];
                         
+                        // Set ARC count to 1
+                        let one = builder.ins().iconst(types::I64, 1);
+                        builder.ins().store(cranelift::prelude::MemFlagsData::new(), one, obj_ptr, 0);
+                        
+                        // Set VTable
                         let vtable_gv = module.declare_data_in_func(layout.vtable_id, &mut builder.func);
                         let vtable_addr = builder.ins().symbol_value(ptr_ty, vtable_gv);
-                        
-                        builder.ins().store(cranelift::prelude::MemFlagsData::new(), vtable_addr, obj_ptr, 0);
+                        builder.ins().store(cranelift::prelude::MemFlagsData::new(), vtable_addr, obj_ptr, 8);
                         
                         let zero = builder.ins().iconst(types::I64, 0);
-                        for &offset in layout.fields.values() {
+                        for &(offset, _) in layout.fields.values() {
                             builder.ins().store(cranelift::prelude::MemFlagsData::new(), zero, obj_ptr, offset as i32);
                         }
                         
@@ -443,12 +519,19 @@ impl Translator {
                     let obj_ptr = Self::translate_expr(module, funcs, class_layouts, builder, object, variables, var_index, func_returns)?;
                     let ptr_ty = module.target_config().pointer_type();
                     
-                    let layout = class_layouts.values().find(|l| l.methods.contains_key(property))
-                        .unwrap_or_else(|| panic!("Method {} not found in any class layout", property));
-                    let m_offset = layout.methods.get(property).unwrap();
+                    let obj_type = Self::get_expr_type(object, variables, func_returns);
+                    let m_offset = if let VarType::Object(type_name) = &obj_type {
+                        let layout = class_layouts.get(type_name)
+                            .unwrap_or_else(|| panic!("Class or interface {} not found in layouts", type_name));
+                        *layout.methods.get(property).unwrap_or_else(|| panic!("Method {} not found in {}", property, type_name))
+                    } else {
+                        let layout = class_layouts.values().find(|l| l.methods.contains_key(property))
+                            .unwrap_or_else(|| panic!("Method {} not found in any class layout", property));
+                        *layout.methods.get(property).unwrap()
+                    };
                     
-                    let vtable_ptr = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), obj_ptr, 0);
-                    let method_ptr = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), vtable_ptr, *m_offset as i32);
+                    let vtable_ptr = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), obj_ptr, 8);
+                    let method_ptr = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), vtable_ptr, m_offset as i32);
                     
                     let mut sig = module.make_signature();
                     sig.params.push(AbiParam::new(ptr_ty)); // self
@@ -479,9 +562,16 @@ impl Translator {
                 
                 let layout = class_layouts.values().find(|l| l.fields.contains_key(property))
                     .unwrap_or_else(|| panic!("Field {} not found in any class layout", property));
-                let f_offset = layout.fields.get(property).unwrap();
+                let (f_offset, f_ty) = layout.fields.get(property).unwrap();
                 
                 let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, *f_offset as i32);
+                
+                if matches!(f_ty, VarType::Object(_)) {
+                    let retain_id = *funcs.get("retain").unwrap();
+                    let local_retain = module.declare_func_in_func(retain_id, &mut builder.func);
+                    builder.ins().call(local_retain, &[val]);
+                }
+                
                 Ok(val)
             }
             _ => Err(CodegenError { message: format!("Cannot translate expression: {:?}", expr) })
