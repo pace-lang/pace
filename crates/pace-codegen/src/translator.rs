@@ -1,7 +1,8 @@
 use cranelift::prelude::*;
-use cranelift_module::{Module, FuncId};
+use cranelift_module::{Module, FuncId, DataDescription, Linkage};
 use pace_ast::{Expr, Stmt, BinaryOp};
 use std::collections::HashMap;
+use crate::compiler::ClassLayout;
 use crate::compiler::CodegenError;
 
 pub struct Translator;
@@ -10,6 +11,7 @@ impl Translator {
     pub fn translate_stmt(
         module: &mut impl Module,
         funcs: &HashMap<String, FuncId>,
+        class_layouts: &HashMap<String, ClassLayout>,
         builder: &mut FunctionBuilder,
         stmt: &Stmt,
         variables: &mut HashMap<String, Variable>,
@@ -18,23 +20,23 @@ impl Translator {
         match stmt {
             Stmt::VarDecl { name, initializer, .. } => {
                 let val = if let Some(expr) = initializer {
-                    Self::translate_expr(module, funcs, builder, expr, variables)?
+                    Self::translate_expr(module, funcs, class_layouts, builder, expr, variables, var_index)?
                 } else {
                     builder.ins().iconst(types::I64, 0)
                 };
-                let var = Variable::new(*var_index);
-                builder.declare_var(var, types::I64);
+                let val_ty = builder.func.dfg.value_type(val);
+                let var = builder.declare_var(val_ty);
                 builder.def_var(var, val);
                 variables.insert(name.clone(), var);
                 *var_index += 1;
                 Ok((val, false))
             }
             Stmt::Expr(expr) => {
-                let val = Self::translate_expr(module, funcs, builder, expr, variables)?;
+                let val = Self::translate_expr(module, funcs, class_layouts, builder, expr, variables, var_index)?;
                 Ok((val, false))
             }
             Stmt::If { condition, then_branch, else_branch } => {
-                let cond_val = Self::translate_expr(module, funcs, builder, condition, variables)?;
+                let cond_val = Self::translate_expr(module, funcs, class_layouts, builder, condition, variables, var_index)?;
                 
                 let then_block = builder.create_block();
                 let else_block = builder.create_block();
@@ -45,7 +47,7 @@ impl Translator {
                 // Then
                 builder.switch_to_block(then_block);
                 builder.seal_block(then_block);
-                let (then_res, then_term) = Self::translate_stmt(module, funcs, builder, then_branch, variables, var_index)?;
+                let (then_res, then_term) = Self::translate_stmt(module, funcs, class_layouts, builder, then_branch, variables, var_index)?;
                 if !then_term {
                     builder.ins().jump(merge_block, &[]);
                 }
@@ -53,8 +55,8 @@ impl Translator {
                 // Else
                 builder.switch_to_block(else_block);
                 builder.seal_block(else_block);
-                let (else_res, else_term) = if let Some(elb) = else_branch {
-                    Self::translate_stmt(module, funcs, builder, elb, variables, var_index)?
+                let (_else_res, else_term) = if let Some(elb) = else_branch {
+                    Self::translate_stmt(module, funcs, class_layouts, builder, elb, variables, var_index)?
                 } else {
                     (builder.ins().iconst(types::I64, 0), false)
                 };
@@ -76,12 +78,12 @@ impl Translator {
                 builder.ins().jump(header_block, &[]);
                 builder.switch_to_block(header_block);
                 
-                let cond_val = Self::translate_expr(module, funcs, builder, condition, variables)?;
+                let cond_val = Self::translate_expr(module, funcs, class_layouts, builder, condition, variables, var_index)?;
                 builder.ins().brif(cond_val, body_block, &[], exit_block, &[]);
                 
                 builder.switch_to_block(body_block);
                 builder.seal_block(body_block);
-                let (_, body_term) = Self::translate_stmt(module, funcs, builder, body, variables, var_index)?;
+                let (_, body_term) = Self::translate_stmt(module, funcs, class_layouts, builder, body, variables, var_index)?;
                 if !body_term {
                     builder.ins().jump(header_block, &[]);
                 }
@@ -99,7 +101,7 @@ impl Translator {
                 builder.ins().jump(body_block, &[]);
                 builder.switch_to_block(body_block);
                 
-                let (_, body_term) = Self::translate_stmt(module, funcs, builder, body, variables, var_index)?;
+                let (_, body_term) = Self::translate_stmt(module, funcs, class_layouts, builder, body, variables, var_index)?;
                 if !body_term {
                     builder.ins().jump(body_block, &[]);
                 }
@@ -115,7 +117,7 @@ impl Translator {
                 let mut last_val = builder.ins().iconst(types::I64, 0);
                 let mut terminated = false;
                 for s in stmts {
-                    let (val, term) = Self::translate_stmt(module, funcs, builder, s, variables, var_index)?;
+                    let (val, term) = Self::translate_stmt(module, funcs, class_layouts, builder, s, variables, var_index)?;
                     last_val = val;
                     if term {
                         terminated = true;
@@ -126,7 +128,7 @@ impl Translator {
             }
             Stmt::Return(expr_opt) => {
                 let ret_val = if let Some(expr) = expr_opt {
-                    Self::translate_expr(module, funcs, builder, expr, variables)?
+                    Self::translate_expr(module, funcs, class_layouts, builder, expr, variables, var_index)?
                 } else {
                     builder.ins().iconst(types::I64, 0)
                 };
@@ -140,14 +142,31 @@ impl Translator {
     pub fn translate_expr(
         module: &mut impl Module,
         funcs: &HashMap<String, FuncId>,
+        class_layouts: &HashMap<String, ClassLayout>,
         builder: &mut FunctionBuilder,
         expr: &Expr,
-        variables: &HashMap<String, Variable>,
+        variables: &mut HashMap<String, Variable>,
+        var_index: &mut usize,
     ) -> Result<Value, CodegenError> {
         match expr {
             Expr::IntLiteral(i) => Ok(builder.ins().iconst(types::I64, *i)),
-            Expr::FloatLiteral(_) => Err(CodegenError { message: "Floats not supported yet".into() }),
-            Expr::StringLiteral(_) => Err(CodegenError { message: "Strings not supported yet".into() }),
+            Expr::FloatLiteral(f) => Ok(builder.ins().f64const(*f)),
+            Expr::StringLiteral(s) => {
+                let mut data_ctx = DataDescription::new();
+                let mut bytes = s.clone().into_bytes();
+                bytes.push(0); // Null terminator
+                data_ctx.define(bytes.into_boxed_slice());
+                
+                let string_name = format!("__str_const_{}", *var_index);
+                *var_index += 1;
+                
+                let data_id = module.declare_data(&string_name, Linkage::Local, false, false).unwrap();
+                module.define_data(data_id, &data_ctx).unwrap();
+                
+                let local_id = module.declare_data_in_func(data_id, &mut builder.func);
+                let ptr_ty = module.target_config().pointer_type();
+                Ok(builder.ins().symbol_value(ptr_ty, local_id))
+            }
             Expr::BoolLiteral(b) => {
                 let val = if *b { 1 } else { 0 };
                 Ok(builder.ins().iconst(types::I64, val))
@@ -160,39 +179,154 @@ impl Translator {
                 }
             }
             Expr::Binary { left, op, right } => {
-                let lhs = Self::translate_expr(module, funcs, builder, left, variables)?;
-                let rhs = Self::translate_expr(module, funcs, builder, right, variables)?;
+                let lhs = Self::translate_expr(module, funcs, class_layouts, builder, left, variables, var_index)?;
+                let rhs = Self::translate_expr(module, funcs, class_layouts, builder, right, variables, var_index)?;
+                
+                let ty = builder.func.dfg.value_type(lhs);
+                let is_float = ty == types::F64;
                 
                 match op {
-                    BinaryOp::Add => Ok(builder.ins().iadd(lhs, rhs)),
-                    BinaryOp::Sub => Ok(builder.ins().isub(lhs, rhs)),
-                    BinaryOp::Mul => Ok(builder.ins().imul(lhs, rhs)),
-                    BinaryOp::Div => Ok(builder.ins().sdiv(lhs, rhs)),
+                    BinaryOp::Add => {
+                        if is_float { Ok(builder.ins().fadd(lhs, rhs)) } else { Ok(builder.ins().iadd(lhs, rhs)) }
+                    }
+                    BinaryOp::Sub => {
+                        if is_float { Ok(builder.ins().fsub(lhs, rhs)) } else { Ok(builder.ins().isub(lhs, rhs)) }
+                    }
+                    BinaryOp::Mul => {
+                        if is_float { Ok(builder.ins().fmul(lhs, rhs)) } else { Ok(builder.ins().imul(lhs, rhs)) }
+                    }
+                    BinaryOp::Div => {
+                        if is_float { Ok(builder.ins().fdiv(lhs, rhs)) } else { Ok(builder.ins().sdiv(lhs, rhs)) }
+                    }
                     BinaryOp::Eq => {
-                        let c = builder.ins().icmp(IntCC::Equal, lhs, rhs);
-                        Ok(builder.ins().uextend(types::I64, c))
+                        if is_float {
+                            let c = builder.ins().fcmp(FloatCC::Equal, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        } else {
+                            let c = builder.ins().icmp(IntCC::Equal, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        }
                     }
                     BinaryOp::NotEq => {
-                        let c = builder.ins().icmp(IntCC::NotEqual, lhs, rhs);
-                        Ok(builder.ins().uextend(types::I64, c))
+                        if is_float {
+                            let c = builder.ins().fcmp(FloatCC::NotEqual, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        } else {
+                            let c = builder.ins().icmp(IntCC::NotEqual, lhs, rhs);
+                            Ok(builder.ins().uextend(types::I64, c))
+                        }
                     }
                 }
             }
             Expr::Call { callee, args } => {
                 if let Expr::Identifier(func_name) = &**callee {
-                    if let Some(&func_id) = funcs.get(func_name) {
+                    if func_name == "print" {
+                        let arg_val = Self::translate_expr(module, funcs, class_layouts, builder, &args[0], variables, var_index)?;
+                        let ty = builder.func.dfg.value_type(arg_val);
+                        
+                        let target_name = if ty == types::F64 {
+                            "print_float"
+                        } else if ty == module.target_config().pointer_type() {
+                            "print_string"
+                        } else {
+                            "print_int" // Fallback to int
+                        };
+                        
+                        let func_id = *funcs.get(target_name).unwrap();
+                        let local_func = module.declare_func_in_func(func_id, &mut builder.func);
+                        let call = builder.ins().call(local_func, &[arg_val]);
+                        
+                        let results = builder.inst_results(call);
+                        if results.is_empty() {
+                            return Ok(builder.ins().iconst(types::I64, 0));
+                        } else {
+                            return Ok(results[0]);
+                        }
+                    }
+                    else if let Some(&func_id) = funcs.get(func_name) {
                         let local_func = module.declare_func_in_func(func_id, &mut builder.func);
                         let mut arg_vals = Vec::new();
                         for arg in args {
-                            arg_vals.push(Self::translate_expr(module, funcs, builder, arg, variables)?);
+                            arg_vals.push(Self::translate_expr(module, funcs, class_layouts, builder, arg, variables, var_index)?);
                         }
                         let call = builder.ins().call(local_func, &arg_vals);
-                        return Ok(builder.inst_results(call)[0]);
+                        
+                        let results = builder.inst_results(call);
+                        if results.is_empty() {
+                            return Ok(builder.ins().iconst(types::I64, 0));
+                        } else {
+                            return Ok(results[0]);
+                        }
+                    } else if let Some(layout) = class_layouts.get(func_name) {
+                        let ptr_ty = module.target_config().pointer_type();
+                        
+                        let malloc_id = *funcs.get("malloc").unwrap();
+                        let local_malloc = module.declare_func_in_func(malloc_id, &mut builder.func);
+                        
+                        let size = 8 + layout.fields.len() * 8;
+                        let size_val = builder.ins().iconst(types::I64, size as i64);
+                        
+                        let call = builder.ins().call(local_malloc, &[size_val]);
+                        let obj_ptr = builder.inst_results(call)[0];
+                        
+                        let vtable_gv = module.declare_data_in_func(layout.vtable_id, &mut builder.func);
+                        let vtable_addr = builder.ins().symbol_value(ptr_ty, vtable_gv);
+                        
+                        builder.ins().store(cranelift::prelude::MemFlagsData::new(), vtable_addr, obj_ptr, 0);
+                        
+                        let zero = builder.ins().iconst(types::I64, 0);
+                        for &offset in layout.fields.values() {
+                            builder.ins().store(cranelift::prelude::MemFlagsData::new(), zero, obj_ptr, offset as i32);
+                        }
+                        
+                        return Ok(obj_ptr);
+                    }
+                } else if let Expr::MemberAccess { object, property, .. } = &**callee {
+                    let obj_ptr = Self::translate_expr(module, funcs, class_layouts, builder, object, variables, var_index)?;
+                    let ptr_ty = module.target_config().pointer_type();
+                    
+                    let layout = class_layouts.values().find(|l| l.methods.contains_key(property))
+                        .unwrap_or_else(|| panic!("Method {} not found in any class layout", property));
+                    let m_offset = layout.methods.get(property).unwrap();
+                    
+                    let vtable_ptr = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), obj_ptr, 0);
+                    let method_ptr = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), vtable_ptr, *m_offset as i32);
+                    
+                    let mut sig = module.make_signature();
+                    sig.params.push(AbiParam::new(ptr_ty)); // self
+                    for _ in args {
+                        sig.params.push(AbiParam::new(types::I64));
+                    }
+                    sig.returns.push(AbiParam::new(types::I64));
+                    
+                    let mut arg_vals = vec![obj_ptr];
+                    for arg in args {
+                        arg_vals.push(Self::translate_expr(module, funcs, class_layouts, builder, arg, variables, var_index)?);
+                    }
+                    
+                    let sig_ref = builder.import_signature(sig);
+                    let call = builder.ins().call_indirect(sig_ref, method_ptr, &arg_vals);
+                    
+                    let results = builder.inst_results(call);
+                    if results.is_empty() {
+                        return Ok(builder.ins().iconst(types::I64, 0));
+                    } else {
+                        return Ok(results[0]);
                     }
                 }
                 Err(CodegenError { message: format!("Cannot resolve function call: {:?}", callee) })
             }
-            _ => Err(CodegenError { message: format!("Expression type not supported yet: {:?}", expr) })
+            Expr::MemberAccess { object, property, .. } => {
+                let obj_ptr = Self::translate_expr(module, funcs, class_layouts, builder, object, variables, var_index)?;
+                
+                let layout = class_layouts.values().find(|l| l.fields.contains_key(property))
+                    .unwrap_or_else(|| panic!("Field {} not found in any class layout", property));
+                let f_offset = layout.fields.get(property).unwrap();
+                
+                let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, *f_offset as i32);
+                Ok(val)
+            }
+            _ => Err(CodegenError { message: format!("Cannot translate expression: {:?}", expr) })
         }
     }
 }

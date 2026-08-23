@@ -9,11 +9,12 @@ license.workspace = true
 [dependencies]
 pace-ast = { workspace = true }
 pace-errors = { workspace = true }
-cranelift = { workspace = true }
-cranelift-module = { workspace = true }
-cranelift-jit = { workspace = true }
-cranelift-native = { workspace = true }
-cranelift-object = { workspace = true }
+cranelift = "0.135.0"
+cranelift-module = "0.135.0"
+cranelift-jit = "0.135.0"
+cranelift-native = "0.135.0"
+cranelift-object = "0.135.0"
 object = { workspace = true }
 miette = { workspace = true }
-thiserror = "1.0"
+thiserror = "2.0.20"
+pace-runtime = { version = "0.1.0", path = "../pace-runtime" }

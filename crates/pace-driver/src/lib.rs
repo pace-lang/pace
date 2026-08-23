@@ -6,20 +6,93 @@ pub struct CompilerSession;
 
 impl CompilerSession {
     pub fn new() -> Self {
+        // Ensure pace-runtime is linked in the driver for JIT
+        let _ = pace_runtime::__pace_print_int as *const () as usize;
+        let _ = pace_runtime::__pace_print_float as *const () as usize;
+        let _ = pace_runtime::__pace_print_string as *const () as usize;
+        let _ = pace_runtime::__pace_malloc as *const () as usize;
         Self
     }
 
-    pub fn check_file(&self, path: &str) -> Result<Vec<Stmt>> {
-        let src = std::fs::read_to_string(path)
+
+    fn load_file(&self, path: &std::path::Path, visited: &mut std::collections::HashSet<std::path::PathBuf>) -> Result<Vec<Stmt>> {
+        let path_buf = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        if visited.contains(&path_buf) {
+            return Ok(Vec::new()); // Already loaded, prevent cycles
+        }
+        visited.insert(path_buf.clone());
+
+        let src = std::fs::read_to_string(&path_buf)
             .into_diagnostic()?;
         
-        self.check_source(&src)
+        let mut ast = match pace_parser::parse(&src) {
+            Ok(ast) => ast,
+            Err(err_msg) => {
+                let err = ParseError {
+                    message: format!("In {}:\n{}", path.display(), err_msg),
+                };
+                return Err(Report::new(err));
+            }
+        };
+
+        // Resolve imports recursively
+        let mut final_ast = Vec::new();
+        for stmt in &ast {
+            if let Stmt::Import { path: import_path, .. } = stmt {
+                let resolved_path;
+                
+                if import_path.starts_with("std/") {
+                    if let Ok(stdlib_path) = std::env::var("PACE_STDLIB") {
+                        let path_without_std = import_path.strip_prefix("std/").unwrap();
+                        resolved_path = std::path::Path::new(&stdlib_path).join(format!("{}.pace", path_without_std));
+                    } else if let Ok(home_path) = std::env::var("PACE_HOME") {
+                        let path_without_std = import_path.strip_prefix("std/").unwrap();
+                        resolved_path = std::path::Path::new(&home_path).join("stdlib").join(format!("{}.pace", path_without_std));
+                    } else {
+                        return Err(miette::miette!("Package Error: Standard library not found. Please set PACE_STDLIB or PACE_HOME."));
+                    }
+                } else {
+                    let parent_dir = path_buf.parent().unwrap_or(std::path::Path::new(""));
+                    resolved_path = parent_dir.join(format!("{}.pace", import_path));
+                }
+                
+                if resolved_path.exists() {
+                    let mut imported_ast = self.load_file(&resolved_path, visited)?;
+                    final_ast.append(&mut imported_ast);
+                } else {
+                    return Err(miette::miette!("Cannot find module '{}' at {:?}", import_path, resolved_path));
+                }
+            }
+        }
+        
+        // Append current file's AST after its dependencies
+        final_ast.append(&mut ast);
+
+        Ok(final_ast)
     }
 
+    pub fn check_file(&self, path: &str) -> Result<Vec<Stmt>> {
+        let mut visited = std::collections::HashSet::new();
+        let ast = self.load_file(std::path::Path::new(path), &mut visited)?;
+        
+        // Run typechecker on the merged AST
+        if let Err(type_err) = pace_ty::check(&ast) {
+            return Err(Report::new(type_err));
+        }
+        
+        Ok(ast)
+    }
+    
+
     pub fn run_file(&self, path: &str) -> Result<()> {
-        let src = std::fs::read_to_string(path)
-            .into_diagnostic()?;
-        self.run_source(&src)
+        let ast = self.check_file(path)?;
+        let mut compiler = pace_codegen::JITCompiler::new();
+        
+        compiler.compile_and_run(&ast).map_err(|e| {
+            Report::new(e)
+        })?;
+        
+        Ok(())
     }
 
     pub fn run_source(&self, src: &str) -> Result<()> {
@@ -34,35 +107,46 @@ impl CompilerSession {
     }
 
     pub fn build_file(&self, path: &str, output: &str) -> Result<()> {
-        let src = std::fs::read_to_string(path)
-            .into_diagnostic()?;
-        self.build_source(&src, output)
+        let ast = self.check_file(path)?;
+        self.build_from_ast(&ast, output)
     }
 
     pub fn build_source(&self, src: &str, output: &str) -> Result<()> {
         let ast = self.check_source(src)?;
-        let mut compiler = pace_codegen::AotCompiler::new();
+        self.build_from_ast(&ast, output)
+    }
+    
+    fn build_from_ast(&self, ast: &[Stmt], output: &str) -> Result<()> {
+        let compiler = pace_codegen::AotCompiler::new();
         
-        let obj_bytes = compiler.compile_to_object(&ast).map_err(|e| {
+        let obj_bytes = compiler.compile_to_object(ast).map_err(|e| {
             Report::new(e)
         })?;
         
         let obj_path = format!("{}.o", output);
         std::fs::write(&obj_path, obj_bytes).into_diagnostic()?;
         
-        // Use gcc to link it
-        let status = std::process::Command::new("gcc")
-            .arg(&obj_path)
-            .arg("-o")
-            .arg(output)
-            .status()
-            .into_diagnostic()?;
+        let runtime_path = std::env::current_dir()
+            .unwrap()
+            .join("target/debug/libpace_runtime.a");
+            
+        let mut cmd = std::process::Command::new("gcc");
+        cmd.arg(&obj_path)
+           .arg("-o")
+           .arg(output);
+           
+        if runtime_path.exists() {
+            cmd.arg(&runtime_path);
+        } else {
+            println!("Warning: libpace_runtime.a not found at {:?}", runtime_path);
+        }
+           
+        let status = cmd.status().into_diagnostic()?;
             
         if !status.success() {
             return Err(miette::miette!("Failed to link executable with gcc"));
         }
         
-        // Clean up the object file
         let _ = std::fs::remove_file(obj_path);
         
         Ok(())

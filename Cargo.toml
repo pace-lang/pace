@@ -1,5 +1,6 @@
 [workspace]
-members = ["crates/pace-ast","crates/pace-cli", "crates/pace-codegen", "crates/pace-driver", "crates/pace-errors", "crates/pace-parser", "crates/pace-ty"]
+members = ["crates/pace-ast","crates/pace-cli", "crates/pace-codegen", "crates/pace-driver", "crates/pace-errors", "crates/pace-parser", "crates/pace-runtime", "crates/pace-ty"]
+default-members = ["crates/pace-cli"]
 resolver = "2"
 
 [workspace.package]
@@ -30,4 +31,4 @@ cranelift-module = "0.106.0"
 cranelift-jit = "0.106.0"
 cranelift-native = "0.106.0"
 cranelift-object = "0.106.0"
-object = { version = "0.33", default-features = false }
+object = { version = "0.40", default-features = false }

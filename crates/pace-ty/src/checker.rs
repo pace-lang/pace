@@ -139,6 +139,20 @@ impl TypeChecker {
                     };
                     self.env.register_class(name.clone(), sig);
                 }
+                Stmt::Import { path, items: _ } => {
+                    // Basic placeholder for module resolution.
+                    // For now, if we import "std/collection", we mock registering `List` and `Set`
+                    if path == "std/collection" {
+                        self.env.register_class("List".to_string(), ClassSignature {
+                            fields: HashMap::new(),
+                            methods: HashMap::new(),
+                        });
+                        self.env.register_class("Set".to_string(), ClassSignature {
+                            fields: HashMap::new(),
+                            methods: HashMap::new(),
+                        });
+                    }
+                }
                 _ => {}
             }
         }
@@ -241,7 +255,7 @@ impl TypeChecker {
                     self.check_stmt(body)?;
                 }
             }
-            Stmt::FuncDecl { name, params, body, return_type, .. } => {
+            Stmt::FuncDecl { name: _, params, body, return_type, .. } => {
                 let prev_return = self.current_return_type.clone();
                 
                 let ret_ty = if let Some(rt) = return_type {
@@ -278,8 +292,8 @@ impl TypeChecker {
                     // Check if class actually implements the interface
                     if let Some(iface_sig) = self.env.classes.get(iface_name) {
                         let class_sig = self.env.classes.get(name).unwrap().clone();
-                        for (m_name, expected_sig) in &iface_sig.methods {
-                            if let Some(actual_sig) = class_sig.methods.get(m_name) {
+                        for (m_name, _expected_sig) in &iface_sig.methods {
+                            if let Some(_actual_sig) = class_sig.methods.get(m_name) {
                                 // For simplicity, we just check if it exists right now
                                 // In a full compiler, we'd check parameter counts and types
                             } else {
@@ -305,6 +319,7 @@ impl TypeChecker {
             }
             Stmt::InterfaceDecl { .. } => {}
             Stmt::StructDecl { .. } => {}
+            Stmt::Import { .. } => {}
         }
         Ok(())
     }
@@ -382,7 +397,15 @@ impl TypeChecker {
                                 message: format!("Function '{}' expects {} arguments, got {}", func_name, sig.params.len(), args.len())
                             });
                         }
-                        // We could check each arg type here
+                        
+                        for (i, arg_ty) in arg_types.iter().enumerate() {
+                            let expected_ty = &sig.params[i];
+                            if expected_ty != &Type::Any && expected_ty != arg_ty {
+                                return Err(TypeError {
+                                    message: format!("Type mismatch in argument {}: expected {:?}, got {:?}", i + 1, expected_ty, arg_ty)
+                                });
+                            }
+                        }
                         return Ok(sig.return_type.clone());
                     }
                 }
@@ -392,7 +415,7 @@ impl TypeChecker {
                 // Since our MemberAccess doesn't return FunctionSignature yet, we just return Unknown
                 Ok(Type::Unknown)
             }
-            Expr::MemberAccess { object, property } => {
+            Expr::MemberAccess { object, property, .. } => {
                 let obj_ty = self.check_expr(object)?;
                 
                 if let Type::Custom(class_name) = obj_ty {

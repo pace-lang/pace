@@ -1,9 +1,9 @@
 use cranelift::prelude::*;
 use cranelift_object::{ObjectBuilder, ObjectModule};
-use cranelift_module::{Module, Linkage, FuncId};
-use pace_ast::{Stmt, Expr};
+use cranelift_module::{Module, FuncId, Linkage, DataDescription};
+use pace_ast::Stmt;
 use std::collections::HashMap;
-use crate::compiler::CodegenError;
+use crate::compiler::{CodegenError, ClassLayout};
 use crate::translator::Translator;
 
 pub struct AotCompiler {
@@ -11,6 +11,7 @@ pub struct AotCompiler {
     ctx: codegen::Context,
     module: ObjectModule,
     funcs: HashMap<String, FuncId>,
+    class_layouts: HashMap<String, ClassLayout>,
 }
 
 impl AotCompiler {
@@ -33,17 +34,111 @@ impl AotCompiler {
             cranelift_module::default_libcall_names()
         ).unwrap();
         
-        let module = ObjectModule::new(builder);
+        let mut module = ObjectModule::new(builder);
+
+        let mut sig_int = module.make_signature();
+        sig_int.params.push(AbiParam::new(types::I64));
+        let print_int_id = module.declare_function("__pace_print_int", Linkage::Import, &sig_int).unwrap();
+        
+        let mut sig_float = module.make_signature();
+        sig_float.params.push(AbiParam::new(types::F64));
+        let print_float_id = module.declare_function("__pace_print_float", Linkage::Import, &sig_float).unwrap();
+        
+        let ptr_ty = module.target_config().pointer_type();
+        let mut sig_string = module.make_signature();
+        sig_string.params.push(AbiParam::new(ptr_ty));
+        let print_string_id = module.declare_function("__pace_print_string", Linkage::Import, &sig_string).unwrap();
+
+        let mut sig_malloc = module.make_signature();
+        sig_malloc.params.push(AbiParam::new(types::I64));
+        sig_malloc.returns.push(AbiParam::new(ptr_ty));
+        let malloc_id = module.declare_function("__pace_malloc", Linkage::Import, &sig_malloc).unwrap();
+
+        let mut funcs = HashMap::new();
+        funcs.insert("print_int".to_string(), print_int_id);
+        funcs.insert("print_float".to_string(), print_float_id);
+        funcs.insert("print_string".to_string(), print_string_id);
+        funcs.insert("malloc".to_string(), malloc_id);
 
         Self {
             builder_context: FunctionBuilderContext::new(),
             ctx: module.make_context(),
             module,
-            funcs: HashMap::new(),
+            funcs,
+            class_layouts: HashMap::new(),
         }
     }
 
+    fn register_classes(&mut self, stmts: &[Stmt]) -> Result<(), CodegenError> {
+        let ptr_ty = self.module.target_config().pointer_type();
+        
+        for stmt in stmts {
+            if let Stmt::ClassDecl { name: class_name, fields, methods, .. } = stmt {
+                let mut field_map = HashMap::new();
+                let mut offset = 8; // Offset 0 is VTable ptr
+                for field in fields {
+                    if let Stmt::VarDecl { name: field_name, .. } = field {
+                        field_map.insert(field_name.clone(), offset);
+                        offset += 8;
+                    }
+                }
+                
+                let mut method_map = HashMap::new();
+                let mut m_offset = 0;
+                let mut vtable_funcs = Vec::new();
+                
+                for method_stmt in methods {
+                    if let Stmt::FuncDecl { name: method_name, params, .. } = method_stmt {
+                        method_map.insert(method_name.clone(), m_offset);
+                        m_offset += 8;
+                        
+                        let full_name = format!("{}_{}", class_name, method_name);
+                        let mut sig = self.module.make_signature();
+                        sig.params.push(AbiParam::new(ptr_ty)); // self
+                        for _ in params {
+                            sig.params.push(AbiParam::new(types::I64));
+                        }
+                        sig.returns.push(AbiParam::new(types::I64));
+                        
+                        let id = self.module.declare_function(&full_name, Linkage::Local, &sig)
+                            .map_err(|e| CodegenError { message: e.to_string() })?;
+                        self.funcs.insert(full_name.clone(), id);
+                        vtable_funcs.push(id);
+                    }
+                }
+                
+                let vtable_name = format!("__vtable_{}", class_name);
+                let vtable_id = self.module.declare_data(&vtable_name, Linkage::Local, false, false)
+                    .map_err(|e| CodegenError { message: e.to_string() })?;
+                    
+                let mut data_ctx = DataDescription::new();
+                data_ctx.define_zeroinit(m_offset);
+                
+                let mut current_offset = 0;
+                for &func_id in &vtable_funcs {
+                    let func_ref = self.module.declare_func_in_data(func_id, &mut data_ctx);
+                    data_ctx.write_function_addr(current_offset as u32, func_ref);
+                    current_offset += 8;
+                }
+                
+                self.module.define_data(vtable_id, &data_ctx)
+                    .map_err(|e| CodegenError { message: e.to_string() })?;
+                    
+                let layout = ClassLayout {
+                    name: class_name.clone(),
+                    fields: field_map,
+                    methods: method_map,
+                    vtable_id,
+                };
+                self.class_layouts.insert(class_name.clone(), layout);
+            }
+        }
+        Ok(())
+    }
+
     pub fn compile_to_object(mut self, stmts: &[Stmt]) -> Result<Vec<u8>, CodegenError> {
+        self.register_classes(stmts)?;
+
         // Pass 1: Declare all functions
         for stmt in stmts {
             if let Stmt::FuncDecl { name, params, .. } = stmt {
@@ -53,7 +148,7 @@ impl AotCompiler {
                 }
                 sig.returns.push(AbiParam::new(types::I64));
                 
-                // If the function is `main`, export it so C linker can find it!
+                // main must be exported, others can be local
                 let linkage = if name == "main" { Linkage::Export } else { Linkage::Local };
                 
                 let id = self.module.declare_function(name, linkage, &sig)
@@ -62,11 +157,26 @@ impl AotCompiler {
             }
         }
 
-        // Pass 2: Define all functions
+        // Pass 2: Define all functions and class methods
         for stmt in stmts {
             if let Stmt::FuncDecl { name, params, body, .. } = stmt {
                 let id = *self.funcs.get(name).unwrap();
                 self.compile_function(name, params, body, id)?;
+            } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
+                for method_stmt in methods {
+                    if let Stmt::FuncDecl { name, params, body, .. } = method_stmt {
+                        let full_name = format!("{}_{}", class_name, name);
+                        let id = *self.funcs.get(&full_name).unwrap();
+                        
+                        let mut new_params = vec![pace_ast::Param {
+                            name: "self".to_string(),
+                            type_annotation: class_name.clone(),
+                        }];
+                        new_params.extend(params.clone());
+                        
+                        self.compile_function(&full_name, &new_params, body, id)?;
+                    }
+                }
             }
         }
 
@@ -99,8 +209,7 @@ impl AotCompiler {
 
         for (i, param) in params.iter().enumerate() {
             let val = builder.block_params(entry_block)[i];
-            let var = Variable::new(var_index);
-            builder.declare_var(var, types::I64);
+            let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
             variables.insert(param.name.clone(), var);
             var_index += 1;
@@ -109,7 +218,7 @@ impl AotCompiler {
         let mut last_val = None;
         let mut terminated = false;
         for stmt in body {
-            let (val, term) = Translator::translate_stmt(&mut self.module, &self.funcs, &mut builder, stmt, &mut variables, &mut var_index)?;
+            let (val, term) = Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &mut builder, stmt, &mut variables, &mut var_index)?;
             last_val = Some(val);
             if term {
                 terminated = true;
@@ -122,7 +231,7 @@ impl AotCompiler {
             builder.ins().return_(&[ret]);
         }
         
-        builder.finalize();
+        builder.finalize(self.module.target_config());
         
         self.module
             .define_function(func_id, &mut self.ctx)

@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use miette::{Result, IntoDiagnostic};
+use miette::Result;
 use pace_driver::CompilerSession;
 
 #[derive(Parser)]
@@ -54,7 +54,6 @@ fn main() -> Result<()> {
             println!("✅ Build complete!");
         }
         Commands::Run { file } => {
-            println!("Compiling and running {}...", file);
             session.run_file(&file)?;
         }
     }

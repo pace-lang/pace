@@ -27,6 +27,7 @@ pub enum Expr {
     MemberAccess {
         object: Box<Expr>,
         property: String,
+        computed_class: Option<String>,
     },
 }
 

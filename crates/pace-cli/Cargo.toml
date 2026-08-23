@@ -10,3 +10,7 @@ license.workspace = true
 clap = { workspace = true }
 miette = { workspace = true }
 pace-driver = { workspace = true }
+
+[[bin]]
+name = "pace"
+path = "src/main.rs"

@@ -11,6 +11,7 @@ pub enum Type {
     Custom(String),
     Unknown, // Used for auto-inference before resolution or error state
     Void,    // Used for functions that don't return anything
+    Any,     // Used for built-ins like print that take multiple types
 }
 
 #[derive(Debug, Clone)]
@@ -34,11 +35,24 @@ pub struct Environment {
 
 impl Environment {
     pub fn new() -> Self {
-        Self {
+        let mut e = Self {
             scopes: vec![HashMap::new()], // Start with a global scope
             functions: HashMap::new(),
             classes: HashMap::new(),
-        }
+        };
+        e.inject_prelude();
+        e
+    }
+
+    fn inject_prelude(&mut self) {
+        // Inject built-in print function
+        self.register_function(
+            "print".to_string(),
+            FunctionSignature {
+                params: vec![Type::Any], // Accept any type
+                return_type: Type::Void,
+            },
+        );
     }
 
     pub fn push_scope(&mut self) {

@@ -66,6 +66,11 @@ pub enum Stmt {
     Match {
         expr: Expr,
         arms: Vec<(Expr, Box<Stmt>)>,
+    },
+    /// An import statement
+    Import {
+        path: String,
+        items: Option<Vec<String>>,
     }
 }
 
