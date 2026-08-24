@@ -126,13 +126,20 @@ impl CompilerSession {
         match pace_ty::check(&mono_ast) {
             Ok(warnings) => {
                 for mut warning in warnings {
+                    let mut is_valid_span = true;
                     match &mut warning {
-                        pace_errors::SemanticWarning::NamingConvention { src: s, .. } |
-                        pace_errors::SemanticWarning::UnusedItem { src: s, .. } => {
-                            *s = miette::NamedSource::new(path_buf.display().to_string(), src.clone());
+                        pace_errors::SemanticWarning::NamingConvention { src: s, span, .. } |
+                        pace_errors::SemanticWarning::UnusedItem { src: s, span, .. } => {
+                            if span.0 + span.1 <= src.len() {
+                                *s = miette::NamedSource::new(path_buf.display().to_string(), src.clone());
+                            } else {
+                                is_valid_span = false;
+                            }
                         }
                     }
-                    eprintln!("{:?}", miette::Report::new(warning));
+                    if is_valid_span {
+                        eprintln!("{:?}", miette::Report::new(warning));
+                    }
                 }
             }
             Err(type_errors) => {
@@ -201,19 +208,35 @@ impl CompilerSession {
         std::fs::write(&obj_path, obj_bytes).into_diagnostic()?;
         
         let mut runtime_path = None;
-        let base_dir = if let Ok(home) = std::env::var("PACE_HOME") {
-            std::path::PathBuf::from(home)
-        } else {
-            std::env::current_dir().unwrap()
-        };
+        if let Ok(home) = std::env::var("PACE_HOME") {
+            let base_dir = std::path::PathBuf::from(home);
+            let debug_path = base_dir.join("target/debug/libpace_runtime.a");
+            let release_path = base_dir.join("target/release/libpace_runtime.a");
+            if debug_path.exists() { runtime_path = Some(debug_path); }
+            else if release_path.exists() { runtime_path = Some(release_path); }
+        } else if let Ok(exe_path) = std::env::current_exe() {
+            // exe_path is something like target/debug/pace
+            // We want to look in the same directory as the executable
+            if let Some(parent) = exe_path.parent() {
+                let runtime_a = parent.join("libpace_runtime.a");
+                if runtime_a.exists() {
+                    runtime_path = Some(runtime_a);
+                }
+            }
+        }
         
-        let debug_path = base_dir.join("target/debug/libpace_runtime.a");
-        let release_path = base_dir.join("target/release/libpace_runtime.a");
-        
-        if debug_path.exists() {
-            runtime_path = Some(debug_path);
-        } else if release_path.exists() {
-            runtime_path = Some(release_path);
+        // Fallback to current directory if not found yet (for development)
+        if runtime_path.is_none() {
+            let current = std::env::current_dir().unwrap();
+            let debug_path = current.join("target/debug/libpace_runtime.a");
+            let release_path = current.join("target/release/libpace_runtime.a");
+            
+            // Try parent directory as well (if running from examples/)
+            let parent_debug = current.parent().unwrap().parent().unwrap().join("target/debug/libpace_runtime.a");
+            
+            if debug_path.exists() { runtime_path = Some(debug_path); }
+            else if release_path.exists() { runtime_path = Some(release_path); }
+            else if parent_debug.exists() { runtime_path = Some(parent_debug); }
         }
             
         let mut cmd = std::process::Command::new("gcc");
@@ -261,13 +284,20 @@ impl CompilerSession {
         match pace_ty::check(&mono_ast) {
             Ok(warnings) => {
                 for mut warning in warnings {
+                    let mut is_valid_span = true;
                     match &mut warning {
-                        pace_errors::SemanticWarning::NamingConvention { src: s, .. } |
-                        pace_errors::SemanticWarning::UnusedItem { src: s, .. } => {
-                            *s = miette::NamedSource::new("source", src.to_string());
+                        pace_errors::SemanticWarning::NamingConvention { src: s, span, .. } |
+                        pace_errors::SemanticWarning::UnusedItem { src: s, span, .. } => {
+                            if span.0 + span.1 <= src.len() {
+                                *s = miette::NamedSource::new("source", src.to_string());
+                            } else {
+                                is_valid_span = false;
+                            }
                         }
                     }
-                    eprintln!("{:?}", miette::Report::new(warning));
+                    if is_valid_span {
+                        eprintln!("{:?}", miette::Report::new(warning));
+                    }
                 }
             }
             Err(type_errors) => {

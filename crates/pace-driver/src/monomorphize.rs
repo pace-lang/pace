@@ -27,12 +27,11 @@ impl Monomorphizer {
         let mut final_ast = Vec::new();
         // Pass 1: Extract all generic class and interface declarations
         for stmt in ast {
-            if let Stmt::ClassDecl { name, generic_params, .. } = &stmt {
-                if generic_params.is_some() {
+            if let Stmt::ClassDecl { name, generic_params, .. } = &stmt
+                && generic_params.is_some() {
                     mono.generic_classes.insert(name.clone(), stmt.clone());
                     continue;
                 }
-            }
             if let Stmt::InterfaceDecl { name, generic_params, .. } = &stmt {
                 mono.all_interfaces.insert(name.clone(), stmt.clone());
                 if generic_params.is_some() {
@@ -40,15 +39,19 @@ impl Monomorphizer {
                     continue;
                 }
             }
+            if let Stmt::EnumDecl { name, generic_params, .. } = &stmt
+                && generic_params.is_some() {
+                    mono.generic_classes.insert(name.clone(), stmt.clone());
+                    continue;
+                }
             if let Stmt::Module { name, body } = stmt {
                 let mut new_body = Vec::new();
                 for inner_stmt in body {
-                    if let Stmt::ClassDecl { name: cname, generic_params, .. } = &inner_stmt {
-                        if generic_params.is_some() {
+                    if let Stmt::ClassDecl { name: cname, generic_params, .. } = &inner_stmt
+                        && generic_params.is_some() {
                             mono.generic_classes.insert(cname.clone(), inner_stmt.clone());
                             continue;
                         }
-                    }
                     if let Stmt::InterfaceDecl { name: iname, generic_params, .. } = &inner_stmt {
                         mono.all_interfaces.insert(iname.clone(), inner_stmt.clone());
                         if generic_params.is_some() {
@@ -56,6 +59,11 @@ impl Monomorphizer {
                             continue;
                         }
                     }
+                    if let Stmt::EnumDecl { name: ename, generic_params, .. } = &inner_stmt
+                        && generic_params.is_some() {
+                            mono.generic_classes.insert(ename.clone(), inner_stmt.clone());
+                            continue;
+                        }
                     new_body.push(inner_stmt);
                 }
                 final_ast.push(Stmt::Module { name, body: new_body });
@@ -153,8 +161,8 @@ impl Monomorphizer {
                     let iface_decl_opt = self.generated_classes.get(&imp.name).or_else(|| self.all_interfaces.get(&imp.name)).cloned();
                     if let Some(Stmt::InterfaceDecl { methods: iface_methods, .. }) = iface_decl_opt {
                         for iface_method in iface_methods {
-                            if let Stmt::FuncDecl { name: iface_m_name, body: iface_m_body, .. } = &iface_method {
-                                if !iface_m_body.is_empty() {
+                            if let Stmt::FuncDecl { name: iface_m_name, body: iface_m_body, .. } = &iface_method
+                                && !iface_m_body.is_empty() {
                                     let already_implemented = new_methods.iter().any(|m| {
                                         if let Stmt::FuncDecl { name: cls_m_name, .. } = m {
                                             cls_m_name == iface_m_name
@@ -166,7 +174,6 @@ impl Monomorphizer {
                                         new_methods.push(iface_method.clone());
                                     }
                                 }
-                            }
                         }
                     }
                 }
@@ -198,6 +205,34 @@ impl Monomorphizer {
                     name: concrete_name.clone(),
                     generic_params: None, // It's concrete now!
                     methods: new_methods,
+                };
+                self.generated_classes.insert(concrete_name, instantiated);
+            }
+            Stmt::EnumDecl { name: _, generic_params, variants } => {
+                let params = generic_params.unwrap();
+                let mut type_mapping = HashMap::new();
+                for (i, p) in params.iter().enumerate() {
+                    if let Some(arg) = concrete_args.get(i) {
+                        type_mapping.insert(p.clone(), arg.clone());
+                    }
+                }
+                
+                let mut new_variants = Vec::new();
+                for v in variants {
+                    let mut new_v = v.clone();
+                    if let Some(fields) = &mut new_v.fields {
+                        for field_ty in fields {
+                            self.replace_types(field_ty, &type_mapping)?;
+                            self.rewrite_type_annotation(field_ty)?;
+                        }
+                    }
+                    new_variants.push(new_v);
+                }
+                
+                let instantiated = Stmt::EnumDecl {
+                    name: concrete_name.clone(),
+                    generic_params: None, // It's concrete now!
+                    variants: new_variants,
                 };
                 self.generated_classes.insert(concrete_name, instantiated);
             }
@@ -355,8 +390,8 @@ impl Monomorphizer {
                     let iface_decl_opt = self.generated_classes.get(&imp.name).or_else(|| self.all_interfaces.get(&imp.name)).cloned();
                     if let Some(Stmt::InterfaceDecl { methods: iface_methods, .. }) = iface_decl_opt {
                         for iface_method in iface_methods {
-                            if let Stmt::FuncDecl { name: iface_m_name, body: iface_m_body, .. } = &iface_method {
-                                if !iface_m_body.is_empty() {
+                            if let Stmt::FuncDecl { name: iface_m_name, body: iface_m_body, .. } = &iface_method
+                                && !iface_m_body.is_empty() {
                                     let already_implemented = methods.iter().any(|m| {
                                         if let Stmt::FuncDecl { name: cls_m_name, .. } = m {
                                             cls_m_name == iface_m_name
@@ -368,7 +403,6 @@ impl Monomorphizer {
                                         methods.push(iface_method.clone());
                                     }
                                 }
-                            }
                         }
                     }
                 }
@@ -376,6 +410,21 @@ impl Monomorphizer {
             Stmt::InterfaceDecl { methods, .. } => {
                 for m in methods {
                     *m = self.rewrite_stmt(m.clone())?;
+                }
+            }
+            Stmt::EnumDecl { variants, .. } => {
+                for v in variants {
+                    if let Some(fields) = &mut v.fields {
+                        for ty in fields {
+                            self.rewrite_type_annotation(ty)?;
+                        }
+                    }
+                }
+            }
+            Stmt::Match { expr, arms } => {
+                self.rewrite_expr(expr)?;
+                for (_, body) in arms {
+                    **body = self.rewrite_stmt(*body.clone())?;
                 }
             }
             Stmt::Expr(expr) => self.rewrite_expr(expr)?,
@@ -416,11 +465,10 @@ impl Monomorphizer {
                 // Convert to a simple identifier and instantiate the class
                 if let Expr::Identifier(name) = &**callee {
                     let concrete_name = Self::generate_name(name, generic_args);
-                    if !self.generated_classes.contains_key(&concrete_name) {
-                        if let Some(generic_decl) = self.generic_classes.get(name).cloned() {
+                    if !self.generated_classes.contains_key(&concrete_name)
+                        && let Some(generic_decl) = self.generic_classes.get(name).cloned() {
                             let _ = self.instantiate_class(generic_decl, concrete_name.clone(), generic_args);
                         }
-                    }
                     *expr = Expr::Identifier(concrete_name);
                 }
             }

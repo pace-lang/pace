@@ -549,6 +549,8 @@ impl TypeChecker {
                             Ok(Type::Struct(name.clone()))
                         } else if self.env.classes.contains_key(name) {
                             Ok(Type::Class(name.clone()))
+                        } else if self.env.enums.contains_key(name) {
+                            Ok(Type::Enum(name.clone()))
                         } else {
                             Err(TypeError {
                                 message: format!("Undefined variable '{}'", name)
@@ -648,7 +650,10 @@ impl TypeChecker {
                 } else if let Type::Struct(name) = &callee_ty
                     && let Some(_sig) = self.env.structs.get(name) {
                         return Ok(Type::Struct(name.clone()));
-                    }
+                } else if let Type::Enum(name) = &callee_ty
+                    && let Some(_sig) = self.env.enums.get(name) {
+                        return Ok(Type::Enum(name.clone()));
+                }
                 
                 // If it's a function or method, we need its signature
                 // Currently, callee_ty might just be Type::Unknown if it was a MemberAccess
@@ -699,6 +704,17 @@ impl TypeChecker {
                             message: format!("Type '{}' is not defined", name)
                         })?;
                         (name, sig)
+                    },
+                    Type::Enum(ref name) => {
+                        let sig = self.env.enums.get(name).ok_or_else(|| TypeError {
+                            message: format!("Enum '{}' is not defined", name)
+                        })?;
+                        if sig.variants.contains_key(property) {
+                            return Ok(Type::Enum(name.clone()));
+                        }
+                        return Err(TypeError {
+                            message: format!("Enum '{}' has no variant '{}'", name, property)
+                        });
                     },
                     _ => {
                         return Err(TypeError {
@@ -835,8 +851,8 @@ impl TypeChecker {
                 }
                 Ok(())
             },
-            pace_ast::Pattern::Variable(name) => {
-                self.env.define(name.clone(), expected_type.clone(), (0, 0), false);
+            pace_ast::Pattern::Variable(name, span) => {
+                self.env.define(name.clone(), expected_type.clone(), *span, false);
                 Ok(())
             },
             pace_ast::Pattern::Variant { enum_name: _, variant_name: _, fields } => {

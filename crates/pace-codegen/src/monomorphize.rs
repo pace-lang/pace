@@ -136,6 +136,12 @@ pub struct MonomorphizationPass {
     instantiated: HashSet<String>, // specialized names like "Box_Int"
 }
 
+impl Default for MonomorphizationPass {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MonomorphizationPass {
     pub fn new() -> Self {
         Self {
@@ -176,7 +182,7 @@ impl MonomorphizationPass {
 
         // Pass 3: Process the queue
         while let Some((template_name, args)) = self.queue.pop() {
-            let specialized_name = format!("{}_{}", template_name, args.iter().map(|a| Self::flatten_type_name(a)).collect::<Vec<_>>().join("_"));
+            let specialized_name = format!("{}_{}", template_name, args.iter().map(Self::flatten_type_name).collect::<Vec<_>>().join("_"));
             
             if self.instantiated.contains(&specialized_name) {
                 continue;

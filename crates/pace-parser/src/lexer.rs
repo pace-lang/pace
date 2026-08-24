@@ -31,6 +31,7 @@ pub enum Token {
     Loop,
     Match,
     Arrow,
+    FatArrow,
     Comma,
     Colon,
     ColonColon,
@@ -171,6 +172,9 @@ impl<'a> Lexer<'a> {
                     if self.peek() == Some(&'=') {
                         self.advance();
                         Token::EqEq
+                    } else if self.peek() == Some(&'>') {
+                        self.advance();
+                        Token::FatArrow
                     } else {
                         Token::Eq
                     }

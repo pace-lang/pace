@@ -56,7 +56,6 @@ class List<T> implement Iterable<T> {
         }
         return ptr_load(self.ptr, idx * 8);
     }
-    
     func length() -> Int {
         return self.len;
     }

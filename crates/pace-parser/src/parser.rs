@@ -301,7 +301,7 @@ impl<'a> Parser<'a> {
                     })
                 } else {
                     // Lowercase without parenthesis -> Variable binding
-                    Ok(pace_ast::Pattern::Variable(variant_name))
+                    Ok(pace_ast::Pattern::Variable(variant_name, self.current_span))
                 }
             },
             Token::Int(_) | Token::Float(_) | Token::String(_) | Token::Bool(_) => {
@@ -323,7 +323,7 @@ impl<'a> Parser<'a> {
         let mut arms = Vec::new();
         while self.current_token != Token::RBrace && self.current_token != Token::Eof {
             let pattern = self.parse_pattern()?;
-            if !self.match_token(Token::Arrow) {
+            if !self.match_token(Token::FatArrow) && !self.match_token(Token::Arrow) {
                 return Err(("Expected '=>' after match pattern".to_string(), self.current_span));
             }
             let body = Box::new(self.parse_stmt()?);
@@ -909,6 +909,17 @@ impl<'a> Parser<'a> {
                 let property = match &self.current_token {
                     Token::Ident(id) => id.clone(),
                     _ => return Err(("Expected property name after '.'".to_string(), self.current_span)),
+                };
+                self.advance();
+                expr = Expr::MemberAccess {
+                    object: Box::new(expr),
+                    property,
+                    computed_class: None,
+                };
+            } else if self.match_token(Token::ColonColon) {
+                let property = match &self.current_token {
+                    Token::Ident(id) => id.clone(),
+                    _ => return Err(("Expected variant name after '::'".to_string(), self.current_span)),
                 };
                 self.advance();
                 expr = Expr::MemberAccess {

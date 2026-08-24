@@ -123,8 +123,8 @@ pub enum Pattern {
     Wildcard,
     /// A literal match (e.g. `5`, `"hello"`)
     Literal(Expr),
-    /// A variable binding (e.g. `x`)
-    Variable(String),
+    /// A variable binding (e.g. `x`) with a span
+    Variable(String, (usize, usize)),
     /// An enum variant pattern (e.g. `Some(x)`)
     Variant {
         enum_name: Option<String>,
