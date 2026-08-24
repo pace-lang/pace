@@ -1,4 +1,4 @@
-use pace_ast::{Expr, Stmt, BinaryOp, Param, Visibility};
+use pace_ast::{Expr, Stmt, BinaryOp, Param, Visibility, TypeAnnotation};
 use crate::lexer::{Lexer, Token};
 
 pub struct Parser<'a> {
@@ -115,6 +115,58 @@ impl<'a> Parser<'a> {
                 Ok(Stmt::Expr(expr))
             }
         }
+    }
+
+    fn parse_generic_params(&mut self) -> Result<Option<Vec<String>>, (String, (usize, usize))> {
+        if self.match_token(Token::Less) {
+            let mut params = Vec::new();
+            while self.current_token != Token::Greater && self.current_token != Token::Eof {
+                if let Token::Ident(id) = &self.current_token {
+                    params.push(id.clone());
+                    self.advance();
+                } else {
+                    return Err(("Expected generic parameter name".to_string(), self.current_span));
+                }
+                if !self.match_token(Token::Comma) {
+                    break;
+                }
+            }
+            if !self.match_token(Token::Greater) {
+                return Err(("Expected '>' after generic parameters".to_string(), self.current_span));
+            }
+            Ok(Some(params))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn parse_type_annotation(&mut self) -> Result<TypeAnnotation, (String, (usize, usize))> {
+        let name = match &self.current_token {
+            Token::Ident(id) => id.clone(),
+            _ => return Err(("Expected type name".to_string(), self.current_span)),
+        };
+        self.advance();
+
+        let mut args = Vec::new();
+        if self.match_token(Token::Less) {
+            while self.current_token != Token::Greater && self.current_token != Token::Eof {
+                args.push(self.parse_type_annotation()?);
+                if !self.match_token(Token::Comma) {
+                    break;
+                }
+            }
+            if !self.match_token(Token::Greater) {
+                return Err(("Expected '>' after generic arguments".to_string(), self.current_span));
+            }
+        }
+
+        let is_nullable = self.match_token(Token::Question);
+
+        Ok(TypeAnnotation {
+            name,
+            args,
+            is_nullable,
+        })
     }
 
     fn parse_block(&mut self) -> Result<Stmt, (String, (usize, usize))> {
@@ -270,6 +322,8 @@ impl<'a> Parser<'a> {
         };
         self.advance();
 
+        let generic_params = self.parse_generic_params()?;
+
         if !self.match_token(Token::LParen) {
             return Err(("Expected '(' after function name".to_string(), self.current_span));
         }
@@ -287,14 +341,7 @@ impl<'a> Parser<'a> {
                     return Err(("Expected ':' after parameter name".to_string(), self.current_span));
                 }
 
-                let mut param_type = match &self.current_token {
-                    Token::Ident(id) => id.clone(),
-                    _ => return Err(("Expected parameter type".to_string(), self.current_span)),
-                };
-                self.advance();
-                if self.match_token(Token::Question) {
-                    param_type.push('?');
-                }
+                let param_type = self.parse_type_annotation()?;
 
                 params.push(Param {
                     name: param_name,
@@ -313,15 +360,7 @@ impl<'a> Parser<'a> {
 
         let mut return_type = None;
         if self.match_token(Token::Arrow) {
-            let mut ret_type = match &self.current_token {
-                Token::Ident(id) => id.clone(),
-                _ => return Err(("Expected return type after '->'".to_string(), self.current_span)),
-            };
-            self.advance();
-            if self.match_token(Token::Question) {
-                ret_type.push('?');
-            }
-            return_type = Some(ret_type);
+            return_type = Some(self.parse_type_annotation()?);
         }
 
         if !self.match_token(Token::LBrace) {
@@ -345,6 +384,7 @@ impl<'a> Parser<'a> {
 
         Ok(Stmt::FuncDecl {
             name,
+            generic_params,
             params,
             return_type,
             body,
@@ -363,13 +403,11 @@ impl<'a> Parser<'a> {
         };
         self.advance();
 
+        let generic_params = self.parse_generic_params()?;
+
         let mut implements = None;
         if self.match_token(Token::Implement) {
-            implements = match &self.current_token {
-                Token::Ident(id) => Some(id.clone()),
-                _ => return Err(("Expected interface name after 'implement'".to_string(), self.current_span)),
-            };
-            self.advance();
+            implements = Some(self.parse_type_annotation()?);
         }
 
         if !self.match_token(Token::LBrace) {
@@ -404,6 +442,7 @@ impl<'a> Parser<'a> {
 
         Ok(Stmt::ClassDecl {
             name,
+            generic_params,
             fields,
             methods,
             implements,
@@ -418,6 +457,8 @@ impl<'a> Parser<'a> {
             _ => return Err(("Expected interface name".to_string(), self.current_span)),
         };
         self.advance();
+
+        let generic_params = self.parse_generic_params()?;
 
         if !self.match_token(Token::LBrace) {
             return Err(("Expected '{' before interface body".to_string(), self.current_span));
@@ -455,14 +496,7 @@ impl<'a> Parser<'a> {
                         return Err(("Expected ':' after parameter name".to_string(), self.current_span));
                     }
 
-                    let mut param_type = match &self.current_token {
-                        Token::Ident(id) => id.clone(),
-                        _ => return Err(("Expected parameter type".to_string(), self.current_span)),
-                    };
-                    self.advance();
-                    if self.match_token(Token::Question) {
-                        param_type.push('?');
-                    }
+                    let param_type = self.parse_type_annotation()?;
 
                     params.push(Param {
                         name: param_name,
@@ -481,19 +515,12 @@ impl<'a> Parser<'a> {
 
             let mut return_type = None;
             if self.match_token(Token::Arrow) {
-                let mut ret_type = match &self.current_token {
-                    Token::Ident(id) => id.clone(),
-                    _ => return Err(("Expected return type after '->'".to_string(), self.current_span)),
-                };
-                self.advance();
-                if self.match_token(Token::Question) {
-                    ret_type.push('?');
-                }
-                return_type = Some(ret_type);
+                return_type = Some(self.parse_type_annotation()?);
             }
 
             methods.push(Stmt::FuncDecl {
                 name: method_name,
+                generic_params: None,
                 params,
                 return_type,
                 body: vec![],
@@ -509,6 +536,7 @@ impl<'a> Parser<'a> {
 
         Ok(Stmt::InterfaceDecl {
             name,
+            generic_params,
             methods,
         })
     }
@@ -521,6 +549,8 @@ impl<'a> Parser<'a> {
             _ => return Err(("Expected struct name".to_string(), self.current_span)),
         };
         self.advance();
+
+        let generic_params = self.parse_generic_params()?;
 
         if !self.match_token(Token::LBrace) {
             return Err(("Expected '{' before struct body".to_string(), self.current_span));
@@ -541,6 +571,7 @@ impl<'a> Parser<'a> {
 
         Ok(Stmt::StructDecl {
             name,
+            generic_params,
             fields,
         })
     }
@@ -556,15 +587,7 @@ impl<'a> Parser<'a> {
 
         let mut type_annotation = None;
         if self.match_token(Token::Colon) {
-            let mut ty_str = match &self.current_token {
-                Token::Ident(id) => id.clone(),
-                _ => return Err(("Expected type identifier after ':'".to_string(), self.current_span)),
-            };
-            self.advance();
-            if self.match_token(Token::Question) {
-                ty_str.push('?');
-            }
-            type_annotation = Some(ty_str);
+            type_annotation = Some(self.parse_type_annotation()?);
         }
 
         let mut initializer = None;

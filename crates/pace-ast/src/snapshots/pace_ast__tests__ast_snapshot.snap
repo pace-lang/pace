@@ -6,7 +6,11 @@ VarDecl {
     name: "x",
     is_mutable: false,
     type_annotation: Some(
-        "Int",
+        TypeAnnotation {
+            name: "Int",
+            args: [],
+            is_nullable: false,
+        },
     ),
     initializer: Some(
         IntLiteral(

@@ -14,7 +14,11 @@ mod tests {
         let ast = Stmt::VarDecl {
             name: "x".to_string(),
             is_mutable: false,
-            type_annotation: Some("Int".to_string()),
+            type_annotation: Some(crate::stmt::TypeAnnotation {
+                name: "Int".to_string(),
+                args: vec![],
+                is_nullable: false,
+            }),
             initializer: Some(Expr::IntLiteral(42)),
             span: (0, 0),
         };

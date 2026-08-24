@@ -19,6 +19,8 @@ pub enum Type {
     Unknown, // Used for auto-inference before resolution or error state
     Void,    // Used for functions that don't return anything
     Any,     // Used for built-ins like print that take multiple types
+    GenericParameter(String),
+    GenericInstance { base: Box<Type>, args: Vec<Type> },
 }
 
 #[derive(Debug, Clone)]
@@ -29,10 +31,12 @@ pub struct FunctionSignature {
     pub is_used: bool,
     pub visibility: Visibility,
     pub module: String,
+    pub generic_params: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ClassSignature {
+    pub generic_params: Option<Vec<String>>,
     pub fields: HashMap<String, Type>,
     pub methods: HashMap<String, FunctionSignature>,
 }
@@ -76,6 +80,7 @@ impl Environment {
                 is_used: true, // Always consider built-ins used
                 visibility: Visibility::Public,
                 module: "std".to_string(),
+                generic_params: None,
             },
         );
     }

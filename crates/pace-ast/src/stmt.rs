@@ -1,6 +1,13 @@
 use crate::expr::Expr;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct TypeAnnotation {
+    pub name: String,
+    pub args: Vec<TypeAnnotation>,
+    pub is_nullable: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     /// An expression evaluated for its side effects
     Expr(Expr),
@@ -8,7 +15,7 @@ pub enum Stmt {
     VarDecl {
         name: String,
         is_mutable: bool,
-        type_annotation: Option<String>,
+        type_annotation: Option<TypeAnnotation>,
         initializer: Option<Expr>,
         span: (usize, usize),
     },
@@ -25,8 +32,9 @@ pub enum Stmt {
     /// A function declaration
     FuncDecl {
         name: String,
+        generic_params: Option<Vec<String>>,
         params: Vec<Param>,
-        return_type: Option<String>,
+        return_type: Option<TypeAnnotation>,
         body: Vec<Stmt>,
         is_async: bool,
         visibility: Visibility,
@@ -35,18 +43,21 @@ pub enum Stmt {
     /// A class declaration
     ClassDecl {
         name: String,
+        generic_params: Option<Vec<String>>,
         fields: Vec<Stmt>, // VarDecl
         methods: Vec<Stmt>, // FuncDecl
-        implements: Option<String>,
+        implements: Option<TypeAnnotation>,
     },
     /// An interface declaration
     InterfaceDecl {
         name: String,
+        generic_params: Option<Vec<String>>,
         methods: Vec<Stmt>, // FuncDecl without body
     },
     /// A struct declaration
     StructDecl {
         name: String,
+        generic_params: Option<Vec<String>>,
         fields: Vec<Stmt>, // VarDecl
     },
     /// A while loop
@@ -84,7 +95,7 @@ pub enum Stmt {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub name: String,
-    pub type_annotation: String,
+    pub type_annotation: TypeAnnotation,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

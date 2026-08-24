@@ -17,6 +17,15 @@ pub enum VarType {
     Unknown,
 }
 
+impl VarType {
+    pub fn to_cranelift_type(&self) -> cranelift::prelude::Type {
+        match self {
+            VarType::Float => cranelift::prelude::types::F64,
+            _ => cranelift::prelude::types::I64, // Pointers and integers are I64
+        }
+    }
+}
+
 pub fn parse_vartype(s: &str) -> VarType {
     let is_nullable = s.ends_with('?');
     let base_name = if is_nullable {

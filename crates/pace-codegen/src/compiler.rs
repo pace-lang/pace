@@ -153,12 +153,12 @@ impl JITCompiler {
 
     fn register_interfaces(&mut self, stmts: &[Stmt]) {
         for stmt in stmts {
-            if let Stmt::InterfaceDecl { name: interface_name, methods } = stmt {
+            if let Stmt::InterfaceDecl { name: interface_name, methods, generic_params: _ } = stmt {
                 let mut method_map = HashMap::new();
                 let mut m_offset = 16; // 0: drop, 8: size
                 
                 for method_stmt in methods {
-                    if let Stmt::FuncDecl { name: method_name, .. } = method_stmt {
+                    if let Stmt::FuncDecl { name: method_name, params: _, return_type: _, .. } = method_stmt {
                         method_map.insert(method_name.clone(), m_offset);
                         m_offset += 8;
                     }
@@ -188,12 +188,12 @@ impl JITCompiler {
         let _ptr_ty = self.module.target_config().pointer_type();
         
         for stmt in stmts {
-            if let Stmt::ClassDecl { name: class_name, fields, methods, .. } = stmt {
+            if let Stmt::ClassDecl { name: class_name, fields, methods, implements, generic_params: _ } = stmt {
                 let mut field_map = HashMap::new();
                 let mut offset = 16; // 8 bytes for ARC, 8 bytes for vtable pointer
                 for field in fields {
                     if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
-                        let ty_str = type_annotation.as_deref().unwrap_or("Unknown");
+                        let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
                         let field_ty = crate::translator::parse_vartype(ty_str);
                         field_map.insert(field_name.clone(), (offset, field_ty));
                         offset += 8;
@@ -205,8 +205,8 @@ impl JITCompiler {
                 let mut vtable_funcs = Vec::new();
                 
                 // Seed methods from interface if implemented
-                if let Stmt::ClassDecl { implements: Some(iface_name), .. } = stmt
-                    && let Some(iface_layout) = self.interface_layouts.get(iface_name) {
+                if let Some(iface_annotation) = implements
+                    && let Some(iface_layout) = self.interface_layouts.get(&iface_annotation.name) {
                         for (m_name, m_off) in &iface_layout.methods {
                             method_map.insert(m_name.clone(), *m_off);
                             if *m_off >= m_offset {
@@ -225,7 +225,7 @@ impl JITCompiler {
                 self.funcs.insert(drop_name.clone(), drop_id);
                 
                 for method_stmt in methods {
-                    if let Stmt::FuncDecl { name: method_name, params, .. } = method_stmt {
+                    if let Stmt::FuncDecl { name: method_name, params, return_type: _, .. } = method_stmt {
                         if !method_map.contains_key(method_name) {
                             method_map.insert(method_name.clone(), m_offset);
                             m_offset += 8;
@@ -276,12 +276,12 @@ impl JITCompiler {
                     vtable_id,
                 };
                 self.class_layouts.insert(class_name.clone(), layout);
-            } else if let Stmt::StructDecl { name: struct_name, fields } = stmt {
+            } else if let Stmt::StructDecl { name: struct_name, fields, generic_params: _ } = stmt {
                 let mut field_map = HashMap::new();
                 let mut offset = 0; // Structs have no header (0 bytes for ARC/VTable)
                 for field in fields {
                     if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
-                        let ty_str = type_annotation.as_deref().unwrap_or("Unknown");
+                        let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
                         let field_ty = crate::translator::parse_vartype(ty_str);
                         field_map.insert(field_name.clone(), (offset, field_ty));
                         offset += 8; // All fields are currently 8 bytes (i64/f64/ptr)
@@ -305,7 +305,7 @@ impl JITCompiler {
 
         // Pass 1: Declare all functions
         for stmt in stmts {
-            if let Stmt::FuncDecl { name, params, .. } = stmt {
+            if let Stmt::FuncDecl { name, params, return_type: _, .. } = stmt {
                 let mut sig = self.module.make_signature();
                 for _ in params {
                     sig.params.push(AbiParam::new(types::I64)); // Assume I64 for now
@@ -321,20 +321,20 @@ impl JITCompiler {
         let mut func_returns = HashMap::new();
         for stmt in stmts {
             if let Stmt::FuncDecl { name, return_type, .. } = stmt {
-                let ret = return_type.as_deref().unwrap_or("Int");
+                let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                 func_returns.insert(name.clone(), crate::translator::parse_vartype(ret));
             } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
                 for method_stmt in methods {
-                    if let Stmt::FuncDecl { name, return_type, .. } = method_stmt {
-                        let ret = return_type.as_deref().unwrap_or("Int");
+                    if let Stmt::FuncDecl { name, params: _, return_type, .. } = method_stmt {
+                        let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         let full_name = format!("{}_{}", class_name, name);
                         func_returns.insert(full_name, crate::translator::parse_vartype(ret));
                     }
                 }
-            } else if let Stmt::InterfaceDecl { name: interface_name, methods } = stmt {
+            } else if let Stmt::InterfaceDecl { name: interface_name, methods, generic_params: _ } = stmt {
                 for method_stmt in methods {
-                    if let Stmt::FuncDecl { name, return_type, .. } = method_stmt {
-                        let ret = return_type.as_deref().unwrap_or("Int");
+                    if let Stmt::FuncDecl { name, params: _, return_type, .. } = method_stmt {
+                        let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         let full_name = format!("{}_{}", interface_name, name);
                         func_returns.insert(full_name, crate::translator::parse_vartype(ret));
                     }
@@ -344,19 +344,23 @@ impl JITCompiler {
 
         // Pass 2: Define all functions and class methods
         for stmt in stmts {
-            if let Stmt::FuncDecl { name, params, body, .. } = stmt {
+            if let Stmt::FuncDecl { name, params, body, return_type: _, .. } = stmt {
                 let id = *self.funcs.get(name).unwrap();
                 self.compile_function(name, params, body, id, &func_returns)?;
             } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
                 self.generate_drop_function(class_name)?;
                 for method_stmt in methods {
-                    if let Stmt::FuncDecl { name, params, body, .. } = method_stmt {
+                    if let Stmt::FuncDecl { name, params, body, return_type: _, .. } = method_stmt {
                         let full_name = format!("{}_{}", class_name, name);
                         let id = *self.funcs.get(&full_name).unwrap();
                         
                         let mut new_params = vec![pace_ast::Param {
                             name: "self".to_string(),
-                            type_annotation: class_name.clone(),
+                            type_annotation: pace_ast::TypeAnnotation {
+                                name: class_name.clone(),
+                                args: vec![],
+                                is_nullable: false,
+                            },
                         }];
                         new_params.extend(params.clone());
                         
@@ -382,7 +386,7 @@ impl JITCompiler {
         let mut func_returns = HashMap::new();
         for stmt in stmts {
             if let Stmt::FuncDecl { name, return_type, .. } = stmt {
-                let ret = return_type.as_deref().unwrap_or("Int");
+                let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                 func_returns.insert(name.clone(), crate::translator::parse_vartype(ret));
             }
         }
@@ -491,7 +495,7 @@ impl JITCompiler {
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
             
-            let param_ty = crate::translator::parse_vartype(&param.type_annotation);
+            let param_ty = crate::translator::parse_vartype(&param.type_annotation.name);
             variables.insert(param.name.clone(), (var, param_ty));
             var_index += 1;
         }

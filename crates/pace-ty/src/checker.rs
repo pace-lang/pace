@@ -16,6 +16,7 @@ pub struct TypeChecker {
     current_return_type: Option<Type>,
     current_class: Option<String>,
     current_module: String,
+    generic_params_in_scope: Vec<String>,
     pub warnings: Vec<pace_errors::SemanticWarning>,
     pub errors: Vec<TypeError>,
 }
@@ -33,6 +34,7 @@ impl TypeChecker {
             current_return_type: None,
             current_class: None,
             current_module: "main".to_string(),
+            generic_params_in_scope: Vec::new(),
             warnings: Vec::new(),
             errors: Vec::new(),
         }
@@ -84,10 +86,30 @@ impl TypeChecker {
                     self.current_module = old_module;
                 }
                 Stmt::ClassDecl { name, .. } | Stmt::InterfaceDecl { name, .. } => {
-                    self.env.classes.insert(name.clone(), ClassSignature { fields: HashMap::new(), methods: HashMap::new() });
+                    self.env.classes.insert(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
                 }
                 Stmt::StructDecl { name, .. } => {
-                    self.env.structs.insert(name.clone(), ClassSignature { fields: HashMap::new(), methods: HashMap::new() });
+                    self.env.structs.insert(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
+                }
+                Stmt::Import { path, .. } => {
+                    if path == "std/collection" {
+                        self.env.register_class("List".to_string(), ClassSignature {
+                            generic_params: Some(vec!["T".to_string()]),
+                            fields: HashMap::new(),
+                            methods: HashMap::new(),
+                        });
+                        self.env.register_class("Set".to_string(), ClassSignature {
+                            generic_params: Some(vec!["T".to_string()]),
+                            fields: HashMap::new(),
+                            methods: HashMap::new(),
+                        });
+                    }
+                    if path == "std/string" {
+                        self.env.register_class("String".to_string(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
+                    }
+                    if path == "std/io" {
+                        self.env.register_class("File".to_string(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
+                    }
                 }
                 _ => {}
             }
@@ -95,7 +117,7 @@ impl TypeChecker {
 
         for stmt in stmts {
             match stmt {
-                Stmt::FuncDecl { name, params, return_type, span, visibility, .. } => {
+                Stmt::FuncDecl { name, params, return_type, span, visibility, generic_params, .. } => {
                     let mut param_types = Vec::new();
                     for param in params {
                         param_types.push(self.resolve_type_name(&param.type_annotation));
@@ -119,10 +141,11 @@ impl TypeChecker {
                         is_used: false,
                         visibility: visibility.clone(),
                         module: self.current_module.clone(),
+                        generic_params: generic_params.clone(),
                     };
                     self.env.register_function(name.clone(), sig);
                 }
-                Stmt::ClassDecl { name, fields, methods, .. } => {
+                Stmt::ClassDecl { name, fields, methods, generic_params, .. } => {
                     let mut field_map = HashMap::new();
                     for f in fields {
                         if let Stmt::VarDecl { name: f_name, type_annotation, .. } = f {
@@ -154,18 +177,20 @@ impl TypeChecker {
                                 is_used: true,
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
+                                generic_params: None, // Methods inherit class generics, or have their own (TODO)
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
                     }
 
                     let sig = ClassSignature {
+                        generic_params: generic_params.clone(),
                         fields: field_map,
                         methods: method_map,
                     };
                     self.env.register_class(name.clone(), sig);
                 }
-                Stmt::StructDecl { name, fields } => {
+                Stmt::StructDecl { name, fields, generic_params } => {
                     let mut field_map = HashMap::new();
                     for f in fields {
                         if let Stmt::VarDecl { name: f_name, type_annotation, .. } = f {
@@ -178,12 +203,13 @@ impl TypeChecker {
                         }
                     }
                     let sig = ClassSignature {
+                        generic_params: generic_params.clone(),
                         fields: field_map,
                         methods: HashMap::new(),
                     };
                     self.env.register_struct(name.clone(), sig);
                 }
-                Stmt::InterfaceDecl { name, methods } => {
+                Stmt::InterfaceDecl { name, methods, generic_params } => {
                     let mut method_map = HashMap::new();
                     for m in methods {
                         if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, .. } = m {
@@ -203,11 +229,13 @@ impl TypeChecker {
                                 is_used: true,
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
+                                generic_params: None,
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
                     }
                     let sig = ClassSignature {
+                        generic_params: generic_params.clone(),
                         fields: HashMap::new(),
                         methods: method_map,
                     };
@@ -218,10 +246,12 @@ impl TypeChecker {
                     // For now, if we import "std/collection", we mock registering `List` and `Set`
                     if path == "std/collection" => {
                         self.env.register_class("List".to_string(), ClassSignature {
+                            generic_params: Some(vec!["T".to_string()]),
                             fields: HashMap::new(),
                             methods: HashMap::new(),
                         });
                         self.env.register_class("Set".to_string(), ClassSignature {
+                            generic_params: Some(vec!["T".to_string()]),
                             fields: HashMap::new(),
                             methods: HashMap::new(),
                         });
@@ -346,8 +376,13 @@ impl TypeChecker {
                     self.check_stmt(body)?;
                 }
             }
-            Stmt::FuncDecl { name: _, params, body, return_type, .. } => {
+            Stmt::FuncDecl { name: _, params, body, return_type, generic_params, .. } => {
                 let prev_return = self.current_return_type.clone();
+                let prev_generics = self.generic_params_in_scope.clone();
+                
+                if let Some(gps) = generic_params {
+                    self.generic_params_in_scope.extend(gps.clone());
+                }
                 
                 let ret_ty = if let Some(rt) = return_type {
                     self.resolve_type_name(rt)
@@ -383,12 +418,20 @@ impl TypeChecker {
                 
                 self.pop_scope_and_check_unused();
                 self.current_return_type = prev_return;
+                self.generic_params_in_scope = prev_generics;
             }
-            Stmt::ClassDecl { name, methods, implements, .. } => {
+            Stmt::ClassDecl { name, methods, implements, generic_params, .. } => {
                 let prev_class = self.current_class.clone();
+                let prev_generics = self.generic_params_in_scope.clone();
+                
                 self.current_class = Some(name.clone());
                 
-                if let Some(iface_name) = implements {
+                if let Some(gps) = generic_params {
+                    self.generic_params_in_scope.extend(gps.clone());
+                }
+                
+                if let Some(iface_annotation) = implements {
+                    let iface_name = &iface_annotation.name;
                     // Check if class actually implements the interface
                     if let Some(iface_sig) = self.env.classes.get(iface_name) {
                         let class_sig = self.env.classes.get(name).unwrap().clone();
@@ -418,6 +461,7 @@ impl TypeChecker {
                 self.pop_scope_and_check_unused();
                 
                 self.current_class = prev_class;
+                self.generic_params_in_scope = prev_generics;
             }
             Stmt::InterfaceDecl { .. } => {}
             Stmt::StructDecl { .. } => {}
@@ -684,22 +728,19 @@ impl TypeChecker {
         }
     }
 
-    fn resolve_type_name(&self, name: &str) -> Type {
-        let is_nullable = name.ends_with('?');
-        let base_name = if is_nullable {
-            &name[..name.len() - 1]
-        } else {
-            name
-        };
+    fn resolve_type_name(&self, annotation: &pace_ast::TypeAnnotation) -> Type {
+        let base_name = &annotation.name;
 
-        let base_type = match base_name {
+        let mut base_type = match base_name.as_str() {
             "Int" => Type::Int,
             "Float" => Type::Float,
             "String" => Type::String,
             "Bool" => Type::Bool,
             "Void" => Type::Void,
             _ => {
-                if self.env.structs.contains_key(base_name) {
+                if self.generic_params_in_scope.contains(base_name) {
+                    Type::GenericParameter(base_name.to_string())
+                } else if self.env.structs.contains_key(base_name) {
                     Type::Struct(base_name.to_string())
                 } else {
                     Type::Class(base_name.to_string())
@@ -707,7 +748,15 @@ impl TypeChecker {
             }
         };
 
-        if is_nullable {
+        if !annotation.args.is_empty() {
+            let mut arg_types = Vec::new();
+            for arg in &annotation.args {
+                arg_types.push(self.resolve_type_name(arg));
+            }
+            base_type = Type::GenericInstance { base: Box::new(base_type), args: arg_types };
+        }
+
+        if annotation.is_nullable {
             Type::Nullable(Box::new(base_type))
         } else {
             base_type
