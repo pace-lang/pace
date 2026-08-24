@@ -1,5 +1,5 @@
 use pace_ast::{Expr, Stmt, BinaryOp, Visibility};
-use crate::env::{Environment, Type, FunctionSignature, ClassSignature};
+use crate::env::{Environment, Type, FunctionSignature, ClassSignature, EnumSignature};
 use miette::Diagnostic;
 use thiserror::Error;
 use std::collections::HashMap;
@@ -90,6 +90,9 @@ impl TypeChecker {
                 }
                 Stmt::StructDecl { name, .. } => {
                     self.env.structs.insert(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
+                }
+                Stmt::EnumDecl { name, .. } => {
+                    self.env.enums.insert(name.clone(), EnumSignature { generic_params: None, variants: HashMap::new() });
                 }
                 Stmt::Import { path, .. } => {
                     if path == "std/collection" {
@@ -208,6 +211,42 @@ impl TypeChecker {
                         methods: HashMap::new(),
                     };
                     self.env.register_struct(name.clone(), sig);
+                }
+                Stmt::EnumDecl { name, variants, generic_params } => {
+                    let mut variant_map = HashMap::new();
+                    self.current_class = Some(name.clone());
+                    
+                    if let Some(params) = generic_params {
+                        self.env.push_scope();
+                        for param in params {
+                            self.env.define(param.clone(), Type::GenericParameter(param.clone()), (0, 0), false);
+                        }
+                    }
+                    
+                    for v in variants {
+                        let fields = if let Some(fs) = &v.fields {
+                            let mut resolved = Vec::new();
+                            for f in fs {
+                                resolved.push(self.resolve_type_name(f));
+                            }
+                            Some(resolved)
+                        } else {
+                            None
+                        };
+                        variant_map.insert(v.name.clone(), fields);
+                    }
+                    
+                    if generic_params.is_some() {
+                        self.env.pop_scope();
+                    }
+                    
+                    self.current_class = None;
+                    
+                    let sig = EnumSignature {
+                        generic_params: generic_params.clone(),
+                        variants: variant_map,
+                    };
+                    self.env.register_enum(name.clone(), sig);
                 }
                 Stmt::InterfaceDecl { name, methods, generic_params } => {
                     let mut method_map = HashMap::new();
@@ -465,6 +504,7 @@ impl TypeChecker {
             }
             Stmt::InterfaceDecl { .. } => {}
             Stmt::StructDecl { .. } => {}
+            Stmt::EnumDecl { .. } => {}
             Stmt::Import { .. } => {}
         }
         Ok(())
@@ -740,11 +780,26 @@ impl TypeChecker {
             "String" => Type::String,
             "Bool" => Type::Bool,
             "Void" => Type::Void,
+            "Self" => {
+                if let Some(current) = &self.current_class {
+                    if self.env.structs.contains_key(current) {
+                        Type::Struct(current.clone())
+                    } else if self.env.enums.contains_key(current) {
+                        Type::Enum(current.clone())
+                    } else {
+                        Type::Class(current.clone())
+                    }
+                } else {
+                    Type::Unknown // Self used outside a class/struct/enum context
+                }
+            }
             _ => {
                 if self.generic_params_in_scope.contains(base_name) {
                     Type::GenericParameter(base_name.to_string())
                 } else if self.env.structs.contains_key(base_name) {
                     Type::Struct(base_name.to_string())
+                } else if self.env.enums.contains_key(base_name) {
+                    Type::Enum(base_name.to_string())
                 } else {
                     Type::Class(base_name.to_string())
                 }

@@ -14,6 +14,8 @@ pub enum Type {
     Class(String),
     /// A value type (stack-allocated)
     Struct(String),
+    /// An enum type
+    Enum(String),
     /// A function type
     Function,
     Unknown, // Used for auto-inference before resolution or error state
@@ -21,6 +23,12 @@ pub enum Type {
     Any,     // Used for built-ins like print that take multiple types
     GenericParameter(String),
     GenericInstance { base: Box<Type>, args: Vec<Type> },
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumSignature {
+    pub generic_params: Option<Vec<String>>,
+    pub variants: HashMap<String, Option<Vec<Type>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +63,7 @@ pub struct Environment {
     pub functions: HashMap<String, FunctionSignature>,
     pub classes: HashMap<String, ClassSignature>,
     pub structs: HashMap<String, ClassSignature>,
+    pub enums: HashMap<String, EnumSignature>,
 }
 
 impl Environment {
@@ -64,6 +73,7 @@ impl Environment {
             functions: HashMap::new(),
             classes: HashMap::new(),
             structs: HashMap::new(),
+            enums: HashMap::new(),
         };
         e.inject_prelude();
         e
@@ -136,5 +146,10 @@ impl Environment {
     pub fn register_struct(&mut self, name: String, sig: ClassSignature) {
         self.structs.insert(name.clone(), sig);
         self.define(name.clone(), Type::Struct(name), (0, 0), false);
+    }
+    
+    pub fn register_enum(&mut self, name: String, sig: EnumSignature) {
+        self.enums.insert(name.clone(), sig);
+        self.define(name.clone(), Type::Enum(name), (0, 0), false);
     }
 }

@@ -60,6 +60,12 @@ pub enum Stmt {
         generic_params: Option<Vec<String>>,
         fields: Vec<Stmt>, // VarDecl
     },
+    /// An enum declaration
+    EnumDecl {
+        name: String,
+        generic_params: Option<Vec<String>>,
+        variants: Vec<EnumVariant>,
+    },
     /// A while loop
     While {
         condition: Expr,
@@ -103,4 +109,10 @@ pub enum Visibility {
     #[default]
     Private,
     Public,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumVariant {
+    pub name: String,
+    pub fields: Option<Vec<TypeAnnotation>>,
 }

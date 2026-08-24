@@ -88,6 +88,7 @@ impl<'a> Parser<'a> {
             Token::Class => self.parse_class_decl(),
             Token::Interface => self.parse_interface_decl(),
             Token::Struct => self.parse_struct_decl(),
+            Token::Enum => self.parse_enum_decl(),
             Token::If => self.parse_if_stmt(),
             Token::While => self.parse_while_stmt(),
             Token::Loop => self.parse_loop_stmt(),
@@ -540,6 +541,79 @@ impl<'a> Parser<'a> {
             generic_params,
             methods,
         })
+    }
+
+    fn parse_enum_decl(&mut self) -> Result<Stmt, (String, (usize, usize))> {
+        self.advance(); // consume enum
+        
+        let name = match &self.current_token {
+            Token::Ident(id) => id.clone(),
+            _ => return Err(("Expected enum name".to_string(), self.current_span)),
+        };
+        self.advance();
+        
+        let generic_params = if self.match_token(Token::Less) {
+            let mut params = Vec::new();
+            while self.current_token != Token::Greater && self.current_token != Token::Eof {
+                if let Token::Ident(id) = &self.current_token {
+                    params.push(id.clone());
+                    self.advance();
+                } else {
+                    return Err(("Expected generic parameter name".to_string(), self.current_span));
+                }
+                
+                if self.match_token(Token::Comma) {
+                    continue;
+                }
+            }
+            if !self.match_token(Token::Greater) {
+                return Err(("Expected '>' after generic parameters".to_string(), self.current_span));
+            }
+            Some(params)
+        } else {
+            None
+        };
+        
+        if !self.match_token(Token::LBrace) {
+            return Err(("Expected '{' after enum name".to_string(), self.current_span));
+        }
+        
+        let mut variants = Vec::new();
+        while self.current_token != Token::RBrace && self.current_token != Token::Eof {
+            let variant_name = match &self.current_token {
+                Token::Ident(id) => id.clone(),
+                _ => return Err(("Expected enum variant name".to_string(), self.current_span)),
+            };
+            self.advance();
+            
+            let fields = if self.match_token(Token::LParen) {
+                let mut variant_fields = Vec::new();
+                while self.current_token != Token::RParen && self.current_token != Token::Eof {
+                    variant_fields.push(self.parse_type_annotation()?);
+                    if self.match_token(Token::Comma) {
+                        continue;
+                    }
+                }
+                if !self.match_token(Token::RParen) {
+                    return Err(("Expected ')' after enum variant fields".to_string(), self.current_span));
+                }
+                Some(variant_fields)
+            } else {
+                None
+            };
+            
+            use pace_ast::EnumVariant;
+            variants.push(EnumVariant { name: variant_name, fields });
+            
+            // Variants can optionally end with a comma
+            self.match_token(Token::Comma);
+        }
+        
+        if !self.match_token(Token::RBrace) {
+            return Err(("Expected '}' after enum body".to_string(), self.current_span));
+        }
+        
+        Ok(Stmt::EnumDecl { name, generic_params, variants })
     }
 
     fn parse_struct_decl(&mut self) -> Result<Stmt, (String, (usize, usize))> {

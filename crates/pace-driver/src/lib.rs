@@ -41,7 +41,7 @@ impl CompilerSession {
         let src = std::fs::read_to_string(&path_buf)
             .into_diagnostic()?;
         
-        let ast = match pace_parser::parse(&src) {
+        let mut ast = match pace_parser::parse(&src) {
             Ok(ast) => ast,
             Err(errors) => {
                 let parse_errors = errors.into_iter().map(|(msg, span)| {
@@ -54,6 +54,11 @@ impl CompilerSession {
                 return Err(Report::new(pace_errors::MultipleSyntaxErrors { errors: parse_errors }));
             }
         };
+
+        // Auto-inject std:core if not the core library itself
+        if path_buf.file_stem().unwrap_or_default() != "core" {
+            ast.insert(0, Stmt::Import { path: "std:core".to_string(), items: None });
+        }
 
         // Resolve imports recursively
         let mut final_ast = Vec::new();
