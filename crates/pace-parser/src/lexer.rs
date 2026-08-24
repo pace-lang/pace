@@ -33,6 +33,7 @@ pub enum Token {
     Arrow,
     Comma,
     Colon,
+    ColonColon,
     Dot,
     Eq,
     Semi,
@@ -153,7 +154,15 @@ impl<'a> Lexer<'a> {
                 return self.number();
             }
             match c {
-                ':' => { self.advance(); Token::Colon }
+                ':' => {
+                    self.advance();
+                    if let Some(&':') = self.peek() {
+                        self.advance();
+                        Token::ColonColon
+                    } else {
+                        Token::Colon
+                    }
+                }
                 '.' => { self.advance(); Token::Dot }
                 ';' => { self.advance(); Token::Semi }
                 '=' => {

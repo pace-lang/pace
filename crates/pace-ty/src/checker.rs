@@ -149,6 +149,7 @@ impl TypeChecker {
                     self.env.register_function(name.clone(), sig);
                 }
                 Stmt::ClassDecl { name, fields, methods, generic_params, .. } => {
+                    self.current_class = Some(name.clone());
                     let mut field_map = HashMap::new();
                     for f in fields {
                         if let Stmt::VarDecl { name: f_name, type_annotation, .. } = f {
@@ -192,6 +193,7 @@ impl TypeChecker {
                         methods: method_map,
                     };
                     self.env.register_class(name.clone(), sig);
+                    self.current_class = None;
                 }
                 Stmt::StructDecl { name, fields, generic_params } => {
                     let mut field_map = HashMap::new();
@@ -249,6 +251,7 @@ impl TypeChecker {
                     self.env.register_enum(name.clone(), sig);
                 }
                 Stmt::InterfaceDecl { name, methods, generic_params } => {
+                    self.current_class = Some(name.clone());
                     let mut method_map = HashMap::new();
                     for m in methods {
                         if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, .. } = m {
@@ -279,6 +282,7 @@ impl TypeChecker {
                         methods: method_map,
                     };
                     self.env.register_class(name.clone(), sig);
+                    self.current_class = None;
                 }
                 Stmt::Import { path, items: _ }
                     // Basic placeholder for module resolution.
@@ -380,7 +384,7 @@ impl TypeChecker {
             }
             Stmt::If { condition, then_branch, else_branch } => {
                 let cond_ty = self.check_expr(condition)?;
-                if cond_ty != Type::Bool {
+                if cond_ty != Type::Bool && cond_ty != Type::Unknown {
                     return Err(TypeError {
                         message: "If condition must be a boolean".to_string()
                     });
@@ -392,7 +396,7 @@ impl TypeChecker {
             }
             Stmt::While { condition, body } => {
                 let cond_ty = self.check_expr(condition)?;
-                if cond_ty != Type::Bool {
+                if cond_ty != Type::Bool && cond_ty != Type::Unknown {
                     return Err(TypeError {
                         message: "While condition must be a boolean".to_string()
                     });
@@ -409,10 +413,12 @@ impl TypeChecker {
                 self.pop_scope_and_check_unused();
             }
             Stmt::Match { expr, arms } => {
-                self.check_expr(expr)?;
+                let expr_ty = self.check_expr(expr)?;
                 for (pattern, body) in arms {
-                    self.check_expr(pattern)?;
+                    self.env.push_scope();
+                    self.check_pattern(pattern, &expr_ty)?;
                     self.check_stmt(body)?;
+                    self.pop_scope_and_check_unused();
                 }
             }
             Stmt::FuncDecl { name: _, params, body, return_type, generic_params, .. } => {
@@ -818,6 +824,30 @@ impl TypeChecker {
             Type::Nullable(Box::new(base_type))
         } else {
             base_type
+        }
+    }
+    pub fn check_pattern(&mut self, pattern: &pace_ast::Pattern, expected_type: &Type) -> Result<(), TypeError> {
+        match pattern {
+            pace_ast::Pattern::Wildcard => Ok(()),
+            pace_ast::Pattern::Literal(expr) => {
+                let ty = self.check_expr(expr)?;
+                if expected_type != &ty && expected_type != &Type::Unknown && ty != Type::Unknown {
+                    return Err(TypeError { message: format!("Pattern type mismatch: expected {:?}, got {:?}", expected_type, ty) });
+                }
+                Ok(())
+            },
+            pace_ast::Pattern::Variable(name) => {
+                self.env.define(name.clone(), expected_type.clone(), (0, 0), false);
+                Ok(())
+            },
+            pace_ast::Pattern::Variant { enum_name: _, variant_name: _, fields } => {
+                if let Some(fields) = fields {
+                    for field in fields {
+                        self.check_pattern(field, &Type::Unknown)?;
+                    }
+                }
+                Ok(())
+            }
         }
     }
 }

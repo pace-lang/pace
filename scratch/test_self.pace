@@ -1,0 +1,19 @@
+class Point {
+    let x: Int;
+    let y: Int;
+    
+    func init(x: Int, y: Int) {
+        self.x = x;
+        self.y = y;
+    }
+    
+    func equals(other: Self) -> Bool {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+
+func main() {
+    let p1 = Point(10, 20);
+    let p2 = Point(10, 20);
+    p1.equals(p2);
+}

@@ -26,7 +26,7 @@ impl VarType {
     }
 }
 
-pub fn parse_vartype(s: &str) -> VarType {
+pub fn parse_vartype(s: &str, current_class: Option<&str>) -> VarType {
     let is_nullable = s.ends_with('?');
     let base_name = if is_nullable {
         &s[..s.len() - 1]
@@ -39,6 +39,7 @@ pub fn parse_vartype(s: &str) -> VarType {
         "Float" => VarType::Float,
         "String" => VarType::String,
         "Bool" => VarType::Bool,
+        "Self" => VarType::Object(current_class.unwrap_or("Self").to_string()),
         _ => VarType::Object(base_name.to_string()),
     };
     
@@ -596,6 +597,17 @@ impl Translator {
                         let zero = builder.ins().iconst(types::I64, 0);
                         for &(offset, _) in layout.fields.values() {
                             builder.ins().store(cranelift::prelude::MemFlagsData::new(), zero, obj_ptr, offset as i32);
+                        }
+                        
+                        // Call init if it exists
+                        let init_name = format!("{}_init", func_name);
+                        if let Some(&init_id) = funcs.get(&init_name) {
+                            let local_init = module.declare_func_in_func(init_id, builder.func);
+                            let mut arg_vals = vec![obj_ptr];
+                            for arg in args {
+                                arg_vals.push(Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, arg, variables, var_index, func_returns)?);
+                            }
+                            builder.ins().call(local_init, &arg_vals);
                         }
                         
                         return Ok(obj_ptr);

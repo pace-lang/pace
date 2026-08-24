@@ -158,7 +158,7 @@ impl AotCompiler {
                 for field in fields {
                     if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
-                        let field_ty = crate::translator::parse_vartype(ty_str);
+                        let field_ty = crate::translator::parse_vartype(ty_str, Some(&class_name));
                         field_map.insert(field_name.clone(), (offset, field_ty));
                         offset += 8;
                     }
@@ -206,7 +206,10 @@ impl AotCompiler {
                         let id = self.module.declare_function(&full_name, Linkage::Local, &sig)
                             .map_err(|e| CodegenError { message: e.to_string() })?;
                         self.funcs.insert(full_name.clone(), id);
-                        vtable_funcs.push(id);
+                        
+                        if method_name != "init" {
+                            vtable_funcs.push(id);
+                        }
                     }
                 }
                 
@@ -246,7 +249,7 @@ impl AotCompiler {
                 for field in fields {
                     if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
-                        let field_ty = crate::translator::parse_vartype(ty_str);
+                        let field_ty = crate::translator::parse_vartype(ty_str, Some(&struct_name));
                         field_map.insert(field_name.clone(), (offset, field_ty));
                         offset += 8;
                     }
@@ -295,13 +298,13 @@ impl AotCompiler {
         for stmt in final_stmts {
             if let Stmt::FuncDecl { name, return_type, .. } = stmt {
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
-                func_returns.insert(name.clone(), crate::translator::parse_vartype(ret));
+                func_returns.insert(name.clone(), crate::translator::parse_vartype(ret, None));
             } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
                 for method in methods {
                     if let Stmt::FuncDecl { name: method_name, params: _, return_type, .. } = method {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         let full_name = format!("{}_{}", class_name, method_name);
-                        func_returns.insert(full_name, crate::translator::parse_vartype(ret));
+                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(&class_name)));
                     }
                 }
             } else if let Stmt::InterfaceDecl { name: interface_name, methods, generic_params: _ } = stmt {
@@ -309,18 +312,18 @@ impl AotCompiler {
                     if let Stmt::FuncDecl { name: method_name, params: _, return_type, .. } = method {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         let full_name = format!("{}_{}", interface_name, method_name);
-                        func_returns.insert(full_name, crate::translator::parse_vartype(ret));
+                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(&interface_name)));
                     }
                 }
             }
         }
 
-        // Pass 2: Define all functions and class methods
+                // Pass 2: Define all functions and class methods
         for stmt in final_stmts {
             if let Stmt::FuncDecl { name, params, body, return_type, .. } = stmt {
                 let id = *self.funcs.get(name).unwrap();
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
-                self.compile_function(name, params, body, id, &func_returns, ret)?;
+                self.compile_function(name, params, body, id, &func_returns, ret, None)?;
             } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
                 self.generate_drop_function(class_name)?;
                 for method_stmt in methods {
@@ -340,7 +343,7 @@ impl AotCompiler {
                         all_params.extend(params.clone());
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         
-                        self.compile_function(&full_name, &all_params, body, id, &func_returns, ret)?;
+                        self.compile_function(&full_name, &all_params, body, id, &func_returns, ret, Some(&class_name))?;
                     }
                 }
             }
@@ -394,11 +397,12 @@ impl AotCompiler {
         func_id: FuncId,
         func_returns: &HashMap<String, crate::translator::VarType>,
         ret_type_str: &str,
+        current_class: Option<&str>,
     ) -> Result<(), CodegenError> {
-        let ret_ty = crate::translator::parse_vartype(ret_type_str);
+        let ret_ty = crate::translator::parse_vartype(ret_type_str, current_class);
         self.ctx.func.signature.returns.push(AbiParam::new(ret_ty.to_cranelift_type()));
         for param in params {
-            let ty = crate::translator::parse_vartype(&param.type_annotation.name);
+            let ty = crate::translator::parse_vartype(&param.type_annotation.name, current_class);
             self.ctx.func.signature.params.push(AbiParam::new(ty.to_cranelift_type()));
         }
 
@@ -416,7 +420,7 @@ impl AotCompiler {
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
             
-            let param_ty = crate::translator::parse_vartype(&param.type_annotation.name);
+            let param_ty = crate::translator::parse_vartype(&param.type_annotation.name, current_class);
             variables.insert(param.name.clone(), (var, param_ty));
             var_index += 1;
         }
@@ -441,7 +445,10 @@ impl AotCompiler {
         
         self.module
             .define_function(func_id, &mut self.ctx)
-            .map_err(|e| CodegenError { message: e.to_string() })?;
+            .map_err(|e| {
+                println!("Cranelift Verifier Error in function {}: {:?}", _name, e);
+                CodegenError { message: e.to_string() }
+            })?;
         
         self.module.clear_context(&mut self.ctx);
         Ok(())

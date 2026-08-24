@@ -84,7 +84,7 @@ pub enum Stmt {
     /// A pattern matching statement
     Match {
         expr: Expr,
-        arms: Vec<(Expr, Box<Stmt>)>,
+        arms: Vec<(Pattern, Box<Stmt>)>,
     },
     /// An import statement
     Import {
@@ -115,4 +115,20 @@ pub enum Visibility {
 pub struct EnumVariant {
     pub name: String,
     pub fields: Option<Vec<TypeAnnotation>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    /// A catch-all pattern (e.g. `_`)
+    Wildcard,
+    /// A literal match (e.g. `5`, `"hello"`)
+    Literal(Expr),
+    /// A variable binding (e.g. `x`)
+    Variable(String),
+    /// An enum variant pattern (e.g. `Some(x)`)
+    Variant {
+        enum_name: Option<String>,
+        variant_name: String,
+        fields: Option<Vec<Pattern>>,
+    },
 }

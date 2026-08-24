@@ -194,7 +194,7 @@ impl JITCompiler {
                 for field in fields {
                     if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
-                        let field_ty = crate::translator::parse_vartype(ty_str);
+                        let field_ty = crate::translator::parse_vartype(ty_str, Some(&class_name));
                         field_map.insert(field_name.clone(), (offset, field_ty));
                         offset += 8;
                     }
@@ -242,7 +242,10 @@ impl JITCompiler {
                         let id = self.module.declare_function(&full_name, Linkage::Local, &sig)
                             .map_err(|e| CodegenError { message: e.to_string() })?;
                         self.funcs.insert(full_name.clone(), id);
-                        vtable_funcs.push(id);
+                        
+                        if method_name != "init" {
+                            vtable_funcs.push(id);
+                        }
                     }
                 }
                 
@@ -282,7 +285,7 @@ impl JITCompiler {
                 for field in fields {
                     if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
-                        let field_ty = crate::translator::parse_vartype(ty_str);
+                        let field_ty = crate::translator::parse_vartype(ty_str, Some(&struct_name));
                         field_map.insert(field_name.clone(), (offset, field_ty));
                         offset += 8; // All fields are currently 8 bytes (i64/f64/ptr)
                     }
@@ -327,13 +330,13 @@ impl JITCompiler {
         for stmt in final_stmts {
             if let Stmt::FuncDecl { name, return_type, .. } = stmt {
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
-                func_returns.insert(name.clone(), crate::translator::parse_vartype(ret));
+                func_returns.insert(name.clone(), crate::translator::parse_vartype(ret, None));
             } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
                 for method_stmt in methods {
                     if let Stmt::FuncDecl { name, params: _, return_type, .. } = method_stmt {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         let full_name = format!("{}_{}", class_name, name);
-                        func_returns.insert(full_name, crate::translator::parse_vartype(ret));
+                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(&class_name)));
                     }
                 }
             } else if let Stmt::InterfaceDecl { name: interface_name, methods, generic_params: _ } = stmt {
@@ -341,7 +344,7 @@ impl JITCompiler {
                     if let Stmt::FuncDecl { name, params: _, return_type, .. } = method_stmt {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         let full_name = format!("{}_{}", interface_name, name);
-                        func_returns.insert(full_name, crate::translator::parse_vartype(ret));
+                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(&interface_name)));
                     }
                 }
             }
@@ -351,7 +354,7 @@ impl JITCompiler {
         for stmt in final_stmts {
             if let Stmt::FuncDecl { name, params, body, return_type: _, .. } = stmt {
                 let id = *self.funcs.get(name).unwrap();
-                self.compile_function(name, params, body, id, &func_returns)?;
+                self.compile_function(name, params, body, id, &func_returns, None)?;
             } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
                 self.generate_drop_function(class_name)?;
                 for method_stmt in methods {
@@ -369,7 +372,7 @@ impl JITCompiler {
                         }];
                         new_params.extend(params.clone());
                         
-                        self.compile_function(&full_name, &new_params, body, id, &func_returns)?;
+                        self.compile_function(&full_name, &new_params, body, id, &func_returns, Some(&class_name))?;
                     }
                 }
             }
@@ -392,7 +395,7 @@ impl JITCompiler {
         for stmt in final_stmts {
             if let Stmt::FuncDecl { name, return_type, .. } = stmt {
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
-                func_returns.insert(name.clone(), crate::translator::parse_vartype(ret));
+                func_returns.insert(name.clone(), crate::translator::parse_vartype(ret, None));
             }
         }
 
@@ -479,6 +482,7 @@ impl JITCompiler {
         body: &[Stmt],
         func_id: FuncId,
         func_returns: &HashMap<String, crate::translator::VarType>,
+        current_class: Option<&str>,
     ) -> Result<(), CodegenError> {
         self.ctx.func.signature.returns.push(AbiParam::new(types::I64));
         for _ in params {
@@ -500,7 +504,7 @@ impl JITCompiler {
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
             
-            let param_ty = crate::translator::parse_vartype(&param.type_annotation.name);
+            let param_ty = crate::translator::parse_vartype(&param.type_annotation.name, current_class);
             variables.insert(param.name.clone(), (var, param_ty));
             var_index += 1;
         }
@@ -526,7 +530,10 @@ impl JITCompiler {
         
         self.module
             .define_function(func_id, &mut self.ctx)
-            .map_err(|e| CodegenError { message: e.to_string() })?;
+            .map_err(|e| {
+                println!("Cranelift Verifier Error in function {}: {:?}", _name, e);
+                CodegenError { message: e.to_string() }
+            })?;
         
         self.module.clear_context(&mut self.ctx);
         Ok(())

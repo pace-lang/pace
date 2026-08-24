@@ -246,6 +246,72 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_pattern(&mut self) -> Result<pace_ast::Pattern, (String, (usize, usize))> {
+        match self.current_token.clone() {
+            Token::Ident(name) => {
+                self.advance();
+                
+                if name == "_" {
+                    return Ok(pace_ast::Pattern::Wildcard);
+                }
+                
+                // Could be a variable, or an Enum variant like `Some(x)` or `Option::Some(x)`
+                // Let's check for `::`
+                let mut enum_name = None;
+                let mut variant_name = name.clone();
+                
+                if self.current_token == Token::ColonColon {
+                    self.advance();
+                    if let Token::Ident(v_name) = self.current_token.clone() {
+                        self.advance();
+                        enum_name = Some(name);
+                        variant_name = v_name;
+                    } else {
+                        return Err(("Expected variant name after :: in pattern".to_string(), self.current_span));
+                    }
+                }
+                
+                // If there's an open parenthesis, it's a variant with fields
+                if self.current_token == Token::LParen {
+                    self.advance();
+                    let mut fields = Vec::new();
+                    if self.current_token != Token::RParen {
+                        loop {
+                            fields.push(self.parse_pattern()?);
+                            if self.match_token(Token::Comma) {
+                                continue;
+                            }
+                            break;
+                        }
+                    }
+                    if !self.match_token(Token::RParen) {
+                        return Err(("Expected ')' after pattern fields".to_string(), self.current_span));
+                    }
+                    Ok(pace_ast::Pattern::Variant {
+                        enum_name,
+                        variant_name,
+                        fields: Some(fields),
+                    })
+                } else if enum_name.is_some() || variant_name.chars().next().unwrap().is_uppercase() {
+                    // It's a variant without fields (like `None`)
+                    Ok(pace_ast::Pattern::Variant {
+                        enum_name,
+                        variant_name,
+                        fields: None,
+                    })
+                } else {
+                    // Lowercase without parenthesis -> Variable binding
+                    Ok(pace_ast::Pattern::Variable(variant_name))
+                }
+            },
+            Token::Int(_) | Token::Float(_) | Token::String(_) | Token::Bool(_) => {
+                let expr = self.parse_primary()?;
+                Ok(pace_ast::Pattern::Literal(expr))
+            },
+            _ => Err(("Expected pattern".to_string(), self.current_span))
+        }
+    }
+
     fn parse_match_stmt(&mut self) -> Result<Stmt, (String, (usize, usize))> {
         self.advance(); // consume match
         let expr = self.parse_expr()?;
@@ -256,12 +322,17 @@ impl<'a> Parser<'a> {
 
         let mut arms = Vec::new();
         while self.current_token != Token::RBrace && self.current_token != Token::Eof {
-            let pattern = self.parse_expr()?;
+            let pattern = self.parse_pattern()?;
             if !self.match_token(Token::Arrow) {
                 return Err(("Expected '=>' after match pattern".to_string(), self.current_span));
             }
             let body = Box::new(self.parse_stmt()?);
             arms.push((pattern, body));
+            
+            // Optional comma after arm
+            if self.current_token == Token::Comma {
+                self.advance();
+            }
         }
 
         if !self.match_token(Token::RBrace) {
