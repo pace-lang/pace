@@ -1,0 +1,27 @@
+// Standard Math module
+
+func max(a: Int, b: Int) -> Int {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+func min(a: Int, b: Int) -> Int {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+func isOdd(a: Int) -> Bool {
+    let div = a / 2;
+    let mul = div * 2;
+    return a != mul;
+}
+
+func isEven(a: Int) -> Bool {
+    let div = a / 2;
+    let mul = div * 2;
+    return a == mul;
+}

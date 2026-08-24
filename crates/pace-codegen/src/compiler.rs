@@ -78,6 +78,11 @@ impl JITCompiler {
         builder.symbol("__pace_malloc", pace_runtime::__pace_malloc as *const u8);
         builder.symbol("__pace_retain", pace_runtime::__pace_retain as *const u8);
         builder.symbol("__pace_release", pace_runtime::__pace_release as *const u8);
+        builder.symbol("__pace_free", pace_runtime::__pace_free as *const u8);
+        builder.symbol("__pace_ptr_store", pace_runtime::__pace_ptr_store as *const u8);
+        builder.symbol("__pace_ptr_load", pace_runtime::__pace_ptr_load as *const u8);
+        builder.symbol("__pace_time", pace_runtime::__pace_time as *const u8);
+        builder.symbol("__pace_get_year", pace_runtime::__pace_get_year as *const u8);
         
         let mut module = JITModule::new(builder);
 
@@ -128,6 +133,33 @@ impl JITCompiler {
         sig_bool_to_string.returns.push(AbiParam::new(ptr_ty));
         let bool_to_str_id = module.declare_function("__pace_bool_to_string", Linkage::Import, &sig_bool_to_string).unwrap();
 
+        let mut sig_free = module.make_signature();
+        sig_free.params.push(AbiParam::new(ptr_ty));
+        sig_free.params.push(AbiParam::new(types::I64));
+        let free_id = module.declare_function("__pace_free", Linkage::Import, &sig_free).unwrap();
+
+        let mut sig_ptr_store = module.make_signature();
+        sig_ptr_store.params.push(AbiParam::new(ptr_ty));
+        sig_ptr_store.params.push(AbiParam::new(types::I64));
+        sig_ptr_store.params.push(AbiParam::new(types::I64));
+        let ptr_store_id = module.declare_function("__pace_ptr_store", Linkage::Import, &sig_ptr_store).unwrap();
+
+        let mut sig_ptr_load = module.make_signature();
+        sig_ptr_load.params.push(AbiParam::new(ptr_ty));
+        sig_ptr_load.params.push(AbiParam::new(types::I64));
+        sig_ptr_load.returns.push(AbiParam::new(types::I64));
+        let ptr_load_id = module.declare_function("__pace_ptr_load", Linkage::Import, &sig_ptr_load).unwrap();
+
+        let mut sig_time = module.make_signature();
+        sig_time.params.push(AbiParam::new(types::I64));
+        sig_time.returns.push(AbiParam::new(types::I64));
+        let time_id = module.declare_function("__pace_time", Linkage::Import, &sig_time).unwrap();
+
+        let mut sig_get_year = module.make_signature();
+        sig_get_year.params.push(AbiParam::new(types::I64));
+        sig_get_year.returns.push(AbiParam::new(types::I64));
+        let get_year_id = module.declare_function("__pace_get_year", Linkage::Import, &sig_get_year).unwrap();
+
         let mut funcs = HashMap::new();
         funcs.insert("print_int".to_string(), print_int_id);
         funcs.insert("print_float".to_string(), print_float_id);
@@ -139,6 +171,11 @@ impl JITCompiler {
         funcs.insert("int_to_string".to_string(), int_to_str_id);
         funcs.insert("float_to_string".to_string(), float_to_str_id);
         funcs.insert("bool_to_string".to_string(), bool_to_str_id);
+        funcs.insert("free".to_string(), free_id);
+        funcs.insert("ptr_store".to_string(), ptr_store_id);
+        funcs.insert("ptr_load".to_string(), ptr_load_id);
+        funcs.insert("time".to_string(), time_id);
+        funcs.insert("get_year".to_string(), get_year_id);
 
         Self {
             builder_context: FunctionBuilderContext::new(),
@@ -226,11 +263,14 @@ impl JITCompiler {
                 
                 for method_stmt in methods {
                     if let Stmt::FuncDecl { name: method_name, params, return_type: _, .. } = method_stmt {
-                        if !method_map.contains_key(method_name) {
-                            method_map.insert(method_name.clone(), m_offset);
-                            m_offset += 8;
+                        if method_name != "init" {
+                            if !method_map.contains_key(method_name) {
+                                method_map.insert(method_name.clone(), m_offset);
+                                m_offset += 8;
+                            }
                         }
                         
+
                         let full_name = format!("{}_{}", class_name, method_name);
                         let mut sig = self.module.make_signature();
                         sig.params.push(AbiParam::new(ptr_ty)); // self

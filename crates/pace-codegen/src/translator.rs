@@ -107,7 +107,7 @@ impl Translator {
                 // Then
                 builder.switch_to_block(then_block);
                 builder.seal_block(then_block);
-                let (then_res, then_term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, builder, then_branch, variables, var_index, func_returns)?;
+                let (_then_res, then_term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, builder, then_branch, variables, var_index, func_returns)?;
                 if !then_term {
                     builder.ins().jump(merge_block, &[]);
                 }
@@ -128,7 +128,8 @@ impl Translator {
                 builder.switch_to_block(merge_block);
                 builder.seal_block(merge_block);
                 
-                Ok((then_res, then_term && else_term))
+                let res = builder.ins().iconst(types::I64, 0);
+                Ok((res, then_term && else_term))
             }
             Stmt::While { condition, body } => {
                 let cond_block = builder.create_block();
@@ -255,6 +256,7 @@ impl Translator {
                         if let Some(ty) = func_returns.get(&full_name) {
                             return ty.clone();
                         }
+                        return VarType::Unknown;
                     } else if let VarType::Struct(obj_name) = obj_ty {
                         let full_name = format!("{}_{}", obj_name, property);
                         if let Some(ty) = func_returns.get(&full_name) {

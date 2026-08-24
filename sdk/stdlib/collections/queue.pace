@@ -1,0 +1,28 @@
+// Standard Queue Implementation
+
+class IntQueue {
+    var list: IntList;
+    var head: Int;
+
+    func init() {
+        self.list = IntList();
+        self.head = 0;
+    }
+
+    func enqueue(val: Int) {
+        self.list.push(val);
+    }
+
+    func dequeue() -> Int {
+        if self.head >= self.list.length() {
+            return 0; // Empty
+        }
+        let val = self.list.get(self.head);
+        self.head = self.head + 1;
+        return val;
+    }
+
+    func length() -> Int {
+        return self.list.length() - self.head;
+    }
+}

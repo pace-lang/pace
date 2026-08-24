@@ -1,0 +1,5 @@
+// Standard Collections Module
+import "./collections/array";
+import "./collections/list";
+import "./collections/set";
+import "./collections/queue";

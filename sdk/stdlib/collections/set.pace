@@ -1,0 +1,35 @@
+// Standard Set Implementation
+
+class IntSet {
+    // Array-backed set for simplicity in V1 standard library without generics.
+    // O(N) insert, but safe and easy to use.
+    var list: IntList;
+
+    func init() {
+        self.list = IntList();
+    }
+
+    func insert(val: Int) -> Bool {
+        if self.contains(val) {
+            return false;
+        }
+        self.list.push(val);
+        return true;
+    }
+
+    func contains(val: Int) -> Bool {
+        var i = 0;
+        let len = self.list.length();
+        while i < len {
+            if self.list.get(i) == val {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    func length() -> Int {
+        return self.list.length();
+    }
+}

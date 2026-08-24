@@ -2,7 +2,7 @@
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_print_int(val: i64) {
-    println!("pace says: {}", val);
+    println!("{}", val);
     let _ = std::io::Write::flush(&mut std::io::stdout());
 }
 
@@ -111,4 +111,45 @@ pub extern "C" fn __pace_release(obj: *mut u8) {
             }
         }
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_free(ptr: *mut u8, size: usize) {
+    if !ptr.is_null() {
+        unsafe {
+            std::alloc::dealloc(ptr, std::alloc::Layout::from_size_align(size, 8).unwrap());
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_ptr_store(ptr: *mut u8, offset: i64, val: i64) {
+    unsafe {
+        let target = ptr.offset(offset as isize) as *mut i64;
+        *target = val;
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_ptr_load(ptr: *const u8, offset: i64) -> i64 {
+    unsafe {
+        let target = ptr.offset(offset as isize) as *const i64;
+        *target
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_time(_arg: i64) -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_get_year(ts: i64) -> i64 {
+    // Basic approximation, ignores some leap seconds/days, but good enough for test if complex date isn't needed.
+    // Actually using chrono is better, but since it's not in dependencies, we'll do simple math.
+    // 1970 + ts / 31556926 (seconds in a year approx)
+    1970 + (ts / 31556926)
 }

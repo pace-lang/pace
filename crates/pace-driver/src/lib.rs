@@ -73,10 +73,12 @@ impl CompilerSession {
                     } else if let Ok(home_path) = std::env::var("PACE_HOME") {
                         resolved_path = std::path::Path::new(&home_path).join("stdlib").join(format!("{}.pace", path_without_std));
                     } else {
-                        // Fallback to testing directory for now
-                        resolved_path = std::env::current_dir().unwrap().join("sdk/stdlib").join(format!("{}.pace", path_without_std));
+                        // Fallback to compile-time repository root
+                        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+                        let fallback_path = std::path::Path::new(manifest_dir).join("../../sdk/stdlib");
+                        resolved_path = fallback_path.join(format!("{}.pace", path_without_std));
                         if !resolved_path.exists() {
-                            return Err(miette::miette!("Package Error: Standard library not found. Please set PACE_STDLIB or PACE_HOME."));
+                            return Err(miette::miette!("Package Error: Standard library not found at '{}'. Please set PACE_STDLIB or PACE_HOME.", resolved_path.display()));
                         }
                     }
                 } else if import_path.starts_with("./") || import_path.starts_with("../") {

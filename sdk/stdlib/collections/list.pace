@@ -1,0 +1,57 @@
+// Standard Dynamic List Implementation
+// Backed by raw memory allocation for high performance and no leaks (ARC drop)
+
+class IntList {
+    var ptr: Int;
+    var len: Int;
+    var cap: Int;
+
+    func init() {
+        self.ptr = 0;
+        self.len = 0;
+        self.cap = 0;
+    }
+
+    func push(val: Int) {
+        if self.cap == 0 {
+            self.cap = 16;
+            self.ptr = malloc(self.cap * 8); // 8 bytes per i64
+        } else if self.len >= self.cap {
+            let newCap = self.cap * 2;
+            let newPtr = malloc(newCap * 8);
+            
+            // Copy old data
+            var i = 0;
+            while i < self.len {
+                let v = ptr_load(self.ptr, i * 8);
+                ptr_store(newPtr, i * 8, v);
+                i = i + 1;
+            }
+            
+            free(self.ptr, self.cap * 8);
+            self.ptr = newPtr;
+            self.cap = newCap;
+        }
+        ptr_store(self.ptr, self.len * 8, val);
+        self.len = self.len + 1;
+    }
+
+    func get(idx: Int) -> Int {
+        if idx >= self.len {
+            // Out of bounds
+            return 0;
+        }
+        return ptr_load(self.ptr, idx * 8);
+    }
+    
+    func length() -> Int {
+        return self.len;
+    }
+
+    func drop() {
+        if self.ptr != 0 {
+            free(self.ptr, self.cap * 8);
+            self.ptr = 0;
+        }
+    }
+}

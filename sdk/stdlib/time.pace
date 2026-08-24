@@ -1,0 +1,54 @@
+// Standard Time module
+
+class DateTime {
+    var timestamp: Int;
+    var isUtc: Bool;
+
+    func init(timestamp: Int, isUtc: Bool) {
+        self.timestamp = timestamp;
+        self.isUtc = isUtc;
+    }
+
+    func toUnixTimestamp() -> Int {
+        return self.timestamp;
+    }
+
+    func getYear() -> Int {
+        // Calls the runtime intrinsic __pace_get_year
+        return get_year(self.timestamp);
+    }
+
+    func difference(other: DateTime) -> Duration {
+        var diff = self.timestamp - other.timestamp;
+        if diff < 0 {
+            diff = other.timestamp - self.timestamp;
+        }
+        return Duration(diff);
+    }
+}
+
+class Duration {
+    var seconds: Int;
+
+    func init(seconds: Int) {
+        self.seconds = seconds;
+    }
+
+    func inSeconds() -> Int {
+        return self.seconds;
+    }
+
+    func inMinutes() -> Int {
+        return self.seconds / 60;
+    }
+
+    func inHours() -> Int {
+        return self.seconds / 3600;
+    }
+}
+
+func now() -> DateTime {
+    // Calls the runtime intrinsic __pace_time
+    let ts = time(0);
+    return DateTime(ts, true);
+}

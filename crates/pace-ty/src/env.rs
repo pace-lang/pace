@@ -93,6 +93,54 @@ impl Environment {
                 generic_params: None,
             },
         );
+        self.register_function(
+            "malloc".to_string(),
+            FunctionSignature {
+                params: vec![Type::Int],
+                return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+            },
+        );
+        self.register_function(
+            "free".to_string(),
+            FunctionSignature {
+                params: vec![Type::Int, Type::Int],
+                return_type: Type::Void,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+            },
+        );
+        self.register_function(
+            "ptr_store".to_string(),
+            FunctionSignature {
+                params: vec![Type::Int, Type::Int, Type::Int],
+                return_type: Type::Void,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+            },
+        );
+        self.register_function(
+            "ptr_load".to_string(),
+            FunctionSignature {
+                params: vec![Type::Int, Type::Int],
+                return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+            },
+        );
+        self.register_function(
+            "time".to_string(),
+            FunctionSignature {
+                params: vec![Type::Int],
+                return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+            },
+        );
+        self.register_function(
+            "get_year".to_string(),
+            FunctionSignature {
+                params: vec![Type::Int],
+                return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+            },
+        );
     }
 
     pub fn push_scope(&mut self) {

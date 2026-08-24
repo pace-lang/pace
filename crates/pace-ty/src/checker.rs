@@ -681,9 +681,8 @@ impl TypeChecker {
                     }
                 
                 // For member access calls (e.g. self.client.get())
-                // We'll trust that the member access validated the existence of the method.
-                // Since our MemberAccess doesn't return FunctionSignature yet, we just return Unknown
-                Ok(Type::Unknown)
+                // MemberAccess returns the method's return type, so we just return callee_ty
+                Ok(callee_ty)
             }
             Expr::MemberAccess { object, property, .. } => {
                 let obj_ty = self.check_expr(object)?;
