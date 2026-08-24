@@ -1,0 +1,20 @@
+---
+source: crates/pace-ast/src/lib.rs
+expression: ast
+---
+VarDecl {
+    name: "x",
+    is_mutable: false,
+    type_annotation: Some(
+        "Int",
+    ),
+    initializer: Some(
+        IntLiteral(
+            42,
+        ),
+    ),
+    span: (
+        0,
+        0,
+    ),
+}

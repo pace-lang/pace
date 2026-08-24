@@ -727,7 +727,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 expr = Expr::MemberAccess {
                     object: Box::new(expr),
-                    property: property,
+                    property,
                     computed_class: None,
                 };
             } else if self.match_token(Token::QuestionDot) {
@@ -738,7 +738,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 expr = Expr::OptionalMemberAccess {
                     object: Box::new(expr),
-                    property: property,
+                    property,
                 };
             } else if self.match_token(Token::LParen) {
                 let mut args = Vec::new();
@@ -824,7 +824,7 @@ impl<'a> Parser<'a> {
                 
                 let mut expr_str = String::new();
                 let mut depth = 1;
-                while let Some(inner_c) = chars.next() {
+                for inner_c in chars.by_ref() {
                     if inner_c == '{' { depth += 1; }
                     if inner_c == '}' {
                         depth -= 1;

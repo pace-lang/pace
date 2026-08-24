@@ -17,6 +17,12 @@ pub struct AotCompiler {
     interface_layouts: HashMap<String, InterfaceLayout>,
 }
 
+impl Default for AotCompiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AotCompiler {
     pub fn new() -> Self {
         let mut flag_builder = settings::builder();
@@ -163,8 +169,8 @@ impl AotCompiler {
                 let mut vtable_funcs = Vec::new();
                 
                 // Seed methods from interface if implemented
-                if let Stmt::ClassDecl { implements: Some(iface_name), .. } = stmt {
-                    if let Some(iface_layout) = self.interface_layouts.get(iface_name) {
+                if let Stmt::ClassDecl { implements: Some(iface_name), .. } = stmt
+                    && let Some(iface_layout) = self.interface_layouts.get(iface_name) {
                         for (m_name, m_off) in &iface_layout.methods {
                             method_map.insert(m_name.clone(), *m_off);
                             if *m_off >= m_offset {
@@ -172,7 +178,6 @@ impl AotCompiler {
                             }
                         }
                     }
-                }
                 
                 let ptr_ty = self.module.target_config().pointer_type();
                 
@@ -353,7 +358,7 @@ impl AotCompiler {
             if matches!(ty, VarType::Object(_)) {
                 let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, offset as i32);
                 let release_id = *self.funcs.get("release").unwrap();
-                let local_release = self.module.declare_func_in_func(release_id, &mut builder.func);
+                let local_release = self.module.declare_func_in_func(release_id, builder.func);
                 builder.ins().call(local_release, &[val]);
             }
         }

@@ -1,3 +1,5 @@
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_print_int(val: i64) {
     println!("pace says: {}", val);
@@ -72,9 +74,9 @@ pub extern "C" fn __pace_retain(obj: *mut u8) {
     if obj.is_null() {
         return;
     }
+    let rc_ptr = obj as *const std::sync::atomic::AtomicI64;
     unsafe {
-        let rc_ptr = obj as *mut i64;
-        *rc_ptr += 1;
+        (*rc_ptr).fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -83,27 +85,30 @@ pub extern "C" fn __pace_release(obj: *mut u8) {
     if obj.is_null() {
         return;
     }
+    let rc_ptr = obj as *const std::sync::atomic::AtomicI64;
     unsafe {
-        let rc_ptr = obj as *mut i64;
-        *rc_ptr -= 1;
-        if *rc_ptr == 0 {
+        if (*rc_ptr).fetch_sub(1, std::sync::atomic::Ordering::Release) == 1 {
+            std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire);
+            
             // Load vtable pointer from Offset 8
             let vtable_ptr_addr = obj.add(8) as *const *const u8;
             let vtable_ptr = *vtable_ptr_addr;
             
-            // Load drop function from VTable Offset 0
-            let drop_fn_addr = vtable_ptr as *const extern "C" fn(*mut u8);
-            let drop_fn = *drop_fn_addr;
-            
-            // Load size from VTable Offset 8
-            let size_addr = vtable_ptr.add(8) as *const i64;
-            let size = *size_addr as usize;
-            
-            // Call the drop function to release fields
-            drop_fn(obj);
-            
-            // Deallocate the memory
-            std::alloc::dealloc(obj, std::alloc::Layout::from_size_align(size, 8).unwrap());
+            if !vtable_ptr.is_null() {
+                // Load drop function from VTable Offset 0
+                let drop_fn_addr = vtable_ptr as *const Option<extern "C" fn(*mut u8)>;
+                if let Some(drop_fn) = *drop_fn_addr {
+                    // Call the drop function to release fields
+                    drop_fn(obj);
+                }
+                
+                // Load size from VTable Offset 8
+                let size_addr = vtable_ptr.add(8) as *const i64;
+                let size = *size_addr as usize;
+                
+                // Deallocate the memory
+                std::alloc::dealloc(obj, std::alloc::Layout::from_size_align(size, 8).unwrap());
+            }
         }
     }
 }

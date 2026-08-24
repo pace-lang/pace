@@ -20,6 +20,12 @@ pub struct TypeChecker {
     pub errors: Vec<TypeError>,
 }
 
+impl Default for TypeChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TypeChecker {
     pub fn new() -> Self {
         Self {
@@ -207,10 +213,10 @@ impl TypeChecker {
                     };
                     self.env.register_class(name.clone(), sig);
                 }
-                Stmt::Import { path, items: _ } => {
+                Stmt::Import { path, items: _ }
                     // Basic placeholder for module resolution.
                     // For now, if we import "std/collection", we mock registering `List` and `Set`
-                    if path == "std/collection" {
+                    if path == "std/collection" => {
                         self.env.register_class("List".to_string(), ClassSignature {
                             fields: HashMap::new(),
                             methods: HashMap::new(),
@@ -220,7 +226,6 @@ impl TypeChecker {
                             methods: HashMap::new(),
                         });
                     }
-                }
                 _ => {}
             }
         }
@@ -387,7 +392,7 @@ impl TypeChecker {
                     // Check if class actually implements the interface
                     if let Some(iface_sig) = self.env.classes.get(iface_name) {
                         let class_sig = self.env.classes.get(name).unwrap().clone();
-                        for (m_name, _expected_sig) in &iface_sig.methods {
+                        for m_name in iface_sig.methods.keys() {
                             if let Some(_actual_sig) = class_sig.methods.get(m_name) {
                                 // For simplicity, we just check if it exists right now
                                 // In a full compiler, we'd check parameter counts and types
@@ -524,7 +529,7 @@ impl TypeChecker {
                             message: format!("Undefined variable '{}'", name)
                         })
                     }
-                } else if let Expr::MemberAccess { object, property: _, .. } = &**target {
+                } else if let Expr::MemberAccess { object, .. } = &**target {
                     let _obj_ty = self.check_expr(object)?;
                     // Simple validation for now - real validation needs class layout check
                     Ok(val_ty)
@@ -547,11 +552,10 @@ impl TypeChecker {
                     if let Some(_sig) = self.env.classes.get(name) {
                         return Ok(Type::Class(name.clone()));
                     }
-                } else if let Type::Struct(name) = &callee_ty {
-                    if let Some(_sig) = self.env.structs.get(name) {
+                } else if let Type::Struct(name) = &callee_ty
+                    && let Some(_sig) = self.env.structs.get(name) {
                         return Ok(Type::Struct(name.clone()));
                     }
-                }
                 
                 // If it's a function or method, we need its signature
                 // Currently, callee_ty might just be Type::Unknown if it was a MemberAccess
@@ -559,8 +563,8 @@ impl TypeChecker {
                 // In a perfect world, MemberAccess returns a FunctionSignature type.
                 
                 // For direct global function calls
-                if let Expr::Identifier(func_name) = &**callee {
-                    if let Some(sig) = self.env.functions.get(func_name) {
+                if let Expr::Identifier(func_name) = &**callee
+                    && let Some(sig) = self.env.functions.get(func_name) {
                         if sig.visibility == Visibility::Private && sig.module != self.current_module {
                             return Err(TypeError {
                                 message: format!("Function '{}' is private and cannot be accessed outside of module '{}'", func_name, sig.module)
@@ -582,7 +586,6 @@ impl TypeChecker {
                         }
                         return Ok(sig.return_type.clone());
                     }
-                }
                 
                 // For member access calls (e.g. self.client.get())
                 // We'll trust that the member access validated the existence of the method.
@@ -616,13 +619,12 @@ impl TypeChecker {
                     return Ok(f_ty.clone());
                 }
                 if let Some(m_sig) = sig.methods.get(property) {
-                    if m_sig.visibility == Visibility::Private {
-                        if self.current_class.as_ref() != Some(class_name) {
+                    if m_sig.visibility == Visibility::Private
+                        && self.current_class.as_ref() != Some(class_name) {
                             return Err(TypeError {
                                 message: format!("Method '{}' is private and cannot be accessed from outside class '{}'", property, class_name)
                             });
                         }
-                    }
                     return Ok(m_sig.return_type.clone());
                 }
                 Err(TypeError {

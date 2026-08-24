@@ -14,6 +14,12 @@ pub struct MultipleTypeErrors {
 
 pub struct CompilerSession;
 
+impl Default for CompilerSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompilerSession {
     pub fn new() -> Self {
         // Ensure pace-runtime is linked in the driver for JIT

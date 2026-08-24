@@ -16,6 +16,7 @@ mod tests {
             is_mutable: false,
             type_annotation: Some("Int".to_string()),
             initializer: Some(Expr::IntLiteral(42)),
+            span: (0, 0),
         };
 
         // Snapshot test the debug output of the AST

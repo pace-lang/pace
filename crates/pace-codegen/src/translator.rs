@@ -80,7 +80,7 @@ impl Translator {
                 let val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, expr, variables, var_index, func_returns)?;
                 if matches!(ty, VarType::Object(_)) {
                     let release_id = *funcs.get("release").unwrap();
-                    let local_release = module.declare_func_in_func(release_id, &mut builder.func);
+                    let local_release = module.declare_func_in_func(release_id, builder.func);
                     builder.ins().call(local_release, &[val]);
                 }
                 Ok((val, false))
@@ -186,7 +186,7 @@ impl Translator {
                         if matches!(ty, VarType::Object(_)) {
                             let obj_val = builder.use_var(var);
                             let release_id = *funcs.get("release").unwrap_or_else(|| panic!("release not found"));
-                            let local_release = module.declare_func_in_func(release_id, &mut builder.func);
+                            let local_release = module.declare_func_in_func(release_id, builder.func);
                             builder.ins().call(local_release, &[obj_val]);
                         }
                         variables.remove(&var_name);
@@ -232,7 +232,7 @@ impl Translator {
                 if let Expr::Identifier(name) = &**callee {
                     if let Some(ty) = func_returns.get(name) {
                         return ty.clone();
-                    } else if name.chars().next().map_or(false, |c| c.is_uppercase()) {
+                    } else if name.chars().next().is_some_and(|c| c.is_uppercase()) {
                         if struct_layouts.contains_key(name) {
                             return VarType::Struct(name.clone());
                         }
@@ -309,7 +309,7 @@ impl Translator {
                 let data_id = module.declare_data(&string_name, Linkage::Local, false, false).unwrap();
                 module.define_data(data_id, &data_ctx).unwrap();
                 
-                let local_id = module.declare_data_in_func(data_id, &mut builder.func);
+                let local_id = module.declare_data_in_func(data_id, builder.func);
                 let ptr_ty = module.target_config().pointer_type();
                 Ok(builder.ins().symbol_value(ptr_ty, local_id))
             }
@@ -322,7 +322,7 @@ impl Translator {
                     let string_name = format!("__empty_str_{}", id);
                     let data_id = module.declare_data(&string_name, Linkage::Local, false, false).unwrap();
                     module.define_data(data_id, &data_ctx).unwrap();
-                    let local_id = module.declare_data_in_func(data_id, &mut builder.func);
+                    let local_id = module.declare_data_in_func(data_id, builder.func);
                     let ptr_ty = module.target_config().pointer_type();
                     return Ok(builder.ins().symbol_value(ptr_ty, local_id));
                 }
@@ -335,21 +335,21 @@ impl Translator {
                     let str_val = if part_ty == VarType::String {
                         val
                     } else if part_ty == VarType::Float {
-                        let to_str = module.declare_func_in_func(*funcs.get("float_to_string").unwrap(), &mut builder.func);
+                        let to_str = module.declare_func_in_func(*funcs.get("float_to_string").unwrap(), builder.func);
                         let call = builder.ins().call(to_str, &[val]);
                         builder.inst_results(call)[0]
                     } else if part_ty == VarType::Bool {
-                        let to_str = module.declare_func_in_func(*funcs.get("bool_to_string").unwrap(), &mut builder.func);
+                        let to_str = module.declare_func_in_func(*funcs.get("bool_to_string").unwrap(), builder.func);
                         let call = builder.ins().call(to_str, &[val]);
                         builder.inst_results(call)[0]
                     } else { // Assume Int
-                        let to_str = module.declare_func_in_func(*funcs.get("int_to_string").unwrap(), &mut builder.func);
+                        let to_str = module.declare_func_in_func(*funcs.get("int_to_string").unwrap(), builder.func);
                         let call = builder.ins().call(to_str, &[val]);
                         builder.inst_results(call)[0]
                     };
                     
                     if let Some(prev) = current_val {
-                        let concat = module.declare_func_in_func(*funcs.get("concat_strings").unwrap(), &mut builder.func);
+                        let concat = module.declare_func_in_func(*funcs.get("concat_strings").unwrap(), builder.func);
                         let call = builder.ins().call(concat, &[prev, str_val]);
                         current_val = Some(builder.inst_results(call)[0]);
                     } else {
@@ -368,7 +368,7 @@ impl Translator {
                     let val = builder.use_var(*var);
                     if matches!(ty, VarType::Object(_)) {
                         let retain_id = *funcs.get("retain").unwrap();
-                        let local_retain = module.declare_func_in_func(retain_id, &mut builder.func);
+                        let local_retain = module.declare_func_in_func(retain_id, builder.func);
                         builder.ins().call(local_retain, &[val]);
                     }
                     Ok(val)
@@ -470,12 +470,12 @@ impl Translator {
                             // Release old value
                             let old_val = builder.use_var(*var);
                             let release_id = *funcs.get("release").unwrap();
-                            let local_release = module.declare_func_in_func(release_id, &mut builder.func);
+                            let local_release = module.declare_func_in_func(release_id, builder.func);
                             builder.ins().call(local_release, &[old_val]);
                             
                             // Retain new value for the variable (caller gets the original +1)
                             let retain_id = *funcs.get("retain").unwrap();
-                            let local_retain = module.declare_func_in_func(retain_id, &mut builder.func);
+                            let local_retain = module.declare_func_in_func(retain_id, builder.func);
                             builder.ins().call(local_retain, &[val]);
                         }
                         builder.def_var(*var, val);
@@ -502,11 +502,11 @@ impl Translator {
                     if matches!(f_ty, VarType::Object(_)) {
                         let old_val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, f_offset as i32);
                         let release_id = *funcs.get("release").unwrap();
-                        let local_release = module.declare_func_in_func(release_id, &mut builder.func);
+                        let local_release = module.declare_func_in_func(release_id, builder.func);
                         builder.ins().call(local_release, &[old_val]);
                         
                         let retain_id = *funcs.get("retain").unwrap();
-                        let local_retain = module.declare_func_in_func(retain_id, &mut builder.func);
+                        let local_retain = module.declare_func_in_func(retain_id, builder.func);
                         builder.ins().call(local_retain, &[val]);
                     }
                     
@@ -534,7 +534,7 @@ impl Translator {
                         };
                         
                         let func_id = *funcs.get(target_name).unwrap();
-                        let local_func = module.declare_func_in_func(func_id, &mut builder.func);
+                        let local_func = module.declare_func_in_func(func_id, builder.func);
                         let call = builder.ins().call(local_func, &[arg_val]);
                         
                         let results = builder.inst_results(call);
@@ -545,7 +545,7 @@ impl Translator {
                         }
                     }
                     else if let Some(&func_id) = funcs.get(func_name) {
-                        let local_func = module.declare_func_in_func(func_id, &mut builder.func);
+                        let local_func = module.declare_func_in_func(func_id, builder.func);
                         let mut arg_vals = Vec::new();
                         for arg in args {
                             let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, arg, variables, var_index, func_returns)?;
@@ -567,7 +567,7 @@ impl Translator {
                         let ptr_ty = module.target_config().pointer_type();
                         
                         let malloc_id = *funcs.get("malloc").unwrap();
-                        let local_malloc = module.declare_func_in_func(malloc_id, &mut builder.func);
+                        let local_malloc = module.declare_func_in_func(malloc_id, builder.func);
                         
                         let size = 16 + layout.fields.len() * 8;
                         let size_val = builder.ins().iconst(types::I64, size as i64);
@@ -580,7 +580,7 @@ impl Translator {
                         builder.ins().store(cranelift::prelude::MemFlagsData::new(), one, obj_ptr, 0);
                         
                         // Set VTable
-                        let vtable_gv = module.declare_data_in_func(layout.vtable_id, &mut builder.func);
+                        let vtable_gv = module.declare_data_in_func(layout.vtable_id, builder.func);
                         let vtable_addr = builder.ins().symbol_value(ptr_ty, vtable_gv);
                         builder.ins().store(cranelift::prelude::MemFlagsData::new(), vtable_addr, obj_ptr, 8);
                         
@@ -681,7 +681,7 @@ impl Translator {
                 
                 if matches!(f_ty, VarType::Object(_)) {
                     let retain_id = *funcs.get("retain").unwrap();
-                    let local_retain = module.declare_func_in_func(retain_id, &mut builder.func);
+                    let local_retain = module.declare_func_in_func(retain_id, builder.func);
                     builder.ins().call(local_retain, &[val]);
                 }
                 
