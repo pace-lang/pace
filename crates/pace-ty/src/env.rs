@@ -112,7 +112,7 @@ impl Environment {
         self.register_function(
             "ptr_store".to_string(),
             FunctionSignature {
-                params: vec![Type::Int, Type::Int, Type::Int],
+                params: vec![Type::Int, Type::Int, Type::Any],
                 return_type: Type::Void,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
             },
@@ -121,7 +121,7 @@ impl Environment {
             "ptr_load".to_string(),
             FunctionSignature {
                 params: vec![Type::Int, Type::Int],
-                return_type: Type::Int,
+                return_type: Type::Any,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
             },
         );

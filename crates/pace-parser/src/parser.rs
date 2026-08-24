@@ -909,6 +909,45 @@ impl<'a> Parser<'a> {
                     object: Box::new(expr),
                     property,
                 };
+            } else if self.current_token == Token::Less {
+                let backup_lexer = self.lexer.clone();
+                let backup_token = self.current_token.clone();
+                let backup_span = self.current_span;
+                let backup_errors = self.errors.clone();
+                
+                self.advance();
+                let mut generic_args = Vec::new();
+                let mut success = false;
+                
+                if self.current_token != Token::Greater {
+                    loop {
+                        match self.parse_type_annotation() {
+                            Ok(ty) => generic_args.push(ty),
+                            Err(_) => break,
+                        }
+                        if self.match_token(Token::Comma) {
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                
+                if self.match_token(Token::Greater) {
+                    success = true;
+                    expr = Expr::GenericInstantiation {
+                        callee: Box::new(expr),
+                        generic_args,
+                    };
+                }
+                
+                if !success {
+                    // Backtrack, it's a Less-Than binary operator!
+                    self.lexer = backup_lexer;
+                    self.current_token = backup_token;
+                    self.current_span = backup_span;
+                    self.errors = backup_errors;
+                    break;
+                }
             } else if self.match_token(Token::LParen) {
                 let mut args = Vec::new();
                 if self.current_token != Token::RParen {

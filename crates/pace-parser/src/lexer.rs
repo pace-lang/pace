@@ -60,6 +60,7 @@ pub enum Token {
     Eof,
 }
 
+#[derive(Clone)]
 pub struct Lexer<'a> {
     src: std::iter::Peekable<std::str::Chars<'a>>,
     pub byte_pos: usize,

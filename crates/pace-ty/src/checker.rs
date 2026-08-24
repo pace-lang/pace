@@ -86,13 +86,13 @@ impl TypeChecker {
                     self.current_module = old_module;
                 }
                 Stmt::ClassDecl { name, .. } | Stmt::InterfaceDecl { name, .. } => {
-                    self.env.classes.insert(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
+                    self.env.register_class(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
                 }
                 Stmt::StructDecl { name, .. } => {
-                    self.env.structs.insert(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
+                    self.env.register_struct(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
                 }
                 Stmt::EnumDecl { name, .. } => {
-                    self.env.enums.insert(name.clone(), EnumSignature { generic_params: None, variants: HashMap::new() });
+                    self.env.register_enum(name.clone(), EnumSignature { generic_params: None, variants: HashMap::new() });
                 }
                 Stmt::Import { path, .. } => {
                     if path == "std/collection" {
@@ -327,7 +327,7 @@ impl TypeChecker {
                 
                 if let Some(annotation) = type_annotation {
                     let expected_type = self.resolve_type_name(annotation);
-                    if inferred_type != Type::Unknown && inferred_type != expected_type {
+                    if inferred_type != Type::Unknown && inferred_type != expected_type && inferred_type != Type::Any && expected_type != Type::Any {
                         self.env.define(name.clone(), expected_type.clone(), *span, *is_mutable);
                         return Err(TypeError {
                             message: format!(
@@ -371,7 +371,7 @@ impl TypeChecker {
                 };
                 
                 if let Some(expected) = &self.current_return_type {
-                    if expected != &ret_ty && expected != &Type::Unknown {
+                    if expected != &ret_ty && expected != &Type::Unknown && ret_ty != Type::Unknown && expected != &Type::Any && ret_ty != Type::Any {
                         return Err(TypeError {
                             message: format!("Type mismatch: expected return type {:?}, found {:?}", expected, ret_ty)
                         });
@@ -609,7 +609,7 @@ impl TypeChecker {
                             });
                         }
                         
-                        if var_info.ty != val_ty && var_info.ty != Type::Unknown && val_ty != Type::Unknown {
+                        if var_info.ty != val_ty && var_info.ty != Type::Unknown && val_ty != Type::Unknown && var_info.ty != Type::Any && val_ty != Type::Any {
                             return Err(TypeError {
                                 message: format!("Type mismatch: cannot assign {:?} to variable of type {:?}", val_ty, var_info.ty)
                             });

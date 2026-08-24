@@ -1,23 +1,29 @@
-// Standard Set Implementation
+import "./list";
 
-class IntSet {
-    // Array-backed set for simplicity in V1 standard library without generics.
-    // O(N) insert, but safe and easy to use.
-    var list: IntList;
+// Standard Dynamic Set Implementation
+// Uses a List internally and deduplicates on insert
+
+class Set<T> {
+    var list: List<T>;
 
     func init() {
-        self.list = IntList();
+        self.list = List<T>();
     }
 
-    func insert(val: Int) -> Bool {
-        if self.contains(val) {
-            return false;
+    func insert(val: T) -> Bool {
+        var i = 0;
+        let len = self.list.length();
+        while i < len {
+            if self.list.get(i) == val {
+                return false;
+            }
+            i = i + 1;
         }
         self.list.push(val);
         return true;
     }
 
-    func contains(val: Int) -> Bool {
+    func contains(val: T) -> Bool {
         var i = 0;
         let len = self.list.length();
         while i < len {

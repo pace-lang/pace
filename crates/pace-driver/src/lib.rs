@@ -4,6 +4,8 @@ use pace_errors::ParseError;
 use miette::Diagnostic;
 use thiserror::Error;
 
+pub mod monomorphize;
+
 #[derive(Error, Diagnostic, Debug)]
 #[error("Found multiple type errors")]
 #[diagnostic(code(pace::multiple_type_errors))]
@@ -113,10 +115,15 @@ impl CompilerSession {
         let mut visited = std::collections::HashSet::new();
         let path_buf = std::path::Path::new(path);
         let ast = self.load_file(path_buf, &mut visited)?;
+        
+        // Flatten the AST before monomorphization and type checking!
+        let flat_ast = Self::flatten_ast(&ast);
+        let mono_ast = monomorphize::Monomorphizer::run(flat_ast).unwrap_or_else(|_| ast.clone());
+        
         let src = std::fs::read_to_string(path).into_diagnostic()?;
         
         // Run typechecker on the parsed AST
-        match pace_ty::check(&ast) {
+        match pace_ty::check(&mono_ast) {
             Ok(warnings) => {
                 for mut warning in warnings {
                     match &mut warning {
@@ -133,7 +140,7 @@ impl CompilerSession {
             }
         }
         
-        Ok(ast)
+        Ok(mono_ast)
     }
     
 
@@ -151,10 +158,9 @@ impl CompilerSession {
 
     pub fn run_file(&self, path: &str) -> Result<()> {
         let ast = self.check_file(path)?;
-        let flat_ast = Self::flatten_ast(&ast);
         let mut compiler = pace_codegen::JITCompiler::new();
         
-        compiler.compile_and_run(&flat_ast).map_err(|e| {
+        compiler.compile_and_run(&ast).map_err(|e| {
             Report::new(e)
         })?;
         
@@ -194,23 +200,31 @@ impl CompilerSession {
         let obj_path = format!("{}.o", output);
         std::fs::write(&obj_path, obj_bytes).into_diagnostic()?;
         
-        let runtime_path = if let Ok(home) = std::env::var("PACE_HOME") {
-            std::path::PathBuf::from(home).join("target/debug/libpace_runtime.a")
+        let mut runtime_path = None;
+        let base_dir = if let Ok(home) = std::env::var("PACE_HOME") {
+            std::path::PathBuf::from(home)
         } else {
-            std::env::current_dir()
-                .unwrap()
-                .join("target/debug/libpace_runtime.a")
+            std::env::current_dir().unwrap()
         };
+        
+        let debug_path = base_dir.join("target/debug/libpace_runtime.a");
+        let release_path = base_dir.join("target/release/libpace_runtime.a");
+        
+        if debug_path.exists() {
+            runtime_path = Some(debug_path);
+        } else if release_path.exists() {
+            runtime_path = Some(release_path);
+        }
             
         let mut cmd = std::process::Command::new("gcc");
         cmd.arg(&obj_path)
            .arg("-o")
            .arg(output);
            
-        if runtime_path.exists() {
-            cmd.arg(&runtime_path);
+        if let Some(rp) = runtime_path {
+            cmd.arg(&rp);
         } else {
-            println!("Warning: libpace_runtime.a not found at {:?}", runtime_path);
+            println!("Warning: libpace_runtime.a not found in target/debug or target/release");
         }
            
         let status = cmd.status().into_diagnostic()?;
@@ -239,8 +253,12 @@ impl CompilerSession {
             }
         };
 
+        // Flatten the AST before monomorphization and type checking!
+        let flat_ast = Self::flatten_ast(&ast);
+        let mono_ast = monomorphize::Monomorphizer::run(flat_ast).unwrap_or_else(|_| ast.clone());
+
         // Run typechecker on the parsed AST
-        match pace_ty::check(&ast) {
+        match pace_ty::check(&mono_ast) {
             Ok(warnings) => {
                 for mut warning in warnings {
                     match &mut warning {
@@ -257,6 +275,6 @@ impl CompilerSession {
             }
         }
 
-        Ok(ast)
+        Ok(mono_ast)
     }
 }

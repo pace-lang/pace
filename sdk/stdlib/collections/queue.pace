@@ -1,28 +1,73 @@
-// Standard Queue Implementation
+// Standard Dynamic Queue Implementation
+// Backed by raw memory allocation for high performance and no leaks (ARC drop)
 
-class IntQueue {
-    var list: IntList;
+class Queue<T> {
+    var ptr: Int;
     var head: Int;
+    var tail: Int;
+    var cap: Int;
 
     func init() {
-        self.list = IntList();
+        self.ptr = 0;
         self.head = 0;
+        self.tail = 0;
+        self.cap = 0;
     }
 
-    func enqueue(val: Int) {
-        self.list.push(val);
-    }
-
-    func dequeue() -> Int {
-        if self.head >= self.list.length() {
-            return 0; // Empty
+    func enqueue(val: T) {
+        if self.cap == 0 {
+            self.cap = 16;
+            self.ptr = malloc(self.cap * 8); // 8 bytes per i64
+        } else if self.tail >= self.cap {
+            // For simplicity, we just reallocate instead of ring buffer for now
+            let newCap = self.cap * 2;
+            let newPtr = malloc(newCap * 8);
+            
+            // Copy old data
+            var i = self.head;
+            var j = 0;
+            while i < self.tail {
+                let v = ptr_load(self.ptr, i * 8);
+                ptr_store(newPtr, j * 8, v);
+                i = i + 1;
+                j = j + 1;
+            }
+            
+            free(self.ptr, self.cap * 8);
+            self.ptr = newPtr;
+            self.cap = newCap;
+            self.head = 0;
+            self.tail = j;
         }
-        let val = self.list.get(self.head);
-        self.head = self.head + 1;
-        return val;
+        ptr_store(self.ptr, self.tail * 8, val);
+        self.tail = self.tail + 1;
     }
 
+    func dequeue() -> T {
+        if self.head >= self.tail {
+            // Empty queue
+            return ptr_load(self.ptr, 0);
+        }
+        let v = ptr_load(self.ptr, self.head * 8);
+        self.head = self.head + 1;
+        
+        // Reset if empty to save space
+        if self.head == self.tail {
+            self.head = 0;
+            self.tail = 0;
+        }
+        
+        return v;
+    }
+    
     func length() -> Int {
-        return self.list.length() - self.head;
+        return self.tail - self.head;
+    }
+
+    func drop() {
+        if self.ptr != 0 {
+            free(self.ptr, self.cap * 8);
+            self.ptr = 0;
+        }
     }
 }

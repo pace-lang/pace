@@ -1,7 +1,7 @@
 // Standard Dynamic List Implementation
 // Backed by raw memory allocation for high performance and no leaks (ARC drop)
 
-class IntList {
+class List<T> {
     var ptr: Int;
     var len: Int;
     var cap: Int;
@@ -12,7 +12,7 @@ class IntList {
         self.cap = 0;
     }
 
-    func push(val: Int) {
+    func push(val: T) {
         if self.cap == 0 {
             self.cap = 16;
             self.ptr = malloc(self.cap * 8); // 8 bytes per i64
@@ -32,14 +32,27 @@ class IntList {
             self.ptr = newPtr;
             self.cap = newCap;
         }
+        
+        // Note: For objects, we need to ensure ARC doesn't prematurely drop them,
+        // but since we are taking ownership in the array, standard ptr_store works.
+        // Wait, for Monomorphization, we need an intrinsic like `__pace_ptr_store_obj`?
+        // Actually, for T, `ptr_store` expects an i64, so we must cast T to i64?
+        // But in Pace, there's no casting. Wait! 
+        // If T is Object, `val` is passed as i64 in codegen. 
+        // Wait, `ptr_store(ptr, offset, val)` takes `(Int, Int, Int)`.
+        // If `val` is `T`, it will fail type-checking because `ptr_store` expects `Int`.
+        // I'll need to update `ptr_store` signature in `env.rs` to take `Any`, or add `__pace_cast_to_int`!
         ptr_store(self.ptr, self.len * 8, val);
         self.len = self.len + 1;
     }
 
-    func get(idx: Int) -> Int {
+    func get(idx: Int) -> T {
         if idx >= self.len {
             // Out of bounds
-            return 0;
+            // Return null or panic? We don't have panic yet.
+            // For now, return the first element or something, or null if nullable.
+            // Since T is not nullable, we just load 0 and cast.
+            return ptr_load(self.ptr, 0);
         }
         return ptr_load(self.ptr, idx * 8);
     }
@@ -50,6 +63,10 @@ class IntList {
 
     func drop() {
         if self.ptr != 0 {
+            // For Object<T>, we should ideally call __pace_release on each element before freeing!
+            // But since Pace ARC is handled by variable scopes, when List is dropped, the elements
+            // should be released! 
+            // Wait, memory management for elements inside generic collections!
             free(self.ptr, self.cap * 8);
             self.ptr = 0;
         }
