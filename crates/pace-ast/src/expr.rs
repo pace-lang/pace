@@ -14,6 +14,11 @@ pub enum Expr {
     Null,
     /// An identifier (e.g., my_var)
     Identifier(String),
+    /// A generic instantiation (e.g., Box<Int> or first<String>)
+    GenericInstantiation {
+        callee: Box<Expr>,
+        generic_args: Vec<crate::stmt::TypeAnnotation>,
+    },
     /// A binary operation (e.g., a + b)
     Binary {
         left: Box<Expr>,

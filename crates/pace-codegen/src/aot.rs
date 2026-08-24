@@ -264,11 +264,17 @@ impl AotCompiler {
     }
 
     pub fn compile_to_object(mut self, stmts: &[Stmt]) -> Result<Vec<u8>, CodegenError> {
-        self.register_interfaces(stmts);
-        self.register_classes(stmts)?;
+        // Run Monomorphization Pass
+        let mut mono = crate::monomorphize::MonomorphizationPass::new();
+        mono.process(stmts);
+        let final_stmts = &mono.final_stmts;
+
+        // Register layouts for classes and interfaces
+        self.register_interfaces(final_stmts);
+        self.register_classes(final_stmts)?;
 
         // Pass 1: Declare all functions
-        for stmt in stmts {
+        for stmt in final_stmts {
             if let Stmt::FuncDecl { name, params, .. } = stmt {
                 let mut sig = self.module.make_signature();
                 for _ in params {
@@ -286,7 +292,7 @@ impl AotCompiler {
         }
 
         let mut func_returns = HashMap::new();
-        for stmt in stmts {
+        for stmt in final_stmts {
             if let Stmt::FuncDecl { name, return_type, .. } = stmt {
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                 func_returns.insert(name.clone(), crate::translator::parse_vartype(ret));
@@ -310,7 +316,7 @@ impl AotCompiler {
         }
 
         // Pass 2: Define all functions and class methods
-        for stmt in stmts {
+        for stmt in final_stmts {
             if let Stmt::FuncDecl { name, params, body, return_type, .. } = stmt {
                 let id = *self.funcs.get(name).unwrap();
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");

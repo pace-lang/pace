@@ -475,6 +475,9 @@ impl TypeChecker {
             Expr::IntLiteral(_) => Ok(Type::Int),
             Expr::FloatLiteral(_) => Ok(Type::Float),
             Expr::StringLiteral(_) => Ok(Type::String),
+            Expr::GenericInstantiation { callee, .. } => {
+                self.check_expr(callee)
+            }
             Expr::InterpolatedString(parts) => {
                 for part in parts {
                     let ty = self.check_expr(part)?;
