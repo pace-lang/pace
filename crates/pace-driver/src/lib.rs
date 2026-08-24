@@ -61,18 +61,28 @@ impl CompilerSession {
             if let Stmt::Import { path: import_path, .. } = stmt {
                 let resolved_path;
                 
-                if import_path.starts_with("./") || import_path.starts_with("../") {
+                if import_path.starts_with("std:") {
+                    let path_without_std = import_path.strip_prefix("std:").unwrap_or(import_path);
+                    if let Ok(stdlib_path) = std::env::var("PACE_STDLIB") {
+                        resolved_path = std::path::Path::new(&stdlib_path).join(format!("{}.pace", path_without_std));
+                    } else if let Ok(home_path) = std::env::var("PACE_HOME") {
+                        resolved_path = std::path::Path::new(&home_path).join("stdlib").join(format!("{}.pace", path_without_std));
+                    } else {
+                        // Fallback to testing directory for now
+                        resolved_path = std::env::current_dir().unwrap().join("sdk/stdlib").join(format!("{}.pace", path_without_std));
+                        if !resolved_path.exists() {
+                            return Err(miette::miette!("Package Error: Standard library not found. Please set PACE_STDLIB or PACE_HOME."));
+                        }
+                    }
+                } else if import_path.starts_with("./") || import_path.starts_with("../") {
                     let parent_dir = path_buf.parent().unwrap_or(std::path::Path::new(""));
                     resolved_path = parent_dir.join(format!("{}.pace", import_path));
                 } else {
-                    if let Ok(stdlib_path) = std::env::var("PACE_STDLIB") {
-                        let path_without_std = import_path.strip_prefix("std/").unwrap_or(import_path);
-                        resolved_path = std::path::Path::new(&stdlib_path).join(format!("{}.pace", path_without_std));
-                    } else if let Ok(home_path) = std::env::var("PACE_HOME") {
-                        let path_without_std = import_path.strip_prefix("std/").unwrap_or(import_path);
-                        resolved_path = std::path::Path::new(&home_path).join("stdlib").join(format!("{}.pace", path_without_std));
-                    } else {
-                        return Err(miette::miette!("Package Error: Standard library not found. Please set PACE_STDLIB or PACE_HOME."));
+                    // External package
+                    let packages_dir = std::env::current_dir().unwrap().join("packages");
+                    resolved_path = packages_dir.join(format!("{}.pace", import_path));
+                    if !resolved_path.exists() {
+                        return Err(miette::miette!("Package Error: External package '{}' not found in packages/ directory.", import_path));
                     }
                 }
                 

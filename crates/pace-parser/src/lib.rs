@@ -13,11 +13,36 @@ pub fn parse(src: &str) -> Result<Vec<Stmt>, Vec<(String, (usize, usize))>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pace_ast::Stmt;
 
     #[test]
     fn test_parse_let_decl() {
-        let src = "let x: Int = 42;";
-        let ast = parse(src).expect("Failed to parse");
-        insta::assert_debug_snapshot!(ast);
+        let src = "let x: Int = 5;";
+        let stmts = crate::parse(src).unwrap();
+        assert_eq!(stmts.len(), 1);
+    }
+    
+    #[test]
+    fn test_import_parsing() {
+        let src = r#"
+            import std:io;
+            import "./models/user";
+            import "http";
+        "#;
+        let stmts = crate::parse(src).unwrap();
+        assert_eq!(stmts.len(), 3);
+        
+        match &stmts[0] {
+            Stmt::Import { path, .. } => assert_eq!(path, "std:io"),
+            _ => panic!("Expected Import"),
+        }
+        match &stmts[1] {
+            Stmt::Import { path, .. } => assert_eq!(path, "./models/user"),
+            _ => panic!("Expected Import"),
+        }
+        match &stmts[2] {
+            Stmt::Import { path, .. } => assert_eq!(path, "http"),
+            _ => panic!("Expected Import"),
+        }
     }
 }

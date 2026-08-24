@@ -280,6 +280,7 @@ impl<'a> Parser<'a> {
                 Token::Dot => path.push('.'),
                 Token::Slash => path.push('/'),
                 Token::Minus => path.push('-'),
+                Token::Colon => path.push(':'),
                 Token::Ident(id) => path.push_str(id),
                 Token::Int(n) => path.push_str(&n.to_string()),
                 _ => break,
