@@ -1,0 +1,46 @@
+import std:io;
+
+import "./test_operators";
+import "./test_loops";
+import "./test_conditions";
+import "./test_classes";
+import "./test_structs";
+import "./test_interfaces";
+import "./test_ffi";
+import "./test_time";
+import "./test_error_handling";
+
+func main() {
+    print("=== PACE INTEGRATION TEST SUITE ===");
+    
+    // Run mathematical operators and boolean tests
+    runOperatorTests();
+    
+    // Run while loop iterations
+    runLoopTests();
+    
+    // Run if-else conditional branches
+    runConditionTests();
+    
+    // Run Classes and ARC memory model allocations
+    runClassTests();
+    
+
+    // Run FFI calls and unsafe memory allocations via Array
+    runFfiTests();
+    
+
+    // Run Struct tests
+    runStructTests();
+    
+    // Run Interface implementations and method resolution
+    runInterfaceTests();
+    
+    // Run DateTime and Duration standard library functionality
+    runTimeTests();
+    
+    // Run Error Handling and `?` Operator tests
+    runErrorHandlingTests();
+    
+    print("=== ALL TESTS PASSED ===");
+}

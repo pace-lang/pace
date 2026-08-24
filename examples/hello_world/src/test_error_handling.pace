@@ -1,0 +1,40 @@
+import std:core;
+
+func mightFail(b: Bool) -> Result<Int, String> {
+    if b {
+        return Result<Int, String>::Ok(42);
+    } else {
+        return Result<Int, String>::Err("It failed!");
+    }
+}
+
+func testTry(b: Bool) -> Result<Int, String> {
+    // If it fails, it should immediately return Result<Int, String>::Err("It failed!")
+    // If it succeeds, x should be 42.
+    let x = mightFail(b)?;
+    return Result<Int, String>::Ok(x * 2);
+}
+
+func runErrorHandlingTests() {
+    print("--- Running Error Handling and `?` Operator Tests ---");
+    let success = testTry(true);
+    let failure = testTry(false);
+
+    match success {
+        Ok(val) => {
+            print("Try Operator Success Output (should be 84):");
+            print(val);
+        }
+        Err(err) => {
+            print(err);
+        }
+    }
+
+    match failure {
+        Ok(val) => print(val);
+        Err(err) => {
+            print("Try Operator Failure Output (should be 'It failed!'):");
+            print(err);
+        }
+    }
+}

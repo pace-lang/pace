@@ -911,6 +911,8 @@ impl<'a> Parser<'a> {
         loop {
             if self.match_token(Token::Bang) {
                 expr = Expr::Unwrap(Box::new(expr));
+            } else if self.match_token(Token::Question) {
+                expr = Expr::Try(Box::new(expr));
             } else if self.match_token(Token::Dot) {
                 let property = match &self.current_token {
                     Token::Ident(id) => id.clone(),

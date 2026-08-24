@@ -747,6 +747,43 @@ impl TypeChecker {
                     Err(TypeError { message: "Cannot unwrap a non-nullable type".to_string() })
                 }
             }
+            Expr::Try(inner) => {
+                let inner_ty = self.check_expr(inner)?;
+                if let Type::Enum(name) = &inner_ty {
+                    if let Some(sig) = self.env.enums.get(name) {
+                        if name.starts_with("Result_") {
+                            if let Some(Type::Enum(ret_name)) = &self.current_return_type {
+                                if !ret_name.starts_with("Result_") {
+                                    return Err(TypeError { message: "Cannot use ? on a Result in a function that does not return Result".to_string() });
+                                }
+                            } else {
+                                return Err(TypeError { message: "Cannot use ? on a Result in a function that does not return Result".to_string() });
+                            }
+                            if let Some(Some(fields)) = sig.variants.get("Ok") {
+                                if let Some(t) = fields.first() {
+                                    return Ok(t.clone());
+                                }
+                            }
+                            return Ok(Type::Void);
+                        } else if name.starts_with("Option_") {
+                            if let Some(Type::Enum(ret_name)) = &self.current_return_type {
+                                if !ret_name.starts_with("Option_") {
+                                    return Err(TypeError { message: "Cannot use ? on an Option in a function that does not return Option".to_string() });
+                                }
+                            } else {
+                                return Err(TypeError { message: "Cannot use ? on an Option in a function that does not return Option".to_string() });
+                            }
+                            if let Some(Some(fields)) = sig.variants.get("Some") {
+                                if let Some(t) = fields.first() {
+                                    return Ok(t.clone());
+                                }
+                            }
+                            return Ok(Type::Void);
+                        }
+                    }
+                }
+                Err(TypeError { message: "The ? operator can only be applied to Result or Option types".to_string() })
+            }
             Expr::NullCoalesce { left, right } => {
                 let left_ty = self.check_expr(left)?;
                 let right_ty = self.check_expr(right)?;

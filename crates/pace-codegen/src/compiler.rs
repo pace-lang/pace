@@ -804,6 +804,7 @@ impl JITCompiler {
             .define_function(func_id, &mut self.ctx)
             .map_err(|e| {
                 println!("Cranelift Verifier Error in function {}: {:?}", _name, e);
+                std::fs::write("ir.txt", self.ctx.func.display().to_string()).unwrap();
                 CodegenError { message: e.to_string() }
             })?;
         

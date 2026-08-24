@@ -52,6 +52,8 @@ pub enum Expr {
         left: Box<Expr>,
         right: Box<Expr>,
     },
+    /// A try operator (e.g., foo?)
+    Try(Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

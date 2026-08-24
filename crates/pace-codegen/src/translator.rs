@@ -132,12 +132,19 @@ impl Translator {
                     builder.ins().jump(merge_block, &[]);
                 }
                 
+                let is_terminated = then_term && else_term;
+                
                 // Merge
                 builder.switch_to_block(merge_block);
                 builder.seal_block(merge_block);
                 
                 let res = builder.ins().iconst(types::I64, 0);
-                Ok((res, then_term && else_term))
+                
+                if is_terminated {
+                    builder.ins().return_(&[res]);
+                }
+                
+                Ok((res, is_terminated))
             }
             Stmt::While { condition, body } => {
                 let cond_block = builder.create_block();
@@ -375,6 +382,23 @@ impl Translator {
                 }
                 VarType::Unknown
             }
+            Expr::Try(inner) => {
+                let inner_ty = Self::get_expr_type(inner, variables, func_returns, struct_layouts, class_layouts);
+                if let VarType::Enum(name) = inner_ty {
+                    if name.starts_with("Result_") {
+                        let parts: Vec<&str> = name.split('_').collect();
+                        if parts.len() >= 3 {
+                            return parse_vartype(parts[1], None);
+                        }
+                    } else if name.starts_with("Option_") {
+                        let parts: Vec<&str> = name.split('_').collect();
+                        if parts.len() >= 2 {
+                            return parse_vartype(parts[1], None);
+                        }
+                    }
+                }
+                VarType::Unknown
+            }
             _ => VarType::Unknown,
         }
     }
@@ -419,18 +443,31 @@ impl Translator {
             Expr::IntLiteral(i) => Ok(builder.ins().iconst(types::I64, *i)),
             Expr::FloatLiteral(f) => Ok(builder.ins().f64const(*f)),
             Expr::StringLiteral(s) => {
-                let mut data_ctx = DataDescription::new();
-                let mut bytes = s.clone().into_bytes();
-                bytes.push(0); // Null terminator
-                data_ctx.define(bytes.into_boxed_slice());
+                use std::sync::{Mutex, OnceLock};
+                use std::collections::HashMap;
+                static STRING_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+                let mut cache = STRING_CACHE.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap();
                 
-                static STRING_ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-                let id = STRING_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                let string_name = format!("__str_const_{}", id);
+                let string_name = if let Some(name) = cache.get(s) {
+                    name.clone()
+                } else {
+                    static STRING_ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+                    let id = STRING_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let name = format!("__str_const_{}", id);
+                    
+                    let mut data_ctx = DataDescription::new();
+                    let mut bytes = s.clone().into_bytes();
+                    bytes.push(0); // Null terminator
+                    data_ctx.define(bytes.into_boxed_slice());
+                    
+                    let data_id = module.declare_data(&name, Linkage::Local, false, false).unwrap();
+                    module.define_data(data_id, &data_ctx).unwrap();
+                    
+                    cache.insert(s.clone(), name.clone());
+                    name
+                };
                 
                 let data_id = module.declare_data(&string_name, Linkage::Local, false, false).unwrap();
-                module.define_data(data_id, &data_ctx).unwrap();
-                
                 let local_id = module.declare_data_in_func(data_id, builder.func);
                 let ptr_ty = module.target_config().pointer_type();
                 Ok(builder.ins().symbol_value(ptr_ty, local_id))
@@ -589,6 +626,47 @@ impl Translator {
                         Ok(builder.ins().bor(lhs, rhs)) // bitwise OR works for booleans represented as 0/1 integers
                     }
                 }
+            }
+            Expr::Try(inner) => {
+                let inner_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, inner, variables, var_index, func_returns)?;
+                
+                // Read the tag at offset 8 (0 = Ok/Some, 1 = Err/None usually based on how variants are sorted)
+                // Wait, we need to know exactly which tag is Ok/Err. 
+                // We'll dynamically look up the tag ID of "Ok" or "Some".
+                let inner_ty = Self::get_expr_type(inner, variables, func_returns, struct_layouts, class_layouts);
+                let enum_name = if let VarType::Enum(name) = inner_ty { name } else { return Err(CodegenError { message: "? operator used on non-enum".to_string() }); };
+                let enum_layout = enum_layouts.get(&enum_name).unwrap();
+                
+                // Determine which tags represent the success and failure
+                let is_result = enum_name.starts_with("Result_");
+                let (success_tag, _) = if is_result {
+                    enum_layout.variants.get("Ok").unwrap()
+                } else {
+                    enum_layout.variants.get("Some").unwrap()
+                };
+                
+                let tag_val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), inner_ptr, 8);
+                let expected_tag = builder.ins().iconst(types::I64, *success_tag as i64);
+                let is_success = builder.ins().icmp(cranelift::codegen::ir::condcodes::IntCC::Equal, tag_val, expected_tag);
+                
+                let continue_block = builder.create_block();
+                let err_block = builder.create_block();
+                
+                builder.ins().brif(is_success, continue_block, &[], err_block, &[]);
+                
+                // Error Block: Return the whole enum from the function
+                builder.seal_block(err_block);
+                builder.switch_to_block(err_block);
+                builder.ins().return_(&[inner_ptr]);
+                
+                // Continue Block: Extract the first field of the Ok/Some variant
+                builder.seal_block(continue_block);
+                builder.switch_to_block(continue_block);
+                
+                // The value of Ok/Some is at offset 16 (since tag is 8, ARC is 0)
+                // Note: Only works if Ok/Some has a 64-bit primitive or pointer (which is true for our types right now)
+                let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), inner_ptr, 16);
+                Ok(val)
             }
             Expr::Assign { target, value } => {
                 let mut val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, value, variables, var_index, func_returns)?;
