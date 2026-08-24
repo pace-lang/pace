@@ -591,19 +591,33 @@ impl<'a> Parser<'a> {
                 return_type = Some(self.parse_type_annotation()?);
             }
 
+            let mut body = vec![];
+            if self.current_token == Token::LBrace {
+                self.advance(); // consume '{'
+                while self.current_token != Token::RBrace && self.current_token != Token::Eof {
+                    match self.parse_stmt() {
+                        Ok(stmt) => body.push(stmt),
+                        Err(e) => {
+                            self.errors.push(e);
+                            self.synchronize();
+                        }
+                    }
+                }
+                self.match_token(Token::RBrace);
+            } else {
+                self.match_token(Token::Semi);
+            }
+
             methods.push(Stmt::FuncDecl {
                 name: method_name,
                 generic_params: None,
                 params,
                 return_type,
-                body: vec![],
+                body,
                 is_async,
                 visibility: Visibility::Public,
                 span: (0, 0),
             });
-            
-            // Allow optional semicolon after interface method declaration
-            self.match_token(Token::Semi);
         }
 
         if !self.match_token(Token::RBrace) {

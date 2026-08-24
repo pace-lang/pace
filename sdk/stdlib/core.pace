@@ -58,4 +58,9 @@ interface Default {
 
 interface Iterable<T> {
     func length() -> Int;
+
+    // Default method (Trait)
+    func isEmpty() -> Bool {
+        return self.length() == 0;
+    }
 }

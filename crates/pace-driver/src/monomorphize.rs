@@ -2,8 +2,15 @@ use pace_ast::{Stmt, Expr, TypeAnnotation};
 use std::collections::HashMap;
 
 pub struct Monomorphizer {
-    generic_classes: HashMap<String, Stmt>,
-    generated_classes: HashMap<String, Stmt>,
+    pub generic_classes: HashMap<String, Stmt>,
+    pub generated_classes: HashMap<String, Stmt>,
+    pub all_interfaces: HashMap<String, Stmt>, // Stores all interfaces (generic and concrete)
+}
+
+impl Default for Monomorphizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Monomorphizer {
@@ -11,6 +18,7 @@ impl Monomorphizer {
         Self {
             generic_classes: HashMap::new(),
             generated_classes: HashMap::new(),
+            all_interfaces: HashMap::new(),
         }
     }
 
@@ -26,6 +34,7 @@ impl Monomorphizer {
                 }
             }
             if let Stmt::InterfaceDecl { name, generic_params, .. } = &stmt {
+                mono.all_interfaces.insert(name.clone(), stmt.clone());
                 if generic_params.is_some() {
                     mono.generic_classes.insert(name.clone(), stmt.clone());
                     continue;
@@ -41,6 +50,7 @@ impl Monomorphizer {
                         }
                     }
                     if let Stmt::InterfaceDecl { name: iname, generic_params, .. } = &inner_stmt {
+                        mono.all_interfaces.insert(iname.clone(), inner_stmt.clone());
                         if generic_params.is_some() {
                             mono.generic_classes.insert(iname.clone(), inner_stmt.clone());
                             continue;
@@ -138,6 +148,27 @@ impl Monomorphizer {
                 if let Some(imp) = &mut new_implements {
                     self.replace_types(imp, &type_mapping)?;
                     self.rewrite_type_annotation(imp)?;
+                    
+                    // Inject default methods from the interface if not overridden by the class
+                    let iface_decl_opt = self.generated_classes.get(&imp.name).or_else(|| self.all_interfaces.get(&imp.name)).cloned();
+                    if let Some(Stmt::InterfaceDecl { methods: iface_methods, .. }) = iface_decl_opt {
+                        for iface_method in iface_methods {
+                            if let Stmt::FuncDecl { name: iface_m_name, body: iface_m_body, .. } = &iface_method {
+                                if !iface_m_body.is_empty() {
+                                    let already_implemented = new_methods.iter().any(|m| {
+                                        if let Stmt::FuncDecl { name: cls_m_name, .. } = m {
+                                            cls_m_name == iface_m_name
+                                        } else {
+                                            false
+                                        }
+                                    });
+                                    if !already_implemented {
+                                        new_methods.push(iface_method.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 let instantiated = Stmt::ClassDecl {
@@ -311,14 +342,35 @@ impl Monomorphizer {
                 }
             }
             Stmt::ClassDecl { fields, methods, implements, .. } => {
-                for f in fields {
+                for f in fields.iter_mut() {
                     *f = self.rewrite_stmt(f.clone())?;
                 }
-                for m in methods {
+                for m in methods.iter_mut() {
                     *m = self.rewrite_stmt(m.clone())?;
                 }
                 if let Some(imp) = implements {
                     self.rewrite_type_annotation(imp)?;
+                    
+                    // Inject default methods for concrete classes
+                    let iface_decl_opt = self.generated_classes.get(&imp.name).or_else(|| self.all_interfaces.get(&imp.name)).cloned();
+                    if let Some(Stmt::InterfaceDecl { methods: iface_methods, .. }) = iface_decl_opt {
+                        for iface_method in iface_methods {
+                            if let Stmt::FuncDecl { name: iface_m_name, body: iface_m_body, .. } = &iface_method {
+                                if !iface_m_body.is_empty() {
+                                    let already_implemented = methods.iter().any(|m| {
+                                        if let Stmt::FuncDecl { name: cls_m_name, .. } = m {
+                                            cls_m_name == iface_m_name
+                                        } else {
+                                            false
+                                        }
+                                    });
+                                    if !already_implemented {
+                                        methods.push(iface_method.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             Stmt::InterfaceDecl { methods, .. } => {
