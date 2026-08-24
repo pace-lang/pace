@@ -570,7 +570,7 @@ impl TypeChecker {
                 }
                 
                 match op {
-                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
+                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
                         if left_ty == Type::Int || left_ty == Type::Float {
                             Ok(left_ty)
                         } else {

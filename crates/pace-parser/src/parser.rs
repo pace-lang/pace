@@ -886,8 +886,14 @@ impl<'a> Parser<'a> {
 
     fn parse_factor(&mut self) -> Result<Expr, (String, (usize, usize))> {
         let mut expr = self.parse_postfix()?;
-        while self.current_token == Token::Star || self.current_token == Token::Slash {
-            let op = if self.current_token == Token::Star { BinaryOp::Mul } else { BinaryOp::Div };
+        while self.current_token == Token::Star || self.current_token == Token::Slash || self.current_token == Token::Mod {
+            let op = if self.current_token == Token::Star { 
+                BinaryOp::Mul 
+            } else if self.current_token == Token::Slash { 
+                BinaryOp::Div 
+            } else { 
+                BinaryOp::Mod 
+            };
             self.advance();
             let right = self.parse_postfix()?;
             expr = Expr::Binary {

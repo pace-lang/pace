@@ -518,6 +518,16 @@ impl Translator {
                     BinaryOp::Div => {
                         if is_float { Ok(builder.ins().fdiv(lhs, rhs)) } else { Ok(builder.ins().sdiv(lhs, rhs)) }
                     }
+                    BinaryOp::Mod => {
+                        if is_float {
+                            // Cranelift doesn't have a native frem instruction, so we'll throw an error or trap.
+                            // But for now, we just trap or unimplemented, or for integer just do srem.
+                            // Actually since float mod isn't widely used in benchmarks, we'll just panic for float mod.
+                            panic!("Float modulo not supported yet");
+                        } else {
+                            Ok(builder.ins().srem(lhs, rhs))
+                        }
+                    }
                     BinaryOp::Eq => {
                         if is_float {
                             let c = builder.ins().fcmp(FloatCC::Equal, lhs, rhs);

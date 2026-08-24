@@ -47,6 +47,15 @@ pub extern "C" fn __pace_int_to_string(val: i64) -> *mut std::ffi::c_char {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn __pace_free_string(ptr: *mut std::ffi::c_char) {
+    if !ptr.is_null() {
+        unsafe {
+            let _ = std::ffi::CString::from_raw(ptr);
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn __pace_float_to_string(val: f64) -> *mut std::ffi::c_char {
     let s = val.to_string();
     std::ffi::CString::new(s).unwrap().into_raw()
@@ -67,6 +76,18 @@ pub extern "C" fn __pace_malloc(size: usize) -> *mut u8 {
         }
         ptr
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_hash(val: i64) -> i64 {
+    // A simple integer hash function (e.g. FNV-1a or splitmix64 style)
+    let mut x = val as u64;
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xbf58476d1ce4e5b9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94d049bb133111eb);
+    x ^= x >> 31;
+    x as i64
 }
 
 #[unsafe(no_mangle)]
@@ -155,4 +176,40 @@ pub extern "C" fn __pace_get_year(ts: i64) -> i64 {
     // Actually using chrono is better, but since it's not in dependencies, we'll do simple math.
     // 1970 + ts / 31556926 (seconds in a year approx)
     1970 + (ts / 31556926)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_sb_new() -> *mut String {
+    Box::into_raw(Box::new(String::with_capacity(32)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_sb_append(ptr: *mut String, s: *const std::ffi::c_char) {
+    if ptr.is_null() || s.is_null() { return; }
+    unsafe {
+        let sb = &mut *ptr;
+        let c_str = std::ffi::CStr::from_ptr(s);
+        if let Ok(s_str) = c_str.to_str() {
+            sb.push_str(s_str);
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_sb_build(ptr: *mut String) -> *mut std::ffi::c_char {
+    if ptr.is_null() { return std::ptr::null_mut(); }
+    unsafe {
+        let sb = &*ptr;
+        let c_string = std::ffi::CString::new(sb.as_str()).unwrap();
+        c_string.into_raw()
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_sb_free(ptr: *mut String) {
+    if !ptr.is_null() {
+        unsafe {
+            let _ = Box::from_raw(ptr);
+        }
+    }
 }

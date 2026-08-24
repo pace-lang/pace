@@ -1,0 +1,18 @@
+import std:string_builder;
+
+func concat_test() {
+    let sb = StringBuilder();
+    var i = 0;
+    while i < 10000 {
+        sb.append("a");
+        i = i + 1;
+    }
+    // ensure we build and then optionally free
+    let result = sb.build();
+    sb.free();
+}
+
+func main() {
+    concat_test();
+    print("Done");
+}

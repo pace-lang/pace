@@ -29,6 +29,11 @@ impl CompilerSession {
         let _ = pace_runtime::__pace_print_float as *const () as usize;
         let _ = pace_runtime::__pace_print_string as *const () as usize;
         let _ = pace_runtime::__pace_malloc as *const () as usize;
+        let _ = pace_runtime::__pace_hash as *const () as usize;
+        let _ = pace_runtime::__pace_sb_new as *const () as usize;
+        let _ = pace_runtime::__pace_sb_append as *const () as usize;
+        let _ = pace_runtime::__pace_sb_build as *const () as usize;
+        let _ = pace_runtime::__pace_sb_free as *const () as usize;
         Self
     }
 

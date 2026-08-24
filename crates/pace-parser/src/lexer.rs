@@ -42,6 +42,7 @@ pub enum Token {
     Minus,
     Star,
     Slash,
+    Mod,
     EqEq,
     NotEq,
     Less,
@@ -248,6 +249,7 @@ impl<'a> Lexer<'a> {
                 }
                 '*' => { self.advance(); Token::Star }
                 '/' => { self.advance(); Token::Slash }
+                '%' => { self.advance(); Token::Mod }
                 '(' => { self.advance(); Token::LParen }
                 ')' => { self.advance(); Token::RParen }
                 '{' => { self.advance(); Token::LBrace }

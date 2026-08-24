@@ -1,0 +1,20 @@
+class StringBuilder {
+    var ptr: Int;
+
+    func init() {
+        self.ptr = sb_new();
+    }
+
+    func append(s: String) {
+        sb_append(self.ptr, s);
+    }
+
+    func build() -> String {
+        return sb_build(self.ptr);
+    }
+
+    func free() {
+        sb_free(self.ptr);
+        self.ptr = 0;
+    }
+}

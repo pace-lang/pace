@@ -120,6 +120,29 @@ impl AotCompiler {
         sig_get_year.returns.push(AbiParam::new(types::I64));
         let get_year_id = module.declare_function("__pace_get_year", Linkage::Import, &sig_get_year).unwrap();
 
+        let mut sig_hash = module.make_signature();
+        sig_hash.params.push(AbiParam::new(types::I64));
+        sig_hash.returns.push(AbiParam::new(types::I64));
+        let hash_id = module.declare_function("__pace_hash", Linkage::Import, &sig_hash).unwrap();
+
+        let mut sig_sb_new = module.make_signature();
+        sig_sb_new.returns.push(AbiParam::new(ptr_ty));
+        let sb_new_id = module.declare_function("__pace_sb_new", Linkage::Import, &sig_sb_new).unwrap();
+
+        let mut sig_sb_append = module.make_signature();
+        sig_sb_append.params.push(AbiParam::new(ptr_ty));
+        sig_sb_append.params.push(AbiParam::new(ptr_ty));
+        let sb_append_id = module.declare_function("__pace_sb_append", Linkage::Import, &sig_sb_append).unwrap();
+
+        let mut sig_sb_build = module.make_signature();
+        sig_sb_build.params.push(AbiParam::new(ptr_ty));
+        sig_sb_build.returns.push(AbiParam::new(ptr_ty));
+        let sb_build_id = module.declare_function("__pace_sb_build", Linkage::Import, &sig_sb_build).unwrap();
+
+        let mut sig_sb_free = module.make_signature();
+        sig_sb_free.params.push(AbiParam::new(ptr_ty));
+        let sb_free_id = module.declare_function("__pace_sb_free", Linkage::Import, &sig_sb_free).unwrap();
+
         let mut funcs = HashMap::new();
         funcs.insert("print_int".to_string(), print_int_id);
         funcs.insert("print_float".to_string(), print_float_id);
@@ -136,6 +159,11 @@ impl AotCompiler {
         funcs.insert("ptr_load".to_string(), ptr_load_id);
         funcs.insert("time".to_string(), time_id);
         funcs.insert("get_year".to_string(), get_year_id);
+        funcs.insert("hash".to_string(), hash_id);
+        funcs.insert("sb_new".to_string(), sb_new_id);
+        funcs.insert("sb_append".to_string(), sb_append_id);
+        funcs.insert("sb_build".to_string(), sb_build_id);
+        funcs.insert("sb_free".to_string(), sb_free_id);
 
         Self {
             builder_context: FunctionBuilderContext::new(),

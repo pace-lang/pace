@@ -93,6 +93,19 @@ impl Environment {
                 generic_params: None,
             },
         );
+        // Inject built-in hash function
+        self.register_function(
+            "hash".to_string(),
+            FunctionSignature {
+                params: vec![Type::Any], // Accept any type
+                return_type: Type::Int,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
+            },
+        );
         self.register_function(
             "malloc".to_string(),
             FunctionSignature {
@@ -130,6 +143,38 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+            },
+        );
+        self.register_function(
+            "sb_new".to_string(),
+            FunctionSignature {
+                params: vec![],
+                return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+            },
+        );
+        self.register_function(
+            "sb_append".to_string(),
+            FunctionSignature {
+                params: vec![Type::Int, Type::String],
+                return_type: Type::Void,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+            },
+        );
+        self.register_function(
+            "sb_build".to_string(),
+            FunctionSignature {
+                params: vec![Type::Int],
+                return_type: Type::String,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+            },
+        );
+        self.register_function(
+            "sb_free".to_string(),
+            FunctionSignature {
+                params: vec![Type::Int],
+                return_type: Type::Void,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
             },
         );

@@ -10,20 +10,35 @@ class MapEntry<K, V> {
     }
 }
 
-// Standard Map Implementation
-// Currently backed by a List (Linear Search). 
-// Will be upgraded to a Hash-based map in the future once Hashing is added to the runtime.
+// True Hash-based Map Implementation
 class Map<K, V> implement Iterable<K> {
-    var entries: List<MapEntry<K, V>>;
+    var buckets: List<List<MapEntry<K, V>>>;
+    var count: Int;
 
     func init() {
-        self.entries = List<MapEntry<K, V>>();
+        self.buckets = List<List<MapEntry<K, V>>>();
+        self.count = 0;
+        
+        var i = 0;
+        let capacity = 65536; // Initial capacity
+        while i < capacity {
+            self.buckets.push(List<MapEntry<K, V>>());
+            i = i + 1;
+        }
     }
 
     func set(key: K, val: V) {
+        var index = hash(key) % self.buckets.length();
+        if index < 0 {
+            index = index * (0 - 1);
+        }
+        
+        let bucket = self.buckets.get(index);
+        
         var i = 0;
-        while i < self.entries.length() {
-            let entry = self.entries.get(i);
+        let len = bucket.length();
+        while i < len {
+            let entry = bucket.get(i);
             if entry.key == key {
                 entry.value = val;
                 return;
@@ -33,31 +48,44 @@ class Map<K, V> implement Iterable<K> {
         
         // Key not found, append a new entry
         let entry = MapEntry<K, V>(key, val);
-        self.entries.push(entry);
+        bucket.push(entry);
+        self.count = self.count + 1;
     }
 
     func get(k: K) -> V {
+        var index = hash(k) % self.buckets.length();
+        if index < 0 {
+            index = index * (0 - 1);
+        }
+        
+        let bucket = self.buckets.get(index);
+        
         var i = 0;
-        let len = self.entries.length();
+        let len = bucket.length();
         while i < len {
-            if self.entries.get(i).key == k {
-                return self.entries.get(i).value;
+            let entry = bucket.get(i);
+            if entry.key == k {
+                return entry.value;
             }
             i = i + 1;
         }
         
-        // Throw an error or return null (if we supported null). 
-        // For now, Pace panics when memory is invalid.
-        // As a temporary workaround, we assume the key exists.
-        // A better pattern will be returning Option<V>.
-        return self.entries.get(0).value; 
+        // Assuming key exists for now
+        return bucket.get(0).value; 
     }
 
     func contains(k: K) -> Bool {
+        var index = hash(k) % self.buckets.length();
+        if index < 0 {
+            index = index * (0 - 1);
+        }
+        
+        let bucket = self.buckets.get(index);
+        
         var i = 0;
-        let len = self.entries.length();
+        let len = bucket.length();
         while i < len {
-            if self.entries.get(i).key == k {
+            if bucket.get(i).key == k {
                 return true;
             }
             i = i + 1;
@@ -66,6 +94,6 @@ class Map<K, V> implement Iterable<K> {
     }
     
     func length() -> Int {
-        return self.entries.length();
+        return self.count;
     }
 }
