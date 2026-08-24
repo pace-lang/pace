@@ -55,3 +55,7 @@ interface Default {
     // but defining this as a placeholder for when static methods are added.
     // static func default() -> Self
 }
+
+interface Iterable<T> {
+    func length() -> Int;
+}

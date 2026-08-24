@@ -1,0 +1,98 @@
+// Standard Binary Search Tree Implementation
+
+class TreeNode<T> {
+    var value: T;
+    // Pace currently lacks nullables natively, so we represent empty child nodes via a boolean flag.
+    var has_left: Bool;
+    var has_right: Bool;
+    var left: TreeNode<T>;
+    var right: TreeNode<T>;
+
+    func init(val: T) {
+        self.value = val;
+        self.has_left = false;
+        self.has_right = false;
+    }
+}
+
+// A TreeSet stores elements in sorted order.
+// Note: T must implement Comparable, but we currently rely on the compiler's intrinsic `<` and `>` 
+// or custom implementations relying on the typechecker.
+class TreeSet<T> implement Iterable<T> {
+    var root: TreeNode<T>;
+    var has_root: Bool;
+    var size: Int;
+
+    func init() {
+        self.has_root = false;
+        self.size = 0;
+    }
+
+    func insert(val: T) {
+        if self.has_root == false {
+            self.root = TreeNode<T>(val);
+            self.has_root = true;
+            self.size = 1;
+            return;
+        }
+
+        var current = self.root;
+        while true {
+            if val == current.value {
+                // Element already exists, TreeSet guarantees uniqueness
+                return;
+            }
+
+            if val < current.value {
+                if current.has_left {
+                    current = current.left;
+                } else {
+                    current.left = TreeNode<T>(val);
+                    current.has_left = true;
+                    self.size = self.size + 1;
+                    return;
+                }
+            } else {
+                if current.has_right {
+                    current = current.right;
+                } else {
+                    current.right = TreeNode<T>(val);
+                    current.has_right = true;
+                    self.size = self.size + 1;
+                    return;
+                }
+            }
+        }
+    }
+
+    func contains(val: T) -> Bool {
+        if self.has_root == false {
+            return false;
+        }
+        
+        var current = self.root;
+        while true {
+            if val == current.value {
+                return true;
+            }
+            if val < current.value {
+                if current.has_left {
+                    current = current.left;
+                } else {
+                    return false;
+                }
+            } else {
+                if current.has_right {
+                    current = current.right;
+                } else {
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
+    func length() -> Int {
+        return self.size;
+    }
+}

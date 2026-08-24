@@ -1,0 +1,71 @@
+import "./list";
+
+class MapEntry<K, V> {
+    var key: K;
+    var value: V;
+    
+    func init(k: K, v: V) {
+        self.key = k;
+        self.value = v;
+    }
+}
+
+// Standard Map Implementation
+// Currently backed by a List (Linear Search). 
+// Will be upgraded to a Hash-based map in the future once Hashing is added to the runtime.
+class Map<K, V> implement Iterable<K> {
+    var entries: List<MapEntry<K, V>>;
+
+    func init() {
+        self.entries = List<MapEntry<K, V>>();
+    }
+
+    func set(key: K, val: V) {
+        var i = 0;
+        while i < self.entries.length() {
+            let entry = self.entries.get(i);
+            if entry.key == key {
+                entry.value = val;
+                return;
+            }
+            i = i + 1;
+        }
+        
+        // Key not found, append a new entry
+        let entry = MapEntry<K, V>(key, val);
+        self.entries.push(entry);
+    }
+
+    func get(k: K) -> V {
+        var i = 0;
+        let len = self.entries.length();
+        while i < len {
+            if self.entries.get(i).key == k {
+                return self.entries.get(i).value;
+            }
+            i = i + 1;
+        }
+        
+        // Throw an error or return null (if we supported null). 
+        // For now, Pace panics when memory is invalid.
+        // As a temporary workaround, we assume the key exists.
+        // A better pattern will be returning Option<V>.
+        return self.entries.get(0).value; 
+    }
+
+    func contains(k: K) -> Bool {
+        var i = 0;
+        let len = self.entries.length();
+        while i < len {
+            if self.entries.get(i).key == k {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+    
+    func length() -> Int {
+        return self.entries.length();
+    }
+}

@@ -1,7 +1,7 @@
 // Standard Dynamic Queue Implementation
 // Backed by raw memory allocation for high performance and no leaks (ARC drop)
 
-class Queue<T> {
+class Queue<T> implement Iterable<T> {
     var ptr: Int;
     var head: Int;
     var tail: Int;

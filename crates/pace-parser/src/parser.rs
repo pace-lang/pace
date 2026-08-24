@@ -601,6 +601,9 @@ impl<'a> Parser<'a> {
                 visibility: Visibility::Public,
                 span: (0, 0),
             });
+            
+            // Allow optional semicolon after interface method declaration
+            self.match_token(Token::Semi);
         }
 
         if !self.match_token(Token::RBrace) {

@@ -239,7 +239,7 @@ impl JITCompiler {
                 
                 let mut method_map = HashMap::new();
                 let mut m_offset = 16;
-                let mut vtable_funcs = Vec::new();
+                let mut vtable_funcs: HashMap<String, cranelift_module::FuncId> = HashMap::new();
                 
                 // Seed methods from interface if implemented
                 if let Some(iface_annotation) = implements
@@ -263,11 +263,9 @@ impl JITCompiler {
                 
                 for method_stmt in methods {
                     if let Stmt::FuncDecl { name: method_name, params, return_type: _, .. } = method_stmt {
-                        if method_name != "init" {
-                            if !method_map.contains_key(method_name) {
-                                method_map.insert(method_name.clone(), m_offset);
-                                m_offset += 8;
-                            }
+                        if !method_map.contains_key(method_name) && method_name != "init" {
+                            method_map.insert(method_name.clone(), m_offset);
+                            m_offset += 8;
                         }
                         
 
@@ -284,7 +282,7 @@ impl JITCompiler {
                         self.funcs.insert(full_name.clone(), id);
                         
                         if method_name != "init" {
-                            vtable_funcs.push(id);
+                            vtable_funcs.insert(method_name.clone(), id);
                         }
                     }
                 }
@@ -302,11 +300,10 @@ impl JITCompiler {
                 let drop_ref = self.module.declare_func_in_data(drop_id, &mut data_ctx);
                 data_ctx.write_function_addr(0, drop_ref);
                 
-                let mut current_offset = 16;
-                for &func_id in &vtable_funcs {
-                    let func_ref = self.module.declare_func_in_data(func_id, &mut data_ctx);
-                    data_ctx.write_function_addr(current_offset as u32, func_ref);
-                    current_offset += 8;
+                for (m_name, func_id) in &vtable_funcs {
+                    let byte_offset = *method_map.get(m_name).unwrap();
+                    let func_ref = self.module.declare_func_in_data(*func_id, &mut data_ctx);
+                    data_ctx.write_function_addr(byte_offset as u32, func_ref);
                 }
                 
                 self.module.define_data(vtable_id, &data_ctx)

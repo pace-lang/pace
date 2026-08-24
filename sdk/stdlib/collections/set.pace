@@ -3,7 +3,7 @@ import "./list";
 // Standard Dynamic Set Implementation
 // Uses a List internally and deduplicates on insert
 
-class Set<T> {
+class Set<T> implement Iterable<T> {
     var list: List<T>;
 
     func init() {

@@ -1,7 +1,7 @@
 // Standard Dynamic List Implementation
 // Backed by raw memory allocation for high performance and no leaks (ARC drop)
 
-class List<T> {
+class List<T> implement Iterable<T> {
     var ptr: Int;
     var len: Int;
     var cap: Int;

@@ -3,3 +3,5 @@ import "./collections/array";
 import "./collections/list";
 import "./collections/set";
 import "./collections/queue";
+import "./collections/map";
+import "./collections/tree_set";

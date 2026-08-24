@@ -68,7 +68,7 @@ impl Translator {
             Stmt::VarDecl { name, initializer, .. } => {
                 let mut var_ty = VarType::Unknown;
                 let val = if let Some(expr) = initializer {
-                    var_ty = Self::get_expr_type(expr, variables, func_returns, struct_layouts);
+                    var_ty = Self::get_expr_type(expr, variables, func_returns, struct_layouts, class_layouts);
                     let mut val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, expr, variables, var_index, func_returns)?;
                     
                     if let VarType::Struct(name) = &var_ty {
@@ -86,7 +86,7 @@ impl Translator {
                 Ok((val, false))
             }
             Stmt::Expr(expr) => {
-                let ty = Self::get_expr_type(expr, variables, func_returns, struct_layouts);
+                let ty = Self::get_expr_type(expr, variables, func_returns, struct_layouts, class_layouts);
                 let val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, expr, variables, var_index, func_returns)?;
                 if matches!(ty, VarType::Object(_)) {
                     let release_id = *funcs.get("release").unwrap();
@@ -190,17 +190,29 @@ impl Translator {
                 }
                 
                 // Release local object variables
-                let current_vars: Vec<String> = variables.keys().cloned().collect();
-                for var_name in current_vars {
-                    if !initial_vars.contains(&var_name) {
-                        let (var, ty) = variables.get(&var_name).unwrap().clone();
-                        if matches!(ty, VarType::Object(_)) {
-                            let obj_val = builder.use_var(var);
-                            let release_id = *funcs.get("release").unwrap_or_else(|| panic!("release not found"));
-                            let local_release = module.declare_func_in_func(release_id, builder.func);
-                            builder.ins().call(local_release, &[obj_val]);
+                if !terminated {
+                    let current_vars: Vec<String> = variables.keys().cloned().collect();
+                    for var_name in current_vars {
+                        if !initial_vars.contains(&var_name) {
+                            let (var, ty) = variables.get(&var_name).unwrap().clone();
+                            if matches!(ty, VarType::Object(_)) {
+                                let obj_val = builder.use_var(var);
+                                let release_id = *funcs.get("release").unwrap_or_else(|| panic!("release not found"));
+                                let local_release = module.declare_func_in_func(release_id, builder.func);
+                                builder.ins().call(local_release, &[obj_val]);
+                            }
+                            variables.remove(&var_name);
                         }
-                        variables.remove(&var_name);
+                    }
+                } else {
+                    // Just remove from scope without emitting instructions, since block is filled.
+                    // This causes a memory leak on early return, but prevents Cranelift panic.
+                    // Proper fix requires a unified return block.
+                    let current_vars: Vec<String> = variables.keys().cloned().collect();
+                    for var_name in current_vars {
+                        if !initial_vars.contains(&var_name) {
+                            variables.remove(&var_name);
+                        }
                     }
                 }
                 
@@ -209,7 +221,7 @@ impl Translator {
             Stmt::Return(expr_opt) => {
                 let ret_val = if let Some(expr) = expr_opt {
                     let mut val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, expr, variables, var_index, func_returns)?;
-                    let val_ty = Self::get_expr_type(expr, variables, func_returns, struct_layouts);
+                    let val_ty = Self::get_expr_type(expr, variables, func_returns, struct_layouts, class_layouts);
                     if let VarType::Struct(name) = &val_ty {
                         val = Self::copy_struct(module, struct_layouts, builder, name, val);
                     }
@@ -224,7 +236,7 @@ impl Translator {
         }
     }
     
-    pub fn get_expr_type(expr: &Expr, variables: &HashMap<String, (Variable, VarType)>, func_returns: &HashMap<String, VarType>, struct_layouts: &HashMap<String, crate::compiler::StructLayout>) -> VarType {
+    pub fn get_expr_type(expr: &Expr, variables: &HashMap<String, (Variable, VarType)>, func_returns: &HashMap<String, VarType>, struct_layouts: &HashMap<String, crate::compiler::StructLayout>, class_layouts: &HashMap<String, crate::compiler::ClassLayout>) -> VarType {
         match expr {
             Expr::IntLiteral(_) => VarType::Int,
             Expr::FloatLiteral(_) => VarType::Float,
@@ -238,7 +250,24 @@ impl Translator {
                     VarType::Unknown
                 }
             }
-            Expr::Binary { left, .. } => Self::get_expr_type(left, variables, func_returns, struct_layouts), // simplified
+            Expr::Binary { left, .. } => Self::get_expr_type(left, variables, func_returns, struct_layouts, class_layouts), // simplified
+            Expr::MemberAccess { object, property, .. } => {
+                let obj_ty = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
+                if let VarType::Object(obj_name) = obj_ty {
+                    if let Some(layout) = class_layouts.get(&obj_name) {
+                        if let Some(f_ty) = layout.fields.get(property) {
+                            return f_ty.1.clone();
+                        }
+                    }
+                } else if let VarType::Struct(obj_name) = obj_ty {
+                    if let Some(layout) = struct_layouts.get(&obj_name) {
+                        if let Some(f_ty) = layout.fields.get(property) {
+                            return f_ty.1.clone();
+                        }
+                    }
+                }
+                VarType::Unknown
+            }
             Expr::Call { callee, .. } => {
                 if let Expr::Identifier(name) = &**callee {
                     if let Some(ty) = func_returns.get(name) {
@@ -250,7 +279,7 @@ impl Translator {
                         return VarType::Object(name.clone());
                     }
                 } else if let Expr::MemberAccess { object, property, .. } = &**callee {
-                    let obj_ty = Self::get_expr_type(object, variables, func_returns, struct_layouts);
+                    let obj_ty = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
                     if let VarType::Object(obj_name) = obj_ty {
                         let full_name = format!("{}_{}", obj_name, property);
                         if let Some(ty) = func_returns.get(&full_name) {
@@ -341,7 +370,7 @@ impl Translator {
                 
                 let mut current_val = None;
                 for part in parts {
-                    let part_ty = Self::get_expr_type(part, variables, func_returns, struct_layouts);
+                    let part_ty = Self::get_expr_type(part, variables, func_returns, struct_layouts, class_layouts);
                     let val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, part, variables, var_index, func_returns)?;
                     
                     let str_val = if part_ty == VarType::String {
@@ -472,7 +501,7 @@ impl Translator {
             }
             Expr::Assign { target, value } => {
                 let mut val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, value, variables, var_index, func_returns)?;
-                let val_ty = Self::get_expr_type(value, variables, func_returns, struct_layouts);
+                let val_ty = Self::get_expr_type(value, variables, func_returns, struct_layouts, class_layouts);
                 if let VarType::Struct(name) = &val_ty {
                     val = Self::copy_struct(module, struct_layouts, builder, name, val);
                 }
@@ -498,7 +527,7 @@ impl Translator {
                 } else if let Expr::MemberAccess { object, property, .. } = &**target {
                     let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, object, variables, var_index, func_returns)?;
                     
-                    let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts);
+                    let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
                     let (f_offset, f_ty) = match obj_type {
                         VarType::Object(name) => {
                             let layout = class_layouts.get(&name).unwrap();
@@ -532,7 +561,7 @@ impl Translator {
                 if let Expr::Identifier(func_name) = &**callee {
                     if func_name == "print" {
                         let arg_expr = &args[0];
-                        let arg_ty = Self::get_expr_type(arg_expr, variables, func_returns, struct_layouts);
+                        let arg_ty = Self::get_expr_type(arg_expr, variables, func_returns, struct_layouts, class_layouts);
                         
                         let arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, arg_expr, variables, var_index, func_returns)?;
                         let ty = builder.func.dfg.value_type(arg_val);
@@ -561,7 +590,7 @@ impl Translator {
                         let mut arg_vals = Vec::new();
                         for arg in args {
                             let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, arg, variables, var_index, func_returns)?;
-                            let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts);
+                            let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts, class_layouts);
                             if let VarType::Struct(name) = &arg_ty {
                                 arg_val = Self::copy_struct(module, struct_layouts, builder, name, arg_val);
                             }
@@ -627,7 +656,7 @@ impl Translator {
                         for (i, arg) in args.iter().enumerate() {
                             if let Some((_, (offset, _))) = sorted_fields.get(i) {
                                 let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, arg, variables, var_index, func_returns)?;
-                                let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts);
+                                let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts, class_layouts);
                                 if let VarType::Struct(name) = &arg_ty {
                                     arg_val = Self::copy_struct(module, struct_layouts, builder, name, arg_val);
                                 }
@@ -641,7 +670,7 @@ impl Translator {
                     let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, object, variables, var_index, func_returns)?;
                     let ptr_ty = module.target_config().pointer_type();
                     
-                    let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts);
+                    let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
                     let m_offset = if let VarType::Object(type_name) = &obj_type {
                         let layout = class_layouts.get(type_name)
                             .unwrap_or_else(|| panic!("Class or interface {} not found in layouts", type_name));
@@ -665,7 +694,7 @@ impl Translator {
                     let mut arg_vals = vec![obj_ptr];
                     for arg in args {
                         let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, arg, variables, var_index, func_returns)?;
-                        let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts);
+                        let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts, class_layouts);
                         if let VarType::Struct(name) = &arg_ty {
                             arg_val = Self::copy_struct(module, struct_layouts, builder, name, arg_val);
                         }
@@ -687,7 +716,7 @@ impl Translator {
             Expr::MemberAccess { object, property, .. } => {
                 let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, builder, object, variables, var_index, func_returns)?;
                 
-                let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts);
+                let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
                 let (f_offset, f_ty) = match obj_type {
                     VarType::Object(name) => {
                         let layout = class_layouts.get(&name).unwrap();

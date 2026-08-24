@@ -1,4 +1,4 @@
-use pace_ast::{Stmt, Expr, TypeAnnotation, Param, Pattern, EnumVariant};
+use pace_ast::{Stmt, Expr, TypeAnnotation};
 use std::collections::HashMap;
 
 pub struct Monomorphizer {
@@ -17,10 +17,15 @@ impl Monomorphizer {
     pub fn run(ast: Vec<Stmt>) -> Result<Vec<Stmt>, miette::Report> {
         let mut mono = Self::new();
         let mut final_ast = Vec::new();
-        
-        // Pass 1: Extract all generic class declarations
+        // Pass 1: Extract all generic class and interface declarations
         for stmt in ast {
             if let Stmt::ClassDecl { name, generic_params, .. } = &stmt {
+                if generic_params.is_some() {
+                    mono.generic_classes.insert(name.clone(), stmt.clone());
+                    continue;
+                }
+            }
+            if let Stmt::InterfaceDecl { name, generic_params, .. } = &stmt {
                 if generic_params.is_some() {
                     mono.generic_classes.insert(name.clone(), stmt.clone());
                     continue;
@@ -32,6 +37,12 @@ impl Monomorphizer {
                     if let Stmt::ClassDecl { name: cname, generic_params, .. } = &inner_stmt {
                         if generic_params.is_some() {
                             mono.generic_classes.insert(cname.clone(), inner_stmt.clone());
+                            continue;
+                        }
+                    }
+                    if let Stmt::InterfaceDecl { name: iname, generic_params, .. } = &inner_stmt {
+                        if generic_params.is_some() {
+                            mono.generic_classes.insert(iname.clone(), inner_stmt.clone());
                             continue;
                         }
                     }
@@ -58,9 +69,8 @@ impl Monomorphizer {
         }
         
         // Append all newly generated classes to the end of the AST
-        // We might generate new classes recursively, so we take them all.
         let mut generated: Vec<Stmt> = mono.generated_classes.into_values().collect();
-        if let Some(Stmt::Module { body, name }) = rewritten_ast.last_mut() {
+        if let Some(Stmt::Module { body, name: _ }) = rewritten_ast.last_mut() {
             body.append(&mut generated);
         } else {
             rewritten_ast.append(&mut generated);
@@ -104,39 +114,63 @@ impl Monomorphizer {
         // Prevent infinite recursion by inserting a dummy first
         self.generated_classes.insert(concrete_name.clone(), Stmt::Expr(Expr::Null));
 
-        if let Stmt::ClassDecl { name, generic_params, fields, methods, implements } = generic_decl {
-            let params = generic_params.unwrap();
-            let mut type_mapping = HashMap::new();
-            for (i, p) in params.iter().enumerate() {
-                if let Some(arg) = concrete_args.get(i) {
-                    type_mapping.insert(p.clone(), arg.clone());
+        match generic_decl {
+            Stmt::ClassDecl { name: _, generic_params, fields, methods, implements } => {
+                let params = generic_params.unwrap();
+                let mut type_mapping = HashMap::new();
+                for (i, p) in params.iter().enumerate() {
+                    if let Some(arg) = concrete_args.get(i) {
+                        type_mapping.insert(p.clone(), arg.clone());
+                    }
                 }
-            }
 
-            let mut new_fields = Vec::new();
-            for f in fields {
-                new_fields.push(self.rewrite_stmt_with_mapping(f, &type_mapping)?);
-            }
+                let mut new_fields = Vec::new();
+                for f in fields {
+                    new_fields.push(self.rewrite_stmt_with_mapping(f, &type_mapping)?);
+                }
 
-            let mut new_methods = Vec::new();
-            for m in methods {
-                new_methods.push(self.rewrite_stmt_with_mapping(m, &type_mapping)?);
-            }
+                let mut new_methods = Vec::new();
+                for m in methods {
+                    new_methods.push(self.rewrite_stmt_with_mapping(m, &type_mapping)?);
+                }
 
-            let mut new_implements = implements;
-            if let Some(imp) = &mut new_implements {
-                self.replace_types(imp, &type_mapping)?;
-                self.rewrite_type_annotation(imp)?;
-            }
+                let mut new_implements = implements;
+                if let Some(imp) = &mut new_implements {
+                    self.replace_types(imp, &type_mapping)?;
+                    self.rewrite_type_annotation(imp)?;
+                }
 
-            let instantiated = Stmt::ClassDecl {
-                name: concrete_name.clone(),
-                generic_params: None, // It's concrete now!
-                fields: new_fields,
-                methods: new_methods,
-                implements: new_implements,
-            };
-            self.generated_classes.insert(concrete_name, instantiated);
+                let instantiated = Stmt::ClassDecl {
+                    name: concrete_name.clone(),
+                    generic_params: None, // It's concrete now!
+                    fields: new_fields,
+                    methods: new_methods,
+                    implements: new_implements,
+                };
+                self.generated_classes.insert(concrete_name, instantiated);
+            }
+            Stmt::InterfaceDecl { name: _, generic_params, methods } => {
+                let params = generic_params.unwrap();
+                let mut type_mapping = HashMap::new();
+                for (i, p) in params.iter().enumerate() {
+                    if let Some(arg) = concrete_args.get(i) {
+                        type_mapping.insert(p.clone(), arg.clone());
+                    }
+                }
+
+                let mut new_methods = Vec::new();
+                for m in methods {
+                    new_methods.push(self.rewrite_stmt_with_mapping(m, &type_mapping)?);
+                }
+
+                let instantiated = Stmt::InterfaceDecl {
+                    name: concrete_name.clone(),
+                    generic_params: None, // It's concrete now!
+                    methods: new_methods,
+                };
+                self.generated_classes.insert(concrete_name, instantiated);
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -212,6 +246,11 @@ impl Monomorphizer {
                     self.substitute_stmt_types(s, mapping)?;
                 }
             }
+            Stmt::InterfaceDecl { methods, .. } => {
+                for m in methods {
+                    self.substitute_stmt_types(m, mapping)?;
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -280,6 +319,11 @@ impl Monomorphizer {
                 }
                 if let Some(imp) = implements {
                     self.rewrite_type_annotation(imp)?;
+                }
+            }
+            Stmt::InterfaceDecl { methods, .. } => {
+                for m in methods {
+                    *m = self.rewrite_stmt(m.clone())?;
                 }
             }
             Stmt::Expr(expr) => self.rewrite_expr(expr)?,
