@@ -12,6 +12,7 @@ pace-parser = { workspace = true }
 pace-errors = { workspace = true }
 pace-ty = { workspace = true }
 pace-codegen = { workspace = true }
+pace-pkg = { workspace = true }
 miette = { workspace = true }
 thiserror = "2"
 pace-runtime = { version = "0.1.0", path = "../pace-runtime" }

@@ -378,11 +378,57 @@ impl<'a> Parser<'a> {
             _ => self.parse_unquoted_path()?,
         };
 
+        let mut alias = None;
+        let mut show = None;
+        let mut hide = None;
+
+        if self.match_token(Token::As) {
+            alias = Some(match &self.current_token {
+                Token::Ident(id) => id.clone(),
+                _ => return Err(("Expected alias identifier after 'as'".to_string(), self.current_span)),
+            });
+            self.advance();
+        }
+
+        if self.match_token(Token::Show) {
+            let mut items = Vec::new();
+            loop {
+                match &self.current_token {
+                    Token::Ident(id) => {
+                        items.push(id.clone());
+                        self.advance();
+                    }
+                    _ => return Err(("Expected identifier to show".to_string(), self.current_span)),
+                }
+                if self.match_token(Token::Comma) {
+                    continue;
+                }
+                break;
+            }
+            show = Some(items);
+        } else if self.match_token(Token::Hide) {
+            let mut items = Vec::new();
+            loop {
+                match &self.current_token {
+                    Token::Ident(id) => {
+                        items.push(id.clone());
+                        self.advance();
+                    }
+                    _ => return Err(("Expected identifier to hide".to_string(), self.current_span)),
+                }
+                if self.match_token(Token::Comma) {
+                    continue;
+                }
+                break;
+            }
+            hide = Some(items);
+        }
+
         if !self.match_token(Token::Semi) {
             return Err(("Expected ';' after import statement".to_string(), self.current_span));
         }
 
-        Ok(Stmt::Import { path, items: None })
+        Ok(Stmt::Import { path, alias, show, hide })
     }
 
     fn parse_func_decl(&mut self, is_async: bool, visibility: Visibility) -> Result<Stmt, (String, (usize, usize))> {

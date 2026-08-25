@@ -89,7 +89,9 @@ pub enum Stmt {
     /// An import statement
     Import {
         path: String,
-        items: Option<Vec<String>>,
+        alias: Option<String>,
+        show: Option<Vec<String>>,
+        hide: Option<Vec<String>>,
     },
     /// A module containing statements
     Module {

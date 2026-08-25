@@ -1,4 +1,6 @@
 import std:io;
+import "hello-world" show greet;
+import "demo" as demoLib;
 
 import "./test_operators";
 import "./test_loops";
@@ -12,6 +14,10 @@ import "./test_error_handling";
 
 func main() {
     print("=== PACE INTEGRATION TEST SUITE ===");
+    
+    // Call the external package!
+    greet(); // From hello-world
+    demoLib.greet(); // From demo
     
     // Run mathematical operators and boolean tests
     runOperatorTests();

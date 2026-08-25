@@ -1,6 +1,6 @@
 use miette::Result;
 
-pub fn execute(name: String) -> Result<()> {
+pub fn execute(name: String, is_pkg: bool) -> Result<()> {
     // Validation
     if name.len() > 15 {
         return Err(miette::miette!("Project name must be 15 characters or less"));
@@ -16,8 +16,8 @@ pub fn execute(name: String) -> Result<()> {
     }
 
     for c in name.chars() {
-        if !c.is_ascii_alphanumeric() && c != '_' {
-            return Err(miette::miette!("Project name can only contain alphanumeric characters and underscores"));
+        if !c.is_ascii_alphanumeric() && c != '-' && c != '_' {
+            return Err(miette::miette!("Project name can only contain alphanumeric characters, hyphens, and underscores"));
         }
     }
 
@@ -39,15 +39,21 @@ pub fn execute(name: String) -> Result<()> {
     std::fs::write(project_path.join(".gitignore"), "target/\nbuild/\n")
         .map_err(|e| miette::miette!("Failed to write .gitignore: {}", e))?;
         
-    let readme_content = format!("# {}\n\nA Pace project.\n", name);
+    let readme_content = format!("# {}\n\nA Pace {}.\n", name, if is_pkg { "package" } else { "project" });
     std::fs::write(project_path.join("README.md"), readme_content)
         .map_err(|e| miette::miette!("Failed to write README.md: {}", e))?;
         
-    let main_content = "func main() {\n    print(\"⚡ Pace is ready. Build something fast.\");\n}\n";
-    std::fs::write(src_path.join("main.pace"), main_content)
-        .map_err(|e| miette::miette!("Failed to write src/main.pace: {}", e))?;
-        
-    println!("✅ Created project '{}'", name);
+    if is_pkg {
+        let lib_content = "func greet() {\n    print(\"Hello from Pace package!\");\n}\n";
+        std::fs::write(src_path.join("lib.pace"), lib_content)
+            .map_err(|e| miette::miette!("Failed to write src/lib.pace: {}", e))?;
+        println!("✅ Created package '{}'", name);
+    } else {
+        let main_content = "func main() {\n    print(\"⚡ Pace is ready. Build something fast.\");\n}\n";
+        std::fs::write(src_path.join("main.pace"), main_content)
+            .map_err(|e| miette::miette!("Failed to write src/main.pace: {}", e))?;
+        println!("✅ Created project '{}'", name);
+    }
     
     Ok(())
 }

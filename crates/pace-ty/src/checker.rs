@@ -130,7 +130,7 @@ impl TypeChecker {
                     } else {
                         Type::Void
                     };
-                    if !is_camel_case(name) && name != "main" {
+                    if !is_camel_case(name) && name != "main" && !name.contains("__") {
                         self.warnings.push(pace_errors::SemanticWarning::NamingConvention {
                             name: name.clone(),
                             src: miette::NamedSource::new("", String::new()),
@@ -284,7 +284,7 @@ impl TypeChecker {
                     self.env.register_class(name.clone(), sig);
                     self.current_class = None;
                 }
-                Stmt::Import { path, items: _ }
+                Stmt::Import { path, .. }
                     // Basic placeholder for module resolution.
                     // For now, if we import "std/collection", we mock registering `List` and `Set`
                     if path == "std/collection" => {
@@ -345,7 +345,7 @@ impl TypeChecker {
                     });
                 }
                 
-                if !is_camel_case(name) {
+                if !is_camel_case(name) && !name.contains("__") {
                     self.warnings.push(pace_errors::SemanticWarning::NamingConvention {
                         name: name.clone(),
                         src: miette::NamedSource::new("", String::new()),

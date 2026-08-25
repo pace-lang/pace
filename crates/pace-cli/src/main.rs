@@ -15,11 +15,45 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Create a new Pace project
+    /// Create a new Pace project in a new directory
     New {
         /// The name of the project
         name: String,
+        /// Create a package instead of an executable project
+        #[arg(long)]
+        pkg: bool,
     },
+    /// Initialize a new Pace project in the current directory
+    Init {
+        /// Create a package instead of an executable project
+        #[arg(long)]
+        pkg: bool,
+    },
+    /// Fetch and update dependencies from pace.toml
+    Fetch,
+    /// Add a new dependency to pace.toml
+    Add {
+        /// Name of the package to add
+        name: String,
+        /// Path to a local package
+        #[arg(long)]
+        path: Option<String>,
+        /// URL to a Git repository
+        #[arg(long)]
+        git: Option<String>,
+        /// Version string (e.g. 1.0.0)
+        #[arg(long)]
+        version: Option<String>,
+    },
+    /// Remove a dependency from pace.toml
+    Remove {
+        /// Name of the package to remove
+        name: String,
+    },
+    /// Package and upload the current project to the Pace Registry
+    Publish,
+    /// Authenticate with the Pace Registry
+    Login,
     /// Check a Pace file for syntax and type errors
     Check {
         /// The Pace file to check (optional, defaults to src/main.pace if pace.toml exists)
@@ -42,7 +76,13 @@ fn main() -> Result<()> {
     let session = CompilerSession::new();
 
     match cli.command {
-        Commands::New { name } => commands::new::execute(name)?,
+        Commands::New { name, pkg } => commands::new::execute(name, pkg)?,
+        Commands::Init { pkg } => commands::init::execute(pkg)?,
+        Commands::Fetch => commands::fetch::execute()?,
+        Commands::Add { name, path, git, version } => commands::add::execute(name, path, git, version)?,
+        Commands::Remove { name } => commands::remove::execute(name)?,
+        Commands::Publish => commands::publish::execute()?,
+        Commands::Login => commands::login::login()?,
         Commands::Check { file } => commands::check::execute(&session, file)?,
         Commands::Build { file } => commands::build::execute(&session, file)?,
         Commands::Run { file } => commands::run::execute(&session, file)?,

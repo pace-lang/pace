@@ -5,6 +5,8 @@ use miette::Diagnostic;
 use thiserror::Error;
 
 pub mod monomorphize;
+pub mod resolve;
+pub mod shake;
 
 #[derive(Error, Diagnostic, Debug)]
 #[error("Found multiple type errors")]
@@ -38,7 +40,7 @@ impl CompilerSession {
     }
 
 
-    fn load_file(&self, path: &std::path::Path, visited: &mut std::collections::HashSet<std::path::PathBuf>) -> Result<Vec<Stmt>> {
+    fn load_file(&self, path: &std::path::Path, module_name: &str, visited: &mut std::collections::HashSet<std::path::PathBuf>) -> Result<Vec<Stmt>> {
         let path_buf = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         if visited.contains(&path_buf) {
             return Ok(Vec::new()); // Already loaded, prevent cycles
@@ -64,7 +66,7 @@ impl CompilerSession {
 
         // Auto-inject std:core if not the core library itself
         if path_buf.file_stem().unwrap_or_default() != "core" {
-            ast.insert(0, Stmt::Import { path: "std:core".to_string(), items: None });
+            ast.insert(0, Stmt::Import { path: "std:core".to_string(), alias: None, show: None, hide: None });
         }
 
         // Resolve imports recursively
@@ -93,15 +95,39 @@ impl CompilerSession {
                     resolved_path = parent_dir.join(format!("{}.pace", import_path));
                 } else {
                     // External package
-                    let packages_dir = std::env::current_dir().unwrap().join("packages");
-                    resolved_path = packages_dir.join(format!("{}.pace", import_path));
+                    let current_dir = std::env::current_dir().unwrap();
+                    let lock_opt = pace_pkg::lockfile::PaceLock::load_from_dir(&current_dir).unwrap_or(None);
+                        
+                    if let Some(lock) = lock_opt {
+                        if let Some(pkg) = lock.packages.get(import_path) {
+                            if let Some(path) = &pkg.path {
+                                let pkg_path = std::path::PathBuf::from(path);
+                                // Default entry point is src/lib.pace as per design
+                                resolved_path = pkg_path.join("src").join("lib.pace");
+                            } else {
+                                return Err(miette::miette!("Package Error: External package '{}' missing path in pace.lock.", import_path));
+                            }
+                        } else {
+                            return Err(miette::miette!("Package Error: External package '{}' not found in pace.lock. Did you run 'pace fetch'?", import_path));
+                        }
+                    } else {
+                        // Fallback for when there's no lockfile
+                        let packages_dir = current_dir.join("packages");
+                        resolved_path = packages_dir.join(format!("{}.pace", import_path));
+                    }
+
                     if !resolved_path.exists() {
-                        return Err(miette::miette!("Package Error: External package '{}' not found in packages/ directory.", import_path));
+                        return Err(miette::miette!("Package Error: External package '{}' not found at expected path: {}", import_path, resolved_path.display()));
                     }
                 }
                 
                 if resolved_path.exists() {
-                    let mut imported_ast = self.load_file(&resolved_path, visited)?;
+                    let mod_name = if import_path.starts_with("./") || import_path.starts_with("../") {
+                        resolved_path.file_stem().unwrap_or_default().to_string_lossy().into_owned()
+                    } else {
+                        format!("pkg:{}", import_path)
+                    };
+                    let mut imported_ast = self.load_file(&resolved_path, &mod_name, visited)?;
                     final_ast.append(&mut imported_ast);
                 } else {
                     return Err(miette::miette!("Cannot find module '{}' at {:?}", import_path, resolved_path));
@@ -110,8 +136,8 @@ impl CompilerSession {
         }
         
         // Append current file's AST after its dependencies
-        let module_name = path_buf.file_stem().unwrap_or_default().to_string_lossy().into_owned();
-        final_ast.push(Stmt::Module { name: module_name, body: ast });
+        // Append current file's AST after its dependencies
+        final_ast.push(Stmt::Module { name: module_name.to_string(), body: ast });
 
         Ok(final_ast)
     }
@@ -119,11 +145,17 @@ impl CompilerSession {
     pub fn check_file(&self, path: &str) -> Result<Vec<Stmt>> {
         let mut visited = std::collections::HashSet::new();
         let path_buf = std::path::Path::new(path);
-        let ast = self.load_file(path_buf, &mut visited)?;
-        
+        let module_name = path_buf.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+        let ast = self.load_file(path_buf, &module_name, &mut visited)?;
+        // Symbol Resolution and Name Mangling pass
+        let resolved_ast = resolve::SymbolResolver::run(ast)?;
+
         // Flatten the AST before monomorphization and type checking!
-        let flat_ast = Self::flatten_ast(&ast);
-        let mono_ast = monomorphize::Monomorphizer::run(flat_ast).unwrap_or_else(|_| ast.clone());
+        let flat_ast = Self::flatten_ast(&resolved_ast);
+        let mono_ast = monomorphize::Monomorphizer::run(flat_ast).unwrap_or_else(|_| resolved_ast.clone());
+
+        // Apply Dead Code Elimination (Tree Shaking)
+        let mono_ast = shake::TreeShaker::run(mono_ast);
         
         let src = std::fs::read_to_string(path).into_diagnostic()?;
         
@@ -281,9 +313,15 @@ impl CompilerSession {
             }
         };
 
+        // Symbol Resolution and Name Mangling pass
+        let resolved_ast = resolve::SymbolResolver::run(ast)?;
+
         // Flatten the AST before monomorphization and type checking!
-        let flat_ast = Self::flatten_ast(&ast);
-        let mono_ast = monomorphize::Monomorphizer::run(flat_ast).unwrap_or_else(|_| ast.clone());
+        let flat_ast = Self::flatten_ast(&resolved_ast);
+        let mono_ast = monomorphize::Monomorphizer::run(flat_ast).unwrap_or_else(|_| resolved_ast.clone());
+
+        // Apply Dead Code Elimination (Tree Shaking)
+        let mono_ast = shake::TreeShaker::run(mono_ast);
 
         // Run typechecker on the parsed AST
         match pace_ty::check(&mono_ast) {

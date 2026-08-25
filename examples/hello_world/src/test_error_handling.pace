@@ -15,7 +15,7 @@ func testTry(b: Bool) -> Result<Int, String> {
     return Result<Int, String>::Ok(x * 2);
 }
 
-func runErrorHandlingTests() {
+public func runErrorHandlingTests() {
     print("--- Running Error Handling and `?` Operator Tests ---");
     let success = testTry(true);
     let failure = testTry(false);
