@@ -120,7 +120,12 @@ impl SymbolResolver {
                 for item in body.iter() {
                     if let Stmt::Import { path, alias, show, hide } = item {
                         let imported_mod_name = if path.starts_with("./") || path.starts_with("../") {
-                            std::path::Path::new(path).file_stem().unwrap().to_string_lossy().to_string()
+                            let parent_dir = std::path::Path::new(name).parent().unwrap_or(std::path::Path::new(""));
+                            parent_dir.join(format!("{}.pace", path))
+                                .canonicalize()
+                                .unwrap_or_else(|_| parent_dir.join(format!("{}.pace", path)))
+                                .to_string_lossy()
+                                .into_owned()
                         } else {
                             format!("pkg:{}", path)
                         };

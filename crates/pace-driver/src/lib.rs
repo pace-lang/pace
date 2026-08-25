@@ -123,7 +123,7 @@ impl CompilerSession {
                 
                 if resolved_path.exists() {
                     let mod_name = if import_path.starts_with("./") || import_path.starts_with("../") {
-                        resolved_path.file_stem().unwrap_or_default().to_string_lossy().into_owned()
+                        resolved_path.canonicalize().unwrap_or_else(|_| resolved_path.clone()).to_string_lossy().into_owned()
                     } else {
                         format!("pkg:{}", import_path)
                     };
@@ -145,7 +145,7 @@ impl CompilerSession {
     pub fn check_file(&self, path: &str) -> Result<Vec<Stmt>> {
         let mut visited = std::collections::HashSet::new();
         let path_buf = std::path::Path::new(path);
-        let module_name = path_buf.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+        let module_name = path_buf.canonicalize().unwrap_or_else(|_| path_buf.to_path_buf()).to_string_lossy().into_owned();
         let ast = self.load_file(path_buf, &module_name, &mut visited)?;
         // Symbol Resolution and Name Mangling pass
         let resolved_ast = resolve::SymbolResolver::run(ast)?;
@@ -300,7 +300,7 @@ impl CompilerSession {
 
     pub fn check_source(&self, src: &str) -> Result<Vec<Stmt>> {
         let ast = match pace_parser::parse(src) {
-            Ok(ast) => ast,
+            Ok(ast) => vec![Stmt::Module { name: "source".to_string(), body: ast }],
             Err(errors) => {
                 let parse_errors = errors.into_iter().map(|(msg, span)| {
                     ParseError {

@@ -121,6 +121,7 @@ impl Monomorphizer {
             new_ann
         } else {
             TypeAnnotation {
+                module_prefix: type_ann.module_prefix.clone(),
                 name: type_ann.name.clone(),
                 args: type_ann.args.iter().map(|a| self.instantiate_type_annotation(a)).collect(),
                 is_nullable: type_ann.is_nullable,
@@ -412,6 +413,7 @@ impl TypeFlattener {
         } else {
             let name = MonomorphizationPass::flatten_type_name(ta);
             TypeAnnotation {
+                module_prefix: ta.module_prefix.clone(),
                 name,
                 args: vec![],
                 is_nullable: ta.is_nullable,

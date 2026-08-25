@@ -28,4 +28,4 @@ editors/vscode/out/
 
 # Local examples and test projects
 examples/
-packages/
+build/

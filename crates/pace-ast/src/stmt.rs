@@ -2,6 +2,7 @@ use crate::expr::Expr;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeAnnotation {
+    pub module_prefix: Option<String>,
     pub name: String,
     pub args: Vec<TypeAnnotation>,
     pub is_nullable: bool,

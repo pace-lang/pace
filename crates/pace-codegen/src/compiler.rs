@@ -505,6 +505,7 @@ impl JITCompiler {
                         let mut new_params = vec![pace_ast::Param {
                             name: "self".to_string(),
                             type_annotation: pace_ast::TypeAnnotation {
+                                module_prefix: None,
                                 name: class_name.clone(),
                                 args: vec![],
                                 is_nullable: false,

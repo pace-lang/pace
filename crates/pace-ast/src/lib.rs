@@ -15,6 +15,7 @@ mod tests {
             name: "x".to_string(),
             is_mutable: false,
             type_annotation: Some(crate::stmt::TypeAnnotation {
+                module_prefix: None,
                 name: "Int".to_string(),
                 args: vec![],
                 is_nullable: false,

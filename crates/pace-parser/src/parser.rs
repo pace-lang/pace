@@ -142,11 +142,21 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type_annotation(&mut self) -> Result<TypeAnnotation, (String, (usize, usize))> {
-        let name = match &self.current_token {
+        let mut name = match &self.current_token {
             Token::Ident(id) => id.clone(),
             _ => return Err(("Expected type name".to_string(), self.current_span)),
         };
         self.advance();
+
+        let mut module_prefix = None;
+        if self.match_token(Token::Dot) {
+            module_prefix = Some(name);
+            name = match &self.current_token {
+                Token::Ident(id) => id.clone(),
+                _ => return Err(("Expected type name after '.'".to_string(), self.current_span)),
+            };
+            self.advance();
+        }
 
         let mut args = Vec::new();
         if self.match_token(Token::Less) {
@@ -164,6 +174,7 @@ impl<'a> Parser<'a> {
         let is_nullable = self.match_token(Token::Question);
 
         Ok(TypeAnnotation {
+            module_prefix,
             name,
             args,
             is_nullable,
