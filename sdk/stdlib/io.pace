@@ -1,2 +1,5 @@
 // Standard IO module
 // Note: `print` is currently implemented as a compiler intrinsic global function.
+
+struct File {}
+

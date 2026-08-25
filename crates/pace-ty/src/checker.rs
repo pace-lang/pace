@@ -94,26 +94,6 @@ impl TypeChecker {
                 Stmt::EnumDecl { name, .. } => {
                     self.env.register_enum(name.clone(), EnumSignature { generic_params: None, variants: HashMap::new() });
                 }
-                Stmt::Import { path, .. } => {
-                    if path == "std:collection" {
-                        self.env.register_class("List".to_string(), ClassSignature {
-                            generic_params: Some(vec!["T".to_string()]),
-                            fields: HashMap::new(),
-                            methods: HashMap::new(),
-                        });
-                        self.env.register_class("Set".to_string(), ClassSignature {
-                            generic_params: Some(vec!["T".to_string()]),
-                            fields: HashMap::new(),
-                            methods: HashMap::new(),
-                        });
-                    }
-                    if path == "std:string" {
-                        self.env.register_class("String".to_string(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
-                    }
-                    if path == "std:io" {
-                        self.env.register_class("File".to_string(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
-                    }
-                }
                 _ => {}
             }
         }

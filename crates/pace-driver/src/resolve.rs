@@ -79,10 +79,13 @@ impl SymbolResolver {
                     }
                     
                     if is_export {
-                        let mangled_name = if name.starts_with("pkg:") && !name.starts_with("pkg:std:") {
-                            format!("{}__{}", name.replace("pkg:", "").replace("-", "_"), original_name)
-                        } else {
+                        let clean_name = name.replace("pkg:", "").replace("-", "_").replace("/", "_").replace(".", "_").replace(":", "_");
+                        let mangled_name = if clean_name == "std_core" {
                             original_name.clone()
+                        } else if original_name == "main" {
+                            original_name.clone()
+                        } else {
+                            format!("{}__{}", clean_name, original_name)
                         };
 
                         module_exports.insert(original_name.clone(), ModuleExport {
@@ -282,15 +285,28 @@ impl SymbolResolver {
     }
 
     fn resolve_type(&self, ty: &mut pace_ast::TypeAnnotation, scope: &HashMap<String, ModuleExport>, aliases: &HashMap<String, String>) -> Result<()> {
-        if let Some(export) = scope.get(&ty.name) {
+        if let Some(prefix) = &ty.module_prefix {
+            if let Some(mod_name) = aliases.get(prefix) {
+                if let Some(mod_exports) = self.exports.get(mod_name) {
+                    if let Some(export) = mod_exports.get(&ty.name) {
+                        if export.visibility == Visibility::Private {
+                            return Err(Report::new(ResolutionError::PrivateSymbol { name: ty.name.clone(), span: (0, 0) }));
+                        }
+                        ty.name = export.mangled_name.clone();
+                    } else {
+                        return Err(Report::new(ResolutionError::UnresolvedSymbol { name: ty.name.clone(), span: (0, 0) }));
+                    }
+                }
+            } else {
+                return Err(Report::new(ResolutionError::UnresolvedSymbol { name: prefix.clone(), span: (0, 0) }));
+            }
+        } else if let Some(export) = scope.get(&ty.name) {
             if export.mangled_name == "COLLISION" {
                 return Err(Report::new(ResolutionError::Collision { name: ty.name.clone(), span: (0, 0) }));
             }
             ty.name = export.mangled_name.clone();
-        } else {
-            // Might be something like `lib.Struct`
-            // But TypeAnnotation just has `name`. We'd need to parse dot in TypeAnnotation if we supported it.
-            // For now we just resolve simple types.
+        } else if !matches!(ty.name.as_str(), "Int" | "Float" | "String" | "Bool" | "Void" | "Any" | "Self") {
+            return Err(Report::new(ResolutionError::UnresolvedSymbol { name: ty.name.clone(), span: (0, 0) }));
         }
         for arg in &mut ty.args {
             self.resolve_type(arg, scope, aliases)?;
