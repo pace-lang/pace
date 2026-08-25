@@ -307,7 +307,17 @@ impl TypeChecker {
                 
                 if let Some(annotation) = type_annotation {
                     let expected_type = self.resolve_type_name(annotation);
-                    if inferred_type != Type::Unknown && inferred_type != expected_type && inferred_type != Type::Any && expected_type != Type::Any {
+                    let mut is_match = false;
+                    
+                    if inferred_type == expected_type || inferred_type == Type::Unknown || expected_type == Type::Any || inferred_type == Type::Any {
+                        is_match = true;
+                    } else if let Type::Nullable(inner) = &expected_type {
+                        if inferred_type == Type::Null || inferred_type == **inner {
+                            is_match = true;
+                        }
+                    }
+                    
+                    if !is_match {
                         self.env.define(name.clone(), expected_type.clone(), *span, *is_mutable);
                         return Err(TypeError {
                             message: format!(
@@ -351,7 +361,17 @@ impl TypeChecker {
                 };
                 
                 if let Some(expected) = &self.current_return_type {
-                    if expected != &ret_ty && expected != &Type::Unknown && ret_ty != Type::Unknown && expected != &Type::Any && ret_ty != Type::Any {
+                    let mut is_match = false;
+                    
+                    if expected == &ret_ty || expected == &Type::Unknown || ret_ty == Type::Unknown || expected == &Type::Any || ret_ty == Type::Any {
+                        is_match = true;
+                    } else if let Type::Nullable(inner) = expected {
+                        if ret_ty == Type::Null || ret_ty == **inner {
+                            is_match = true;
+                        }
+                    }
+                    
+                    if !is_match {
                         return Err(TypeError {
                             message: format!("Type mismatch: expected return type {:?}, found {:?}", expected, ret_ty)
                         });

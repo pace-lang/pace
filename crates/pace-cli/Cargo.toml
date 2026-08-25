@@ -20,6 +20,8 @@ serde_json = "1.0"
 dialoguer = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
+cranelift.workspace = true
+cranelift-codegen = "0.135.1"
 
 [[bin]]
 name = "pace"

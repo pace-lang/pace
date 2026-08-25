@@ -348,6 +348,32 @@ impl Translator {
                         }
                 VarType::Unknown
             }
+            Expr::OptionalMemberAccess { object, property } => {
+                let obj_ty = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
+                if let VarType::Object(obj_name) = obj_ty {
+                    if let Some(layout) = class_layouts.get(&obj_name)
+                        && let Some(f_ty) = layout.fields.get(property) {
+                            return f_ty.1.clone();
+                        }
+                } else if let VarType::Struct(obj_name) = obj_ty
+                    && let Some(layout) = struct_layouts.get(&obj_name)
+                        && let Some(f_ty) = layout.fields.get(property) {
+                            return f_ty.1.clone();
+                        }
+                VarType::Unknown
+            }
+            Expr::Unwrap(inner) => {
+                Self::get_expr_type(inner, variables, func_returns, struct_layouts, class_layouts)
+            }
+            Expr::NullCoalesce { left, right } => {
+                let left_ty = Self::get_expr_type(left, variables, func_returns, struct_layouts, class_layouts);
+                if matches!(left_ty, VarType::Unknown) {
+                    Self::get_expr_type(right, variables, func_returns, struct_layouts, class_layouts)
+                } else {
+                    left_ty
+                }
+            }
+            Expr::Null => VarType::Unknown,
             Expr::Call { callee, .. } => {
                 if let Expr::Identifier(name) = &**callee {
                     if let Some(ty) = func_returns.get(name) {
@@ -925,7 +951,95 @@ impl Translator {
                     builder.ins().call(local_retain, &[val]);
                 }
                 
+                
                 Ok(val)
+            }
+            Expr::Null => Ok(builder.ins().iconst(types::I64, 0)),
+            Expr::Unwrap(inner) => {
+                let inner_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, inner, variables, var_index, func_returns)?;
+                
+                let is_null = builder.ins().icmp_imm_u(cranelift::prelude::IntCC::Equal, inner_val, 0);
+                
+                // Trap if null
+                let trap_block = builder.create_block();
+                let cont_block = builder.create_block();
+                
+                builder.ins().brif(is_null, trap_block, &[], cont_block, &[]);
+                
+                builder.switch_to_block(trap_block);
+                builder.seal_block(trap_block);
+                builder.ins().trap(cranelift::prelude::TrapCode::user(1).unwrap()); // Null pointer dereference
+                
+                builder.switch_to_block(cont_block);
+                builder.seal_block(cont_block);
+                
+                Ok(inner_val)
+            }
+            Expr::NullCoalesce { left, right } => {
+                let left_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, left, variables, var_index, func_returns)?;
+                
+                let is_null = builder.ins().icmp_imm_u(cranelift::prelude::IntCC::Equal, left_val, 0);
+                
+                let right_block = builder.create_block();
+                let merge_block = builder.create_block();
+                builder.append_block_param(merge_block, types::I64);
+                
+                builder.ins().brif(is_null, right_block, &[], merge_block, &[cranelift::codegen::ir::BlockArg::Value(left_val)]);
+                
+                builder.switch_to_block(right_block);
+                builder.seal_block(right_block);
+                let right_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, right, variables, var_index, func_returns)?;
+                builder.ins().jump(merge_block, &[cranelift::codegen::ir::BlockArg::Value(right_val)]);
+                
+                builder.switch_to_block(merge_block);
+                builder.seal_block(merge_block);
+                
+                let result = builder.block_params(merge_block)[0];
+                Ok(result)
+            }
+            Expr::OptionalMemberAccess { object, property } => {
+                let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns)?;
+                
+                let is_null = builder.ins().icmp_imm_u(cranelift::prelude::IntCC::Equal, obj_ptr, 0);
+                
+                let access_block = builder.create_block();
+                let merge_block = builder.create_block();
+                builder.append_block_param(merge_block, types::I64);
+                
+                let zero_val = builder.ins().iconst(types::I64, 0);
+                builder.ins().brif(is_null, merge_block, &[cranelift::codegen::ir::BlockArg::Value(zero_val)], access_block, &[]);
+                
+                builder.switch_to_block(access_block);
+                builder.seal_block(access_block);
+                
+                let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
+                let (f_offset, f_ty) = match obj_type {
+                    VarType::Object(name) => {
+                        let layout = class_layouts.get(&name).unwrap();
+                        layout.fields.get(property).unwrap().clone()
+                    }
+                    VarType::Struct(name) => {
+                        let layout = struct_layouts.get(&name).unwrap();
+                        layout.fields.get(property).unwrap().clone()
+                    }
+                    _ => panic!("OptionalMemberAccess on non-object type: {:?}", obj_type),
+                };
+                
+                let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, f_offset as i32);
+                
+                if matches!(f_ty, VarType::Object(_)) {
+                    let retain_id = *funcs.get("retain").unwrap();
+                    let local_retain = module.declare_func_in_func(retain_id, builder.func);
+                    builder.ins().call(local_retain, &[val]);
+                }
+                
+                builder.ins().jump(merge_block, &[cranelift::codegen::ir::BlockArg::Value(val)]);
+                
+                builder.switch_to_block(merge_block);
+                builder.seal_block(merge_block);
+                
+                let result = builder.block_params(merge_block)[0];
+                Ok(result)
             }
             _ => Err(CodegenError { message: format!("Cannot translate expression: {:?}", expr) })
         }
