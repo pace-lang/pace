@@ -71,7 +71,7 @@ impl CompilerSession {
 
         // Resolve imports recursively
         let mut final_ast = Vec::new();
-        for stmt in &ast {
+        for stmt in &mut ast {
             if let Stmt::Import { path: import_path, .. } = stmt {
                 let resolved_path;
                 
@@ -84,7 +84,7 @@ impl CompilerSession {
                     } else {
                         // Fallback to compile-time repository root
                         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-                        let fallback_path = std::path::Path::new(manifest_dir).join("../../sdk/stdlib");
+                        let fallback_path = std::path::Path::new(manifest_dir).join("../../stdlib");
                         resolved_path = fallback_path.join(format!("{}.pace", path_without_std));
                         if !resolved_path.exists() {
                             return Err(miette::miette!("Package Error: Standard library not found at '{}'. Please set PACE_STDLIB or PACE_HOME.", resolved_path.display()));
@@ -127,6 +127,10 @@ impl CompilerSession {
                     } else {
                         format!("pkg:{}", import_path)
                     };
+                    
+                    // Inject the exact resolved mod_name back into the AST so resolve.rs doesn't have to guess relative paths
+                    *import_path = mod_name.clone();
+                    
                     let mut imported_ast = self.load_file(&resolved_path, &mod_name, visited)?;
                     final_ast.append(&mut imported_ast);
                 } else {
@@ -135,7 +139,6 @@ impl CompilerSession {
             }
         }
         
-        // Append current file's AST after its dependencies
         // Append current file's AST after its dependencies
         final_ast.push(Stmt::Module { name: module_name.to_string(), body: ast });
 

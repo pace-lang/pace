@@ -352,14 +352,17 @@ impl Translator {
                 if let Expr::Identifier(name) = &**callee {
                     if let Some(ty) = func_returns.get(name) {
                         return ty.clone();
-                    } else if name.chars().next().is_some_and(|c| c.is_uppercase()) {
-                        if struct_layouts.contains_key(name) {
-                            return VarType::Struct(name.clone());
-                        }
-                        if name.starts_with("Result_") || name.starts_with("Option_") {
-                            return VarType::Enum(name.clone());
-                        }
+                    } else if struct_layouts.contains_key(name) {
+                        return VarType::Struct(name.clone());
+                    } else if class_layouts.contains_key(name) {
                         return VarType::Object(name.clone());
+                    } else if name.starts_with("Result_") || name.starts_with("Option_") || name.contains("__Result_") || name.contains("__Option_") {
+                        return VarType::Enum(name.clone());
+                    } else if let Some(pos) = name.rfind("__") {
+                        let base_name = &name[pos + 2..];
+                        if base_name.chars().next().is_some_and(|c| c.is_uppercase()) {
+                            return VarType::Object(name.clone());
+                        }
                     }
                 } else if let Expr::MemberAccess { object, property, .. } = &**callee {
                     if let Expr::Identifier(obj_name) = &**object

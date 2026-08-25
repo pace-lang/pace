@@ -122,16 +122,8 @@ impl SymbolResolver {
 
                 for item in body.iter() {
                     if let Stmt::Import { path, alias, show, hide } = item {
-                        let imported_mod_name = if path.starts_with("./") || path.starts_with("../") {
-                            let parent_dir = std::path::Path::new(name).parent().unwrap_or(std::path::Path::new(""));
-                            parent_dir.join(format!("{}.pace", path))
-                                .canonicalize()
-                                .unwrap_or_else(|_| parent_dir.join(format!("{}.pace", path)))
-                                .to_string_lossy()
-                                .into_owned()
-                        } else {
-                            format!("pkg:{}", path)
-                        };
+                        let imported_mod_name = path.clone();
+                        let mut to_reexport = Vec::new();
                         if let Some(imported_exports) = self.exports.get(&imported_mod_name) {
                             if let Some(alias_name) = alias {
                                 mod_aliases.insert(alias_name.clone(), imported_mod_name.clone());
@@ -155,8 +147,15 @@ impl SymbolResolver {
                                         }
                                     } else {
                                         local_scope.insert(sym.clone(), export.clone());
+                                        to_reexport.push((sym.clone(), export.clone()));
                                     }
                                 }
+                            }
+                        }
+                        // Apply re-exports
+                        if let Some(mod_exports) = self.exports.get_mut(name) {
+                            for (sym, export) in to_reexport {
+                                mod_exports.insert(sym, export);
                             }
                         }
                     }
@@ -279,6 +278,18 @@ impl SymbolResolver {
             Expr::GenericInstantiation { callee, .. } => {
                 self.resolve_expr(callee, scope, aliases)?;
             }
+            Expr::InterpolatedString(exprs) => {
+                for e in exprs {
+                    self.resolve_expr(e, scope, aliases)?;
+                }
+            }
+            Expr::Unwrap(inner) | Expr::Try(inner) => {
+                self.resolve_expr(inner, scope, aliases)?;
+            }
+            Expr::NullCoalesce { left, right } => {
+                self.resolve_expr(left, scope, aliases)?;
+                self.resolve_expr(right, scope, aliases)?;
+            }
             _ => {}
         }
         Ok(())
@@ -305,8 +316,6 @@ impl SymbolResolver {
                 return Err(Report::new(ResolutionError::Collision { name: ty.name.clone(), span: (0, 0) }));
             }
             ty.name = export.mangled_name.clone();
-        } else if !matches!(ty.name.as_str(), "Int" | "Float" | "String" | "Bool" | "Void" | "Any" | "Self") {
-            return Err(Report::new(ResolutionError::UnresolvedSymbol { name: ty.name.clone(), span: (0, 0) }));
         }
         for arg in &mut ty.args {
             self.resolve_type(arg, scope, aliases)?;
