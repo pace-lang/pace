@@ -3,6 +3,8 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
+    /// Poison type for graceful error recovery
+    Error,
     Int,
     Float,
     String,
@@ -322,10 +324,14 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, name: String, ty: Type, span: (usize, usize), is_mutable: bool) {
+    pub fn define(&mut self, name: String, ty: Type, span: (usize, usize), is_mutable: bool) -> Result<(), (usize, usize)> {
         if let Some(scope) = self.scopes.last_mut() {
+            if let Some(existing) = scope.get(&name) {
+                return Err(existing.span);
+            }
             scope.insert(name, VarInfo { ty, span, is_used: false, is_mutable });
         }
+        Ok(())
     }
 
     pub fn get_mut(&mut self, name: &str) -> Option<&mut VarInfo> {
@@ -344,6 +350,31 @@ impl Environment {
             }
         }
         None
+    }
+
+    pub fn get_var_info(&self, name: &str) -> Option<&VarInfo> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(var_info) = scope.get(name) {
+                return Some(var_info);
+            }
+        }
+        None
+    }
+
+    pub fn find_closest_variable(&self, name: &str) -> Option<String> {
+        let mut closest = None;
+        let mut min_distance = usize::MAX;
+
+        for scope in self.scopes.iter().rev() {
+            for var_name in scope.keys() {
+                let dist = levenshtein(name, var_name);
+                if dist <= 2 && dist < min_distance {
+                    min_distance = dist;
+                    closest = Some(var_name.clone());
+                }
+            }
+        }
+        closest
     }
 
     pub fn has(&self, name: &str) -> bool {
@@ -371,21 +402,37 @@ impl Environment {
     pub fn register_function(&mut self, name: String, sig: FunctionSignature) {
         let span = sig.span;
         self.functions.insert(name.clone(), sig);
-        self.define(name, Type::Function, span, false);
+        let _ = self.define(name, Type::Function, span, false);
     }
     
     pub fn register_class(&mut self, name: String, sig: ClassSignature) {
         self.classes.insert(name.clone(), sig);
-        self.define(name.clone(), Type::Class(name), (0, 0), false);
+        let _ = self.define(name.clone(), Type::Class(name), (0, 0), false);
     }
 
     pub fn register_struct(&mut self, name: String, sig: ClassSignature) {
         self.structs.insert(name.clone(), sig);
-        self.define(name.clone(), Type::Struct(name), (0, 0), false);
+        let _ = self.define(name.clone(), Type::Struct(name), (0, 0), false);
     }
     
     pub fn register_enum(&mut self, name: String, sig: EnumSignature) {
         self.enums.insert(name.clone(), sig);
-        self.define(name.clone(), Type::Enum(name), (0, 0), false);
+        let _ = self.define(name.clone(), Type::Enum(name), (0, 0), false);
     }
+}
+
+pub fn levenshtein(a: &str, b: &str) -> usize {
+    let mut matrix = vec![vec![0; b.len() + 1]; a.len() + 1];
+    for i in 0..=a.len() { matrix[i][0] = i; }
+    for j in 0..=b.len() { matrix[0][j] = j; }
+    for (i, ca) in a.chars().enumerate() {
+        for (j, cb) in b.chars().enumerate() {
+            let cost = if ca == cb { 0 } else { 1 };
+            matrix[i + 1][j + 1] = std::cmp::min(
+                std::cmp::min(matrix[i][j + 1] + 1, matrix[i + 1][j] + 1),
+                matrix[i][j] + cost,
+            );
+        }
+    }
+    matrix[a.len()][b.len()]
 }

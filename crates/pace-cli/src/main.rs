@@ -58,6 +58,9 @@ enum Commands {
     Check {
         /// The Pace file to check (optional, defaults to src/main.pace if pace.toml exists)
         file: Option<String>,
+        /// Output format (e.g. "json" or "human")
+        #[arg(long, default_value = "human")]
+        output_format: String,
     },
     /// Compile a Pace file into an executable
     Build {
@@ -79,6 +82,15 @@ enum Commands {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    if let Commands::Check { output_format, .. } = &cli.command {
+        if output_format == "json" {
+            miette::set_hook(Box::new(|_| {
+                Box::new(miette::JSONReportHandler::new())
+            })).unwrap();
+        }
+    }
+
     let session = CompilerSession::new();
 
     match cli.command {
@@ -89,7 +101,7 @@ fn main() -> Result<()> {
         Commands::Remove { name } => commands::remove::execute(name)?,
         Commands::Publish => commands::publish::execute()?,
         Commands::Login => commands::login::login()?,
-        Commands::Check { file } => commands::check::execute(&session, file)?,
+        Commands::Check { file, output_format } => commands::check::execute(&session, file, output_format)?,
         Commands::Build { file, release } => commands::build::execute(&session, file, release)?,
         Commands::Run { file, release } => commands::run::execute(&session, file, release)?,
     }

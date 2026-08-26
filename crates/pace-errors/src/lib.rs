@@ -28,9 +28,10 @@ pub struct MultipleSyntaxErrors {
 #[derive(Error, Diagnostic, Debug)]
 pub enum TypeError {
     #[error("Unknown identifier '{name}'")]
-    #[diagnostic(code(P2001), help("Ensure the variable or function is declared in this scope."))]
+    #[diagnostic(code(P2001), help("{help_text}"))]
     UnknownIdentifier {
         name: String,
+        help_text: String,
         #[source_code]
         src: NamedSource<String>,
         #[label("Not found")]
@@ -43,8 +44,10 @@ pub enum TypeError {
         name: String,
         #[source_code]
         src: NamedSource<String>,
-        #[label("Already declared")]
+        #[label("Cannot redeclare '{name}'")]
         span: (usize, usize),
+        #[label("Originally defined here")]
+        original_span: (usize, usize),
     },
 
     #[error("Type mismatch: {message}")]
