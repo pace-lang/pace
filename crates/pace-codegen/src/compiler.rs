@@ -11,6 +11,7 @@ use crate::translator::VarType;
 pub struct StructLayout {
     pub name: String,
     pub fields: HashMap<String, (usize, VarType)>,
+    pub static_fields: HashMap<String, (DataId, VarType)>,
     pub size: usize,
 }
 
@@ -19,6 +20,7 @@ pub struct ClassLayout {
     pub name: String,
     pub fields: HashMap<String, (usize, VarType)>,
     pub methods: HashMap<String, usize>,
+    pub static_fields: HashMap<String, (DataId, VarType)>,
     pub vtable_id: DataId,
 }
 
@@ -306,6 +308,7 @@ impl JITCompiler {
                 let dummy_class_layout = ClassLayout {
                     name: interface_name.clone(),
                     fields: HashMap::new(),
+                    static_fields: HashMap::new(),
                     methods: method_map,
                     vtable_id: dummy_vtable_id,
                 };
@@ -328,12 +331,43 @@ impl JITCompiler {
                     offset += 8;
                 }
                 
+                let mut static_fields = HashMap::new();
                 for field in fields {
-                    if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
+                    if let Stmt::VarDecl { name: field_name, type_annotation, is_static, initializer, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
                         let field_ty = crate::translator::parse_vartype(ty_str, Some(class_name));
-                        field_map.insert(field_name.clone(), (offset, field_ty));
-                        offset += 8;
+                        if *is_static {
+                            let global_name = format!("{}_{}", class_name, field_name);
+                            let data_id = self.module.declare_data(&global_name, Linkage::Export, true, false)
+                                .expect("Failed to declare static field");
+                            let mut data_ctx = DataDescription::new();
+                            
+                            let mut init_bytes = vec![0u8; 8];
+                            if let Some(init_expr) = initializer {
+                                use pace_ast::Expr;
+                                match init_expr {
+                                    Expr::IntLiteral(i) => {
+                                        init_bytes.copy_from_slice(&i.to_ne_bytes());
+                                    }
+                                    Expr::FloatLiteral(f) => {
+                                        init_bytes.copy_from_slice(&f.to_bits().to_ne_bytes());
+                                    }
+                                    Expr::BoolLiteral(b) => {
+                                        let val: i64 = if *b { 1 } else { 0 };
+                                        init_bytes.copy_from_slice(&val.to_ne_bytes());
+                                    }
+                                    _ => {} // Default to 0 for complex expressions
+                                }
+                            }
+                            
+                            data_ctx.define(init_bytes.into_boxed_slice());
+                            self.module.define_data(data_id, &data_ctx)
+                                .expect("Failed to define static field data");
+                            static_fields.insert(field_name.clone(), (data_id, field_ty));
+                        } else {
+                            field_map.insert(field_name.clone(), (offset, field_ty));
+                            offset += 8;
+                        }
                     }
                 }
                 
@@ -426,6 +460,7 @@ impl JITCompiler {
                     name: class_name.clone(),
                     fields: field_map,
                     methods: method_map,
+                    static_fields,
                     vtable_id,
                 };
                 self.class_layouts.insert(class_name.clone(), layout);
@@ -484,18 +519,50 @@ impl JITCompiler {
             } else if let Stmt::StructDecl { name: struct_name, fields, generic_params: _ } = stmt {
                 let mut field_map = HashMap::new();
                 let mut offset = 0; // Structs have no header (0 bytes for ARC/VTable)
+                let mut static_fields = HashMap::new();
                 for field in fields {
-                    if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
+                    if let Stmt::VarDecl { name: field_name, type_annotation, is_static, initializer, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
                         let field_ty = crate::translator::parse_vartype(ty_str, Some(struct_name));
-                        field_map.insert(field_name.clone(), (offset, field_ty));
-                        offset += 8; // All fields are currently 8 bytes (i64/f64/ptr)
+                        if *is_static {
+                            let global_name = format!("{}_{}", struct_name, field_name);
+                            let data_id = self.module.declare_data(&global_name, Linkage::Export, true, false)
+                                .expect("Failed to declare static field");
+                            let mut data_ctx = DataDescription::new();
+                            
+                            let mut init_bytes = vec![0u8; 8];
+                            if let Some(init_expr) = initializer {
+                                use pace_ast::Expr;
+                                match init_expr {
+                                    Expr::IntLiteral(i) => {
+                                        init_bytes.copy_from_slice(&i.to_ne_bytes());
+                                    }
+                                    Expr::FloatLiteral(f) => {
+                                        init_bytes.copy_from_slice(&f.to_bits().to_ne_bytes());
+                                    }
+                                    Expr::BoolLiteral(b) => {
+                                        let val: i64 = if *b { 1 } else { 0 };
+                                        init_bytes.copy_from_slice(&val.to_ne_bytes());
+                                    }
+                                    _ => {} // Default to 0 for complex expressions
+                                }
+                            }
+                            
+                            data_ctx.define(init_bytes.into_boxed_slice());
+                            self.module.define_data(data_id, &data_ctx)
+                                .expect("Failed to define static field data");
+                            static_fields.insert(field_name.clone(), (data_id, field_ty));
+                        } else {
+                            field_map.insert(field_name.clone(), (offset, field_ty));
+                            offset += 8; // All fields are currently 8 bytes (i64/f64/ptr)
+                        }
                     }
                 }
                 
                 let layout = StructLayout {
                     name: struct_name.clone(),
                     fields: field_map,
+                    static_fields,
                     size: offset,
                 };
                 self.struct_layouts.insert(struct_name.clone(), layout);
@@ -915,7 +982,7 @@ impl JITCompiler {
             let ret = last_val.unwrap_or_else(|| builder.ins().iconst(types::I64, 0));
             
             // Release all active local object variables
-            for (var_name, (var, ty)) in variables.iter() {
+            for (_var_name, (var, ty)) in variables.iter() {
                 if matches!(ty, crate::translator::VarType::Object(_)) {
                     let obj_val = builder.use_var(*var);
                     let release_id = *self.funcs.get("release").unwrap_or_else(|| panic!("release not found"));

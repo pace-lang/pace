@@ -241,6 +241,7 @@ impl AotCompiler {
                 let dummy_class_layout = ClassLayout {
                     name: interface_name.clone(),
                     fields: HashMap::new(),
+                    static_fields: HashMap::new(),
                     methods: method_map,
                     vtable_id: dummy_vtable_id,
                 };
@@ -339,6 +340,7 @@ impl AotCompiler {
                 let layout = ClassLayout {
                     name: class_name.clone(),
                     fields: field_map,
+                    static_fields: HashMap::new(), // Will fix fully if AOT needs it later
                     methods: method_map,
                     vtable_id,
                 };
@@ -409,6 +411,7 @@ impl AotCompiler {
                 let layout = StructLayout {
                     name: struct_name.clone(),
                     fields: field_map,
+                    static_fields: HashMap::new(),
                     size: offset,
                 };
                 self.struct_layouts.insert(struct_name.clone(), layout);

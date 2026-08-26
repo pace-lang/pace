@@ -388,7 +388,7 @@ impl Translator {
                 };
                 
                 // Release all active local object variables
-                for (var_name, (var, ty)) in variables.iter() {
+                for (_var_name, (var, ty)) in variables.iter() {
                     if matches!(ty, VarType::Object(_)) {
                         let obj_val = builder.use_var(*var);
                         let release_id = *funcs.get("release").unwrap_or_else(|| panic!("release not found"));
@@ -420,6 +420,18 @@ impl Translator {
             }
             Expr::Binary { left, .. } => Self::get_expr_type(left, variables, func_returns, struct_layouts, class_layouts), // simplified
             Expr::MemberAccess { object, property, .. } => {
+                if let Expr::Identifier(obj_name) = &**object {
+                    if let Some(layout) = class_layouts.get(obj_name) {
+                        if let Some((_, f_ty)) = layout.static_fields.get(property) {
+                            return f_ty.clone();
+                        }
+                    } else if let Some(layout) = struct_layouts.get(obj_name) {
+                        if let Some((_, f_ty)) = layout.static_fields.get(property) {
+                            return f_ty.clone();
+                        }
+                    }
+                }
+                
                 let obj_ty = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
                 if let VarType::Object(obj_name) = obj_ty {
                     if let Some(layout) = class_layouts.get(&obj_name)
@@ -616,8 +628,12 @@ impl Translator {
                     let str_val = if part_ty == VarType::String {
                         val
                     } else if part_ty == VarType::Float {
+                        let mut float_val = val;
+                        if builder.func.dfg.value_type(val) == types::I64 {
+                            float_val = builder.ins().bitcast(types::F64, cranelift::prelude::MemFlagsData::new(), val);
+                        }
                         let to_str = module.declare_func_in_func(*funcs.get("float_to_string").unwrap(), builder.func);
-                        let call = builder.ins().call(to_str, &[val]);
+                        let call = builder.ins().call(to_str, &[float_val]);
                         builder.inst_results(call)[0]
                     } else if part_ty == VarType::Bool {
                         let to_str = module.declare_func_in_func(*funcs.get("bool_to_string").unwrap(), builder.func);
@@ -823,6 +839,36 @@ impl Translator {
                         Err(CodegenError { message: format!("Variable '{}' not found in JIT environment", name) })
                     }
                 } else if let Expr::MemberAccess { object, property, .. } = &**target {
+                    if let Expr::Identifier(obj_name) = &**object {
+                        let maybe_static_field = if let Some(layout) = class_layouts.get(obj_name) {
+                            layout.static_fields.get(property)
+                        } else if let Some(layout) = struct_layouts.get(obj_name) {
+                            layout.static_fields.get(property)
+                        } else {
+                            None
+                        };
+                        
+                        if let Some(&(data_id, ref f_ty)) = maybe_static_field {
+                            let ptr_ty = module.target_config().pointer_type();
+                            let data_ref = module.declare_data_in_func(data_id, builder.func);
+                            let addr = builder.ins().symbol_value(ptr_ty, data_ref);
+                            
+                            if matches!(f_ty, VarType::Object(_)) {
+                                let old_val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), addr, 0);
+                                let release_id = *funcs.get("release").unwrap();
+                                let local_release = module.declare_func_in_func(release_id, builder.func);
+                                builder.ins().call(local_release, &[old_val]);
+                                
+                                let retain_id = *funcs.get("retain").unwrap();
+                                let local_retain = module.declare_func_in_func(retain_id, builder.func);
+                                builder.ins().call(local_retain, &[val]);
+                            }
+                            
+                            builder.ins().store(cranelift::prelude::MemFlagsData::new(), val, addr, 0);
+                            return Ok(val);
+                        }
+                    }
+
                     let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns)?;
                     
                     let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
@@ -1089,6 +1135,31 @@ impl Translator {
                 Err(CodegenError { message: format!("Cannot resolve function call: {:?}", callee) })
             }
             Expr::MemberAccess { object, property, .. } => {
+                if let Expr::Identifier(obj_name) = &**object {
+                    let maybe_static_field = if let Some(layout) = class_layouts.get(obj_name) {
+                        layout.static_fields.get(property)
+                    } else if let Some(layout) = struct_layouts.get(obj_name) {
+                        layout.static_fields.get(property)
+                    } else {
+                        None
+                    };
+                    
+                    if let Some(&(data_id, ref f_ty)) = maybe_static_field {
+                        let ptr_ty = module.target_config().pointer_type();
+                        let data_ref = module.declare_data_in_func(data_id, builder.func);
+                        let addr = builder.ins().symbol_value(ptr_ty, data_ref);
+                        let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), addr, 0);
+                        
+                        if matches!(f_ty, VarType::Object(_)) {
+                            let retain_id = *funcs.get("retain").unwrap();
+                            let local_retain = module.declare_func_in_func(retain_id, builder.func);
+                            builder.ins().call(local_retain, &[val]);
+                        }
+                        
+                        return Ok(val);
+                    }
+                }
+                
                 let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns)?;
                 
                 let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);

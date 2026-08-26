@@ -137,13 +137,17 @@ impl TypeChecker {
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
                     for f in fields {
-                        if let Stmt::VarDecl { name: f_name, type_annotation, .. } = f {
+                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, .. } = f {
                             let f_ty = if let Some(ty_str) = type_annotation {
                                 self.resolve_type_name(ty_str)
                             } else {
                                 Type::Unknown
                             };
-                            field_map.insert(f_name.clone(), f_ty);
+                            if *is_static {
+                                static_field_map.insert(f_name.clone(), f_ty);
+                            } else {
+                                field_map.insert(f_name.clone(), f_ty);
+                            }
                         }
                     }
 
@@ -167,7 +171,7 @@ impl TypeChecker {
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
                                 generic_params: generic_params.clone(),
-                                is_static: false, // Will fix later
+                                is_static: *is_static,
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
@@ -203,7 +207,7 @@ impl TypeChecker {
 
                     let mut method_map = HashMap::new();
                     for m in methods {
-                        if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, .. } = m {
+                        if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, is_static, .. } = m {
                             let mut param_types = Vec::new();
                             for param in params {
                                 param_types.push(self.resolve_type_name(&param.type_annotation));
@@ -221,7 +225,7 @@ impl TypeChecker {
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
                                 generic_params: generic_params.clone(),
-                                is_static: false, // Will fix later
+                                is_static: *is_static,
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
@@ -482,7 +486,7 @@ impl TypeChecker {
                     if !args.is_empty() {
                         item_ty = args[0].clone();
                     }
-                } else if let Type::Class(name) = &iterable_ty {
+                } else if let Type::Class(_name) = &iterable_ty {
                     // Fallback for non-generic classes if needed, though most iterables are generic
                 }
                 
@@ -781,24 +785,24 @@ impl TypeChecker {
             Expr::MemberAccess { object, property, .. } => {
                 let obj_ty = self.check_expr(object)?;
                 
-                let (class_name, fields, methods) = match obj_ty {
+                let (class_name, fields, static_fields, methods) = match obj_ty {
                     Type::Class(ref name) => {
                         let sig = self.env.classes.get(name).ok_or_else(|| TypeError {
                             message: format!("Type '{}' is not defined", name)
                         })?;
-                        (name.clone(), sig.fields.clone(), sig.methods.clone())
+                        (name.clone(), sig.fields.clone(), sig.static_fields.clone(), sig.methods.clone())
                     },
                     Type::Actor(ref name) => {
                         let sig = self.env.actors.get(name).ok_or_else(|| TypeError {
                             message: format!("Actor '{}' is not defined", name)
                         })?;
-                        (name.clone(), sig.fields.clone(), sig.methods.clone())
+                        (name.clone(), sig.fields.clone(), sig.static_fields.clone(), sig.methods.clone())
                     },
                     Type::Struct(ref name) => {
                         let sig = self.env.structs.get(name).ok_or_else(|| TypeError {
                             message: format!("Type '{}' is not defined", name)
                         })?;
-                        (name.clone(), sig.fields.clone(), sig.methods.clone())
+                        (name.clone(), sig.fields.clone(), sig.static_fields.clone(), sig.methods.clone())
                     },
                     Type::Enum(ref name) => {
                         let sig = self.env.enums.get(name).ok_or_else(|| TypeError {
@@ -818,6 +822,9 @@ impl TypeChecker {
                     }
                 };
                 
+                if let Some(ty) = static_fields.get(property) {
+                    return Ok(ty.clone());
+                }
                 if let Some(ty) = fields.get(property) {
                     if let Type::Actor(ref a_name) = obj_ty {
                         if Some(a_name.clone()) != self.current_class {
