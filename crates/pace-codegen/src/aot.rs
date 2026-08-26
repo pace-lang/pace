@@ -143,6 +143,31 @@ impl AotCompiler {
         sig_sb_free.params.push(AbiParam::new(ptr_ty));
         let sb_free_id = module.declare_function("__pace_sb_free", Linkage::Import, &sig_sb_free).unwrap();
 
+        // Actor runtime
+        let mut sig_mb_create = module.make_signature();
+        sig_mb_create.returns.push(AbiParam::new(ptr_ty));
+        let mb_create_id = module.declare_function("__pace_mailbox_create", Linkage::Import, &sig_mb_create).unwrap();
+
+        let mut sig_mb_send = module.make_signature();
+        sig_mb_send.params.push(AbiParam::new(ptr_ty)); // mb
+        sig_mb_send.params.push(AbiParam::new(ptr_ty)); // func pointer
+        sig_mb_send.params.push(AbiParam::new(types::I64)); // arg
+        sig_mb_send.params.push(AbiParam::new(ptr_ty)); // promise
+        let mb_send_id = module.declare_function("__pace_mailbox_send", Linkage::Import, &sig_mb_send).unwrap();
+
+        let mut sig_mb_destroy = module.make_signature();
+        sig_mb_destroy.params.push(AbiParam::new(ptr_ty));
+        let mb_destroy_id = module.declare_function("__pace_mailbox_destroy", Linkage::Import, &sig_mb_destroy).unwrap();
+
+        let mut sig_promise_create = module.make_signature();
+        sig_promise_create.returns.push(AbiParam::new(ptr_ty));
+        let promise_create_id = module.declare_function("__pace_promise_create", Linkage::Import, &sig_promise_create).unwrap();
+
+        let mut sig_promise_await = module.make_signature();
+        sig_promise_await.params.push(AbiParam::new(ptr_ty));
+        sig_promise_await.returns.push(AbiParam::new(types::I64));
+        let promise_await_id = module.declare_function("__pace_promise_await", Linkage::Import, &sig_promise_await).unwrap();
+
         let mut funcs = HashMap::new();
         funcs.insert("print_int".to_string(), print_int_id);
         funcs.insert("print_float".to_string(), print_float_id);
@@ -164,6 +189,12 @@ impl AotCompiler {
         funcs.insert("sb_append".to_string(), sb_append_id);
         funcs.insert("sb_build".to_string(), sb_build_id);
         funcs.insert("sb_free".to_string(), sb_free_id);
+
+        funcs.insert("__pace_mailbox_create".to_string(), mb_create_id);
+        funcs.insert("__pace_mailbox_send".to_string(), mb_send_id);
+        funcs.insert("__pace_mailbox_destroy".to_string(), mb_destroy_id);
+        funcs.insert("__pace_promise_create".to_string(), promise_create_id);
+        funcs.insert("__pace_promise_await".to_string(), promise_await_id);
 
         Self {
             builder_context: FunctionBuilderContext::new(),
@@ -222,7 +253,7 @@ impl AotCompiler {
         let _ptr_ty = self.module.target_config().pointer_type();
         
         for stmt in stmts {
-            if let Stmt::ClassDecl { name: class_name, fields, methods, implements, generic_params: _ } = stmt {
+            if let Stmt::ClassDecl { name: class_name, fields, methods, implements, generic_params: _ } | Stmt::ActorDecl { name: class_name, fields, methods, implements, generic_params: _ } = stmt {
                 let mut field_map = HashMap::new();
                 let mut offset = 16; // 8 bytes for ARC, 8 bytes for vtable pointer
                 for field in fields {
@@ -419,7 +450,7 @@ impl AotCompiler {
             if let Stmt::FuncDecl { name, return_type, .. } = stmt {
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                 func_returns.insert(name.clone(), crate::translator::parse_vartype(ret, None));
-            } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
+            } else if let Stmt::ClassDecl { name: class_name, methods, .. } | Stmt::ActorDecl { name: class_name, methods, .. } = stmt {
                 for method in methods {
                     if let Stmt::FuncDecl { name: method_name, params: _, return_type, .. } = method {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
@@ -444,7 +475,8 @@ impl AotCompiler {
                 let id = *self.funcs.get(name).unwrap();
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                 self.compile_function(name, params, body, id, &func_returns, ret, None)?;
-            } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
+            } else if let Stmt::ClassDecl { name: class_name, methods, .. } | Stmt::ActorDecl { name: class_name, methods, .. } = stmt {
+                let is_actor = matches!(stmt, Stmt::ActorDecl { .. });
                 self.generate_drop_function(class_name)?;
                 for method_stmt in methods {
                     if let Stmt::FuncDecl { name: method_name, params, body, return_type, .. } = method_stmt {
@@ -465,6 +497,10 @@ impl AotCompiler {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         
                         self.compile_function(&full_name, &all_params, body, id, &func_returns, ret, Some(class_name))?;
+                        
+                        if is_actor && method_name != "init" {
+                            self.generate_async_wrapper(class_name, method_name, params.len())?;
+                        }
                     }
                 }
             } else if let Stmt::EnumDecl { name: enum_name, variants, .. } = stmt {
@@ -477,6 +513,53 @@ impl AotCompiler {
         let bytes = product.emit().map_err(|e| CodegenError { message: e.to_string() })?;
         
         Ok(bytes)
+    }
+
+    fn generate_async_wrapper(&mut self, class_name: &str, method_name: &str, num_args: usize) -> Result<(), CodegenError> {
+        let async_name = format!("__async_{}_{}", class_name, method_name);
+        let id = *self.funcs.get(&async_name).unwrap();
+        let target_id = *self.funcs.get(&format!("{}_{}", class_name, method_name)).unwrap();
+        
+        self.ctx.func.signature.params.push(AbiParam::new(types::I64)); // arg_ptr
+        self.ctx.func.signature.returns.push(AbiParam::new(types::I64));
+        
+        let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+        let entry_block = builder.create_block();
+        builder.append_block_params_for_function_params(entry_block);
+        builder.switch_to_block(entry_block);
+        builder.seal_block(entry_block);
+        
+        let arg_ptr = builder.block_params(entry_block)[0];
+        
+        let mut call_args = Vec::new();
+        for i in 0..=num_args { // self + args
+            let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), arg_ptr, (i * 8) as i32);
+            call_args.push(val);
+        }
+        
+        // Call the real method
+        let local_target = self.module.declare_func_in_func(target_id, builder.func);
+        let call = builder.ins().call(local_target, &call_args);
+        
+        let results = builder.inst_results(call);
+        let ret_val = if results.is_empty() {
+            builder.ins().iconst(types::I64, 0)
+        } else {
+            results[0]
+        };
+        
+        // Free the tuple allocated by the caller
+        let free_id = *self.funcs.get("__pace_free").unwrap();
+        let local_free = self.module.declare_func_in_func(free_id, builder.func);
+        let size_val = builder.ins().iconst(types::I64, ((num_args + 1) * 8) as i64);
+        builder.ins().call(local_free, &[arg_ptr, size_val]);
+        
+        builder.ins().return_(&[ret_val]);
+        builder.finalize(self.module.target_config());
+        
+        self.module.define_function(id, &mut self.ctx).map_err(|e| CodegenError { message: e.to_string() })?;
+        self.module.clear_context(&mut self.ctx);
+        Ok(())
     }
 
     fn generate_drop_function(&mut self, class_name: &str) -> Result<(), CodegenError> {
@@ -494,8 +577,13 @@ impl AotCompiler {
         
         let obj_ptr = builder.block_params(entry_block)[0];
         
-        for &(offset, ref ty) in layout.fields.values() {
-            if matches!(ty, VarType::Object(_)) {
+        for (field_name, &(offset, ref ty)) in &layout.fields {
+            if field_name == "__mailbox" {
+                let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, offset as i32);
+                let destroy_id = *self.funcs.get("__pace_mailbox_destroy").unwrap();
+                let local_destroy = self.module.declare_func_in_func(destroy_id, builder.func);
+                builder.ins().call(local_destroy, &[val]);
+            } else if matches!(ty, VarType::Object(_)) {
                 let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, offset as i32);
                 let release_id = *self.funcs.get("release").unwrap();
                 let local_release = self.module.declare_func_in_func(release_id, builder.func);

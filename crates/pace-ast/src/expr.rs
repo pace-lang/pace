@@ -54,6 +54,8 @@ pub enum Expr {
     },
     /// A try operator (e.g., foo?)
     Try(Box<Expr>),
+    /// An await expression (e.g., await foo)
+    Await(Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

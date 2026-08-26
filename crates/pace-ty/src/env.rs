@@ -12,6 +12,8 @@ pub enum Type {
     Nullable(Box<Type>),
     /// A reference type (heap-allocated, ARC)
     Class(String),
+    /// An actor type (isolated state, async messages)
+    Actor(String),
     /// A value type (stack-allocated)
     Struct(String),
     /// An enum type
@@ -23,6 +25,8 @@ pub enum Type {
     Any,     // Used for built-ins like print that take multiple types
     GenericParameter(String),
     GenericInstance { base: Box<Type>, args: Vec<Type> },
+    /// An asynchronous value that resolves to the inner type
+    Promise(Box<Type>),
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +44,13 @@ pub struct FunctionSignature {
     pub visibility: Visibility,
     pub module: String,
     pub generic_params: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ActorSignature {
+    pub generic_params: Option<Vec<String>>,
+    pub fields: HashMap<String, Type>,
+    pub methods: HashMap<String, FunctionSignature>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +75,7 @@ pub struct Environment {
     pub classes: HashMap<String, ClassSignature>,
     pub structs: HashMap<String, ClassSignature>,
     pub enums: HashMap<String, EnumSignature>,
+    pub actors: HashMap<String, ActorSignature>,
 }
 
 impl Environment {
@@ -74,6 +86,7 @@ impl Environment {
             classes: HashMap::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
+            actors: HashMap::new(),
         };
         e.inject_prelude();
         e
@@ -225,6 +238,10 @@ impl Environment {
         None
     }
     
+    pub fn register_actor(&mut self, name: String, sig: ActorSignature) {
+        self.actors.insert(name, sig);
+    }
+
     pub fn register_function(&mut self, name: String, sig: FunctionSignature) {
         let span = sig.span;
         self.functions.insert(name.clone(), sig);

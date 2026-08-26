@@ -27,7 +27,7 @@ impl Monomorphizer {
         let mut final_ast = Vec::new();
         // Pass 1: Extract all generic class and interface declarations
         for stmt in ast {
-            if let Stmt::ClassDecl { name, generic_params, .. } = &stmt
+            if let Stmt::ClassDecl { name, generic_params, .. } | Stmt::ActorDecl { name, generic_params, .. } = &stmt
                 && generic_params.is_some() {
                     mono.generic_classes.insert(name.clone(), stmt.clone());
                     continue;
@@ -47,7 +47,7 @@ impl Monomorphizer {
             if let Stmt::Module { name, body } = stmt {
                 let mut new_body = Vec::new();
                 for inner_stmt in body {
-                    if let Stmt::ClassDecl { name: cname, generic_params, .. } = &inner_stmt
+                    if let Stmt::ClassDecl { name: cname, generic_params, .. } | Stmt::ActorDecl { name: cname, generic_params, .. } = &inner_stmt
                         && generic_params.is_some() {
                             mono.generic_classes.insert(cname.clone(), inner_stmt.clone());
                             continue;
@@ -132,8 +132,9 @@ impl Monomorphizer {
         // Prevent infinite recursion by inserting a dummy first
         self.generated_classes.insert(concrete_name.clone(), Stmt::Expr(Expr::Null));
 
+        let is_actor = matches!(generic_decl, Stmt::ActorDecl { .. });
         match generic_decl {
-            Stmt::ClassDecl { name: _, generic_params, fields, methods, implements } => {
+            Stmt::ClassDecl { name: _, generic_params, fields, methods, implements } | Stmt::ActorDecl { name: _, generic_params, fields, methods, implements } => {
                 let params = generic_params.unwrap();
                 let mut type_mapping = HashMap::new();
                 for (i, p) in params.iter().enumerate() {
@@ -178,12 +179,22 @@ impl Monomorphizer {
                     }
                 }
 
-                let instantiated = Stmt::ClassDecl {
-                    name: concrete_name.clone(),
-                    generic_params: None, // It's concrete now!
-                    fields: new_fields,
-                    methods: new_methods,
-                    implements: new_implements,
+                let instantiated = if is_actor {
+                    Stmt::ActorDecl {
+                        name: concrete_name.clone(),
+                        generic_params: None, // It's concrete now!
+                        fields: new_fields,
+                        methods: new_methods,
+                        implements: new_implements,
+                    }
+                } else {
+                    Stmt::ClassDecl {
+                        name: concrete_name.clone(),
+                        generic_params: None, // It's concrete now!
+                        fields: new_fields,
+                        methods: new_methods,
+                        implements: new_implements,
+                    }
                 };
                 self.generated_classes.insert(concrete_name, instantiated);
             }
@@ -279,7 +290,7 @@ impl Monomorphizer {
                     self.substitute_stmt_types(s, mapping)?;
                 }
             }
-            Stmt::ClassDecl { fields, methods, implements, .. } => {
+            Stmt::ClassDecl { fields, methods, implements, .. } | Stmt::ActorDecl { fields, methods, implements, .. } => {
                 for f in fields {
                     self.substitute_stmt_types(f, mapping)?;
                 }
@@ -376,7 +387,7 @@ impl Monomorphizer {
                     *s = self.rewrite_stmt(s.clone())?;
                 }
             }
-            Stmt::ClassDecl { fields, methods, implements, .. } => {
+            Stmt::ClassDecl { fields, methods, implements, .. } | Stmt::ActorDecl { fields, methods, implements, .. } => {
                 for f in fields.iter_mut() {
                     *f = self.rewrite_stmt(f.clone())?;
                 }

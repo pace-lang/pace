@@ -15,6 +15,7 @@ pub enum VarType {
     Struct(String),
     Enum(String),
     Nullable(Box<VarType>),
+    Promise(Box<VarType>),
     Unknown,
 }
 
@@ -260,6 +261,79 @@ impl Translator {
                 builder.seal_block(body_block);
                 Ok((builder.ins().iconst(types::I64, 0), true))
             }
+            Stmt::ForIn { item, iterable, body, .. } => {
+                let iter_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, iterable, variables, var_index, func_returns)?;
+                let iter_ty = Self::get_expr_type(iterable, variables, func_returns, struct_layouts, class_layouts);
+                
+                let (length_offset, get_offset) = if let VarType::Object(type_name) = &iter_ty {
+                    let layout = class_layouts.get(type_name).unwrap();
+                    let l = layout.methods.get("length").unwrap().clone();
+                    let g = layout.methods.get("get").unwrap().clone();
+                    (l, g)
+                } else {
+                    return Err(CodegenError { message: "ForIn iterable must be an object implementing length() and get()".to_string() });
+                };
+                
+                let ptr_ty = module.target_config().pointer_type();
+                
+                let idx_var = builder.declare_var(types::I64);
+                let init_val = builder.ins().iconst(types::I64, 0);
+                builder.def_var(idx_var, init_val);
+                
+                let cond_block = builder.create_block();
+                let body_block = builder.create_block();
+                let exit_block = builder.create_block();
+                
+                builder.ins().jump(cond_block, &[]);
+                builder.switch_to_block(cond_block);
+                
+                // Get length
+                let vtable_ptr_len = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), iter_val, 8);
+                let method_ptr_len = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), vtable_ptr_len, length_offset as i32);
+                let mut sig_len = module.make_signature();
+                sig_len.params.push(cranelift::prelude::AbiParam::new(ptr_ty));
+                sig_len.returns.push(cranelift::prelude::AbiParam::new(types::I64));
+                let sig_len_ref = builder.import_signature(sig_len);
+                let callee_len = builder.ins().call_indirect(sig_len_ref, method_ptr_len, &[iter_val]);
+                let len_val = builder.inst_results(callee_len)[0];
+                
+                let curr_idx = builder.use_var(idx_var);
+                let is_less = builder.ins().icmp(cranelift::codegen::ir::condcodes::IntCC::SignedLessThan, curr_idx, len_val);
+                builder.ins().brif(is_less, body_block, &[], exit_block, &[]);
+                
+                builder.seal_block(body_block);
+                builder.switch_to_block(body_block);
+                
+                // Get item
+                let vtable_ptr_get = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), iter_val, 8);
+                let method_ptr_get = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), vtable_ptr_get, get_offset as i32);
+                let mut sig_get = module.make_signature();
+                sig_get.params.push(cranelift::prelude::AbiParam::new(ptr_ty));
+                sig_get.params.push(cranelift::prelude::AbiParam::new(types::I64));
+                sig_get.returns.push(cranelift::prelude::AbiParam::new(types::I64));
+                let sig_get_ref = builder.import_signature(sig_get);
+                let callee_get = builder.ins().call_indirect(sig_get_ref, method_ptr_get, &[iter_val, curr_idx]);
+                let item_val = builder.inst_results(callee_get)[0];
+                
+                let item_var = builder.declare_var(types::I64);
+                builder.def_var(item_var, item_val);
+                variables.insert(item.clone(), (item_var, VarType::Unknown));
+                *var_index += 1;
+                
+                let (_, body_term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, body, variables, var_index, func_returns)?;
+                if !body_term {
+                    let one = builder.ins().iconst(types::I64, 1);
+                    let next_idx = builder.ins().iadd(curr_idx, one);
+                    builder.def_var(idx_var, next_idx);
+                    builder.ins().jump(cond_block, &[]);
+                }
+                
+                builder.seal_block(cond_block);
+                builder.switch_to_block(exit_block);
+                builder.seal_block(exit_block);
+                
+                Ok((builder.ins().iconst(types::I64, 0), false))
+            }
             Stmt::Module { body, .. } | Stmt::Block(body) => {
                 let initial_vars: Vec<String> = variables.keys().cloned().collect();
                 let mut last_val = builder.ins().iconst(types::I64, 0);
@@ -427,6 +501,14 @@ impl Translator {
                     }
                 }
                 VarType::Unknown
+            }
+            Expr::Await(inner) => {
+                let inner_ty = Self::get_expr_type(inner, variables, func_returns, struct_layouts, class_layouts);
+                if let VarType::Promise(t) = inner_ty {
+                    *t
+                } else {
+                    VarType::Unknown
+                }
             }
             _ => VarType::Unknown,
         }
@@ -656,6 +738,13 @@ impl Translator {
                     }
                 }
             }
+            Expr::Await(inner) => {
+                let promise_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, inner, variables, var_index, func_returns)?;
+                let await_id = *funcs.get("__pace_promise_await").unwrap();
+                let local_await = module.declare_func_in_func(await_id, builder.func);
+                let call = builder.ins().call(local_await, &[promise_ptr]);
+                Ok(builder.inst_results(call)[0])
+            }
             Expr::Try(inner) => {
                 let inner_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, inner, variables, var_index, func_returns)?;
                 
@@ -824,8 +913,16 @@ impl Translator {
                         builder.ins().store(cranelift::prelude::MemFlagsData::new(), vtable_addr, obj_ptr, 8);
                         
                         let zero = builder.ins().iconst(types::I64, 0);
-                        for &(offset, _) in layout.fields.values() {
-                            builder.ins().store(cranelift::prelude::MemFlagsData::new(), zero, obj_ptr, offset as i32);
+                        for (field_name, &(offset, _)) in &layout.fields {
+                            if field_name == "__mailbox" {
+                                let mb_create_id = *funcs.get("__pace_mailbox_create").unwrap();
+                                let local_mb_create = module.declare_func_in_func(mb_create_id, builder.func);
+                                let mb_call = builder.ins().call(local_mb_create, &[]);
+                                let mb_ptr = builder.inst_results(mb_call)[0];
+                                builder.ins().store(cranelift::prelude::MemFlagsData::new(), mb_ptr, obj_ptr, offset as i32);
+                            } else {
+                                builder.ins().store(cranelift::prelude::MemFlagsData::new(), zero, obj_ptr, offset as i32);
+                            }
                         }
                         
                         // Call init if it exists
@@ -885,25 +982,18 @@ impl Translator {
                     let ptr_ty = module.target_config().pointer_type();
                     
                     let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
-                    let m_offset = if let VarType::Object(type_name) = &obj_type {
+                    let (m_offset, is_actor) = if let VarType::Object(type_name) = &obj_type {
                         let layout = class_layouts.get(type_name)
                             .unwrap_or_else(|| panic!("Class or interface {} not found in layouts", type_name));
-                        *layout.methods.get(property).unwrap_or_else(|| panic!("Method {} not found in {}", property, type_name))
+                        (*layout.methods.get(property).unwrap_or_else(|| panic!("Method {} not found in {}", property, type_name)), layout.fields.contains_key("__mailbox"))
                     } else {
                         let layout = class_layouts.values().find(|l| l.methods.contains_key(property))
                             .unwrap_or_else(|| panic!("Method {} not found in any class layout", property));
-                        *layout.methods.get(property).unwrap()
+                        (*layout.methods.get(property).unwrap(), false)
                     };
                     
                     let vtable_ptr = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), obj_ptr, 8);
                     let method_ptr = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), vtable_ptr, m_offset as i32);
-                    
-                    let mut sig = module.make_signature();
-                    sig.params.push(AbiParam::new(ptr_ty)); // self
-                    for _ in args {
-                        sig.params.push(AbiParam::new(types::I64));
-                    }
-                    sig.returns.push(AbiParam::new(types::I64));
                     
                     let mut arg_vals = vec![obj_ptr];
                     for arg in args {
@@ -914,15 +1004,50 @@ impl Translator {
                         }
                         arg_vals.push(arg_val);
                     }
-                    
-                    let sig_ref = builder.import_signature(sig);
-                    let call = builder.ins().call_indirect(sig_ref, method_ptr, &arg_vals);
-                    
-                    let results = builder.inst_results(call);
-                    if results.is_empty() {
-                        return Ok(builder.ins().iconst(types::I64, 0));
+
+                    if is_actor {
+                        let promise_create_id = *funcs.get("__pace_promise_create").unwrap();
+                        let local_promise_create = module.declare_func_in_func(promise_create_id, builder.func);
+                        let promise_call = builder.ins().call(local_promise_create, &[]);
+                        let promise_ptr = builder.inst_results(promise_call)[0];
+                        
+                        let layout = class_layouts.get(if let VarType::Object(name) = &obj_type { name } else { unreachable!() }).unwrap();
+                        let mb_offset = layout.fields.get("__mailbox").unwrap().0;
+                        let mailbox_ptr = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, mb_offset as i32);
+                        
+                        let malloc_id = *funcs.get("malloc").unwrap();
+                        let local_malloc = module.declare_func_in_func(malloc_id, builder.func);
+                        let tuple_size = arg_vals.len() * 8;
+                        let size_val = builder.ins().iconst(types::I64, tuple_size as i64);
+                        let malloc_call = builder.ins().call(local_malloc, &[size_val]);
+                        let tuple_ptr = builder.inst_results(malloc_call)[0];
+                        
+                        for (i, val) in arg_vals.iter().enumerate() {
+                            builder.ins().store(cranelift::prelude::MemFlagsData::new(), *val, tuple_ptr, (i * 8) as i32);
+                        }
+                        
+                        let mb_send_id = *funcs.get("__pace_mailbox_send").unwrap();
+                        let local_mb_send = module.declare_func_in_func(mb_send_id, builder.func);
+                        builder.ins().call(local_mb_send, &[mailbox_ptr, method_ptr, tuple_ptr, promise_ptr]);
+                        
+                        return Ok(promise_ptr);
                     } else {
-                        return Ok(results[0]);
+                        let mut sig = module.make_signature();
+                        sig.params.push(AbiParam::new(ptr_ty)); // self
+                        for _ in args {
+                            sig.params.push(AbiParam::new(types::I64));
+                        }
+                        sig.returns.push(AbiParam::new(types::I64));
+                        
+                        let sig_ref = builder.import_signature(sig);
+                        let call = builder.ins().call_indirect(sig_ref, method_ptr, &arg_vals);
+                        
+                        let results = builder.inst_results(call);
+                        if results.is_empty() {
+                            return Ok(builder.ins().iconst(types::I64, 0));
+                        } else {
+                            return Ok(results[0]);
+                        }
                     }
                 }
                 Err(CodegenError { message: format!("Cannot resolve function call: {:?}", callee) })

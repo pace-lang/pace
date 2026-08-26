@@ -63,7 +63,7 @@ impl<'a> Parser<'a> {
             }
             
             match self.current_token {
-                Token::Class | Token::Func | Token::Var | Token::Let |
+                Token::Class | Token::Actor | Token::Func | Token::Var | Token::Let |
                 Token::For | Token::If | Token::While | Token::Return | Token::RBrace => return,
                 _ => self.advance(),
             }
@@ -86,6 +86,7 @@ impl<'a> Parser<'a> {
             Token::Var => self.parse_var_decl(true),
             Token::Func => self.parse_func_decl(is_async, visibility),
             Token::Class => self.parse_class_decl(),
+            Token::Actor => self.parse_actor_decl(),
             Token::Interface => self.parse_interface_decl(),
             Token::Struct => self.parse_struct_decl(),
             Token::Enum => self.parse_enum_decl(),
@@ -525,8 +526,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_class_decl(&mut self) -> Result<Stmt, (String, (usize, usize))> {
-        self.advance(); // consume class
-
+        // Assume current_token is Class or Actor
+        self.advance();
         let name = match &self.current_token {
             Token::Ident(id) => id.clone(),
             _ => return Err(("Expected class name".to_string(), self.current_span)),
@@ -571,6 +572,60 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Stmt::ClassDecl {
+            name,
+            generic_params,
+            fields,
+            methods,
+            implements,
+        })
+    }
+
+    fn parse_actor_decl(&mut self) -> Result<Stmt, (String, (usize, usize))> {
+        self.advance();
+        let name = match &self.current_token {
+            Token::Ident(id) => id.clone(),
+            _ => return Err(("Expected actor name".to_string(), self.current_span)),
+        };
+        self.advance();
+
+        let generic_params = self.parse_generic_params()?;
+
+        let mut implements = None;
+        if self.match_token(Token::Implement) {
+            implements = Some(self.parse_type_annotation()?);
+        }
+
+        if !self.match_token(Token::LBrace) {
+            return Err(("Expected '{' before actor body".to_string(), self.current_span));
+        }
+
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+
+        while self.current_token != Token::RBrace && self.current_token != Token::Eof {
+            match self.parse_stmt() {
+                Ok(stmt) => {
+                    match stmt {
+                        Stmt::VarDecl { .. } => fields.push(stmt),
+                        Stmt::FuncDecl { .. } => methods.push(stmt),
+                        _ => {
+                            self.errors.push(("Actors can only contain fields and methods".to_string(), self.current_span));
+                            self.synchronize();
+                        }
+                    }
+                }
+                Err(e) => {
+                    self.errors.push(e);
+                    self.synchronize();
+                }
+            }
+        }
+
+        if !self.match_token(Token::RBrace) {
+            return Err(("Expected '}' after actor body".to_string(), self.current_span));
+        }
+
+        Ok(Stmt::ActorDecl {
             name,
             generic_params,
             fields,
@@ -942,7 +997,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_factor(&mut self) -> Result<Expr, (String, (usize, usize))> {
-        let mut expr = self.parse_postfix()?;
+        let mut expr = self.parse_unary()?;
         while self.current_token == Token::Star || self.current_token == Token::Slash || self.current_token == Token::Mod {
             let op = if self.current_token == Token::Star { 
                 BinaryOp::Mul 
@@ -952,7 +1007,7 @@ impl<'a> Parser<'a> {
                 BinaryOp::Mod 
             };
             self.advance();
-            let right = self.parse_postfix()?;
+            let right = self.parse_unary()?;
             expr = Expr::Binary {
                 left: Box::new(expr),
                 op,
@@ -960,6 +1015,15 @@ impl<'a> Parser<'a> {
             };
         }
         Ok(expr)
+    }
+
+    fn parse_unary(&mut self) -> Result<Expr, (String, (usize, usize))> {
+        if self.match_token(Token::Await) {
+            let expr = self.parse_unary()?;
+            Ok(Expr::Await(Box::new(expr)))
+        } else {
+            self.parse_postfix()
+        }
     }
 
     fn parse_postfix(&mut self) -> Result<Expr, (String, (usize, usize))> {

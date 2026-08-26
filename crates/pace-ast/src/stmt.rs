@@ -41,8 +41,15 @@ pub enum Stmt {
         visibility: Visibility,
         span: (usize, usize),
     },
-    /// A class declaration
     ClassDecl {
+        name: String,
+        generic_params: Option<Vec<String>>,
+        fields: Vec<Stmt>, // VarDecl
+        methods: Vec<Stmt>, // FuncDecl
+        implements: Option<TypeAnnotation>,
+    },
+    /// An actor declaration
+    ActorDecl {
         name: String,
         generic_params: Option<Vec<String>>,
         fields: Vec<Stmt>, // VarDecl

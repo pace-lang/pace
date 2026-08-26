@@ -88,6 +88,9 @@ impl TypeChecker {
                 Stmt::ClassDecl { name, .. } | Stmt::InterfaceDecl { name, .. } => {
                     self.env.register_class(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
                 }
+                Stmt::ActorDecl { name, .. } => {
+                    self.env.register_actor(name.clone(), crate::env::ActorSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
+                }
                 Stmt::StructDecl { name, .. } => {
                     self.env.register_struct(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
                 }
@@ -173,6 +176,53 @@ impl TypeChecker {
                         methods: method_map,
                     };
                     self.env.register_class(name.clone(), sig);
+                    self.current_class = None;
+                }
+                Stmt::ActorDecl { name, fields, methods, generic_params, .. } => {
+                    self.current_class = Some(name.clone());
+                    let mut field_map = HashMap::new();
+                    for f in fields {
+                        if let Stmt::VarDecl { name: f_name, type_annotation, .. } = f {
+                            let f_ty = if let Some(ty_str) = type_annotation {
+                                self.resolve_type_name(ty_str)
+                            } else {
+                                Type::Unknown
+                            };
+                            field_map.insert(f_name.clone(), f_ty);
+                        }
+                    }
+
+                    let mut method_map = HashMap::new();
+                    for m in methods {
+                        if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, .. } = m {
+                            let mut param_types = Vec::new();
+                            for param in params {
+                                param_types.push(self.resolve_type_name(&param.type_annotation));
+                            }
+                            let ret_ty = if let Some(rt) = return_type {
+                                self.resolve_type_name(rt)
+                            } else {
+                                Type::Void
+                            };
+                            let sig = FunctionSignature {
+                                params: param_types,
+                                return_type: ret_ty,
+                                span: (0, 0),
+                                is_used: true,
+                                visibility: visibility.clone(),
+                                module: self.current_module.clone(),
+                                generic_params: None, // Methods inherit actor generics, or have their own (TODO)
+                            };
+                            method_map.insert(m_name.clone(), sig);
+                        }
+                    }
+
+                    let sig = crate::env::ActorSignature {
+                        generic_params: generic_params.clone(),
+                        fields: field_map,
+                        methods: method_map,
+                    };
+                    self.env.register_actor(name.clone(), sig);
                     self.current_class = None;
                 }
                 Stmt::StructDecl { name, fields, generic_params } => {
@@ -406,9 +456,20 @@ impl TypeChecker {
             Stmt::Loop { body } => {
                 self.check_stmt(body)?;
             }
-            Stmt::ForIn { iterable, body, .. } => {
-                self.check_expr(iterable)?;
+            Stmt::ForIn { item, iterable, body, .. } => {
+                let iterable_ty = self.check_expr(iterable)?;
+                let mut item_ty = Type::Unknown;
+                
+                if let Type::GenericInstance { base: _, args } = &iterable_ty {
+                    if !args.is_empty() {
+                        item_ty = args[0].clone();
+                    }
+                } else if let Type::Class(name) = &iterable_ty {
+                    // Fallback for non-generic classes if needed, though most iterables are generic
+                }
+                
                 self.env.push_scope();
+                self.env.define(item.clone(), item_ty, (0, 0), false);
                 self.check_stmt(body)?;
                 self.pop_scope_and_check_unused();
             }
@@ -442,6 +503,8 @@ impl TypeChecker {
                 if let Some(class_name) = &self.current_class {
                     let self_ty = if self.env.structs.contains_key(class_name) {
                         Type::Struct(class_name.clone())
+                    } else if self.env.actors.contains_key(class_name) {
+                        Type::Actor(class_name.clone())
                     } else {
                         Type::Class(class_name.clone())
                     };
@@ -465,7 +528,7 @@ impl TypeChecker {
                 self.current_return_type = prev_return;
                 self.generic_params_in_scope = prev_generics;
             }
-            Stmt::ClassDecl { name, methods, implements, generic_params, .. } => {
+            Stmt::ClassDecl { name, methods, implements, generic_params, .. } | Stmt::ActorDecl { name, methods, implements, generic_params, .. } => {
                 let prev_class = self.current_class.clone();
                 let prev_generics = self.generic_params_in_scope.clone();
                 
@@ -545,10 +608,13 @@ impl TypeChecker {
                     Some(ty) => Ok(ty.clone()),
                     None => {
                         // Check if it's a class/struct for instantiation
-                        if self.env.structs.contains_key(name) {
-                            Ok(Type::Struct(name.clone()))
-                        } else if self.env.classes.contains_key(name) {
+                        // Check if it's a module item
+                        if self.env.classes.contains_key(name) {
                             Ok(Type::Class(name.clone()))
+                        } else if self.env.actors.contains_key(name) {
+                            Ok(Type::Actor(name.clone()))
+                        } else if self.env.structs.contains_key(name) {
+                            Ok(Type::Struct(name.clone()))
                         } else if self.env.enums.contains_key(name) {
                             Ok(Type::Enum(name.clone()))
                         } else {
@@ -563,7 +629,7 @@ impl TypeChecker {
                 let left_ty = self.check_expr(left)?;
                 let right_ty = self.check_expr(right)?;
                 
-                if left_ty != right_ty {
+                if left_ty != right_ty && left_ty != Type::Unknown && right_ty != Type::Unknown && left_ty != Type::Any && right_ty != Type::Any {
                     return Err(TypeError {
                         message: format!("Type mismatch in binary operation: {:?} and {:?}", left_ty, right_ty)
                     });
@@ -571,7 +637,7 @@ impl TypeChecker {
                 
                 match op {
                     BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
-                        if left_ty == Type::Int || left_ty == Type::Float {
+                        if left_ty == Type::Int || left_ty == Type::Float || left_ty == Type::Unknown || left_ty == Type::Any || right_ty == Type::Unknown || right_ty == Type::Any {
                             Ok(left_ty)
                         } else {
                             Err(TypeError {
@@ -647,6 +713,9 @@ impl TypeChecker {
                     if let Some(_sig) = self.env.classes.get(name) {
                         return Ok(Type::Class(name.clone()));
                     }
+                } else if let Type::Actor(name) = &callee_ty
+                    && let Some(_sig) = self.env.actors.get(name) {
+                        return Ok(Type::Actor(name.clone()));
                 } else if let Type::Struct(name) = &callee_ty
                     && let Some(_sig) = self.env.structs.get(name) {
                         return Ok(Type::Struct(name.clone()));
@@ -692,18 +761,24 @@ impl TypeChecker {
             Expr::MemberAccess { object, property, .. } => {
                 let obj_ty = self.check_expr(object)?;
                 
-                let (class_name, sig) = match obj_ty {
+                let (class_name, fields, methods) = match obj_ty {
                     Type::Class(ref name) => {
                         let sig = self.env.classes.get(name).ok_or_else(|| TypeError {
                             message: format!("Type '{}' is not defined", name)
                         })?;
-                        (name, sig)
+                        (name.clone(), sig.fields.clone(), sig.methods.clone())
+                    },
+                    Type::Actor(ref name) => {
+                        let sig = self.env.actors.get(name).ok_or_else(|| TypeError {
+                            message: format!("Actor '{}' is not defined", name)
+                        })?;
+                        (name.clone(), sig.fields.clone(), sig.methods.clone())
                     },
                     Type::Struct(ref name) => {
                         let sig = self.env.structs.get(name).ok_or_else(|| TypeError {
                             message: format!("Type '{}' is not defined", name)
                         })?;
-                        (name, sig)
+                        (name.clone(), sig.fields.clone(), sig.methods.clone())
                     },
                     Type::Enum(ref name) => {
                         let sig = self.env.enums.get(name).ok_or_else(|| TypeError {
@@ -723,21 +798,40 @@ impl TypeChecker {
                     }
                 };
                 
-                if let Some(f_ty) = sig.fields.get(property) {
-                    return Ok(f_ty.clone());
-                }
-                if let Some(m_sig) = sig.methods.get(property) {
-                    if m_sig.visibility == Visibility::Private
-                        && self.current_class.as_ref() != Some(class_name) {
+                if let Some(ty) = fields.get(property) {
+                    if let Type::Actor(ref a_name) = obj_ty {
+                        if Some(a_name.clone()) != self.current_class {
                             return Err(TypeError {
-                                message: format!("Method '{}' is private and cannot be accessed from outside class '{}'", property, class_name)
+                                message: format!("Actor fields are isolated and cannot be accessed from outside actor '{}'", a_name)
                             });
                         }
+                    }
+                    return Ok(ty.clone());
+                }
+                if let Some(m_sig) = methods.get(property) {
+                    if m_sig.visibility == Visibility::Private {
+                        if self.current_class.as_deref() != Some(&class_name) {
+                            return Err(TypeError {
+                                message: format!("Method '{}' is private and cannot be accessed from outside class/actor '{}'", property, class_name)
+                            });
+                        }
+                    }
+                    if matches!(obj_ty, Type::Actor(_)) {
+                        return Ok(Type::Promise(Box::new(m_sig.return_type.clone())));
+                    }
                     return Ok(m_sig.return_type.clone());
                 }
                 Err(TypeError {
                     message: format!("Property '{}' not found on type '{}'", property, class_name)
                 })
+            }
+            Expr::Await(inner) => {
+                let inner_ty = self.check_expr(inner)?;
+                if let Type::Promise(t) = inner_ty {
+                    Ok(*t)
+                } else {
+                    Err(TypeError { message: "Cannot await a non-promise type".to_string() })
+                }
             }
             Expr::Unwrap(inner) => {
                 let inner_ty = self.check_expr(inner)?;
@@ -844,6 +938,8 @@ impl TypeChecker {
                         Type::Struct(current.clone())
                     } else if self.env.enums.contains_key(current) {
                         Type::Enum(current.clone())
+                    } else if self.env.actors.contains_key(current) {
+                        Type::Actor(current.clone())
                     } else {
                         Type::Class(current.clone())
                     }
@@ -858,6 +954,8 @@ impl TypeChecker {
                     Type::Struct(base_name.to_string())
                 } else if self.env.enums.contains_key(base_name) {
                     Type::Enum(base_name.to_string())
+                } else if self.env.actors.contains_key(base_name) {
+                    Type::Actor(base_name.to_string())
                 } else {
                     Type::Class(base_name.to_string())
                 }

@@ -213,3 +213,163 @@ pub extern "C" fn __pace_sb_free(ptr: *mut String) {
         }
     }
 }
+
+// ==========================================
+// ACTOR RUNTIME (Mailbox, ThreadPool, Promise)
+// ==========================================
+
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+
+pub struct Task {
+    func: extern "C" fn(i64) -> i64,
+    arg: i64,
+    promise: *mut Promise,
+}
+
+pub struct Mailbox {
+    queue: Mutex<VecDeque<Task>>,
+    is_scheduled: AtomicBool,
+}
+
+struct ThreadPool {
+    actor_sender: mpsc::Sender<usize>,
+}
+
+static THREAD_POOL: OnceLock<ThreadPool> = OnceLock::new();
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_init_runtime(num_threads: usize) {
+    THREAD_POOL.get_or_init(|| {
+        let (sender, receiver) = mpsc::channel::<usize>();
+        let receiver = Arc::new(Mutex::new(receiver));
+
+        let num_threads = if num_threads == 0 { 4 } else { num_threads };
+
+        for _ in 0..num_threads {
+            let rx = Arc::clone(&receiver);
+            thread::spawn(move || loop {
+                let mb_ptr = {
+                    let lock = rx.lock().unwrap();
+                    lock.recv()
+                };
+                match mb_ptr {
+                    Ok(ptr) => {
+                        let mailbox = unsafe { &*(ptr as *mut Mailbox) };
+                        loop {
+                            let task = {
+                                let mut q = mailbox.queue.lock().unwrap();
+                                q.pop_front()
+                            };
+                            match task {
+                                Some(t) => {
+                                    let result = (t.func)(t.arg);
+                                    if !t.promise.is_null() {
+                                        __pace_promise_resolve(t.promise, result);
+                                    }
+                                }
+                                None => {
+                                    mailbox.is_scheduled.store(false, Ordering::SeqCst);
+                                    // Double-check queue to avoid race condition
+                                    let q = mailbox.queue.lock().unwrap();
+                                    if !q.is_empty() {
+                                        if !mailbox.is_scheduled.swap(true, Ordering::SeqCst) {
+                                            // Keep processing since a message arrived right after we stored false
+                                            continue;
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => break, // Channel closed
+                }
+            });
+        }
+
+        ThreadPool { actor_sender: sender }
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_mailbox_create() -> *mut Mailbox {
+    let mb = Box::new(Mailbox {
+        queue: Mutex::new(VecDeque::new()),
+        is_scheduled: AtomicBool::new(false),
+    });
+    Box::into_raw(mb)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_mailbox_send(mb: *mut Mailbox, func: extern "C" fn(i64) -> i64, arg: i64, promise: *mut Promise) {
+    if mb.is_null() { return; }
+    let mailbox = unsafe { &*mb };
+    
+    mailbox.queue.lock().unwrap().push_back(Task { func, arg, promise });
+    
+    if !mailbox.is_scheduled.swap(true, Ordering::SeqCst) {
+        if let Some(pool) = THREAD_POOL.get() {
+            let _ = pool.actor_sender.send(mb as usize);
+        } else {
+            __pace_init_runtime(4);
+            if let Some(pool) = THREAD_POOL.get() {
+                let _ = pool.actor_sender.send(mb as usize);
+            }
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_mailbox_destroy(mb: *mut Mailbox) {
+    if !mb.is_null() {
+        unsafe {
+            let _ = Box::from_raw(mb);
+        }
+    }
+}
+
+pub struct Promise {
+    result: Mutex<Option<i64>>,
+    condvar: std::sync::Condvar,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_promise_create() -> *mut Promise {
+    let p = Box::new(Promise {
+        result: Mutex::new(None),
+        condvar: std::sync::Condvar::new(),
+    });
+    Box::into_raw(p)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_promise_resolve(p: *mut Promise, val: i64) {
+    if p.is_null() { return; }
+    let promise = unsafe { &*p };
+    let mut result = promise.result.lock().unwrap();
+    *result = Some(val);
+    promise.condvar.notify_all();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_promise_await(p: *mut Promise) -> i64 {
+    if p.is_null() { return 0; }
+    let promise = unsafe { &*p };
+    let mut result = promise.result.lock().unwrap();
+    while result.is_none() {
+        result = promise.condvar.wait(result).unwrap();
+    }
+    result.unwrap()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_promise_destroy(p: *mut Promise) {
+    if !p.is_null() {
+        unsafe {
+            let _ = Box::from_raw(p);
+        }
+    }
+}

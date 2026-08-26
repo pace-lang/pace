@@ -97,6 +97,12 @@ impl JITCompiler {
         builder.symbol("__pace_sb_append", pace_runtime::__pace_sb_append as *const u8);
         builder.symbol("__pace_sb_build", pace_runtime::__pace_sb_build as *const u8);
         builder.symbol("__pace_sb_free", pace_runtime::__pace_sb_free as *const u8);
+        builder.symbol("__pace_mailbox_create", pace_runtime::__pace_mailbox_create as *const u8);
+        builder.symbol("__pace_mailbox_send", pace_runtime::__pace_mailbox_send as *const u8);
+        builder.symbol("__pace_mailbox_destroy", pace_runtime::__pace_mailbox_destroy as *const u8);
+        builder.symbol("__pace_promise_create", pace_runtime::__pace_promise_create as *const u8);
+        builder.symbol("__pace_promise_resolve", pace_runtime::__pace_promise_resolve as *const u8);
+        builder.symbol("__pace_promise_await", pace_runtime::__pace_promise_await as *const u8);
         
         let mut module = JITModule::new(builder);
 
@@ -197,6 +203,36 @@ impl JITCompiler {
         sig_sb_free.params.push(AbiParam::new(ptr_ty));
         let sb_free_id = module.declare_function("__pace_sb_free", Linkage::Import, &sig_sb_free).unwrap();
 
+        // Actor runtime
+        let mut sig_mb_create = module.make_signature();
+        sig_mb_create.returns.push(AbiParam::new(ptr_ty));
+        let mb_create_id = module.declare_function("__pace_mailbox_create", Linkage::Import, &sig_mb_create).unwrap();
+
+        let mut sig_mb_send = module.make_signature();
+        sig_mb_send.params.push(AbiParam::new(ptr_ty)); // mb
+        sig_mb_send.params.push(AbiParam::new(ptr_ty)); // func pointer
+        sig_mb_send.params.push(AbiParam::new(types::I64)); // arg
+        sig_mb_send.params.push(AbiParam::new(ptr_ty)); // promise
+        let mb_send_id = module.declare_function("__pace_mailbox_send", Linkage::Import, &sig_mb_send).unwrap();
+
+        let mut sig_mb_destroy = module.make_signature();
+        sig_mb_destroy.params.push(AbiParam::new(ptr_ty));
+        let mb_destroy_id = module.declare_function("__pace_mailbox_destroy", Linkage::Import, &sig_mb_destroy).unwrap();
+
+        let mut sig_prom_create = module.make_signature();
+        sig_prom_create.returns.push(AbiParam::new(ptr_ty));
+        let prom_create_id = module.declare_function("__pace_promise_create", Linkage::Import, &sig_prom_create).unwrap();
+
+        let mut sig_prom_resolve = module.make_signature();
+        sig_prom_resolve.params.push(AbiParam::new(ptr_ty)); // promise
+        sig_prom_resolve.params.push(AbiParam::new(types::I64)); // value
+        let prom_resolve_id = module.declare_function("__pace_promise_resolve", Linkage::Import, &sig_prom_resolve).unwrap();
+
+        let mut sig_prom_await = module.make_signature();
+        sig_prom_await.params.push(AbiParam::new(ptr_ty)); // promise
+        sig_prom_await.returns.push(AbiParam::new(types::I64)); // value
+        let prom_await_id = module.declare_function("__pace_promise_await", Linkage::Import, &sig_prom_await).unwrap();
+
         let mut funcs = HashMap::new();
         funcs.insert("print_int".to_string(), print_int_id);
         funcs.insert("print_float".to_string(), print_float_id);
@@ -218,6 +254,12 @@ impl JITCompiler {
         funcs.insert("sb_append".to_string(), sb_append_id);
         funcs.insert("sb_build".to_string(), sb_build_id);
         funcs.insert("sb_free".to_string(), sb_free_id);
+        funcs.insert("__pace_mailbox_create".to_string(), mb_create_id);
+        funcs.insert("__pace_mailbox_send".to_string(), mb_send_id);
+        funcs.insert("__pace_mailbox_destroy".to_string(), mb_destroy_id);
+        funcs.insert("__pace_promise_create".to_string(), prom_create_id);
+        funcs.insert("__pace_promise_resolve".to_string(), prom_resolve_id);
+        funcs.insert("__pace_promise_await".to_string(), prom_await_id);
 
         Self {
             builder_context: FunctionBuilderContext::new(),
@@ -276,9 +318,16 @@ impl JITCompiler {
         let _ptr_ty = self.module.target_config().pointer_type();
         
         for stmt in stmts {
-            if let Stmt::ClassDecl { name: class_name, fields, methods, implements, generic_params: _ } = stmt {
+            if let Stmt::ClassDecl { name: class_name, fields, methods, implements, generic_params: _ } | Stmt::ActorDecl { name: class_name, fields, methods, implements, generic_params: _ } = stmt {
+                let is_actor = matches!(stmt, Stmt::ActorDecl { .. });
                 let mut field_map = HashMap::new();
                 let mut offset = 16; // 8 bytes for ARC, 8 bytes for vtable pointer
+                
+                if is_actor {
+                    field_map.insert("__mailbox".to_string(), (offset, VarType::Unknown)); // Internal pointer
+                    offset += 8;
+                }
+                
                 for field in fields {
                     if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
@@ -333,7 +382,18 @@ impl JITCompiler {
                         self.funcs.insert(full_name.clone(), id);
                         
                         if method_name != "init" {
-                            vtable_funcs.insert(method_name.clone(), id);
+                            if is_actor {
+                                let async_name = format!("__async_{}_{}", class_name, method_name);
+                                let mut async_sig = self.module.make_signature();
+                                async_sig.params.push(AbiParam::new(types::I64));
+                                async_sig.returns.push(AbiParam::new(types::I64));
+                                let async_id = self.module.declare_function(&async_name, Linkage::Local, &async_sig)
+                                    .map_err(|e| CodegenError { message: e.to_string() })?;
+                                self.funcs.insert(async_name.clone(), async_id);
+                                vtable_funcs.insert(method_name.clone(), async_id);
+                            } else {
+                                vtable_funcs.insert(method_name.clone(), id);
+                            }
                         }
                     }
                 }
@@ -471,7 +531,7 @@ impl JITCompiler {
             if let Stmt::FuncDecl { name, return_type, .. } = stmt {
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                 func_returns.insert(name.clone(), crate::translator::parse_vartype(ret, None));
-            } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
+            } else if let Stmt::ClassDecl { name: class_name, methods, .. } | Stmt::ActorDecl { name: class_name, methods, .. } = stmt {
                 for method_stmt in methods {
                     if let Stmt::FuncDecl { name, params: _, return_type, .. } = method_stmt {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
@@ -495,7 +555,8 @@ impl JITCompiler {
             if let Stmt::FuncDecl { name, params, body, .. } = stmt {
                 let id = *self.funcs.get(name).unwrap();
                 self.compile_function(name, params, body, id, &func_returns, None)?;
-            } else if let Stmt::ClassDecl { name: class_name, methods, .. } = stmt {
+            } else if let Stmt::ClassDecl { name: class_name, methods, .. } | Stmt::ActorDecl { name: class_name, methods, .. } = stmt {
+                let is_actor = matches!(stmt, Stmt::ActorDecl { .. });
                 self.generate_drop_function(class_name)?;
                 for method_stmt in methods {
                     if let Stmt::FuncDecl { name, params, body, .. } = method_stmt {
@@ -514,6 +575,10 @@ impl JITCompiler {
                         new_params.extend(params.clone());
                         
                         self.compile_function(&full_name, &new_params, body, id, &func_returns, Some(class_name))?;
+                        
+                        if name != "init" && is_actor {
+                            self.generate_async_wrapper(class_name, name, params.len())?;
+                        }
                     }
                 }
             } else if let Stmt::EnumDecl { name: enum_name, variants, .. } = stmt {
@@ -615,6 +680,53 @@ impl JITCompiler {
         self.module.define_function(func_id, &mut self.ctx)
             .map_err(|e| CodegenError { message: e.to_string() })?;
             
+        self.module.clear_context(&mut self.ctx);
+        Ok(())
+    }
+
+    fn generate_async_wrapper(&mut self, class_name: &str, method_name: &str, num_args: usize) -> Result<(), CodegenError> {
+        let async_name = format!("__async_{}_{}", class_name, method_name);
+        let id = *self.funcs.get(&async_name).unwrap();
+        let target_id = *self.funcs.get(&format!("{}_{}", class_name, method_name)).unwrap();
+        
+        self.ctx.func.signature.params.push(AbiParam::new(types::I64)); // arg_ptr
+        self.ctx.func.signature.returns.push(AbiParam::new(types::I64));
+        
+        let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+        let entry_block = builder.create_block();
+        builder.append_block_params_for_function_params(entry_block);
+        builder.switch_to_block(entry_block);
+        builder.seal_block(entry_block);
+        
+        let arg_ptr = builder.block_params(entry_block)[0];
+        
+        let mut call_args = Vec::new();
+        for i in 0..=num_args { // self + args
+            let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), arg_ptr, (i * 8) as i32);
+            call_args.push(val);
+        }
+        
+        // Call the real method
+        let local_target = self.module.declare_func_in_func(target_id, builder.func);
+        let call = builder.ins().call(local_target, &call_args);
+        
+        let results = builder.inst_results(call);
+        let ret_val = if results.is_empty() {
+            builder.ins().iconst(types::I64, 0)
+        } else {
+            results[0]
+        };
+        
+        // Free the tuple allocated by the caller
+        let free_id = *self.funcs.get("free").unwrap();
+        let local_free = self.module.declare_func_in_func(free_id, builder.func);
+        let size_val = builder.ins().iconst(types::I64, ((num_args + 1) * 8) as i64);
+        builder.ins().call(local_free, &[arg_ptr, size_val]);
+        
+        builder.ins().return_(&[ret_val]);
+        builder.finalize(self.module.target_config());
+        
+        self.module.define_function(id, &mut self.ctx).map_err(|e| CodegenError { message: e.to_string() })?;
         self.module.clear_context(&mut self.ctx);
         Ok(())
     }

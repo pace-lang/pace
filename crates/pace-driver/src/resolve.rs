@@ -68,7 +68,7 @@ impl SymbolResolver {
                             vis = visibility.clone();
                             original_name = n.clone();
                         }
-                        Stmt::ClassDecl { name: n, .. } |
+                        Stmt::ClassDecl { name: n, .. } | Stmt::ActorDecl { name: n, .. } |
                         Stmt::StructDecl { name: n, .. } |
                         Stmt::EnumDecl { name: n, .. } |
                         Stmt::InterfaceDecl { name: n, .. } => {
@@ -96,7 +96,7 @@ impl SymbolResolver {
 
                         match item {
                             Stmt::FuncDecl { name: n, .. } => *n = mangled_name,
-                            Stmt::ClassDecl { name: n, .. } => *n = mangled_name,
+                            Stmt::ClassDecl { name: n, .. } | Stmt::ActorDecl { name: n, .. } => *n = mangled_name,
                             Stmt::StructDecl { name: n, .. } => *n = mangled_name,
                             Stmt::EnumDecl { name: n, .. } => *n = mangled_name,
                             Stmt::InterfaceDecl { name: n, .. } => *n = mangled_name,
@@ -197,7 +197,7 @@ impl SymbolResolver {
                     self.resolve_stmt(s, scope, aliases)?;
                 }
             }
-            Stmt::ClassDecl { fields, methods, implements, .. } => {
+            Stmt::ClassDecl { fields, methods, implements, .. } | Stmt::ActorDecl { fields, methods, implements, .. } => {
                 for f in fields { self.resolve_stmt(f, scope, aliases)?; }
                 for m in methods { self.resolve_stmt(m, scope, aliases)?; }
                 if let Some(imp) = implements { self.resolve_type(imp, scope, aliases)?; }
@@ -283,7 +283,7 @@ impl SymbolResolver {
                     self.resolve_expr(e, scope, aliases)?;
                 }
             }
-            Expr::Unwrap(inner) | Expr::Try(inner) => {
+            Expr::Unwrap(inner) | Expr::Try(inner) | Expr::Await(inner) => {
                 self.resolve_expr(inner, scope, aliases)?;
             }
             Expr::NullCoalesce { left, right } => {

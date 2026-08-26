@@ -21,7 +21,7 @@ impl TreeShaker {
         let mut decls = std::collections::HashMap::new();
         for stmt in &ast {
             if let Stmt::FuncDecl { name, .. } |
-                   Stmt::ClassDecl { name, .. } |
+                   Stmt::ClassDecl { name, .. } | Stmt::ActorDecl { name, .. } |
                    Stmt::StructDecl { name, .. } |
                    Stmt::EnumDecl { name, .. } |
                    Stmt::InterfaceDecl { name, .. } = stmt {
@@ -42,7 +42,7 @@ impl TreeShaker {
         ast.into_iter().filter(|stmt| {
             match stmt {
                 Stmt::FuncDecl { name, .. } |
-                Stmt::ClassDecl { name, .. } |
+                Stmt::ClassDecl { name, .. } | Stmt::ActorDecl { name, .. } |
                 Stmt::StructDecl { name, .. } |
                 Stmt::EnumDecl { name, .. } |
                 Stmt::InterfaceDecl { name, .. } => shaker.reachable.contains(name),
@@ -78,7 +78,7 @@ impl TreeShaker {
                     self.trace_stmt(s, queue);
                 }
             }
-            Stmt::ClassDecl { fields, methods, implements, .. } => {
+            Stmt::ClassDecl { fields, methods, implements, .. } | Stmt::ActorDecl { fields, methods, implements, .. } => {
                 for f in fields { self.trace_stmt(f, queue); }
                 for m in methods { self.trace_stmt(m, queue); }
                 if let Some(imp) = implements { self.trace_type(imp, queue); }
@@ -145,7 +145,7 @@ impl TreeShaker {
                     self.trace_type(arg, queue);
                 }
             }
-            Expr::Try(expr) | Expr::Unwrap(expr) => self.trace_expr(expr, queue),
+            Expr::Try(expr) | Expr::Unwrap(expr) | Expr::Await(expr) => self.trace_expr(expr, queue),
             Expr::InterpolatedString(args) => {
                 for arg in args {
                     self.trace_expr(arg, queue);
