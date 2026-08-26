@@ -566,6 +566,33 @@ impl Translator {
         }
     }
 
+
+    pub fn translate_args<'a>(
+        module: &mut impl Module,
+        funcs: &HashMap<String, FuncId>,
+        class_layouts: &HashMap<String, crate::compiler::ClassLayout>,
+        struct_layouts: &HashMap<String, crate::compiler::StructLayout>,
+        enum_layouts: &HashMap<String, crate::compiler::EnumLayout>,
+        builder: &mut FunctionBuilder,
+        args: &[Expr],
+        variables: &mut HashMap<String, (Variable, VarType)>,
+        var_index: &mut usize,
+        func_returns: &HashMap<String, VarType>,
+        string_cache: &mut HashMap<String, String>,
+        string_id: &mut usize,
+    ) -> Result<Vec<Value>, CodegenError> {
+        let mut arg_vals = Vec::new();
+        for arg in args {
+            let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id)?;
+            let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts, class_layouts);
+            if let VarType::Struct(name) = &arg_ty {
+                arg_val = Self::copy_struct(module, struct_layouts, builder, name, arg_val);
+            }
+            arg_vals.push(arg_val);
+        }
+        Ok(arg_vals)
+    }
+
     fn copy_struct(
         module: &mut impl Module,
         struct_layouts: &HashMap<String, crate::compiler::StructLayout>,
@@ -958,15 +985,7 @@ impl Translator {
                     }
                     else if let Some(&func_id) = funcs.get(func_name) {
                         let local_func = module.declare_func_in_func(func_id, builder.func);
-                        let mut arg_vals = Vec::new();
-                        for arg in args {
-                            let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id)?;
-                            let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts, class_layouts);
-                            if let VarType::Struct(name) = &arg_ty {
-                                arg_val = Self::copy_struct(module, struct_layouts, builder, name, arg_val);
-                            }
-                            arg_vals.push(arg_val);
-                        }
+                        let arg_vals = Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id)?;
                         let call = builder.ins().call(local_func, &arg_vals);
                         
                         let results = builder.inst_results(call);
@@ -1014,9 +1033,7 @@ impl Translator {
                         if let Some(&init_id) = funcs.get(&init_name) {
                             let local_init = module.declare_func_in_func(init_id, builder.func);
                             let mut arg_vals = vec![obj_ptr];
-                            for arg in args {
-                                arg_vals.push(Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id)?);
-                            }
+                            arg_vals.extend(Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id)?);
                             builder.ins().call(local_init, &arg_vals);
                         }
                         
@@ -1062,10 +1079,7 @@ impl Translator {
                                 .unwrap_or_else(|| panic!("Enum constructor {} not found", constructor_name));
                             let local_callee = module.declare_func_in_func(*func_id, builder.func);
                             
-                            let mut arg_vals = Vec::new();
-                            for arg in args {
-                                arg_vals.push(Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id)?);
-                            }
+                            let arg_vals = Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id)?;
                             
                             let call = builder.ins().call(local_callee, &arg_vals);
                             return Ok(builder.inst_results(call)[0]);
@@ -1076,15 +1090,7 @@ impl Translator {
                                 .unwrap_or_else(|| panic!("Static method {} not found", static_method_name));
                             let local_callee = module.declare_func_in_func(*func_id, builder.func);
                             
-                            let mut arg_vals = Vec::new();
-                            for arg in args {
-                                let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id)?;
-                                let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts, class_layouts);
-                                if let VarType::Struct(name) = &arg_ty {
-                                    arg_val = Self::copy_struct(module, struct_layouts, builder, name, arg_val);
-                                }
-                                arg_vals.push(arg_val);
-                            }
+                            let arg_vals = Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id)?;
                             
                             let call = builder.ins().call(local_callee, &arg_vals);
                             let results = builder.inst_results(call);

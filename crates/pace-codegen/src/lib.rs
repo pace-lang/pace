@@ -5,3 +5,4 @@ pub mod monomorphize;
 
 pub use compiler::{JITCompiler, CodegenError};
 pub use aot::AotCompiler;
+pub mod runtime;
