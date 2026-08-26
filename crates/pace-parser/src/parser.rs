@@ -80,11 +80,12 @@ impl<'a> Parser<'a> {
         };
 
         let is_async = self.match_token(Token::Async);
+        let is_static = self.match_token(Token::Static);
 
         match self.current_token {
-            Token::Let => self.parse_var_decl(false),
-            Token::Var => self.parse_var_decl(true),
-            Token::Func => self.parse_func_decl(is_async, visibility),
+            Token::Let => self.parse_var_decl(false, is_static),
+            Token::Var => self.parse_var_decl(true, is_static),
+            Token::Func => self.parse_func_decl(is_async, visibility, is_static),
             Token::Class => self.parse_class_decl(),
             Token::Actor => self.parse_actor_decl(),
             Token::Interface => self.parse_interface_decl(),
@@ -443,7 +444,7 @@ impl<'a> Parser<'a> {
         Ok(Stmt::Import { path, alias, show, hide })
     }
 
-    fn parse_func_decl(&mut self, is_async: bool, visibility: Visibility) -> Result<Stmt, (String, (usize, usize))> {
+    fn parse_func_decl(&mut self, is_async: bool, visibility: Visibility, is_static: bool) -> Result<Stmt, (String, (usize, usize))> {
         let start_pos = self.current_span.0;
         self.advance(); // consume func
 
@@ -520,6 +521,7 @@ impl<'a> Parser<'a> {
             return_type,
             body,
             is_async,
+            is_static,
             visibility,
             span: (start_pos, (self.current_span.0 + self.current_span.1).saturating_sub(start_pos)),
         })
@@ -727,6 +729,7 @@ impl<'a> Parser<'a> {
                 return_type,
                 body,
                 is_async,
+                is_static: false, // Interfaces methods are inherently non-static for now
                 visibility: Visibility::Public,
                 span: (0, 0),
             });
@@ -851,7 +854,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_var_decl(&mut self, is_mutable: bool) -> Result<Stmt, (String, (usize, usize))> {
+    fn parse_var_decl(&mut self, is_mutable: bool, is_static: bool) -> Result<Stmt, (String, (usize, usize))> {
         let start_pos = self.current_span.0;
         self.advance(); // consume let/var
         let name = match &self.current_token {
@@ -878,6 +881,7 @@ impl<'a> Parser<'a> {
             name,
             is_mutable,
             type_annotation,
+            is_static,
             initializer,
             span: (start_pos, (self.current_span.0 + self.current_span.1).saturating_sub(start_pos)),
         })

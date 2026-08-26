@@ -973,8 +973,8 @@ impl Translator {
                         return Ok(obj_ptr);
                     }
                 } else if let Expr::MemberAccess { object, property, .. } = &**callee {
-                    if let Expr::Identifier(obj_name) = &**object
-                        && enum_layouts.contains_key(obj_name) {
+                    if let Expr::Identifier(obj_name) = &**object {
+                        if enum_layouts.contains_key(obj_name) {
                             let constructor_name = format!("{}_{}", obj_name, property);
                             let func_id = funcs.get(&constructor_name)
                                 .unwrap_or_else(|| panic!("Enum constructor {} not found", constructor_name));
@@ -987,7 +987,32 @@ impl Translator {
                             
                             let call = builder.ins().call(local_callee, &arg_vals);
                             return Ok(builder.inst_results(call)[0]);
+                        } else if class_layouts.contains_key(obj_name) || struct_layouts.contains_key(obj_name) {
+                            // STATIC METHOD CALL!
+                            let static_method_name = format!("{}_{}", obj_name, property);
+                            let func_id = funcs.get(&static_method_name)
+                                .unwrap_or_else(|| panic!("Static method {} not found", static_method_name));
+                            let local_callee = module.declare_func_in_func(*func_id, builder.func);
+                            
+                            let mut arg_vals = Vec::new();
+                            for arg in args {
+                                let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns)?;
+                                let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts, class_layouts);
+                                if let VarType::Struct(name) = &arg_ty {
+                                    arg_val = Self::copy_struct(module, struct_layouts, builder, name, arg_val);
+                                }
+                                arg_vals.push(arg_val);
+                            }
+                            
+                            let call = builder.ins().call(local_callee, &arg_vals);
+                            let results = builder.inst_results(call);
+                            if results.is_empty() {
+                                return Ok(builder.ins().iconst(types::I64, 0));
+                            } else {
+                                return Ok(results[0]);
+                            }
                         }
+                    }
 
                     let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns)?;
                     let ptr_ty = module.target_config().pointer_type();

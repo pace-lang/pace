@@ -44,12 +44,14 @@ pub struct FunctionSignature {
     pub visibility: Visibility,
     pub module: String,
     pub generic_params: Option<Vec<String>>,
+    pub is_static: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct ActorSignature {
     pub generic_params: Option<Vec<String>>,
     pub fields: HashMap<String, Type>,
+    pub static_fields: HashMap<String, Type>,
     pub methods: HashMap<String, FunctionSignature>,
 }
 
@@ -57,6 +59,7 @@ pub struct ActorSignature {
 pub struct ClassSignature {
     pub generic_params: Option<Vec<String>>,
     pub fields: HashMap<String, Type>,
+    pub static_fields: HashMap<String, Type>,
     pub methods: HashMap<String, FunctionSignature>,
 }
 
@@ -104,6 +107,7 @@ impl Environment {
                 visibility: Visibility::Public,
                 module: "std".to_string(),
                 generic_params: None,
+                is_static: false,
             },
         );
         // Inject built-in hash function
@@ -117,6 +121,7 @@ impl Environment {
                 visibility: Visibility::Public,
                 module: "std".to_string(),
                 generic_params: None,
+                is_static: false,
             },
         );
         self.register_function(
@@ -125,6 +130,7 @@ impl Environment {
                 params: vec![Type::Int],
                 return_type: Type::Int,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
             },
         );
         self.register_function(
@@ -133,6 +139,7 @@ impl Environment {
                 params: vec![Type::Int, Type::Int],
                 return_type: Type::Void,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
             },
         );
         self.register_function(
@@ -141,6 +148,7 @@ impl Environment {
                 params: vec![Type::Int, Type::Int, Type::Any],
                 return_type: Type::Void,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
             },
         );
         self.register_function(
@@ -149,6 +157,7 @@ impl Environment {
                 params: vec![Type::Int, Type::Int],
                 return_type: Type::Any,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
             },
         );
         self.register_function(
@@ -157,6 +166,7 @@ impl Environment {
                 params: vec![Type::Int],
                 return_type: Type::Int,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
             },
         );
         self.register_function(
@@ -165,6 +175,7 @@ impl Environment {
                 params: vec![],
                 return_type: Type::Int,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
             },
         );
         self.register_function(
@@ -173,6 +184,7 @@ impl Environment {
                 params: vec![Type::Int, Type::String],
                 return_type: Type::Void,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
             },
         );
         self.register_function(
@@ -181,6 +193,7 @@ impl Environment {
                 params: vec![Type::Int],
                 return_type: Type::String,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
             },
         );
         self.register_function(
@@ -189,6 +202,7 @@ impl Environment {
                 params: vec![Type::Int],
                 return_type: Type::Void,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
             },
         );
         self.register_function(
@@ -197,6 +211,7 @@ impl Environment {
                 params: vec![Type::Int],
                 return_type: Type::Int,
                 span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
             },
         );
     }

@@ -362,8 +362,8 @@ impl JITCompiler {
                 self.funcs.insert(drop_name.clone(), drop_id);
                 
                 for method_stmt in methods {
-                    if let Stmt::FuncDecl { name: method_name, params, .. } = method_stmt {
-                        if !method_map.contains_key(method_name) && method_name != "init" {
+                    if let Stmt::FuncDecl { name: method_name, params, is_static, .. } = method_stmt {
+                        if !is_static && !method_map.contains_key(method_name) && method_name != "init" {
                             method_map.insert(method_name.clone(), m_offset);
                             m_offset += 8;
                         }
@@ -371,7 +371,9 @@ impl JITCompiler {
 
                         let full_name = format!("{}_{}", class_name, method_name);
                         let mut sig = self.module.make_signature();
-                        sig.params.push(AbiParam::new(ptr_ty)); // self
+                        if !is_static {
+                            sig.params.push(AbiParam::new(ptr_ty)); // self
+                        }
                         for _ in params {
                             sig.params.push(AbiParam::new(types::I64));
                         }
@@ -381,7 +383,7 @@ impl JITCompiler {
                             .map_err(|e| CodegenError { message: e.to_string() })?;
                         self.funcs.insert(full_name.clone(), id);
                         
-                        if method_name != "init" {
+                        if !is_static && method_name != "init" {
                             if is_actor {
                                 let async_name = format!("__async_{}_{}", class_name, method_name);
                                 let mut async_sig = self.module.make_signature();
@@ -559,24 +561,27 @@ impl JITCompiler {
                 let is_actor = matches!(stmt, Stmt::ActorDecl { .. });
                 self.generate_drop_function(class_name)?;
                 for method_stmt in methods {
-                    if let Stmt::FuncDecl { name, params, body, .. } = method_stmt {
+                    if let Stmt::FuncDecl { name, params, body, is_static, .. } = method_stmt {
                         let full_name = format!("{}_{}", class_name, name);
                         let id = *self.funcs.get(&full_name).unwrap();
                         
-                        let mut new_params = vec![pace_ast::Param {
-                            name: "self".to_string(),
-                            type_annotation: pace_ast::TypeAnnotation {
-                                module_prefix: None,
-                                name: class_name.clone(),
-                                args: vec![],
-                                is_nullable: false,
-                            },
-                        }];
+                        let mut new_params = vec![];
+                        if !is_static {
+                            new_params.push(pace_ast::Param {
+                                name: "self".to_string(),
+                                type_annotation: pace_ast::TypeAnnotation {
+                                    module_prefix: None,
+                                    name: class_name.clone(),
+                                    args: vec![],
+                                    is_nullable: false,
+                                },
+                            });
+                        }
                         new_params.extend(params.clone());
                         
                         self.compile_function(&full_name, &new_params, body, id, &func_returns, Some(class_name))?;
                         
-                        if name != "init" && is_actor {
+                        if !is_static && name != "init" && is_actor {
                             self.generate_async_wrapper(class_name, name, params.len())?;
                         }
                     }

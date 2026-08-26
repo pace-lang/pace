@@ -86,13 +86,13 @@ impl TypeChecker {
                     self.current_module = old_module;
                 }
                 Stmt::ClassDecl { name, .. } | Stmt::InterfaceDecl { name, .. } => {
-                    self.env.register_class(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
+                    self.env.register_class(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), static_fields: HashMap::new(), methods: HashMap::new() });
                 }
                 Stmt::ActorDecl { name, .. } => {
-                    self.env.register_actor(name.clone(), crate::env::ActorSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
+                    self.env.register_actor(name.clone(), crate::env::ActorSignature { generic_params: None, fields: HashMap::new(), static_fields: HashMap::new(), methods: HashMap::new() });
                 }
                 Stmt::StructDecl { name, .. } => {
-                    self.env.register_struct(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), methods: HashMap::new() });
+                    self.env.register_struct(name.clone(), ClassSignature { generic_params: None, fields: HashMap::new(), static_fields: HashMap::new(), methods: HashMap::new() });
                 }
                 Stmt::EnumDecl { name, .. } => {
                     self.env.register_enum(name.clone(), EnumSignature { generic_params: None, variants: HashMap::new() });
@@ -103,7 +103,7 @@ impl TypeChecker {
 
         for stmt in stmts {
             match stmt {
-                Stmt::FuncDecl { name, params, return_type, span, visibility, generic_params, .. } => {
+                Stmt::FuncDecl { name, params, return_type, span, visibility, generic_params, is_static, .. } => {
                     let mut param_types = Vec::new();
                     for param in params {
                         param_types.push(self.resolve_type_name(&param.type_annotation));
@@ -128,12 +128,14 @@ impl TypeChecker {
                         visibility: visibility.clone(),
                         module: self.current_module.clone(),
                         generic_params: generic_params.clone(),
+                        is_static: *is_static,
                     };
                     self.env.register_function(name.clone(), sig);
                 }
                 Stmt::ClassDecl { name, fields, methods, generic_params, .. } => {
                     self.current_class = Some(name.clone());
                     let mut field_map = HashMap::new();
+                    let mut static_field_map = HashMap::new();
                     for f in fields {
                         if let Stmt::VarDecl { name: f_name, type_annotation, .. } = f {
                             let f_ty = if let Some(ty_str) = type_annotation {
@@ -147,7 +149,7 @@ impl TypeChecker {
 
                     let mut method_map = HashMap::new();
                     for m in methods {
-                        if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, .. } = m {
+                        if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, is_static, .. } = m {
                             let mut param_types = Vec::new();
                             for param in params {
                                 param_types.push(self.resolve_type_name(&param.type_annotation));
@@ -165,6 +167,7 @@ impl TypeChecker {
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
                                 generic_params: generic_params.clone(),
+                                is_static: false, // Will fix later
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
@@ -173,6 +176,7 @@ impl TypeChecker {
                     let sig = ClassSignature {
                         generic_params: generic_params.clone(),
                         fields: field_map,
+                        static_fields: static_field_map,
                         methods: method_map,
                     };
                     self.env.register_class(name.clone(), sig);
@@ -181,14 +185,19 @@ impl TypeChecker {
                 Stmt::ActorDecl { name, fields, methods, generic_params, .. } => {
                     self.current_class = Some(name.clone());
                     let mut field_map = HashMap::new();
+                    let mut static_field_map = HashMap::new();
                     for f in fields {
-                        if let Stmt::VarDecl { name: f_name, type_annotation, .. } = f {
+                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, .. } = f {
                             let f_ty = if let Some(ty_str) = type_annotation {
                                 self.resolve_type_name(ty_str)
                             } else {
                                 Type::Unknown
                             };
-                            field_map.insert(f_name.clone(), f_ty);
+                            if *is_static {
+                                static_field_map.insert(f_name.clone(), f_ty);
+                            } else {
+                                field_map.insert(f_name.clone(), f_ty);
+                            }
                         }
                     }
 
@@ -212,6 +221,7 @@ impl TypeChecker {
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
                                 generic_params: generic_params.clone(),
+                                is_static: false, // Will fix later
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
@@ -220,6 +230,7 @@ impl TypeChecker {
                     let sig = crate::env::ActorSignature {
                         generic_params: generic_params.clone(),
                         fields: field_map,
+                        static_fields: static_field_map,
                         methods: method_map,
                     };
                     self.env.register_actor(name.clone(), sig);
@@ -227,19 +238,25 @@ impl TypeChecker {
                 }
                 Stmt::StructDecl { name, fields, generic_params } => {
                     let mut field_map = HashMap::new();
+                    let mut static_field_map = HashMap::new();
                     for f in fields {
-                        if let Stmt::VarDecl { name: f_name, type_annotation, .. } = f {
+                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, .. } = f {
                             let f_ty = if let Some(ty_str) = type_annotation {
                                 self.resolve_type_name(ty_str)
                             } else {
                                 Type::Unknown
                             };
-                            field_map.insert(f_name.clone(), f_ty);
+                            if *is_static {
+                                static_field_map.insert(f_name.clone(), f_ty);
+                            } else {
+                                field_map.insert(f_name.clone(), f_ty);
+                            }
                         }
                     }
                     let sig = ClassSignature {
                         generic_params: generic_params.clone(),
                         fields: field_map,
+                        static_fields: static_field_map,
                         methods: HashMap::new(),
                     };
                     self.env.register_struct(name.clone(), sig);
@@ -284,7 +301,7 @@ impl TypeChecker {
                     self.current_class = Some(name.clone());
                     let mut method_map = HashMap::new();
                     for m in methods {
-                        if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, .. } = m {
+                        if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, is_static, .. } = m {
                             let mut param_types = Vec::new();
                             for param in params {
                                 param_types.push(self.resolve_type_name(&param.type_annotation));
@@ -302,13 +319,14 @@ impl TypeChecker {
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
                                 generic_params: None,
+                                is_static: *is_static,
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
                     }
                     let sig = ClassSignature {
                         generic_params: generic_params.clone(),
-                        fields: HashMap::new(),
+                        fields: HashMap::new(), static_fields: HashMap::new(),
                         methods: method_map,
                     };
                     self.env.register_class(name.clone(), sig);
@@ -320,12 +338,12 @@ impl TypeChecker {
                     if path == "std/collection" => {
                         self.env.register_class("List".to_string(), ClassSignature {
                             generic_params: Some(vec!["T".to_string()]),
-                            fields: HashMap::new(),
+                            fields: HashMap::new(), static_fields: HashMap::new(),
                             methods: HashMap::new(),
                         });
                         self.env.register_class("Set".to_string(), ClassSignature {
                             generic_params: Some(vec!["T".to_string()]),
-                            fields: HashMap::new(),
+                            fields: HashMap::new(), static_fields: HashMap::new(),
                             methods: HashMap::new(),
                         });
                     }
@@ -482,7 +500,7 @@ impl TypeChecker {
                     self.pop_scope_and_check_unused();
                 }
             }
-            Stmt::FuncDecl { name: _, params, body, return_type, generic_params, .. } => {
+            Stmt::FuncDecl { name: _, params, body, return_type, generic_params, is_static, .. } => {
                 let prev_return = self.current_return_type.clone();
                 let prev_generics = self.generic_params_in_scope.clone();
                 
@@ -499,16 +517,18 @@ impl TypeChecker {
                 
                 self.env.push_scope();
                 
-                // Add `self` if we are inside a class/struct
+                // Add `self` if we are inside a class/struct AND the method is not static
                 if let Some(class_name) = &self.current_class {
-                    let self_ty = if self.env.structs.contains_key(class_name) {
-                        Type::Struct(class_name.clone())
-                    } else if self.env.actors.contains_key(class_name) {
-                        Type::Actor(class_name.clone())
-                    } else {
-                        Type::Class(class_name.clone())
-                    };
-                    self.env.define("self".to_string(), self_ty, (0, 0), false);
+                    if !is_static {
+                        let self_ty = if self.env.structs.contains_key(class_name) {
+                            Type::Struct(class_name.clone())
+                        } else if self.env.actors.contains_key(class_name) {
+                            Type::Actor(class_name.clone())
+                        } else {
+                            Type::Class(class_name.clone())
+                        };
+                        self.env.define("self".to_string(), self_ty, (0, 0), false);
+                    }
                 }
                 
                 // Add parameters to scope

@@ -15,11 +15,12 @@ impl Monomorphizer {
     pub fn instantiate_stmt(&self, stmt: &Stmt) -> Stmt {
         match stmt {
             Stmt::Expr(expr) => Stmt::Expr(self.instantiate_expr(expr)),
-            Stmt::VarDecl { name, is_mutable, type_annotation, initializer, span } => {
+            Stmt::VarDecl { name, is_mutable, type_annotation, is_static, initializer, span } => {
                 Stmt::VarDecl {
                     name: name.clone(),
                     is_mutable: *is_mutable,
                     type_annotation: type_annotation.as_ref().map(|t| self.instantiate_type_annotation(t)),
+                    is_static: *is_static,
                     initializer: initializer.as_ref().map(|e| self.instantiate_expr(e)),
                     span: *span,
                 }
@@ -44,7 +45,7 @@ impl Monomorphizer {
                     body: Box::new(self.instantiate_stmt(body)),
                 }
             }
-            Stmt::FuncDecl { name, generic_params: _, params, return_type, body, is_async, visibility, span } => {
+            Stmt::FuncDecl { name, generic_params: _, params, return_type, body, is_async, is_static, visibility, span } => {
                 Stmt::FuncDecl {
                     name: name.clone(),
                     generic_params: None, // Monomorphized functions are no longer generic
@@ -55,6 +56,7 @@ impl Monomorphizer {
                     return_type: return_type.as_ref().map(|t| self.instantiate_type_annotation(t)),
                     body: body.iter().map(|s| self.instantiate_stmt(s)).collect(),
                     is_async: *is_async,
+                    is_static: *is_static,
                     visibility: visibility.clone(),
                     span: *span,
                 }
@@ -308,11 +310,12 @@ impl TypeFlattener {
     fn do_flatten_stmt(&self, stmt: &Stmt) -> Stmt {
         match stmt {
             Stmt::Expr(expr) => Stmt::Expr(self.flatten_expr(expr)),
-            Stmt::VarDecl { name, is_mutable, type_annotation, initializer, span } => {
+            Stmt::VarDecl { name, is_mutable, type_annotation, is_static, initializer, span } => {
                 Stmt::VarDecl {
                     name: name.clone(),
                     is_mutable: *is_mutable,
                     type_annotation: type_annotation.as_ref().map(|t| self.flatten_type_annotation(t)),
+                    is_static: *is_static,
                     initializer: initializer.as_ref().map(|e| self.flatten_expr(e)),
                     span: *span,
                 }
@@ -337,7 +340,7 @@ impl TypeFlattener {
                     body: Box::new(self.do_flatten_stmt(body)),
                 }
             }
-            Stmt::FuncDecl { name, generic_params, params, return_type, body, is_async, visibility, span } => {
+            Stmt::FuncDecl { name, generic_params, params, return_type, body, is_async, is_static, visibility, span } => {
                 Stmt::FuncDecl {
                     name: name.clone(),
                     generic_params: generic_params.clone(),
@@ -348,6 +351,7 @@ impl TypeFlattener {
                     return_type: return_type.as_ref().map(|t| self.flatten_type_annotation(t)),
                     body: body.iter().map(|s| self.do_flatten_stmt(s)).collect(),
                     is_async: *is_async,
+                    is_static: *is_static,
                     visibility: visibility.clone(),
                     span: *span,
                 }
