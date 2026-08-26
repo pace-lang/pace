@@ -164,7 +164,7 @@ impl TypeChecker {
                                 is_used: true,
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
-                                generic_params: None, // Methods inherit class generics, or have their own (TODO)
+                                generic_params: generic_params.clone(),
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
@@ -211,7 +211,7 @@ impl TypeChecker {
                                 is_used: true,
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
-                                generic_params: None, // Methods inherit actor generics, or have their own (TODO)
+                                generic_params: generic_params.clone(),
                             };
                             method_map.insert(m_name.clone(), sig);
                         }
