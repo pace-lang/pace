@@ -54,6 +54,8 @@ pub struct JITCompiler {
     struct_layouts: HashMap<String, StructLayout>,
     interface_layouts: HashMap<String, InterfaceLayout>,
     enum_layouts: HashMap<String, EnumLayout>,
+    string_cache: HashMap<String, String>,
+    string_id: usize,
 }
 
 impl Default for JITCompiler {
@@ -272,6 +274,8 @@ impl JITCompiler {
             struct_layouts: HashMap::new(),
             interface_layouts: HashMap::new(),
             enum_layouts: HashMap::new(),
+            string_cache: HashMap::new(),
+            string_id: 0,
         }
     }
 
@@ -683,7 +687,7 @@ impl JITCompiler {
         for stmt in stmts {
             match stmt {
                 Stmt::VarDecl { .. } | Stmt::Expr(_) | Stmt::If { .. } | Stmt::While { .. } | Stmt::Loop { .. } | Stmt::Match { .. } => {
-                    let (val, _) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, stmt, &mut variables, &mut var_index, &func_returns)?;
+                    let (val, _) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, stmt, &mut variables, &mut var_index, &func_returns, &mut self.string_cache, &mut self.string_id)?;
                     last_val = Some(val);
                 }
                 _ => {}
@@ -969,7 +973,7 @@ impl JITCompiler {
         let mut last_val = None;
         let mut terminated = false;
         for stmt in body {
-            let (val, term) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, stmt, &mut variables, &mut var_index, func_returns)?;
+            let (val, term) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, stmt, &mut variables, &mut var_index, func_returns, &mut self.string_cache, &mut self.string_id)?;
             last_val = Some(val);
             if term {
                 terminated = true;

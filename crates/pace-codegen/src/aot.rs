@@ -16,6 +16,8 @@ pub struct AotCompiler {
     struct_layouts: HashMap<String, StructLayout>,
     interface_layouts: HashMap<String, InterfaceLayout>,
     enum_layouts: HashMap<String, EnumLayout>,
+    string_cache: HashMap<String, String>,
+    string_id: usize,
 }
 
 impl Default for AotCompiler {
@@ -205,6 +207,8 @@ impl AotCompiler {
             struct_layouts: HashMap::new(),
             interface_layouts: HashMap::new(),
             enum_layouts: HashMap::new(),
+            string_cache: HashMap::new(),
+            string_id: 0,
         }
     }
 
@@ -255,19 +259,58 @@ impl AotCompiler {
         
         for stmt in stmts {
             if let Stmt::ClassDecl { name: class_name, fields, methods, implements, generic_params: _ } | Stmt::ActorDecl { name: class_name, fields, methods, implements, generic_params: _ } = stmt {
+                let is_actor = matches!(stmt, Stmt::ActorDecl { .. });
                 let mut field_map = HashMap::new();
                 let mut offset = 16; // 8 bytes for ARC, 8 bytes for vtable pointer
+                
+                if is_actor {
+                    field_map.insert("__mailbox".to_string(), (offset, crate::translator::VarType::Unknown)); // Internal pointer
+                    offset += 8;
+                }
+                
+                let mut static_fields = HashMap::new();
                 for field in fields {
-                    if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
+                    if let Stmt::VarDecl { name: field_name, type_annotation, is_static, initializer, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
                         let field_ty = crate::translator::parse_vartype(ty_str, Some(class_name));
-                        field_map.insert(field_name.clone(), (offset, field_ty));
-                        offset += 8;
+                        if *is_static {
+                            let global_name = format!("{}_{}", class_name, field_name);
+                            let data_id = self.module.declare_data(&global_name, Linkage::Export, true, false)
+                                .expect("Failed to declare static field");
+                            let mut data_ctx = DataDescription::new();
+                            
+                            let mut init_bytes = vec![0u8; 8];
+                            if let Some(init_expr) = initializer {
+                                use pace_ast::Expr;
+                                match init_expr {
+                                    Expr::IntLiteral(i) => {
+                                        init_bytes.copy_from_slice(&i.to_ne_bytes());
+                                    }
+                                    Expr::FloatLiteral(f) => {
+                                        init_bytes.copy_from_slice(&f.to_bits().to_ne_bytes());
+                                    }
+                                    Expr::BoolLiteral(b) => {
+                                        let val: i64 = if *b { 1 } else { 0 };
+                                        init_bytes.copy_from_slice(&val.to_ne_bytes());
+                                    }
+                                    _ => {} // Default to 0 for complex expressions
+                                }
+                            }
+                            
+                            data_ctx.define(init_bytes.into_boxed_slice());
+                            self.module.define_data(data_id, &data_ctx)
+                                .expect("Failed to define static field data");
+                            static_fields.insert(field_name.clone(), (data_id, field_ty));
+                        } else {
+                            field_map.insert(field_name.clone(), (offset, field_ty));
+                            offset += 8;
+                        }
                     }
                 }
                 
                 let mut method_map = HashMap::new();
                 let mut m_offset = 16;
+                let mut vtable_funcs = HashMap::new();
                 
                 // Seed methods from interface if implemented
                 if let Some(iface_annotation) = implements
@@ -289,17 +332,18 @@ impl AotCompiler {
                     .map_err(|e| CodegenError { message: e.to_string() })?;
                 self.funcs.insert(drop_name.clone(), drop_id);
                 
-                let mut vtable_funcs = std::collections::HashMap::new();
                 for method_stmt in methods {
-                    if let Stmt::FuncDecl { name: method_name, params, .. } = method_stmt {
-                        if method_name != "init" {
+                    if let Stmt::FuncDecl { name: method_name, params, is_static, .. } = method_stmt {
+                        if !is_static && !method_map.contains_key(method_name) && method_name != "init" {
                             method_map.insert(method_name.clone(), m_offset);
                             m_offset += 8;
                         }
                         
                         let full_name = format!("{}_{}", class_name, method_name);
                         let mut sig = self.module.make_signature();
-                        sig.params.push(AbiParam::new(ptr_ty)); // self
+                        if !is_static {
+                            sig.params.push(AbiParam::new(ptr_ty)); // self
+                        }
                         for _ in params {
                             sig.params.push(AbiParam::new(types::I64));
                         }
@@ -309,8 +353,19 @@ impl AotCompiler {
                             .map_err(|e| CodegenError { message: e.to_string() })?;
                         self.funcs.insert(full_name.clone(), id);
                         
-                        if method_name != "init" {
-                            vtable_funcs.insert(method_name.clone(), id);
+                        if !is_static && method_name != "init" {
+                            if is_actor {
+                                let async_name = format!("__async_{}_{}", class_name, method_name);
+                                let mut async_sig = self.module.make_signature();
+                                async_sig.params.push(AbiParam::new(types::I64));
+                                async_sig.returns.push(AbiParam::new(types::I64));
+                                let async_id = self.module.declare_function(&async_name, Linkage::Local, &async_sig)
+                                    .map_err(|e| CodegenError { message: e.to_string() })?;
+                                self.funcs.insert(async_name.clone(), async_id);
+                                vtable_funcs.insert(method_name.clone(), async_id);
+                            } else {
+                                vtable_funcs.insert(method_name.clone(), id);
+                            }
                         }
                     }
                 }
@@ -340,7 +395,7 @@ impl AotCompiler {
                 let layout = ClassLayout {
                     name: class_name.clone(),
                     fields: field_map,
-                    static_fields: HashMap::new(), // Will fix fully if AOT needs it later
+                    static_fields,
                     methods: method_map,
                     vtable_id,
                 };
@@ -482,26 +537,28 @@ impl AotCompiler {
                 let is_actor = matches!(stmt, Stmt::ActorDecl { .. });
                 self.generate_drop_function(class_name)?;
                 for method_stmt in methods {
-                    if let Stmt::FuncDecl { name: method_name, params, body, return_type, .. } = method_stmt {
+                    if let Stmt::FuncDecl { name: method_name, params, body, return_type, is_static, .. } = method_stmt {
                         let full_name = format!("{}_{}", class_name, method_name);
                         let id = *self.funcs.get(&full_name).unwrap();
                         
-                        let self_param = pace_ast::Param {
-                            name: "self".to_string(),
-                            type_annotation: pace_ast::TypeAnnotation {
-                                module_prefix: None,
-                                name: class_name.clone(),
-                                args: vec![],
-                                is_nullable: false,
-                            },
-                        };
-                        let mut all_params = vec![self_param];
+                        let mut all_params = vec![];
+                        if !is_static {
+                            all_params.push(pace_ast::Param {
+                                name: "self".to_string(),
+                                type_annotation: pace_ast::TypeAnnotation {
+                                    module_prefix: None,
+                                    name: class_name.clone(),
+                                    args: vec![],
+                                    is_nullable: false,
+                                },
+                            });
+                        }
                         all_params.extend(params.clone());
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         
                         self.compile_function(&full_name, &all_params, body, id, &func_returns, ret, Some(class_name))?;
                         
-                        if is_actor && method_name != "init" {
+                        if !is_static && method_name != "init" && is_actor {
                             self.generate_async_wrapper(class_name, method_name, params.len())?;
                         }
                     }
@@ -552,7 +609,7 @@ impl AotCompiler {
         };
         
         // Free the tuple allocated by the caller
-        let free_id = *self.funcs.get("__pace_free").unwrap();
+        let free_id = *self.funcs.get("free").unwrap();
         let local_free = self.module.declare_func_in_func(free_id, builder.func);
         let size_val = builder.ins().iconst(types::I64, ((num_args + 1) * 8) as i64);
         builder.ins().call(local_free, &[arg_ptr, size_val]);
@@ -765,7 +822,7 @@ impl AotCompiler {
         let mut last_val = None;
         let mut terminated = false;
         for stmt in body {
-            let (val, term) = Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, stmt, &mut variables, &mut var_index, func_returns)?;
+            let (val, term) = Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, stmt, &mut variables, &mut var_index, func_returns, &mut self.string_cache, &mut self.string_id)?;
             last_val = Some(val);
             if term {
                 terminated = true;
