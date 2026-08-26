@@ -142,5 +142,6 @@ pub enum Pattern {
         enum_name: Option<String>,
         variant_name: String,
         fields: Option<Vec<Pattern>>,
+        generic_args: Option<Vec<TypeAnnotation>>,
     },
 }

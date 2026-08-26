@@ -205,6 +205,99 @@ impl Environment {
                 is_static: false,
             },
         );
+        // FS and HTTP FFI functions
+        self.register_function(
+            "fs_writeText".to_string(),
+            FunctionSignature {
+                params: vec![Type::String, Type::String],
+                return_type: Type::Int, // Returns 1 on success, 0 on failure
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "fs_exists".to_string(),
+            FunctionSignature {
+                params: vec![Type::String],
+                return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "fs_readText".to_string(),
+            FunctionSignature {
+                params: vec![Type::String],
+                return_type: Type::Nullable(Box::new(Type::String)),
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "http_get".to_string(),
+            FunctionSignature {
+                params: vec![Type::String],
+                return_type: Type::Nullable(Box::new(Type::String)),
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "string_split".to_string(),
+            FunctionSignature {
+                params: vec![Type::String, Type::String],
+                return_type: Type::Int, // Actually it returns Int pointer
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
+            }
+        );
+        self.register_function(
+            "string_replace".to_string(),
+            FunctionSignature {
+                params: vec![Type::String, Type::String, Type::String],
+                return_type: Type::String,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
+            }
+        );
+        self.register_function(
+            "string_substring".to_string(),
+            FunctionSignature {
+                params: vec![Type::String, Type::Int, Type::Int],
+                return_type: Type::String,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
+            }
+        );
+        self.register_function(
+            "string_trim".to_string(),
+            FunctionSignature {
+                params: vec![Type::String],
+                return_type: Type::String,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
+            }
+        );
+        self.register_function(
+            "string_index_of".to_string(),
+            FunctionSignature {
+                params: vec![Type::String, Type::String],
+                return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
+            }
+        );
+        self.register_function(
+            "string_starts_with".to_string(),
+            FunctionSignature {
+                params: vec![Type::String, Type::String],
+                return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
+            }
+        );
+        self.register_function(
+            "get_last_error".to_string(),
+            FunctionSignature {
+                params: vec![],
+                return_type: Type::String,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
+            }
+        );
         self.register_function(
             "get_year".to_string(),
             FunctionSignature {
@@ -251,6 +344,24 @@ impl Environment {
             }
         }
         None
+    }
+
+    pub fn has(&self, name: &str) -> bool {
+        for scope in self.scopes.iter().rev() {
+            if scope.contains_key(name) {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn is_local(&self, name: &str) -> bool {
+        for scope in self.scopes.iter().skip(1).rev() {
+            if scope.contains_key(name) {
+                return true;
+            }
+        }
+        false
     }
     
     pub fn register_actor(&mut self, name: String, sig: ActorSignature) {

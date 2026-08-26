@@ -32,6 +32,16 @@ impl CompilerSession {
         let _ = pace_runtime::__pace_print_string as *const () as usize;
         let _ = pace_runtime::__pace_malloc as *const () as usize;
         let _ = pace_runtime::__pace_hash as *const () as usize;
+        let _ = pace_runtime::__pace_time as *const () as usize;
+        let _ = pace_runtime::__pace_get_year as *const () as usize;
+        
+        // Force linkage of FS and HTTP runtime functions
+        let _ = pace_runtime::__pace_fs_write as *const () as usize;
+        let _ = pace_runtime::__pace_fs_exists as *const () as usize;
+        let _ = pace_runtime::__pace_fs_read as *const () as usize;
+        let _ = pace_runtime::__pace_http_get as *const () as usize;
+
+        // Force linkage of StringBuilder runtime functions
         let _ = pace_runtime::__pace_sb_new as *const () as usize;
         let _ = pace_runtime::__pace_sb_append as *const () as usize;
         let _ = pace_runtime::__pace_sb_build as *const () as usize;

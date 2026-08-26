@@ -34,11 +34,12 @@ pub enum Expr {
         target: Box<Expr>,
         value: Box<Expr>,
     },
-    /// A member access (e.g., foo.bar)
+    /// A member access (e.g., foo.bar or Class::static_method)
     MemberAccess {
         object: Box<Expr>,
         property: String,
         computed_class: Option<String>,
+        is_static_operator: bool,
     },
     /// A forced unwrap (e.g., foo!)
     Unwrap(Box<Expr>),

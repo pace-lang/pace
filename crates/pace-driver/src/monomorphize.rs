@@ -88,10 +88,13 @@ impl Monomorphizer {
         
         // Append all newly generated classes to the end of the AST
         let mut generated: Vec<Stmt> = mono.generated_classes.into_values().collect();
+        let mut generics: Vec<Stmt> = mono.generic_classes.into_values().collect();
         if let Some(Stmt::Module { body, name: _ }) = rewritten_ast.last_mut() {
             body.append(&mut generated);
+            body.append(&mut generics);
         } else {
             rewritten_ast.append(&mut generated);
+            rewritten_ast.append(&mut generics);
         }
 
         Ok(rewritten_ast)
@@ -355,7 +358,7 @@ impl Monomorphizer {
                 self.substitute_expr_types(target, mapping)?;
                 self.substitute_expr_types(value, mapping)?;
             }
-            Expr::MemberAccess { object, .. } => {
+            Expr::MemberAccess { object, property: _, computed_class: _, is_static_operator: _ } => {
                 self.substitute_expr_types(object, mapping)?;
             }
             Expr::OptionalMemberAccess { object, .. } => {
@@ -434,7 +437,8 @@ impl Monomorphizer {
             }
             Stmt::Match { expr, arms } => {
                 self.rewrite_expr(expr)?;
-                for (_, body) in arms {
+                for (pattern, body) in arms {
+                    self.rewrite_pattern(pattern)?;
                     **body = self.rewrite_stmt(*body.clone())?;
                 }
             }
@@ -497,10 +501,31 @@ impl Monomorphizer {
                 self.rewrite_expr(target)?;
                 self.rewrite_expr(value)?;
             }
-            Expr::MemberAccess { object, .. } => {
+            Expr::MemberAccess { object, property: _, computed_class: _, is_static_operator: _ } => {
                 self.rewrite_expr(object)?;
             }
             _ => {}
+        }
+        Ok(())
+    }
+
+    fn rewrite_pattern(&mut self, pat: &mut pace_ast::Pattern) -> Result<(), miette::Report> {
+        if let pace_ast::Pattern::Variant { enum_name, variant_name: _, fields, generic_args } = pat {
+            if let Some(args) = generic_args {
+                for arg in args.iter_mut() {
+                    self.rewrite_type_annotation(arg)?;
+                }
+                if let Some(name) = enum_name {
+                    let concrete_name = Self::generate_name(name, args);
+                    *name = concrete_name;
+                }
+                *generic_args = None;
+            }
+            if let Some(flds) = fields {
+                for f in flds {
+                    self.rewrite_pattern(f)?;
+                }
+            }
         }
         Ok(())
     }

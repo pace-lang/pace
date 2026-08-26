@@ -653,7 +653,15 @@ impl TypeChecker {
                 let left_ty = self.check_expr(left)?;
                 let right_ty = self.check_expr(right)?;
                 
-                if left_ty != right_ty && left_ty != Type::Unknown && right_ty != Type::Unknown && left_ty != Type::Any && right_ty != Type::Any {
+                let mut types_match = left_ty == right_ty;
+                if matches!(left_ty, Type::Nullable(_)) && right_ty == Type::Null {
+                    types_match = true;
+                }
+                if matches!(right_ty, Type::Nullable(_)) && left_ty == Type::Null {
+                    types_match = true;
+                }
+                
+                if !types_match && left_ty != Type::Unknown && right_ty != Type::Unknown && left_ty != Type::Any && right_ty != Type::Any {
                     return Err(TypeError {
                         message: format!("Type mismatch in binary operation: {:?} and {:?}", left_ty, right_ty)
                     });
@@ -714,7 +722,7 @@ impl TypeChecker {
                             message: format!("Undefined variable '{}'", name)
                         })
                     }
-                } else if let Expr::MemberAccess { object, .. } = &**target {
+                } else if let Expr::MemberAccess { object, property: _, computed_class: _, is_static_operator: _ } = &**target {
                     let _obj_ty = self.check_expr(object)?;
                     // Simple validation for now - real validation needs class layout check
                     Ok(val_ty)
@@ -782,7 +790,35 @@ impl TypeChecker {
                 // MemberAccess returns the method's return type, so we just return callee_ty
                 Ok(callee_ty)
             }
-            Expr::MemberAccess { object, property, .. } => {
+            Expr::MemberAccess { object, property, computed_class: _, is_static_operator } => {
+                let mut is_namespace_access = false;
+                let mut base_ident = None;
+                if let Expr::Identifier(name) = &**object {
+                    base_ident = Some(name.clone());
+                } else if let Expr::GenericInstantiation { callee, .. } = &**object {
+                    if let Expr::Identifier(name) = &**callee {
+                        base_ident = Some(name.clone());
+                    }
+                }
+                if let Some(ref name) = base_ident {
+                    if self.env.classes.contains_key(name) || self.env.structs.contains_key(name) || self.env.enums.contains_key(name) || self.env.actors.contains_key(name) {
+                        is_namespace_access = !self.env.is_local(name);
+                    }
+                }
+                
+                // Allow :: ONLY on namespaces, and . ONLY on instances.
+                // Exception: allow . on namespaces ONLY if it's NOT an enum variant (for backwards compatibility while we transition)
+                if *is_static_operator && !is_namespace_access {
+                    return Err(TypeError {
+                        message: format!("The '::' operator can only be used for static or namespace access (object was {:?}, base_ident {:?}, classes={:?})", object, base_ident, self.env.classes.keys())
+                    });
+                }
+                if !*is_static_operator && is_namespace_access {
+                    return Err(TypeError {
+                        message: "The '.' operator can only be used for instance access. Use '::' for static/namespace access.".to_string()
+                    });
+                }
+                
                 let obj_ty = self.check_expr(object)?;
                 
                 let (class_name, fields, static_fields, methods) = match obj_ty {
@@ -928,6 +964,7 @@ impl TypeChecker {
                         object: Box::new(Expr::Null), // Dummy object to bypass recursive check_expr if we extracted logic
                         property: property.clone(),
                         computed_class: None,
+                        is_static_operator: false,
                     };
                     // Instead of full check, we can manually check if it's Class or Struct
                     let (class_name, sig) = match &*inner {
@@ -1017,10 +1054,25 @@ impl TypeChecker {
                 self.env.define(name.clone(), expected_type.clone(), *span, false);
                 Ok(())
             },
-            pace_ast::Pattern::Variant { enum_name: _, variant_name: _, fields } => {
+            pace_ast::Pattern::Variant { enum_name, variant_name, fields, generic_args: _ } => {
+                let mut field_types = vec![Type::Unknown; fields.as_ref().map_or(0, |f| f.len())];
+                if let Some(ename) = enum_name {
+                    if let Some(sig) = self.env.enums.get(ename) {
+                        if let Some((_, v_fields_opt)) = sig.variants.iter().find(|(name, _)| **name == *variant_name) {
+                            if let Some(v_fields) = v_fields_opt {
+                                for (i, f_ty) in v_fields.iter().enumerate() {
+                                    if i < field_types.len() {
+                                        field_types[i] = f_ty.clone();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
                 if let Some(fields) = fields {
-                    for field in fields {
-                        self.check_pattern(field, &Type::Unknown)?;
+                    for (i, field) in fields.iter().enumerate() {
+                        self.check_pattern(field, &field_types[i])?;
                     }
                 }
                 Ok(())

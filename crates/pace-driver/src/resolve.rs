@@ -125,6 +125,7 @@ impl SymbolResolver {
                         let imported_mod_name = path.clone();
                         let mut to_reexport = Vec::new();
                         if let Some(imported_exports) = self.exports.get(&imported_mod_name) {
+
                             if let Some(alias_name) = alias {
                                 mod_aliases.insert(alias_name.clone(), imported_mod_name.clone());
                             } else {
@@ -214,6 +215,13 @@ impl SymbolResolver {
             Stmt::Block(stmts) => {
                 for s in stmts { self.resolve_stmt(s, scope, aliases)?; }
             }
+            Stmt::Match { expr, arms } => {
+                self.resolve_expr(expr, scope, aliases)?;
+                for (pattern, body) in arms {
+                    self.resolve_pattern(pattern, scope, aliases)?;
+                    self.resolve_stmt(body, scope, aliases)?;
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -254,6 +262,9 @@ impl SymbolResolver {
                 }
             }
             Expr::Identifier(name) => {
+                if name == "StringUtil" {
+
+                }
                 if let Some(export) = scope.get(name) {
                     if export.mangled_name == "COLLISION" {
                         return Err(Report::new(ResolutionError::Collision { name: name.clone(), span: (0, 0) }));
@@ -289,6 +300,26 @@ impl SymbolResolver {
             Expr::NullCoalesce { left, right } => {
                 self.resolve_expr(left, scope, aliases)?;
                 self.resolve_expr(right, scope, aliases)?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn resolve_pattern(&self, pat: &mut pace_ast::Pattern, scope: &HashMap<String, ModuleExport>, aliases: &HashMap<String, String>) -> Result<()> {
+        match pat {
+            pace_ast::Pattern::Literal(expr) => self.resolve_expr(expr, scope, aliases)?,
+            pace_ast::Pattern::Variant { enum_name, fields, .. } => {
+                if let Some(name) = enum_name {
+                    if let Some(export) = scope.get(name) {
+                        *name = export.mangled_name.clone();
+                    }
+                }
+                if let Some(flds) = fields {
+                    for f in flds {
+                        self.resolve_pattern(f, scope, aliases)?;
+                    }
+                }
             }
             _ => {}
         }

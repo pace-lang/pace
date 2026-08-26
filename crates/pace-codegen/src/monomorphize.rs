@@ -103,10 +103,11 @@ impl Monomorphizer {
                 target: Box::new(self.instantiate_expr(target)),
                 value: Box::new(self.instantiate_expr(value)),
             },
-            Expr::MemberAccess { object, property, computed_class } => Expr::MemberAccess {
+            Expr::MemberAccess { object, property, computed_class, is_static_operator } => Expr::MemberAccess {
                 object: Box::new(self.instantiate_expr(object)),
                 property: property.clone(),
                 computed_class: computed_class.clone(),
+                is_static_operator: *is_static_operator,
             },
             Expr::GenericInstantiation { callee, generic_args } => Expr::GenericInstantiation {
                 callee: Box::new(self.instantiate_expr(callee)),
@@ -398,10 +399,11 @@ impl TypeFlattener {
                 target: Box::new(self.flatten_expr(target)),
                 value: Box::new(self.flatten_expr(value)),
             },
-            Expr::MemberAccess { object, property, computed_class } => Expr::MemberAccess {
+            Expr::MemberAccess { object, property, computed_class, is_static_operator } => Expr::MemberAccess {
                 object: Box::new(self.flatten_expr(object)),
                 property: property.clone(),
                 computed_class: computed_class.clone(),
+                is_static_operator: *is_static_operator,
             },
             Expr::GenericInstantiation { callee, generic_args } => Expr::GenericInstantiation {
                 callee: Box::new(self.flatten_expr(callee)),

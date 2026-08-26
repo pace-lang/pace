@@ -198,6 +198,80 @@ impl AotCompiler {
         funcs.insert("__pace_promise_create".to_string(), promise_create_id);
         funcs.insert("__pace_promise_await".to_string(), promise_await_id);
 
+        let mut sig_fs_write_text = module.make_signature();
+        sig_fs_write_text.params.push(AbiParam::new(ptr_ty));
+        sig_fs_write_text.params.push(AbiParam::new(ptr_ty));
+        sig_fs_write_text.returns.push(AbiParam::new(types::I64));
+        let fs_write_text_id = module.declare_function("fs_writeText", Linkage::Import, &sig_fs_write_text).unwrap();
+        funcs.insert("fs_writeText".to_string(), fs_write_text_id);
+
+        let mut sig_fs_exists = module.make_signature();
+        sig_fs_exists.params.push(AbiParam::new(ptr_ty));
+        sig_fs_exists.returns.push(AbiParam::new(types::I64));
+        let fs_exists_id = module.declare_function("fs_exists", Linkage::Import, &sig_fs_exists).unwrap();
+        funcs.insert("fs_exists".to_string(), fs_exists_id);
+
+        let mut sig_fs_read_text = module.make_signature();
+        sig_fs_read_text.params.push(AbiParam::new(ptr_ty));
+        sig_fs_read_text.returns.push(AbiParam::new(ptr_ty));
+        let fs_read_text_id = module.declare_function("fs_readText", Linkage::Import, &sig_fs_read_text).unwrap();
+        funcs.insert("fs_readText".to_string(), fs_read_text_id);
+
+        let mut sig_http_get = module.make_signature();
+        sig_http_get.params.push(AbiParam::new(ptr_ty));
+        sig_http_get.returns.push(AbiParam::new(ptr_ty));
+        let http_get_id = module.declare_function("http_get", Linkage::Import, &sig_http_get).unwrap();
+        funcs.insert("http_get".to_string(), http_get_id);
+
+        let mut sig_get_last_error = module.make_signature();
+        sig_get_last_error.returns.push(AbiParam::new(ptr_ty));
+        let get_last_error_id = module.declare_function("get_last_error", Linkage::Import, &sig_get_last_error).unwrap();
+        funcs.insert("get_last_error".to_string(), get_last_error_id);
+
+        let mut sig_string_split = module.make_signature();
+        sig_string_split.params.push(AbiParam::new(ptr_ty));
+        sig_string_split.params.push(AbiParam::new(ptr_ty));
+        sig_string_split.returns.push(AbiParam::new(types::I64));
+        let string_split_id = module.declare_function("string_split", Linkage::Import, &sig_string_split).unwrap();
+        funcs.insert("string_split".to_string(), string_split_id);
+
+        let mut sig_string_replace = module.make_signature();
+        sig_string_replace.params.push(AbiParam::new(ptr_ty));
+        sig_string_replace.params.push(AbiParam::new(ptr_ty));
+        sig_string_replace.params.push(AbiParam::new(ptr_ty));
+        sig_string_replace.returns.push(AbiParam::new(ptr_ty));
+        let string_replace_id = module.declare_function("string_replace", Linkage::Import, &sig_string_replace).unwrap();
+        funcs.insert("string_replace".to_string(), string_replace_id);
+
+        let mut sig_string_substring = module.make_signature();
+        sig_string_substring.params.push(AbiParam::new(ptr_ty));
+        sig_string_substring.params.push(AbiParam::new(types::I64));
+        sig_string_substring.params.push(AbiParam::new(types::I64));
+        sig_string_substring.returns.push(AbiParam::new(ptr_ty));
+        let string_substring_id = module.declare_function("string_substring", Linkage::Import, &sig_string_substring).unwrap();
+        funcs.insert("string_substring".to_string(), string_substring_id);
+
+        let mut sig_string_trim = module.make_signature();
+        sig_string_trim.params.push(AbiParam::new(ptr_ty));
+        sig_string_trim.returns.push(AbiParam::new(ptr_ty));
+        let string_trim_id = module.declare_function("string_trim", Linkage::Import, &sig_string_trim).unwrap();
+        funcs.insert("string_trim".to_string(), string_trim_id);
+
+        let mut sig_string_index_of = module.make_signature();
+        sig_string_index_of.params.push(AbiParam::new(ptr_ty));
+        sig_string_index_of.params.push(AbiParam::new(ptr_ty));
+        sig_string_index_of.returns.push(AbiParam::new(types::I64));
+        let string_index_of_id = module.declare_function("string_index_of", Linkage::Import, &sig_string_index_of).unwrap();
+        funcs.insert("string_index_of".to_string(), string_index_of_id);
+
+        let mut sig_string_starts_with = module.make_signature();
+        sig_string_starts_with.params.push(AbiParam::new(ptr_ty));
+        sig_string_starts_with.params.push(AbiParam::new(ptr_ty));
+        sig_string_starts_with.returns.push(AbiParam::new(types::I64));
+        let string_starts_with_id = module.declare_function("string_starts_with", Linkage::Import, &sig_string_starts_with).unwrap();
+        funcs.insert("string_starts_with".to_string(), string_starts_with_id);
+
+
         Self {
             builder_context: FunctionBuilderContext::new(),
             ctx: module.make_context(),
@@ -272,7 +346,7 @@ impl AotCompiler {
                 for field in fields {
                     if let Stmt::VarDecl { name: field_name, type_annotation, is_static, initializer, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
-                        let field_ty = crate::translator::parse_vartype(ty_str, Some(class_name));
+                        let field_ty = crate::translator::parse_vartype(ty_str, Some(class_name), Some(&self.struct_layouts), Some(&self.enum_layouts));
                         if *is_static {
                             let global_name = format!("{}_{}", class_name, field_name);
                             let data_id = self.module.declare_data(&global_name, Linkage::Export, true, false)
@@ -419,7 +493,7 @@ impl AotCompiler {
                     
                     if let Some(fields) = &variant.fields {
                         for field_ty in fields {
-                            let field_var_type = crate::translator::parse_vartype(&field_ty.name, Some(enum_name));
+                            let field_var_type = crate::translator::parse_vartype(&field_ty.name, Some(enum_name), Some(&self.struct_layouts), Some(&self.enum_layouts));
                             variant_types.push(field_var_type);
                             variant_size += 8;
                         }
@@ -457,7 +531,7 @@ impl AotCompiler {
                 for field in fields {
                     if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
-                        let field_ty = crate::translator::parse_vartype(ty_str, Some(struct_name));
+                        let field_ty = crate::translator::parse_vartype(ty_str, Some(struct_name), Some(&self.struct_layouts), Some(&self.enum_layouts));
                         field_map.insert(field_name.clone(), (offset, field_ty));
                         offset += 8;
                     }
@@ -507,13 +581,13 @@ impl AotCompiler {
         for stmt in final_stmts {
             if let Stmt::FuncDecl { name, return_type, .. } = stmt {
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
-                func_returns.insert(name.clone(), crate::translator::parse_vartype(ret, None));
+                func_returns.insert(name.clone(), crate::translator::parse_vartype(ret, None, Some(&self.struct_layouts), Some(&self.enum_layouts)));
             } else if let Stmt::ClassDecl { name: class_name, methods, .. } | Stmt::ActorDecl { name: class_name, methods, .. } = stmt {
                 for method in methods {
                     if let Stmt::FuncDecl { name: method_name, params: _, return_type, .. } = method {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         let full_name = format!("{}_{}", class_name, method_name);
-                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(class_name)));
+                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(class_name), Some(&self.struct_layouts), Some(&self.enum_layouts)));
                     }
                 }
             } else if let Stmt::InterfaceDecl { name: interface_name, methods, generic_params: _ } = stmt {
@@ -521,7 +595,7 @@ impl AotCompiler {
                     if let Stmt::FuncDecl { name: method_name, params: _, return_type, .. } = method {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         let full_name = format!("{}_{}", interface_name, method_name);
-                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(interface_name)));
+                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(interface_name), Some(&self.struct_layouts), Some(&self.enum_layouts)));
                     }
                 }
             }
@@ -793,10 +867,10 @@ impl AotCompiler {
         ret_type_str: &str,
         current_class: Option<&str>,
     ) -> Result<(), CodegenError> {
-        let ret_ty = crate::translator::parse_vartype(ret_type_str, current_class);
+        let ret_ty = crate::translator::parse_vartype(ret_type_str, current_class, Some(&self.struct_layouts), Some(&self.enum_layouts));
         self.ctx.func.signature.returns.push(AbiParam::new(ret_ty.to_cranelift_type()));
         for param in params {
-            let ty = crate::translator::parse_vartype(&param.type_annotation.name, current_class);
+            let ty = crate::translator::parse_vartype(&param.type_annotation.name, current_class, Some(&self.struct_layouts), Some(&self.enum_layouts));
             self.ctx.func.signature.params.push(AbiParam::new(ty.to_cranelift_type()));
         }
 
@@ -814,7 +888,7 @@ impl AotCompiler {
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
             
-            let param_ty = crate::translator::parse_vartype(&param.type_annotation.name, current_class);
+            let param_ty = crate::translator::parse_vartype(&param.type_annotation.name, current_class, Some(&self.struct_layouts), Some(&self.enum_layouts));
             variables.insert(param.name.clone(), (var, param_ty));
             var_index += 1;
         }

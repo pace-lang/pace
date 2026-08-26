@@ -268,6 +268,23 @@ impl<'a> Parser<'a> {
                     return Ok(pace_ast::Pattern::Wildcard);
                 }
                 
+                let mut generic_args = None;
+                if self.current_token == Token::Less {
+                    self.advance();
+                    let mut args = Vec::new();
+                    while self.current_token != Token::Greater && self.current_token != Token::Eof {
+                        args.push(self.parse_type_annotation()?);
+                        if self.match_token(Token::Comma) {
+                            continue;
+                        }
+                        break;
+                    }
+                    if !self.match_token(Token::Greater) {
+                        return Err(("Expected '>' after generic arguments in pattern".to_string(), self.current_span));
+                    }
+                    generic_args = Some(args);
+                }
+                
                 // Could be a variable, or an Enum variant like `Some(x)` or `Option::Some(x)`
                 // Let's check for `::`
                 let mut enum_name = None;
@@ -304,6 +321,7 @@ impl<'a> Parser<'a> {
                         enum_name,
                         variant_name,
                         fields: Some(fields),
+                        generic_args,
                     })
                 } else if enum_name.is_some() || variant_name.chars().next().unwrap().is_uppercase() {
                     // It's a variant without fields (like `None`)
@@ -311,6 +329,7 @@ impl<'a> Parser<'a> {
                         enum_name,
                         variant_name,
                         fields: None,
+                        generic_args,
                     })
                 } else {
                     // Lowercase without parenthesis -> Variable binding
@@ -1048,6 +1067,7 @@ impl<'a> Parser<'a> {
                     object: Box::new(expr),
                     property,
                     computed_class: None,
+                    is_static_operator: false,
                 };
             } else if self.match_token(Token::ColonColon) {
                 let property = match &self.current_token {
@@ -1059,6 +1079,7 @@ impl<'a> Parser<'a> {
                     object: Box::new(expr),
                     property,
                     computed_class: None,
+                    is_static_operator: true,
                 };
             } else if self.match_token(Token::QuestionDot) {
                 let property = match &self.current_token {

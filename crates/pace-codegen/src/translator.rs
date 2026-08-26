@@ -28,7 +28,12 @@ impl VarType {
     }
 }
 
-pub fn parse_vartype(s: &str, current_class: Option<&str>) -> VarType {
+pub fn parse_vartype(
+    s: &str,
+    current_class: Option<&str>,
+    struct_layouts: Option<&HashMap<String, crate::compiler::StructLayout>>,
+    enum_layouts: Option<&HashMap<String, crate::compiler::EnumLayout>>,
+) -> VarType {
     let is_nullable = s.ends_with('?');
     let base_name = if is_nullable {
         &s[..s.len() - 1]
@@ -43,11 +48,21 @@ pub fn parse_vartype(s: &str, current_class: Option<&str>) -> VarType {
         "Bool" => VarType::Bool,
         "Self" => VarType::Object(current_class.unwrap_or("Self").to_string()),
         other => {
-            if other.starts_with("Result_") || other.starts_with("Option_") {
-                VarType::Enum(other.to_string())
-            } else {
-                VarType::Object(other.to_string())
+            if let Some(enums) = enum_layouts {
+                if enums.contains_key(other) {
+                    return VarType::Enum(other.to_string());
+                }
+            } else if other.starts_with("Result_") || other.starts_with("Option_") {
+                return VarType::Enum(other.to_string());
             }
+
+            if let Some(structs) = struct_layouts {
+                if structs.contains_key(other) {
+                    return VarType::Struct(other.to_string());
+                }
+            }
+
+            VarType::Object(other.to_string())
         }
     };
     
@@ -421,7 +436,7 @@ impl Translator {
                 }
             }
             Expr::Binary { left, .. } => Self::get_expr_type(left, variables, func_returns, struct_layouts, class_layouts), // simplified
-            Expr::MemberAccess { object, property, .. } => {
+            Expr::MemberAccess { object, property, computed_class: _, is_static_operator: _ } => {
                 if let Expr::Identifier(obj_name) = &**object {
                     if let Some(layout) = class_layouts.get(obj_name) {
                         if let Some((_, f_ty)) = layout.static_fields.get(property) {
@@ -462,7 +477,12 @@ impl Translator {
                 VarType::Unknown
             }
             Expr::Unwrap(inner) => {
-                Self::get_expr_type(inner, variables, func_returns, struct_layouts, class_layouts)
+                let inner_ty = Self::get_expr_type(inner, variables, func_returns, struct_layouts, class_layouts);
+                if let VarType::Nullable(nested) = inner_ty {
+                    *nested
+                } else {
+                    inner_ty
+                }
             }
             Expr::NullCoalesce { left, right } => {
                 let left_ty = Self::get_expr_type(left, variables, func_returns, struct_layouts, class_layouts);
@@ -489,11 +509,18 @@ impl Translator {
                             return VarType::Object(name.clone());
                         }
                     }
-                } else if let Expr::MemberAccess { object, property, .. } = &**callee {
-                    if let Expr::Identifier(obj_name) = &**object
-                        && (obj_name.starts_with("Result_") || obj_name.starts_with("Option_")) {
+                } else if let Expr::MemberAccess { object, property, computed_class: _, is_static_operator: _ } = &**callee {
+                    if let Expr::Identifier(obj_name) = &**object {
+                        if obj_name.starts_with("Result_") || obj_name.starts_with("Option_") {
                             return VarType::Enum(obj_name.clone());
                         }
+                        if class_layouts.contains_key(obj_name) || struct_layouts.contains_key(obj_name) {
+                            let static_method_name = format!("{}_{}", obj_name, property);
+                            if let Some(ty) = func_returns.get(&static_method_name) {
+                                return ty.clone();
+                            }
+                        }
+                    }
                     let obj_ty = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
                     if let VarType::Object(obj_name) = obj_ty {
                         let full_name = format!("{}_{}", obj_name, property);
@@ -516,12 +543,12 @@ impl Translator {
                     if name.starts_with("Result_") {
                         let parts: Vec<&str> = name.split('_').collect();
                         if parts.len() >= 3 {
-                            return parse_vartype(parts[1], None);
+                            return parse_vartype(parts[1], None, Some(struct_layouts), None);
                         }
                     } else if name.starts_with("Option_") {
                         let parts: Vec<&str> = name.split('_').collect();
                         if parts.len() >= 2 {
-                            return parse_vartype(parts[1], None);
+                            return parse_vartype(parts[1], None, Some(struct_layouts), None);
                         }
                     }
                 }
@@ -624,6 +651,7 @@ impl Translator {
                     let part_ty = Self::get_expr_type(part, variables, func_returns, struct_layouts, class_layouts);
                     let val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, part, variables, var_index, func_returns, string_cache, string_id)?;
                     
+
                     let str_val = if part_ty == VarType::String {
                         val
                     } else if part_ty == VarType::Float {
@@ -837,7 +865,7 @@ impl Translator {
                     } else {
                         Err(CodegenError { message: format!("Variable '{}' not found in JIT environment", name) })
                     }
-                } else if let Expr::MemberAccess { object, property, .. } = &**target {
+                } else if let Expr::MemberAccess { object, property, computed_class: _, is_static_operator: _ } = &**target {
                     if let Expr::Identifier(obj_name) = &**object {
                         let maybe_static_field = if let Some(layout) = class_layouts.get(obj_name) {
                             layout.static_fields.get(property)
@@ -853,7 +881,7 @@ impl Translator {
                             let addr = builder.ins().symbol_value(ptr_ty, data_ref);
                             
                             if matches!(f_ty, VarType::Object(_)) {
-                                let old_val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), addr, 0);
+                                let old_val = builder.ins().load(f_ty.to_cranelift_type(), cranelift::prelude::MemFlagsData::new(), addr, 0);
                                 let release_id = *funcs.get("release").unwrap();
                                 let local_release = module.declare_func_in_func(release_id, builder.func);
                                 builder.ins().call(local_release, &[old_val]);
@@ -884,7 +912,7 @@ impl Translator {
                     };
                     
                     if matches!(f_ty, VarType::Object(_)) {
-                        let old_val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, f_offset as i32);
+                        let old_val = builder.ins().load(f_ty.to_cranelift_type(), cranelift::prelude::MemFlagsData::new(), obj_ptr, f_offset as i32);
                         let release_id = *funcs.get("release").unwrap();
                         let local_release = module.declare_func_in_func(release_id, builder.func);
                         builder.ins().call(local_release, &[old_val]);
@@ -911,7 +939,7 @@ impl Translator {
                         
                         let target_name = if ty == types::F64 {
                             "print_float"
-                        } else if arg_ty == VarType::String {
+                        } else if arg_ty == VarType::String || matches!(arg_ty, VarType::Nullable(ref inner) if **inner == VarType::String) {
                             "print_string"
                         } else {
                             "print_int" // Fallback to int
@@ -1017,9 +1045,18 @@ impl Translator {
                         
                         return Ok(obj_ptr);
                     }
-                } else if let Expr::MemberAccess { object, property, .. } = &**callee {
+                } else if let Expr::MemberAccess { object, property, computed_class: _, is_static_operator: _ } = &**callee {
+                    let mut obj_name_opt = None;
                     if let Expr::Identifier(obj_name) = &**object {
-                        if enum_layouts.contains_key(obj_name) {
+                        obj_name_opt = Some(obj_name.clone());
+                    } else if let Expr::GenericInstantiation { callee, .. } = &**object {
+                        if let Expr::Identifier(obj_name) = &**callee {
+                            obj_name_opt = Some(obj_name.clone());
+                        }
+                    }
+                    
+                    if let Some(obj_name) = obj_name_opt {
+                        if enum_layouts.contains_key(&obj_name) {
                             let constructor_name = format!("{}_{}", obj_name, property);
                             let func_id = funcs.get(&constructor_name)
                                 .unwrap_or_else(|| panic!("Enum constructor {} not found", constructor_name));
@@ -1032,7 +1069,7 @@ impl Translator {
                             
                             let call = builder.ins().call(local_callee, &arg_vals);
                             return Ok(builder.inst_results(call)[0]);
-                        } else if class_layouts.contains_key(obj_name) || struct_layouts.contains_key(obj_name) {
+                        } else if class_layouts.contains_key(&obj_name) || struct_layouts.contains_key(&obj_name) {
                             // STATIC METHOD CALL!
                             let static_method_name = format!("{}_{}", obj_name, property);
                             let func_id = funcs.get(&static_method_name)
@@ -1133,11 +1170,30 @@ impl Translator {
                 }
                 Err(CodegenError { message: format!("Cannot resolve function call: {:?}", callee) })
             }
-            Expr::MemberAccess { object, property, .. } => {
+            Expr::MemberAccess { object, property, computed_class: _, is_static_operator: _ } => {
+                let mut obj_name_opt = None;
                 if let Expr::Identifier(obj_name) = &**object {
-                    let maybe_static_field = if let Some(layout) = class_layouts.get(obj_name) {
+                    obj_name_opt = Some(obj_name.clone());
+                } else if let Expr::GenericInstantiation { callee, .. } = &**object {
+                    if let Expr::Identifier(obj_name) = &**callee {
+                        obj_name_opt = Some(obj_name.clone());
+                    }
+                }
+                
+                if let Some(obj_name) = obj_name_opt {
+                    if enum_layouts.contains_key(&obj_name) {
+                        let constructor_name = format!("{}_{}", obj_name, property);
+                        let func_id = funcs.get(&constructor_name)
+                            .unwrap_or_else(|| panic!("Enum constructor {} not found", constructor_name));
+                        let local_callee = module.declare_func_in_func(*func_id, builder.func);
+                        
+                        let call = builder.ins().call(local_callee, &[]);
+                        return Ok(builder.inst_results(call)[0]);
+                    }
+                    
+                    let maybe_static_field = if let Some(layout) = class_layouts.get(&obj_name) {
                         layout.static_fields.get(property)
-                    } else if let Some(layout) = struct_layouts.get(obj_name) {
+                    } else if let Some(layout) = struct_layouts.get(&obj_name) {
                         layout.static_fields.get(property)
                     } else {
                         None
@@ -1147,7 +1203,7 @@ impl Translator {
                         let ptr_ty = module.target_config().pointer_type();
                         let data_ref = module.declare_data_in_func(data_id, builder.func);
                         let addr = builder.ins().symbol_value(ptr_ty, data_ref);
-                        let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), addr, 0);
+                        let val = builder.ins().load(f_ty.to_cranelift_type(), cranelift::prelude::MemFlagsData::new(), addr, 0);
                         
                         if matches!(f_ty, VarType::Object(_)) {
                             let retain_id = *funcs.get("retain").unwrap();
@@ -1174,7 +1230,7 @@ impl Translator {
                     _ => panic!("MemberAccess on non-object type: {:?}", obj_type),
                 };
                 
-                let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, f_offset as i32);
+                let val = builder.ins().load(f_ty.to_cranelift_type(), cranelift::prelude::MemFlagsData::new(), obj_ptr, f_offset as i32);
                 
                 if matches!(f_ty, VarType::Object(_)) {
                     let retain_id = *funcs.get("retain").unwrap();

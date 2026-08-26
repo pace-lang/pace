@@ -1,0 +1,25 @@
+// File System stdlib using native FFI
+
+public class File {
+    public static func writeText(path: String, content: String) -> Result<Bool, String> {
+        if fs_writeText(path, content) != 0 {
+            return Result<Bool, String>::Ok(true);
+        }
+        return Result<Bool, String>::Err(get_last_error());
+    }
+
+    public static func exists(path: String) -> Result<Bool, String> {
+        if fs_exists(path) != 0 {
+            return Result<Bool, String>::Ok(true);
+        }
+        return Result<Bool, String>::Err(get_last_error());
+    }
+
+    public static func readText(path: String) -> Result<String, String> {
+        let ptr = fs_readText(path);
+        if ptr == null {
+            return Result<String, String>::Err(get_last_error());
+        }
+        return Result<String, String>::Ok(ptr);
+    }
+}

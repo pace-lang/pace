@@ -1034,6 +1034,9 @@ dependencies = [
 [[package]]
 name = "pace-runtime"
 version = "0.1.0"
+dependencies = [
+ "ureq",
+]
 
 [[package]]
 name = "pace-ty"

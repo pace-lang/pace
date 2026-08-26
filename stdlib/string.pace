@@ -1,0 +1,29 @@
+// String utilities
+import "./collections/list";
+
+public class StringUtil {
+    public static func split(s: String, delim: String) -> List<String> {
+        // returning a List requires parsing the IntArray from FFI
+        return List<String>();
+    }
+
+    public static func replace(s: String, old: String, newStr: String) -> String {
+        return string_replace(s, old, newStr);
+    }
+
+    public static func substring(s: String, start: Int, end: Int) -> String {
+        return string_substring(s, start, end);
+    }
+
+    public static func trim(s: String) -> String {
+        return string_trim(s);
+    }
+
+    public static func indexOf(s: String, search: String) -> Int {
+        return string_index_of(s, search);
+    }
+
+    public static func startsWith(s: String, search: String) -> Bool {
+        return string_starts_with(s, search) != 0;
+    }
+}

@@ -133,7 +133,7 @@ impl TreeShaker {
                 self.trace_expr(target, queue);
                 self.trace_expr(value, queue);
             }
-            Expr::MemberAccess { object, .. } => {
+            Expr::MemberAccess { object, property: _, computed_class: _, is_static_operator: _ } => {
                 self.trace_expr(object, queue);
             }
             Expr::OptionalMemberAccess { object, .. } => {

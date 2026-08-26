@@ -1,0 +1,11 @@
+// HTTP stdlib using native FFI
+
+public class Http {
+    public static func get(url: String) -> Result<String, String> {
+        let ptr = http_get(url);
+        if ptr == null {
+            return Result<String, String>::Err(get_last_error());
+        }
+        return Result<String, String>::Ok(ptr);
+    }
+}
