@@ -386,6 +386,17 @@ impl Translator {
                 } else {
                     builder.ins().iconst(types::I64, 0)
                 };
+                
+                // Release all active local object variables
+                for (var_name, (var, ty)) in variables.iter() {
+                    if matches!(ty, VarType::Object(_)) {
+                        let obj_val = builder.use_var(*var);
+                        let release_id = *funcs.get("release").unwrap_or_else(|| panic!("release not found"));
+                        let local_release = module.declare_func_in_func(release_id, builder.func);
+                        builder.ins().call(local_release, &[obj_val]);
+                    }
+                }
+                
                 builder.ins().return_(&[ret_val]);
                 Ok((ret_val, true))
             }
