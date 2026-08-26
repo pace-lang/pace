@@ -78,6 +78,8 @@ enum Commands {
         #[arg(long)]
         release: bool,
     },
+    /// Start the Pace Language Server
+    Lsp,
 }
 
 fn main() -> Result<()> {
@@ -104,6 +106,7 @@ fn main() -> Result<()> {
         Commands::Check { file, output_format } => commands::check::execute(&session, file, output_format)?,
         Commands::Build { file, release } => commands::build::execute(&session, file, release)?,
         Commands::Run { file, release } => commands::run::execute(&session, file, release)?,
+        Commands::Lsp => pace_lsp::run_server(),
     }
 
     Ok(())

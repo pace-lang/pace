@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/pace-ast","crates/pace-cli", "crates/pace-codegen", "crates/pace-driver", "crates/pace-errors", "crates/pace-parser", "crates/pace-runtime", "crates/pace-ty", "crates/pace-pkg"]
+members = ["crates/pace-ast","crates/pace-cli", "crates/pace-codegen", "crates/pace-driver", "crates/pace-errors", "crates/pace-parser", "crates/pace-runtime", "crates/pace-ty", "crates/pace-pkg", "crates/pace-lsp"]
 default-members = ["crates/pace-cli"]
 resolver = "2"
 

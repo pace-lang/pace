@@ -7,6 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+pace-lsp = { path = "../pace-lsp" }
 clap = { workspace = true }
 miette = { workspace = true }
 pace-driver = { workspace = true }
