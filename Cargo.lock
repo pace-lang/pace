@@ -1012,7 +1012,9 @@ name = "pace-parser"
 version = "0.1.0"
 dependencies = [
  "insta",
+ "miette",
  "pace-ast",
+ "pace-errors",
 ]
 
 [[package]]

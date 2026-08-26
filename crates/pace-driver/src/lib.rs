@@ -1,6 +1,6 @@
 use miette::{Result, IntoDiagnostic, Report};
 use pace_ast::Stmt;
-use pace_errors::ParseError;
+
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -60,16 +60,9 @@ impl CompilerSession {
         let src = std::fs::read_to_string(&path_buf)
             .into_diagnostic()?;
         
-        let mut ast = match pace_parser::parse(&src) {
+        let mut ast = match pace_parser::parse(&src, &path.display().to_string()) {
             Ok(ast) => ast,
-            Err(errors) => {
-                let parse_errors = errors.into_iter().map(|(msg, span)| {
-                    ParseError {
-                        message: msg,
-                        src: miette::NamedSource::new(path.display().to_string(), src.clone()),
-                        span,
-                    }
-                }).collect();
+            Err(parse_errors) => {
                 return Err(Report::new(pace_errors::MultipleSyntaxErrors { errors: parse_errors }));
             }
         };
@@ -173,7 +166,7 @@ impl CompilerSession {
         let src = std::fs::read_to_string(path).into_diagnostic()?;
         
         // Run typechecker on the parsed AST
-        match pace_ty::check(&mono_ast) {
+        match pace_ty::check(&mono_ast, &src, &path_buf.display().to_string()) {
             Ok(warnings) => {
                 for mut warning in warnings {
                     let mut is_valid_span = true;
@@ -313,16 +306,9 @@ impl CompilerSession {
     }
 
     pub fn check_source(&self, src: &str) -> Result<Vec<Stmt>> {
-        let ast = match pace_parser::parse(src) {
+        let ast = match pace_parser::parse(src, "source") {
             Ok(ast) => vec![Stmt::Module { name: "source".to_string(), body: ast }],
-            Err(errors) => {
-                let parse_errors = errors.into_iter().map(|(msg, span)| {
-                    ParseError {
-                        message: msg,
-                        src: miette::NamedSource::new("source", src.to_string()),
-                        span,
-                    }
-                }).collect();
+            Err(parse_errors) => {
                 return Err(Report::new(pace_errors::MultipleSyntaxErrors { errors: parse_errors }));
             }
         };
@@ -338,7 +324,7 @@ impl CompilerSession {
         let mono_ast = shake::TreeShaker::run(mono_ast);
 
         // Run typechecker on the parsed AST
-        match pace_ty::check(&mono_ast) {
+        match pace_ty::check(&mono_ast, src, "source") {
             Ok(warnings) => {
                 for mut warning in warnings {
                     let mut is_valid_span = true;

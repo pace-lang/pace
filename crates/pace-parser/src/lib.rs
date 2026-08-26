@@ -5,8 +5,8 @@ use pace_ast::Stmt;
 pub use lexer::{Lexer, Token};
 pub use parser::Parser;
 
-pub fn parse(src: &str) -> Result<Vec<Stmt>, Vec<(String, (usize, usize))>> {
-    let mut parser = Parser::new(src);
+pub fn parse(src: &str, file_name: &str) -> Result<Vec<Stmt>, Vec<pace_errors::SyntaxError>> {
+    let mut parser = Parser::new(src, file_name);
     parser.parse()
 }
 
