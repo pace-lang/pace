@@ -63,11 +63,17 @@ enum Commands {
     Build {
         /// The Pace file to build (optional, defaults to src/main.pace if pace.toml exists)
         file: Option<String>,
+        /// Build with optimizations enabled
+        #[arg(long)]
+        release: bool,
     },
     /// Compile and run a Pace file
     Run {
         /// The Pace file to run (optional, defaults to src/main.pace if pace.toml exists)
         file: Option<String>,
+        /// Run with optimizations enabled
+        #[arg(long)]
+        release: bool,
     },
 }
 
@@ -84,8 +90,8 @@ fn main() -> Result<()> {
         Commands::Publish => commands::publish::execute()?,
         Commands::Login => commands::login::login()?,
         Commands::Check { file } => commands::check::execute(&session, file)?,
-        Commands::Build { file } => commands::build::execute(&session, file)?,
-        Commands::Run { file } => commands::run::execute(&session, file)?,
+        Commands::Build { file, release } => commands::build::execute(&session, file, release)?,
+        Commands::Run { file, release } => commands::run::execute(&session, file, release)?,
     }
 
     Ok(())

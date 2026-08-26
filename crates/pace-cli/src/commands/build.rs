@@ -2,7 +2,7 @@ use miette::Result;
 use pace_driver::CompilerSession;
 use crate::utils::resolve_file;
 
-pub fn execute(session: &CompilerSession, file: Option<String>) -> Result<()> {
+pub fn execute(session: &CompilerSession, file: Option<String>, release: bool) -> Result<()> {
     let resolved_file = resolve_file(file)?;
     let output_name = std::path::Path::new(&resolved_file)
         .file_stem()
@@ -23,7 +23,7 @@ pub fn execute(session: &CompilerSession, file: Option<String>) -> Result<()> {
     };
     
     println!("Building {} to ./{}...", resolved_file, output);
-    session.build_file(&resolved_file, &output)?;
+    session.build_file(&resolved_file, &output, release)?;
     println!("✅ Build complete!");
     
     Ok(())

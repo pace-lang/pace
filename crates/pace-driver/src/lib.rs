@@ -213,9 +213,10 @@ impl CompilerSession {
         flat
     }
 
-    pub fn run_file(&self, path: &str) -> Result<()> {
+
+    pub fn run_file(&self, path: &str, release: bool) -> Result<()> {
         let ast = self.check_file(path)?;
-        let mut compiler = pace_codegen::JITCompiler::new();
+        let mut compiler = pace_codegen::JITCompiler::new(if release { "speed".to_string() } else { "none".to_string() });
         
         compiler.compile_and_run(&ast).map_err(|e| {
             Report::new(e)
@@ -224,10 +225,10 @@ impl CompilerSession {
         Ok(())
     }
 
-    pub fn run_source(&self, src: &str) -> Result<()> {
+    pub fn run_source(&self, src: &str, release: bool) -> Result<()> {
         let ast = self.check_source(src)?;
         let flat_ast = Self::flatten_ast(&ast);
-        let mut compiler = pace_codegen::JITCompiler::new();
+        let mut compiler = pace_codegen::JITCompiler::new(if release { "speed".to_string() } else { "none".to_string() });
         
         compiler.compile_and_run(&flat_ast).map_err(|e| {
             Report::new(e)
@@ -236,18 +237,18 @@ impl CompilerSession {
         Ok(())
     }
 
-    pub fn build_file(&self, path: &str, output: &str) -> Result<()> {
+    pub fn build_file(&self, path: &str, output: &str, release: bool) -> Result<()> {
         let ast = self.check_file(path)?;
-        self.build_from_ast(&ast, output)
+        self.build_from_ast(&ast, output, release)
     }
 
-    pub fn build_source(&self, src: &str, output: &str) -> Result<()> {
+    pub fn build_source(&self, src: &str, output: &str, release: bool) -> Result<()> {
         let ast = self.check_source(src)?;
-        self.build_from_ast(&ast, output)
+        self.build_from_ast(&ast, output, release)
     }
     
-    fn build_from_ast(&self, ast: &[Stmt], output: &str) -> Result<()> {
-        let compiler = pace_codegen::AotCompiler::new();
+    fn build_from_ast(&self, ast: &[Stmt], output: &str, release: bool) -> Result<()> {
+        let compiler = pace_codegen::AotCompiler::new(if release { "speed".to_string() } else { "none".to_string() });
         
         let flat_ast = Self::flatten_ast(ast);
         let obj_bytes = compiler.compile_to_object(&flat_ast).map_err(|e| {

@@ -22,14 +22,15 @@ pub struct AotCompiler {
 
 impl Default for AotCompiler {
     fn default() -> Self {
-        Self::new()
+        Self::new("none".to_string())
     }
 }
 
 impl AotCompiler {
-    pub fn new() -> Self {
+    pub fn new(opt_level: String) -> Self {
         let mut flag_builder = settings::builder();
         flag_builder.set("use_colocated_libcalls", "false").unwrap();
+        flag_builder.set("opt_level", &opt_level).unwrap();
         flag_builder.set("is_pic", "true").unwrap(); // Need PIC for AOT compilation
         
         let isa_builder = cranelift_native::builder().unwrap_or_else(|msg| {
