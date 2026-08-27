@@ -92,6 +92,7 @@ fn get_position(src: &str, offset: usize) -> Position {
     Position { line, character: char_idx }
 }
 
+#[allow(dead_code)]
 fn position_to_offset(src: &str, pos: Position) -> Option<usize> {
     let mut current_line = 0;
     let mut current_char = 0;
@@ -301,13 +302,13 @@ impl LanguageServer for PaceLanguageServer {
                     } else if let Some(func) = env.functions.get(&word) {
                         let params_str = func.params.iter().map(|p| format!("{:?}", p)).collect::<Vec<_>>().join(", ");
                         hover_text = format!("```pace\nfunc {}({}) -> {:?}\n```", word, params_str, func.return_type);
-                    } else if let Some(cls) = env.classes.get(&word) {
+                    } else if let Some(_cls) = env.classes.get(&word) {
                         hover_text = format!("```pace\nclass {}\n```", word);
-                    } else if let Some(strct) = env.structs.get(&word) {
+                    } else if let Some(_strct) = env.structs.get(&word) {
                         hover_text = format!("```pace\nstruct {}\n```", word);
-                    } else if let Some(enm) = env.enums.get(&word) {
+                    } else if let Some(_enm) = env.enums.get(&word) {
                         hover_text = format!("```pace\nenum {}\n```", word);
-                    } else if let Some(act) = env.actors.get(&word) {
+                    } else if let Some(_act) = env.actors.get(&word) {
                         hover_text = format!("```pace\nactor {}\n```", word);
                     }
                 }

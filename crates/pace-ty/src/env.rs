@@ -21,7 +21,7 @@ pub enum Type {
     /// An enum type
     Enum(String),
     /// A function type
-    Function,
+    Function { params: Vec<Type>, return_type: Box<Type> },
     Unknown, // Used for auto-inference before resolution or error state
     Void,    // Used for functions that don't return anything
     Any,     // Used for built-ins like print that take multiple types
@@ -404,8 +404,12 @@ impl Environment {
 
     pub fn register_function(&mut self, name: String, sig: FunctionSignature) {
         let span = sig.span;
+        let fn_type = Type::Function {
+            params: sig.params.clone(),
+            return_type: Box::new(sig.return_type.clone()),
+        };
         self.functions.insert(name.clone(), sig);
-        let _ = self.define(name, Type::Function, span, false);
+        let _ = self.define(name, fn_type, span, false);
     }
     
     pub fn register_class(&mut self, name: String, sig: ClassSignature) {

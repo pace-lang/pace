@@ -6,6 +6,10 @@ pub struct TypeAnnotation {
     pub name: String,
     pub args: Vec<TypeAnnotation>,
     pub is_nullable: bool,
+    // Function type support
+    pub is_function: bool,
+    pub function_params: Option<Vec<TypeAnnotation>>,
+    pub function_return: Option<Box<TypeAnnotation>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

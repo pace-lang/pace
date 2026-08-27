@@ -128,6 +128,9 @@ impl Monomorphizer {
                 name: type_ann.name.clone(),
                 args: type_ann.args.iter().map(|a| self.instantiate_type_annotation(a)).collect(),
                 is_nullable: type_ann.is_nullable,
+                is_function: false,
+                function_params: None,
+                function_return: None
             }
         }
     }
@@ -423,6 +426,9 @@ impl TypeFlattener {
                 name,
                 args: vec![],
                 is_nullable: ta.is_nullable,
+                is_function: ta.is_function,
+                function_params: ta.function_params.clone(),
+                function_return: ta.function_return.clone(),
             }
         }
     }

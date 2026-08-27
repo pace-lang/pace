@@ -118,7 +118,7 @@ impl<'a> Parser<'a> {
                 let expr = self.parse_expr()?;
                 if !self.match_token(Token::Semi) {
                     if let Expr::Call { callee, .. } = &expr {
-                        if self.current_token == Token::LBrace {
+                        if self.current_token == Token::LBrace || self.current_token == Token::Arrow {
                             if let Expr::Identifier(name) = &**callee {
                                 return Err(pace_errors::SyntaxError { message: format!("Functions and methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
                             }
@@ -155,6 +155,34 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type_annotation(&mut self) -> Result<TypeAnnotation, pace_errors::SyntaxError> {
+        // Parse function types like (Int, String) -> Bool
+        if self.match_token(Token::LParen) {
+            let mut params = Vec::new();
+            while self.current_token != Token::RParen && self.current_token != Token::Eof {
+                params.push(self.parse_type_annotation()?);
+                if !self.match_token(Token::Comma) {
+                    break;
+                }
+            }
+            if !self.match_token(Token::RParen) {
+                return Err(pace_errors::SyntaxError { message: "Expected ')' after function type parameters".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+            }
+            if !self.match_token(Token::Arrow) {
+                return Err(pace_errors::SyntaxError { message: "Expected '->' after function parameters".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+            }
+            let return_type = self.parse_type_annotation()?;
+            
+            return Ok(TypeAnnotation {
+                module_prefix: None,
+                name: "Function".to_string(),
+                args: vec![],
+                is_nullable: false,
+                is_function: true,
+                function_params: Some(params),
+                function_return: Some(Box::new(return_type)),
+            });
+        }
+
         let mut name = match &self.current_token {
             Token::Ident(id) => id.clone(),
             _ => return Err(pace_errors::SyntaxError { message: "Expected type name".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span }),
@@ -188,9 +216,12 @@ impl<'a> Parser<'a> {
 
         Ok(TypeAnnotation {
             module_prefix,
-            name,
-            args,
+            name: name,
+            args: args,
             is_nullable,
+            is_function: false,
+            function_params: None,
+            function_return: None,
         })
     }
 
@@ -1168,6 +1199,9 @@ impl<'a> Parser<'a> {
                     }
                 }
                 if !self.match_token(Token::RParen) {
+                    if self.current_token == Token::Colon {
+                        return Err(pace_errors::SyntaxError { message: "Expected ')' after arguments. (Note: if you are declaring a function, ensure it is prefixed with the 'func' keyword)".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+                    }
                     return Err(pace_errors::SyntaxError { message: "Expected ')' after arguments".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
                 }
                 expr = Expr::Call {
@@ -1215,7 +1249,81 @@ impl<'a> Parser<'a> {
                 Ok(Expr::Identifier(v))
             }
             Token::LParen => {
-                self.advance();
+                let _start_span = self.current_span;
+                
+                // Try parsing as a closure first by checking if it matches closure parameter syntax
+                // To avoid messing up the main parser state if it fails, we can clone it
+                let mut lookahead = Parser {
+                    file_name: self.file_name.clone(),
+                    src: self.src.clone(),
+                    lexer: self.lexer.clone(),
+                    current_token: self.current_token.clone(),
+                    current_span: self.current_span,
+                    errors: vec![],
+                };
+                
+                lookahead.advance(); // consume '('
+                let mut is_closure = false;
+                if lookahead.current_token == Token::RParen {
+                    lookahead.advance();
+                    if lookahead.current_token == Token::FatArrow || lookahead.current_token == Token::Arrow {
+                        is_closure = true;
+                    }
+                } else if let Token::Ident(_) = lookahead.current_token {
+                    lookahead.advance();
+                    if lookahead.current_token == Token::Colon {
+                        is_closure = true; // (ident: type) -> definitely a closure
+                    }
+                }
+                
+                if is_closure {
+                    self.advance(); // consume '('
+                    let mut params = Vec::new();
+                    while self.current_token != Token::RParen && self.current_token != Token::Eof {
+                        let param_name = match &self.current_token {
+                            Token::Ident(id) => id.clone(),
+                            _ => return Err(pace_errors::SyntaxError { message: "Expected parameter name in closure".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span }),
+                        };
+                        self.advance();
+                        if !self.match_token(Token::Colon) {
+                            return Err(pace_errors::SyntaxError { message: "Expected ':' after closure parameter name".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+                        }
+                        let param_ty = self.parse_type_annotation()?;
+                        params.push((param_name, param_ty));
+                        if !self.match_token(Token::Comma) {
+                            break;
+                        }
+                    }
+                    if !self.match_token(Token::RParen) {
+                        return Err(pace_errors::SyntaxError { message: "Expected ')' after closure parameters".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+                    }
+                    
+                    let mut return_type = None;
+                    if self.match_token(Token::Arrow) {
+                        return_type = Some(self.parse_type_annotation()?);
+                    }
+                    
+                    if !self.match_token(Token::FatArrow) {
+                        return Err(pace_errors::SyntaxError { message: "Expected '=>' for closure body".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+                    }
+                    
+                    let body = if self.current_token == Token::LBrace {
+                        Expr::Block(match self.parse_block()? {
+                            Stmt::Block(stmts) => stmts,
+                            _ => vec![], // Shouldn't happen
+                        })
+                    } else {
+                        self.parse_expr()?
+                    };
+                    
+                    return Ok(Expr::Closure {
+                        params,
+                        return_type,
+                        body: Box::new(body),
+                    });
+                }
+                
+                self.advance(); // consume '(' as normal group
                 let expr = self.parse_expr()?;
                 if !self.match_token(Token::RParen) {
                     return Err(pace_errors::SyntaxError { message: "Expected ')'".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });

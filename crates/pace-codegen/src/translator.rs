@@ -16,6 +16,7 @@ pub enum VarType {
     Enum(String),
     Nullable(Box<VarType>),
     Promise(Box<VarType>),
+    Function(Vec<VarType>, Box<VarType>),
     Unknown,
 }
 
@@ -26,6 +27,34 @@ impl VarType {
             _ => cranelift::prelude::types::I64, // Pointers and integers are I64
         }
     }
+}
+
+pub fn parse_type_annotation(
+    ann: &pace_ast::TypeAnnotation,
+    current_class: Option<&str>,
+    struct_layouts: Option<&HashMap<String, crate::compiler::StructLayout>>,
+    enum_layouts: Option<&HashMap<String, crate::compiler::EnumLayout>>,
+) -> VarType {
+    if ann.is_function {
+        let mut params = Vec::new();
+        if let Some(fn_params) = &ann.function_params {
+            for p in fn_params {
+                params.push(parse_type_annotation(p, current_class, struct_layouts, enum_layouts));
+            }
+        }
+        let ret = if let Some(r) = &ann.function_return {
+            Box::new(parse_type_annotation(r, current_class, struct_layouts, enum_layouts))
+        } else {
+            Box::new(VarType::Unknown)
+        };
+        let base = VarType::Function(params, ret);
+        if ann.is_nullable {
+            return VarType::Nullable(Box::new(base));
+        }
+        return base;
+    }
+    
+    parse_vartype(&ann.name, current_class, struct_layouts, enum_layouts)
 }
 
 pub fn parse_vartype(
@@ -88,14 +117,14 @@ impl Translator {
         var_index: &mut usize,
         func_returns: &HashMap<String, VarType>,
         string_cache: &mut HashMap<String, String>,
-        string_id: &mut usize,
+        string_id: &mut usize, pending_closures: &mut Vec<(String, pace_ast::Expr, Vec<(String, VarType)>)>,
     ) -> Result<(Value, bool), CodegenError> {
         match stmt {
             Stmt::VarDecl { name, initializer, .. } => {
                 let mut var_ty = VarType::Unknown;
                 let val = if let Some(expr) = initializer {
                     var_ty = Self::get_expr_type(expr, variables, func_returns, struct_layouts, class_layouts);
-                    let mut val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, expr, variables, var_index, func_returns, string_cache, string_id)?;
+                    let mut val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, expr, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                     
                     if let VarType::Struct(name) = &var_ty {
                         val = Self::copy_struct(module, struct_layouts, builder, name, val);
@@ -113,7 +142,7 @@ impl Translator {
             }
             Stmt::Expr(expr) => {
                 let ty = Self::get_expr_type(expr, variables, func_returns, struct_layouts, class_layouts);
-                let val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, expr, variables, var_index, func_returns, string_cache, string_id)?;
+                let val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, expr, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 if matches!(ty, VarType::Object(_)) {
                     let release_id = *funcs.get("release").unwrap();
                     let local_release = module.declare_func_in_func(release_id, builder.func);
@@ -122,7 +151,7 @@ impl Translator {
                 Ok((val, false))
             }
             Stmt::If { condition, then_branch, else_branch } => {
-                let cond_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, condition, variables, var_index, func_returns, string_cache, string_id)?;
+                let cond_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, condition, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 
                 let then_block = builder.create_block();
                 let else_block = builder.create_block();
@@ -133,7 +162,7 @@ impl Translator {
                 // Then
                 builder.switch_to_block(then_block);
                 builder.seal_block(then_block);
-                let (_then_res, then_term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, then_branch, variables, var_index, func_returns, string_cache, string_id)?;
+                let (_then_res, then_term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, then_branch, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 if !then_term {
                     builder.ins().jump(merge_block, &[]);
                 }
@@ -142,7 +171,7 @@ impl Translator {
                 builder.switch_to_block(else_block);
                 builder.seal_block(else_block);
                 let (_else_res, else_term) = if let Some(elb) = else_branch {
-                    Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, elb, variables, var_index, func_returns, string_cache, string_id)?
+                    Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, elb, variables, var_index, func_returns, string_cache, string_id, pending_closures)?
                 } else {
                     (builder.ins().iconst(types::I64, 0), false)
                 };
@@ -172,13 +201,13 @@ impl Translator {
                 builder.ins().jump(cond_block, &[]);
                 builder.switch_to_block(cond_block);
                 
-                let cond_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, condition, variables, var_index, func_returns, string_cache, string_id)?;
+                let cond_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, condition, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 builder.ins().brif(cond_val, body_block, &[], exit_block, &[]);
                 
                 builder.seal_block(body_block);
                 builder.switch_to_block(body_block);
                 
-                let (_, body_term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, body, variables, var_index, func_returns, string_cache, string_id)?;
+                let (_, body_term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, body, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 if !body_term {
                     builder.ins().jump(cond_block, &[]);
                 }
@@ -201,7 +230,7 @@ impl Translator {
                 };
                 let enum_layout = enum_layouts.get(&enum_name).unwrap().clone();
                 
-                let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, expr, variables, var_index, func_returns, string_cache, string_id)?;
+                let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, expr, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 
                 let tag_val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, 8);
                 
@@ -253,7 +282,7 @@ impl Translator {
                         }
                     }
                     
-                    let (_, term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, body, variables, var_index, func_returns, string_cache, string_id)?;
+                    let (_, term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, body, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                     if !term {
                         builder.ins().jump(end_block, &[]);
                     }
@@ -270,7 +299,7 @@ impl Translator {
                 
                 builder.switch_to_block(body_block);
                 
-                let (_, body_term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, body, variables, var_index, func_returns, string_cache, string_id)?;
+                let (_, body_term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, body, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 if !body_term {
                     builder.ins().jump(body_block, &[]);
                 }
@@ -279,7 +308,7 @@ impl Translator {
                 Ok((builder.ins().iconst(types::I64, 0), true))
             }
             Stmt::ForIn { item, iterable, body, .. } => {
-                let iter_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, iterable, variables, var_index, func_returns, string_cache, string_id)?;
+                let iter_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, iterable, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 let iter_ty = Self::get_expr_type(iterable, variables, func_returns, struct_layouts, class_layouts);
                 
                 let (length_offset, get_offset) = if let VarType::Object(type_name) = &iter_ty {
@@ -337,7 +366,7 @@ impl Translator {
                 variables.insert(item.clone(), (item_var, VarType::Unknown));
                 *var_index += 1;
                 
-                let (_, body_term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, body, variables, var_index, func_returns, string_cache, string_id)?;
+                let (_, body_term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, body, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 if !body_term {
                     let one = builder.ins().iconst(types::I64, 1);
                     let next_idx = builder.ins().iadd(curr_idx, one);
@@ -357,7 +386,7 @@ impl Translator {
                 let mut terminated = false;
                 for s in body {
                     if !terminated {
-                        let (val, term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, s, variables, var_index, func_returns, string_cache, string_id)?;
+                        let (val, term) = Self::translate_stmt(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, s, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                         last_val = val;
                         terminated = term;
                     }
@@ -394,7 +423,7 @@ impl Translator {
             }
             Stmt::Return(expr_opt) => {
                 let ret_val = if let Some(expr) = expr_opt {
-                    let mut val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, expr, variables, var_index, func_returns, string_cache, string_id)?;
+                    let mut val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, expr, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                     let val_ty = Self::get_expr_type(expr, variables, func_returns, struct_layouts, class_layouts);
                     if let VarType::Struct(name) = &val_ty {
                         val = Self::copy_struct(module, struct_layouts, builder, name, val);
@@ -562,6 +591,18 @@ impl Translator {
                     VarType::Unknown
                 }
             }
+            Expr::Closure { params, return_type, .. } => {
+                let mut param_types = Vec::new();
+                for (_, ty_ann) in params {
+                    param_types.push(parse_type_annotation(ty_ann, None, Some(struct_layouts), None));
+                }
+                let ret = if let Some(ret_ann) = return_type {
+                    Box::new(parse_type_annotation(ret_ann, None, Some(struct_layouts), None))
+                } else {
+                    Box::new(VarType::Unknown)
+                };
+                VarType::Function(param_types, ret)
+            }
             _ => VarType::Unknown,
         }
     }
@@ -579,11 +620,11 @@ impl Translator {
         var_index: &mut usize,
         func_returns: &HashMap<String, VarType>,
         string_cache: &mut HashMap<String, String>,
-        string_id: &mut usize,
+        string_id: &mut usize, pending_closures: &mut Vec<(String, pace_ast::Expr, Vec<(String, VarType)>)>,
     ) -> Result<Vec<Value>, CodegenError> {
         let mut arg_vals = Vec::new();
         for arg in args {
-            let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id)?;
+            let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
             let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts, class_layouts);
             if let VarType::Struct(name) = &arg_ty {
                 arg_val = Self::copy_struct(module, struct_layouts, builder, name, arg_val);
@@ -629,7 +670,7 @@ impl Translator {
         var_index: &mut usize,
         func_returns: &HashMap<String, VarType>,
         string_cache: &mut HashMap<String, String>,
-        string_id: &mut usize,
+        string_id: &mut usize, pending_closures: &mut Vec<(String, pace_ast::Expr, Vec<(String, VarType)>)>,
     ) -> Result<Value, CodegenError> {
         match expr {
             Expr::IntLiteral(i) => Ok(builder.ins().iconst(types::I64, *i)),
@@ -676,7 +717,7 @@ impl Translator {
                 let mut current_val = None;
                 for part in parts {
                     let part_ty = Self::get_expr_type(part, variables, func_returns, struct_layouts, class_layouts);
-                    let val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, part, variables, var_index, func_returns, string_cache, string_id)?;
+                    let val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, part, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                     
 
                     let str_val = if part_ty == VarType::String {
@@ -728,8 +769,8 @@ impl Translator {
                 }
             }
             Expr::Binary { left, op, right } => {
-                let lhs = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, left, variables, var_index, func_returns, string_cache, string_id)?;
-                let rhs = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, right, variables, var_index, func_returns, string_cache, string_id)?;
+                let lhs = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, left, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
+                let rhs = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, right, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 
                 let ty = builder.func.dfg.value_type(lhs);
                 let is_float = ty == types::F64;
@@ -820,14 +861,14 @@ impl Translator {
                 }
             }
             Expr::Await(inner) => {
-                let promise_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, inner, variables, var_index, func_returns, string_cache, string_id)?;
+                let promise_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, inner, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 let await_id = *funcs.get("__pace_promise_await").unwrap();
                 let local_await = module.declare_func_in_func(await_id, builder.func);
                 let call = builder.ins().call(local_await, &[promise_ptr]);
                 Ok(builder.inst_results(call)[0])
             }
             Expr::Try(inner) => {
-                let inner_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, inner, variables, var_index, func_returns, string_cache, string_id)?;
+                let inner_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, inner, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 
                 // Read the tag at offset 8 (0 = Ok/Some, 1 = Err/None usually based on how variants are sorted)
                 // Wait, we need to know exactly which tag is Ok/Err. 
@@ -868,7 +909,7 @@ impl Translator {
                 Ok(val)
             }
             Expr::Assign { target, value } => {
-                let mut val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, value, variables, var_index, func_returns, string_cache, string_id)?;
+                let mut val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, value, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 let val_ty = Self::get_expr_type(value, variables, func_returns, struct_layouts, class_layouts);
                 if let VarType::Struct(name) = &val_ty {
                     val = Self::copy_struct(module, struct_layouts, builder, name, val);
@@ -923,7 +964,7 @@ impl Translator {
                         }
                     }
 
-                    let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns, string_cache, string_id)?;
+                    let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                     
                     let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
                     let (f_offset, f_ty) = match obj_type {
@@ -956,12 +997,48 @@ impl Translator {
                 }
             }
             Expr::Call { callee, args } => {
+                let callee_ty = Self::get_expr_type(callee, variables, func_returns, struct_layouts, class_layouts);
+                if matches!(callee_ty, VarType::Function(_, _)) {
+                    let fat_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, callee, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
+                    
+                    let ptr_ty = module.target_config().pointer_type();
+                    let func_ptr = builder.ins().load(ptr_ty, cranelift::prelude::MemFlagsData::new(), fat_ptr, 0);
+                    let env_ptr = fat_ptr; // The fat pointer itself is the environment pointer
+                    
+                    let mut arg_vals = vec![env_ptr];
+                    for arg in args {
+                        let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
+                        let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts, class_layouts);
+                        if let VarType::Struct(name) = &arg_ty {
+                            arg_val = Self::copy_struct(module, struct_layouts, builder, name, arg_val);
+                        }
+                        arg_vals.push(arg_val);
+                    }
+                    
+                    let mut sig = module.make_signature();
+                    sig.params.push(AbiParam::new(ptr_ty)); // env
+                    for _ in args {
+                        sig.params.push(AbiParam::new(types::I64));
+                    }
+                    sig.returns.push(AbiParam::new(types::I64));
+                    
+                    let sig_ref = builder.import_signature(sig);
+                    let call = builder.ins().call_indirect(sig_ref, func_ptr, &arg_vals);
+                    
+                    let results = builder.inst_results(call);
+                    if results.is_empty() {
+                        return Ok(builder.ins().iconst(types::I64, 0));
+                    } else {
+                        return Ok(results[0]);
+                    }
+                }
+                
                 if let Expr::Identifier(func_name) = &**callee {
                     if func_name == "print" {
                         let arg_expr = &args[0];
                         let arg_ty = Self::get_expr_type(arg_expr, variables, func_returns, struct_layouts, class_layouts);
                         
-                        let arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg_expr, variables, var_index, func_returns, string_cache, string_id)?;
+                        let arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg_expr, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                         let ty = builder.func.dfg.value_type(arg_val);
                         
                         let target_name = if ty == types::F64 {
@@ -985,7 +1062,7 @@ impl Translator {
                     }
                     else if let Some(&func_id) = funcs.get(func_name) {
                         let local_func = module.declare_func_in_func(func_id, builder.func);
-                        let arg_vals = Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id)?;
+                        let arg_vals = Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                         let call = builder.ins().call(local_func, &arg_vals);
                         
                         let results = builder.inst_results(call);
@@ -1033,7 +1110,7 @@ impl Translator {
                         if let Some(&init_id) = funcs.get(&init_name) {
                             let local_init = module.declare_func_in_func(init_id, builder.func);
                             let mut arg_vals = vec![obj_ptr];
-                            arg_vals.extend(Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id)?);
+                            arg_vals.extend(Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id, pending_closures)?);
                             builder.ins().call(local_init, &arg_vals);
                         }
                         
@@ -1051,7 +1128,7 @@ impl Translator {
                         
                         for (i, arg) in args.iter().enumerate() {
                             if let Some((_, (offset, _))) = sorted_fields.get(i) {
-                                let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id)?;
+                                let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                                 let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts, class_layouts);
                                 if let VarType::Struct(name) = &arg_ty {
                                     arg_val = Self::copy_struct(module, struct_layouts, builder, name, arg_val);
@@ -1079,7 +1156,7 @@ impl Translator {
                                 .unwrap_or_else(|| panic!("Enum constructor {} not found", constructor_name));
                             let local_callee = module.declare_func_in_func(*func_id, builder.func);
                             
-                            let arg_vals = Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id)?;
+                            let arg_vals = Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                             
                             let call = builder.ins().call(local_callee, &arg_vals);
                             return Ok(builder.inst_results(call)[0]);
@@ -1090,7 +1167,7 @@ impl Translator {
                                 .unwrap_or_else(|| panic!("Static method {} not found", static_method_name));
                             let local_callee = module.declare_func_in_func(*func_id, builder.func);
                             
-                            let arg_vals = Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id)?;
+                            let arg_vals = Self::translate_args(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, args, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                             
                             let call = builder.ins().call(local_callee, &arg_vals);
                             let results = builder.inst_results(call);
@@ -1102,7 +1179,7 @@ impl Translator {
                         }
                     }
 
-                    let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns, string_cache, string_id)?;
+                    let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                     let ptr_ty = module.target_config().pointer_type();
                     
                     let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
@@ -1121,7 +1198,7 @@ impl Translator {
                     
                     let mut arg_vals = vec![obj_ptr];
                     for arg in args {
-                        let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id)?;
+                        let mut arg_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, arg, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                         let arg_ty = Self::get_expr_type(arg, variables, func_returns, struct_layouts, class_layouts);
                         if let VarType::Struct(name) = &arg_ty {
                             arg_val = Self::copy_struct(module, struct_layouts, builder, name, arg_val);
@@ -1221,7 +1298,7 @@ impl Translator {
                     }
                 }
                 
-                let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns, string_cache, string_id)?;
+                let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 
                 let obj_type = Self::get_expr_type(object, variables, func_returns, struct_layouts, class_layouts);
                 let (f_offset, f_ty) = match obj_type {
@@ -1247,9 +1324,59 @@ impl Translator {
                 
                 Ok(val)
             }
+            Expr::Closure { .. } => {
+                // 1. Generate unique function name
+                let closure_id = pending_closures.len();
+                let fn_name = format!("__closure_fn_{}", closure_id);
+                
+                let mut captured_vars = Vec::new();
+                for (name, (_, ty)) in variables.iter() {
+                    captured_vars.push((name.clone(), ty.clone()));
+                }
+                
+                captured_vars.sort_by(|a, b| a.0.cmp(&b.0));
+                
+                let env_size = 16 + (captured_vars.len() * 8);
+                
+                let malloc_id = *funcs.get("malloc").unwrap();
+                let local_malloc = module.declare_func_in_func(malloc_id, builder.func);
+                let size_val = builder.ins().iconst(types::I64, env_size as i64);
+                let malloc_call = builder.ins().call(local_malloc, &[size_val]);
+                let env_ptr = builder.inst_results(malloc_call)[0];
+                
+                for (i, (name, _)) in captured_vars.iter().enumerate() {
+                    let offset = 16 + (i * 8);
+                    let (var, _) = variables.get(name).unwrap();
+                    let val = builder.use_var(*var);
+                    builder.ins().store(cranelift::prelude::MemFlagsData::new(), val, env_ptr, offset as i32);
+                }
+                
+                pending_closures.push((fn_name.clone(), expr.clone(), captured_vars));
+                
+                let mut sig = module.make_signature();
+                sig.params.push(AbiParam::new(module.target_config().pointer_type())); // env
+                
+                let num_params = match expr {
+                    Expr::Closure { params, .. } => params.len(),
+                    _ => 0,
+                };
+                
+                for _ in 0..num_params {
+                    sig.params.push(AbiParam::new(types::I64));
+                }
+                sig.returns.push(AbiParam::new(types::I64));
+                
+                let func_id = module.declare_function(&fn_name, Linkage::Export, &sig).unwrap();
+                let local_func = module.declare_func_in_func(func_id, builder.func);
+                let func_ptr = builder.ins().func_addr(module.target_config().pointer_type(), local_func);
+                
+                builder.ins().store(cranelift::prelude::MemFlagsData::new(), func_ptr, env_ptr, 0);
+                
+                Ok(env_ptr)
+            }
             Expr::Null => Ok(builder.ins().iconst(types::I64, 0)),
             Expr::Unwrap(inner) => {
-                let inner_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, inner, variables, var_index, func_returns, string_cache, string_id)?;
+                let inner_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, inner, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 
                 let is_null = builder.ins().icmp_imm_u(cranelift::prelude::IntCC::Equal, inner_val, 0);
                 
@@ -1269,7 +1396,7 @@ impl Translator {
                 Ok(inner_val)
             }
             Expr::NullCoalesce { left, right } => {
-                let left_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, left, variables, var_index, func_returns, string_cache, string_id)?;
+                let left_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, left, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 
                 let is_null = builder.ins().icmp_imm_u(cranelift::prelude::IntCC::Equal, left_val, 0);
                 
@@ -1281,7 +1408,7 @@ impl Translator {
                 
                 builder.switch_to_block(right_block);
                 builder.seal_block(right_block);
-                let right_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, right, variables, var_index, func_returns, string_cache, string_id)?;
+                let right_val = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, right, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 builder.ins().jump(merge_block, &[cranelift::codegen::ir::BlockArg::Value(right_val)]);
                 
                 builder.switch_to_block(merge_block);
@@ -1291,7 +1418,7 @@ impl Translator {
                 Ok(result)
             }
             Expr::OptionalMemberAccess { object, property } => {
-                let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns, string_cache, string_id)?;
+                let obj_ptr = Self::translate_expr(module, funcs, class_layouts, struct_layouts, enum_layouts, builder, object, variables, var_index, func_returns, string_cache, string_id, pending_closures)?;
                 
                 let is_null = builder.ins().icmp_imm_u(cranelift::prelude::IntCC::Equal, obj_ptr, 0);
                 

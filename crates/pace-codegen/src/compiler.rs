@@ -508,7 +508,10 @@ impl JITCompiler {
                                     name: class_name.clone(),
                                     args: vec![],
                                     is_nullable: false,
-                                },
+                is_function: false,
+                function_params: None,
+                function_return: None
+            },
                             });
                         }
                         new_params.extend(params.clone());
@@ -547,10 +550,11 @@ impl JITCompiler {
             }
         }
 
+        let mut pending_closures = Vec::new();
         for stmt in stmts {
             match stmt {
                 Stmt::VarDecl { .. } | Stmt::Expr(_) | Stmt::If { .. } | Stmt::While { .. } | Stmt::Loop { .. } | Stmt::Match { .. } => {
-                    let (val, _) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, stmt, &mut variables, &mut var_index, &func_returns, &mut self.string_cache, &mut self.string_id)?;
+                    let (val, _) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, stmt, &mut variables, &mut var_index, &func_returns, &mut self.string_cache, &mut self.string_id, &mut pending_closures)?;
                     last_val = Some(val);
                 }
                 _ => {}
@@ -578,6 +582,10 @@ impl JITCompiler {
             .map_err(|e| CodegenError { message: e.to_string() })?;
 
         self.module.clear_context(&mut self.ctx);
+        
+        for (fn_name, expr, captured_vars) in pending_closures {
+            self.compile_closure(&fn_name, expr, captured_vars, &func_returns, None)?;
+        }
         self.module.finalize_definitions().unwrap();
 
         let code = self.module.get_finalized_function(id);
@@ -828,15 +836,16 @@ impl JITCompiler {
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
             
-            let param_ty = crate::translator::parse_vartype(&param.type_annotation.name, current_class, Some(&self.struct_layouts), Some(&self.enum_layouts));
+            let param_ty = crate::translator::parse_type_annotation(&param.type_annotation, current_class, Some(&self.struct_layouts), Some(&self.enum_layouts));
             variables.insert(param.name.clone(), (var, param_ty));
             var_index += 1;
         }
 
         let mut last_val = None;
         let mut terminated = false;
+        let mut pending_closures = Vec::new();
         for stmt in body {
-            let (val, term) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, stmt, &mut variables, &mut var_index, func_returns, &mut self.string_cache, &mut self.string_id)?;
+            let (val, term) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, stmt, &mut variables, &mut var_index, func_returns, &mut self.string_cache, &mut self.string_id, &mut pending_closures)?;
             last_val = Some(val);
             if term {
                 terminated = true;
@@ -872,6 +881,96 @@ impl JITCompiler {
             })?;
         
         self.module.clear_context(&mut self.ctx);
+        
+        for (fn_name, expr, captured_vars) in pending_closures {
+            self.compile_closure(&fn_name, expr, captured_vars, func_returns, current_class)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn compile_closure(
+        &mut self,
+        fn_name: &str,
+        expr: pace_ast::Expr,
+        captured_vars: Vec<(String, crate::translator::VarType)>,
+        func_returns: &HashMap<String, crate::translator::VarType>,
+        current_class: Option<&str>,
+    ) -> Result<(), CodegenError> {
+        let (params, body) = match expr {
+            pace_ast::Expr::Closure { params, body, .. } => (params, body),
+            _ => return Err(CodegenError { message: "Invalid closure expression".to_string() }),
+        };
+        
+        let mut sig = self.module.make_signature();
+        sig.params.push(AbiParam::new(self.module.target_config().pointer_type())); // env pointer
+        for _ in &params {
+            sig.params.push(AbiParam::new(types::I64));
+        }
+        sig.returns.push(AbiParam::new(types::I64)); // Assume returning I64 for now
+        
+        let func_id = self.module.declare_function(fn_name, Linkage::Export, &sig).unwrap();
+        
+        self.ctx.func.signature = sig;
+        
+        let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+        let entry_block = builder.create_block();
+        builder.append_block_params_for_function_params(entry_block);
+        builder.switch_to_block(entry_block);
+        builder.seal_block(entry_block);
+        
+        let env_ptr = builder.block_params(entry_block)[0];
+        
+        let mut variables = HashMap::new();
+        let mut var_index = 0;
+        
+        // Load captured variables from environment
+        for (i, (name, ty)) in captured_vars.iter().enumerate() {
+            let offset = 16 + (i * 8);
+            let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), env_ptr, offset as i32);
+            let var = builder.declare_var(types::I64);
+            builder.def_var(var, val);
+            variables.insert(name.clone(), (var, ty.clone()));
+            var_index += 1;
+        }
+        
+        // Declare closure parameters as variables
+        for (i, param) in params.iter().enumerate() {
+            let val = builder.block_params(entry_block)[i + 1]; // +1 because env_ptr is at 0
+            let var = builder.declare_var(types::I64);
+            builder.def_var(var, val);
+            let param_ty = crate::translator::parse_type_annotation(&param.1, current_class, Some(&self.struct_layouts), Some(&self.enum_layouts));
+            variables.insert(param.0.clone(), (var, param_ty));
+            var_index += 1;
+        }
+        
+        let mut terminated = false;
+        let mut pending_closures = Vec::new();
+        
+        // Closure body is a single Expr, not Stmt! Wait, Expr::Closure has a `body: Box<Expr>`.
+        // We can synthesize a Stmt::Expr or Stmt::Return.
+        let body_stmt = pace_ast::Stmt::Expr(*body);
+        let (val, term) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, &body_stmt, &mut variables, &mut var_index, func_returns, &mut self.string_cache, &mut self.string_id, &mut pending_closures)?;
+        let last_val = Some(val);
+        if term {
+            terminated = true;
+        }
+        
+        if !terminated {
+            let ret = last_val.unwrap_or_else(|| builder.ins().iconst(types::I64, 0));
+            builder.ins().return_(&[ret]);
+        }
+        
+        builder.finalize(self.module.target_config());
+        self.module.define_function(func_id, &mut self.ctx)
+            .map_err(|e| CodegenError { message: e.to_string() })?;
+        self.module.clear_context(&mut self.ctx);
+        
+        // Recursively compile any nested closures
+        for (nested_fn, nested_expr, nested_captured) in pending_closures {
+            self.compile_closure(&nested_fn, nested_expr, nested_captured, func_returns, current_class)?;
+        }
+        
         Ok(())
     }
 }

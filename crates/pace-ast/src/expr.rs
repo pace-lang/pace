@@ -57,6 +57,15 @@ pub enum Expr {
     Try(Box<Expr>),
     /// An await expression (e.g., await foo)
     Await(Box<Expr>),
+    /// A closure (anonymous function)
+    Closure {
+        params: Vec<(String, crate::stmt::TypeAnnotation)>,
+        return_type: Option<crate::stmt::TypeAnnotation>,
+        body: Box<Expr>, // Using Expr for both implicit return expressions and blocks (Expr::Block)
+    },
+
+    /// A block expression
+    Block(Vec<crate::stmt::Stmt>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -114,8 +114,10 @@ impl SymbolResolver {
                 let mut local_scope: HashMap<String, ModuleExport> = HashMap::new();
                 let mut mod_aliases: HashMap<String, String> = HashMap::new();
                 
+                let mut local_declarations: HashMap<String, ModuleExport> = HashMap::new();
                 if let Some(exports) = self.exports.get(name) {
                     for (k, v) in exports {
+                        local_declarations.insert(k.clone(), v.clone());
                         local_scope.insert(k.clone(), v.clone());
                     }
                 }
@@ -136,6 +138,10 @@ impl SymbolResolver {
                                     }
                                     if let Some(show_list) = show {
                                         if !show_list.contains(sym) { continue; }
+                                    }
+                                    
+                                    if local_declarations.contains_key(sym) {
+                                        continue; // Local declarations shadow imports implicitly
                                     }
                                     
                                     if let Some(existing) = local_scope.get(sym) {

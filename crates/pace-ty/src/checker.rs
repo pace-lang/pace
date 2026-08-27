@@ -74,7 +74,7 @@ impl TypeChecker {
         let unused = self.env.pop_scope();
         for (name, var_info) in unused {
             if !var_info.is_used && !name.starts_with('_') && name != "self" {
-                let kind = if var_info.ty == Type::Function {
+                let kind = if matches!(var_info.ty, Type::Function { .. }) {
                     "function"
                 } else {
                     "variable"
@@ -632,6 +632,45 @@ impl TypeChecker {
             }
             Expr::BoolLiteral(_) => Type::Bool,
             Expr::Null => Type::Null,
+            Expr::Closure { params, return_type, body } => {
+                self.env.push_scope();
+                
+                let mut param_types = Vec::new();
+                for (param_name, param_ty_ann) in params {
+                    let param_ty = self.resolve_type_name(param_ty_ann);
+                    param_types.push(param_ty.clone());
+                    let _ = self.env.define(param_name.clone(), param_ty, (0, 0), true);
+                }
+                
+                let ret_ty = if let Some(rt) = return_type {
+                    self.resolve_type_name(rt)
+                } else {
+                    Type::Unknown
+                };
+                
+                let old_expected_return = self.current_return_type.clone();
+                self.current_return_type = Some(ret_ty.clone());
+                
+                let body_ty = self.check_expr(body);
+                
+                self.current_return_type = old_expected_return;
+                self.pop_scope_and_check_unused();
+                
+                let final_ret = if ret_ty != Type::Unknown { ret_ty } else { body_ty };
+                
+                Type::Function {
+                    params: param_types,
+                    return_type: Box::new(final_ret),
+                }
+            }
+            Expr::Block(stmts) => {
+                self.env.push_scope();
+                for stmt in stmts {
+                    self.check_stmt(stmt);
+                }
+                self.pop_scope_and_check_unused();
+                Type::Void
+            }
             Expr::Identifier(name) => {
                 if let Some(var_info) = self.env.get_mut(name) {
                     var_info.is_used = true;
@@ -791,8 +830,26 @@ impl TypeChecker {
                 // If it's a function or method, we need its signature
                 // Currently, callee_ty might just be Type::Unknown if it was a MemberAccess
                 // So if we don't know the type, we just return Unknown.
-                // In a perfect world, MemberAccess returns a FunctionSignature type.
                 
+                // For first-class function values (closures, callbacks)
+                if let Type::Function { params, return_type } = &callee_ty {
+                    if params.len() != args.len() {
+                        { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                            message: format!("Function expects {} arguments, got {}", params.len(), args.len())
+                        }); return Type::Error; };
+                    }
+                    
+                    for (i, arg_ty) in arg_types.iter().enumerate() {
+                        let expected_ty = &params[i];
+                        if expected_ty != &Type::Any && expected_ty != arg_ty && arg_ty != &Type::Unknown {
+                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                                message: format!("Type mismatch in argument {}: expected {:?}, got {:?}", i + 1, expected_ty, arg_ty)
+                            }); return Type::Error; };
+                        }
+                    }
+                    return (**return_type).clone();
+                }
+
                 // For direct global function calls
                 if let Expr::Identifier(func_name) = &**callee
                     && let Some(sig) = self.env.functions.get(func_name) {
@@ -921,7 +978,7 @@ impl TypeChecker {
                     if let Type::Actor(ref a_name) = obj_ty {
                         if Some(a_name.clone()) != self.current_class {
                             { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
-                                message: format!("Actor fields are isolated and cannot be accessed from outside actor '{}'", a_name)
+                                message: format!("Actor fields are isolated and cannot be accessed from outside actor '{}'", a_name.split("__").last().unwrap_or(a_name))
                             }); return Type::Error; };
                         }
                     }
@@ -931,7 +988,7 @@ impl TypeChecker {
                     if m_sig.visibility == Visibility::Private {
                         if self.current_class.as_deref() != Some(&*class_name) {
                             { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
-                                message: format!("Method '{}' is private and cannot be accessed from outside class/actor '{}'", property, &class_name)
+                                message: format!("Method '{}' is private and cannot be accessed from outside class/actor '{}'", property, class_name.split("__").last().unwrap_or(&class_name))
                             }); return Type::Error; };
                         }
                     }
@@ -1088,6 +1145,21 @@ impl TypeChecker {
                 arg_types.push(self.resolve_type_name(arg));
             }
             base_type = Type::GenericInstance { base: Box::new(base_type), args: arg_types };
+        }
+
+        if annotation.is_function {
+            let mut params = Vec::new();
+            if let Some(fn_params) = &annotation.function_params {
+                for p in fn_params {
+                    params.push(self.resolve_type_name(p));
+                }
+            }
+            let return_type = if let Some(ret) = &annotation.function_return {
+                Box::new(self.resolve_type_name(ret))
+            } else {
+                Box::new(Type::Void)
+            };
+            base_type = Type::Function { params, return_type };
         }
 
         if annotation.is_nullable {
