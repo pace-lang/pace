@@ -75,6 +75,16 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, pace_errors::SyntaxError> {
+        let mut doc_comment = None;
+        while let Token::DocComment(c) = &self.current_token {
+            let existing = doc_comment.get_or_insert_with(String::new);
+            if !existing.is_empty() {
+                existing.push('\n');
+            }
+            existing.push_str(c);
+            self.advance();
+        }
+
         let visibility = if self.match_token(Token::Public) {
             Visibility::Public
         } else if self.match_token(Token::Private) {
@@ -87,14 +97,14 @@ impl<'a> Parser<'a> {
         let is_static = self.match_token(Token::Static);
 
         match self.current_token {
-            Token::Let => self.parse_var_decl(false, is_static),
+            Token::Let => self.parse_var_decl(false, is_static), // doc_comments on vars omitted for now
             Token::Var => self.parse_var_decl(true, is_static),
-            Token::Func => self.parse_func_decl(is_async, visibility, is_static),
-            Token::Class => self.parse_class_decl(),
-            Token::Actor => self.parse_actor_decl(),
-            Token::Interface => self.parse_interface_decl(),
-            Token::Struct => self.parse_struct_decl(),
-            Token::Enum => self.parse_enum_decl(),
+            Token::Func => self.parse_func_decl(is_async, visibility, is_static, doc_comment),
+            Token::Class => self.parse_class_decl(doc_comment),
+            Token::Actor => self.parse_actor_decl(doc_comment),
+            Token::Interface => self.parse_interface_decl(doc_comment),
+            Token::Struct => self.parse_struct_decl(doc_comment),
+            Token::Enum => self.parse_enum_decl(doc_comment),
             Token::If => self.parse_if_stmt(),
             Token::While => self.parse_while_stmt(),
             Token::Loop => self.parse_loop_stmt(),
@@ -505,7 +515,7 @@ impl<'a> Parser<'a> {
         Ok(Stmt::Import { path, alias, show, hide })
     }
 
-    fn parse_func_decl(&mut self, is_async: bool, visibility: Visibility, is_static: bool) -> Result<Stmt, pace_errors::SyntaxError> {
+    fn parse_func_decl(&mut self, is_async: bool, visibility: Visibility, is_static: bool, doc_comment: Option<String>) -> Result<Stmt, pace_errors::SyntaxError> {
         let start_pos = self.current_span.0;
         self.advance(); // consume func
 
@@ -584,11 +594,12 @@ impl<'a> Parser<'a> {
             is_async,
             is_static,
             visibility,
+            doc_comment,
             span: (start_pos, (self.current_span.0 + self.current_span.1).saturating_sub(start_pos)),
         })
     }
 
-    fn parse_class_decl(&mut self) -> Result<Stmt, pace_errors::SyntaxError> {
+    fn parse_class_decl(&mut self, doc_comment: Option<String>) -> Result<Stmt, pace_errors::SyntaxError> {
         // Assume current_token is Class or Actor
         self.advance();
         let name = match &self.current_token {
@@ -648,10 +659,11 @@ impl<'a> Parser<'a> {
             fields,
             methods,
             implements,
+            doc_comment,
         })
     }
 
-    fn parse_actor_decl(&mut self) -> Result<Stmt, pace_errors::SyntaxError> {
+    fn parse_actor_decl(&mut self, doc_comment: Option<String>) -> Result<Stmt, pace_errors::SyntaxError> {
         self.advance();
         let name = match &self.current_token {
             Token::Ident(id) => id.clone(),
@@ -710,10 +722,11 @@ impl<'a> Parser<'a> {
             fields,
             methods,
             implements,
+            doc_comment,
         })
     }
 
-    fn parse_interface_decl(&mut self) -> Result<Stmt, pace_errors::SyntaxError> {
+    fn parse_interface_decl(&mut self, doc_comment: Option<String>) -> Result<Stmt, pace_errors::SyntaxError> {
         self.advance(); // consume interface
 
         let name = match &self.current_token {
@@ -808,6 +821,7 @@ impl<'a> Parser<'a> {
                 is_async,
                 is_static: false, // Interfaces methods are inherently non-static for now
                 visibility: Visibility::Public,
+                doc_comment: None,
                 span: (0, 0),
             });
         }
@@ -820,10 +834,11 @@ impl<'a> Parser<'a> {
             name,
             generic_params,
             methods,
+            doc_comment,
         })
     }
 
-    fn parse_enum_decl(&mut self) -> Result<Stmt, pace_errors::SyntaxError> {
+    fn parse_enum_decl(&mut self, doc_comment: Option<String>) -> Result<Stmt, pace_errors::SyntaxError> {
         self.advance(); // consume enum
         
         let name = match &self.current_token {
@@ -893,10 +908,10 @@ impl<'a> Parser<'a> {
             return Err(pace_errors::SyntaxError { message: "Expected '}' after enum body".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
         }
         
-        Ok(Stmt::EnumDecl { name, generic_params, variants })
+        Ok(Stmt::EnumDecl { name, generic_params, variants, doc_comment })
     }
 
-    fn parse_struct_decl(&mut self) -> Result<Stmt, pace_errors::SyntaxError> {
+    fn parse_struct_decl(&mut self, doc_comment: Option<String>) -> Result<Stmt, pace_errors::SyntaxError> {
         self.advance(); // consume struct
 
         let name = match &self.current_token {
@@ -928,6 +943,7 @@ impl<'a> Parser<'a> {
             name,
             generic_params,
             fields,
+            doc_comment,
         })
     }
 

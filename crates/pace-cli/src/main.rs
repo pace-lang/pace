@@ -38,9 +38,6 @@ enum Commands {
         /// Path to a local package
         #[arg(long)]
         path: Option<String>,
-        /// URL to a Git repository
-        #[arg(long)]
-        git: Option<String>,
         /// Version string (e.g. 1.0.0)
         #[arg(long)]
         version: Option<String>,
@@ -51,9 +48,16 @@ enum Commands {
         name: String,
     },
     /// Package and upload the current project to the Pace Registry
-    Publish,
+    Publish {
+        /// Perform a dry run without actually uploading
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Authenticate with the Pace Registry
-    Login,
+    Login {
+        /// The token to authenticate with
+        token: String,
+    },
     /// Check a Pace file for syntax and type errors
     Check {
         /// The Pace file to check (optional, defaults to src/main.pace if pace.toml exists)
@@ -99,10 +103,10 @@ fn main() -> Result<()> {
         Commands::New { name, pkg } => commands::new::execute(name, pkg)?,
         Commands::Init { pkg } => commands::init::execute(pkg)?,
         Commands::Fetch => commands::fetch::execute()?,
-        Commands::Add { name, path, git, version } => commands::add::execute(name, path, git, version)?,
+        Commands::Add { name, path, version } => commands::add::execute(name, path, version)?,
         Commands::Remove { name } => commands::remove::execute(name)?,
-        Commands::Publish => commands::publish::execute()?,
-        Commands::Login => commands::login::login()?,
+        Commands::Publish { dry_run } => commands::publish::execute(&session, dry_run)?,
+        Commands::Login { token } => commands::login::login(token)?,
         Commands::Check { file, output_format } => commands::check::execute(&session, file, output_format)?,
         Commands::Build { file, release } => commands::build::execute(&session, file, release)?,
         Commands::Run { file, release } => commands::run::execute(&session, file, release)?,

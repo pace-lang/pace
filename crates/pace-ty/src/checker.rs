@@ -254,7 +254,7 @@ impl TypeChecker {
                     self.env.register_actor(name.clone(), sig);
                     self.current_class = None;
                 }
-                Stmt::StructDecl { name, fields, generic_params } => {
+                Stmt::StructDecl { name, fields, generic_params, .. } => {
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
                     for f in fields {
@@ -279,7 +279,7 @@ impl TypeChecker {
                     };
                     self.env.register_struct(name.clone(), sig);
                 }
-                Stmt::EnumDecl { name, variants, generic_params } => {
+                Stmt::EnumDecl { name, variants, generic_params, .. } => {
                     let mut variant_map = HashMap::new();
                     self.current_class = Some(name.clone());
                     
@@ -315,7 +315,7 @@ impl TypeChecker {
                     };
                     self.env.register_enum(name.clone(), sig);
                 }
-                Stmt::InterfaceDecl { name, methods, generic_params } => {
+                Stmt::InterfaceDecl { name, methods, generic_params, .. } => {
                     self.current_class = Some(name.clone());
                     let mut method_map = HashMap::new();
                     for m in methods {

@@ -45,7 +45,7 @@ impl Monomorphizer {
                     body: Box::new(self.instantiate_stmt(body)),
                 }
             }
-            Stmt::FuncDecl { name, generic_params: _, params, return_type, body, is_async, is_static, visibility, span } => {
+            Stmt::FuncDecl { name, generic_params: _, params, return_type, body, is_async, is_static, visibility, doc_comment, span } => {
                 Stmt::FuncDecl {
                     name: name.clone(),
                     generic_params: None, // Monomorphized functions are no longer generic
@@ -58,30 +58,34 @@ impl Monomorphizer {
                     is_async: *is_async,
                     is_static: *is_static,
                     visibility: visibility.clone(),
+                    doc_comment: doc_comment.clone(),
                     span: *span,
                 }
             }
-            Stmt::ClassDecl { name, generic_params: _, fields, methods, implements } => {
+            Stmt::ClassDecl { name, generic_params: _, fields, methods, implements, doc_comment } => {
                 Stmt::ClassDecl {
                     name: name.clone(),
                     generic_params: None,
                     fields: fields.iter().map(|f| self.instantiate_stmt(f)).collect(),
                     methods: methods.iter().map(|m| self.instantiate_stmt(m)).collect(),
                     implements: implements.as_ref().map(|t| self.instantiate_type_annotation(t)),
+                    doc_comment: doc_comment.clone(),
                 }
             }
-            Stmt::StructDecl { name, generic_params: _, fields } => {
+            Stmt::StructDecl { name, generic_params: _, fields, doc_comment } => {
                 Stmt::StructDecl {
                     name: name.clone(),
                     generic_params: None,
                     fields: fields.iter().map(|f| self.instantiate_stmt(f)).collect(),
+                    doc_comment: doc_comment.clone(),
                 }
             }
-            Stmt::InterfaceDecl { name, generic_params: _, methods } => {
+            Stmt::InterfaceDecl { name, generic_params: _, methods, doc_comment } => {
                 Stmt::InterfaceDecl {
                     name: name.clone(),
                     generic_params: None,
                     methods: methods.iter().map(|m| self.instantiate_stmt(m)).collect(),
+                    doc_comment: doc_comment.clone(),
                 }
             }
             _ => stmt.clone(),
@@ -344,7 +348,7 @@ impl TypeFlattener {
                     body: Box::new(self.do_flatten_stmt(body)),
                 }
             }
-            Stmt::FuncDecl { name, generic_params, params, return_type, body, is_async, is_static, visibility, span } => {
+            Stmt::FuncDecl { name, generic_params, params, return_type, body, is_async, is_static, visibility, doc_comment, span } => {
                 Stmt::FuncDecl {
                     name: name.clone(),
                     generic_params: generic_params.clone(),
@@ -357,30 +361,34 @@ impl TypeFlattener {
                     is_async: *is_async,
                     is_static: *is_static,
                     visibility: visibility.clone(),
+                    doc_comment: doc_comment.clone(),
                     span: *span,
                 }
             }
-            Stmt::ClassDecl { name, generic_params, fields, methods, implements } => {
+            Stmt::ClassDecl { name, generic_params, fields, methods, implements, doc_comment } => {
                 Stmt::ClassDecl {
                     name: name.clone(),
                     generic_params: generic_params.clone(),
                     fields: fields.iter().map(|f| self.do_flatten_stmt(f)).collect(),
                     methods: methods.iter().map(|m| self.do_flatten_stmt(m)).collect(),
                     implements: implements.as_ref().map(|t| self.flatten_type_annotation(t)),
+                    doc_comment: doc_comment.clone(),
                 }
             }
-            Stmt::StructDecl { name, generic_params, fields } => {
+            Stmt::StructDecl { name, generic_params, fields, doc_comment } => {
                 Stmt::StructDecl {
                     name: name.clone(),
                     generic_params: generic_params.clone(),
                     fields: fields.iter().map(|f| self.do_flatten_stmt(f)).collect(),
+                    doc_comment: doc_comment.clone(),
                 }
             }
-            Stmt::InterfaceDecl { name, generic_params, methods } => {
+            Stmt::InterfaceDecl { name, generic_params, methods, doc_comment } => {
                 Stmt::InterfaceDecl {
                     name: name.clone(),
                     generic_params: generic_params.clone(),
                     methods: methods.iter().map(|m| self.do_flatten_stmt(m)).collect(),
+                    doc_comment: doc_comment.clone(),
                 }
             }
             _ => stmt.clone(),

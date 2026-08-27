@@ -3,9 +3,17 @@ use pace_pkg::manifest::PaceToml;
 use std::io::Write;
 use walkdir::WalkDir;
 use std::fs::File;
+use pace_driver::CompilerSession;
+use crate::utils::resolve_file;
 
-pub fn execute() -> Result<()> {
+pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
     let current_dir = std::env::current_dir().map_err(|e| miette::miette!("Failed to get current dir: {}", e))?;
+    
+    // Run compiler check before packaging
+    let resolved_file = resolve_file(None)?;
+    println!("🧪 Checking {} before publishing...", resolved_file);
+    session.check_file(&resolved_file)?;
+    println!("✅ Check passed!");
     
     // Load manifest
     let manifest = PaceToml::load_from_dir(&current_dir)
@@ -15,7 +23,49 @@ pub fn execute() -> Result<()> {
     let pkg_version = &manifest.package.version;
     let pkg_desc = manifest.package.description.clone().unwrap_or_else(|| String::new());
 
-    println!("📦 Packaging {} v{}...", pkg_name, pkg_version);
+    if dry_run {
+        println!("🔍 Dry run: Packaging {} v{}...", pkg_name, pkg_version);
+        println!("Files to be included:");
+    } else {
+        println!("📦 Packaging {} v{}...", pkg_name, pkg_version);
+    }
+
+    let mut files_to_include = Vec::new();
+    let mut total_size = 0;
+
+    for entry in WalkDir::new(&current_dir) {
+        let entry = entry.map_err(|e| miette::miette!("Failed to traverse dir: {}", e))?;
+        let path = entry.path();
+
+        if path.is_file() {
+            let relative = path.strip_prefix(&current_dir).unwrap();
+            let relative_str = relative.to_string_lossy().to_string();
+
+            // Filter logic
+            let is_allowed = relative_str == "pace.toml"
+                || relative_str == "README.md"
+                || relative_str == "CHANGELOG.md"
+                || relative_str == "LICENSE"
+                || relative_str.starts_with("src/")
+                || relative_str.starts_with("tests/");
+
+            if is_allowed {
+                if let Ok(metadata) = std::fs::metadata(path) {
+                    files_to_include.push((relative.to_owned(), path.to_owned()));
+                    total_size += metadata.len();
+                    if dry_run {
+                        println!("  - {} ({} bytes)", relative_str, metadata.len());
+                    }
+                }
+            }
+        }
+    }
+
+    if dry_run {
+        println!("Total size: {} bytes", total_size);
+        println!("✅ Dry run completed.");
+        return Ok(());
+    }
 
     // Create tarball in memory
     let mut tarball_data = Vec::new();
@@ -23,23 +73,9 @@ pub fn execute() -> Result<()> {
         let enc = flate2::write::GzEncoder::new(&mut tarball_data, flate2::Compression::default());
         let mut builder = tar::Builder::new(enc);
         
-        for entry in WalkDir::new(&current_dir) {
-            let entry = entry.map_err(|e| miette::miette!("Failed to traverse dir: {}", e))?;
-            let path = entry.path();
-            
-            // Skip .git, target, .pace
-            if path.components().any(|c| {
-                let s = c.as_os_str().to_string_lossy();
-                s == ".git" || s == "target" || s == ".pace"
-            }) {
-                continue;
-            }
-
-            if path.is_file() {
-                let relative = path.strip_prefix(&current_dir).unwrap();
-                let mut f = File::open(path).map_err(|e| miette::miette!("Failed to open file {:?}: {}", path, e))?;
-                builder.append_file(relative, &mut f).map_err(|e| miette::miette!("Failed to append to tarball: {}", e))?;
-            }
+        for (relative, absolute) in files_to_include {
+            let mut f = File::open(&absolute).map_err(|e| miette::miette!("Failed to open file {:?}: {}", absolute, e))?;
+            builder.append_file(relative, &mut f).map_err(|e| miette::miette!("Failed to append to tarball: {}", e))?;
         }
         
         builder.into_inner().map_err(|e| miette::miette!("Failed to finish tar: {}", e))?
@@ -62,7 +98,8 @@ pub fn execute() -> Result<()> {
     body.extend_from_slice(&tarball_data);
     write!(body, "\r\n--{}--\r\n", boundary).unwrap();
     
-    let url = format!("http://localhost:3000/api/packages/{}/publish", pkg_name);
+    let registry_url = std::env::var("PACE_REGISTRY_URL").unwrap_or_else(|_| "https://registry.pace.dev".to_string());
+    let url = format!("{}/api/packages/{}/publish", registry_url, pkg_name);
     
     // Read credentials token
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -99,7 +136,7 @@ pub fn execute() -> Result<()> {
         Err(e) => return Err(miette::miette!("Failed to publish to registry: {}", e)),
     };
         
-    if resp.status() != 201 {
+    if resp.status() != 201 && resp.status() != 200 {
         return Err(miette::miette!("Registry rejected publish: status {}", resp.status()));
     }
     

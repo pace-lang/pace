@@ -5,6 +5,7 @@ pub enum Token {
     Float(f64),
     String(String),
     Bool(bool),
+    DocComment(String),
     Let,
     Var,
     Const,
@@ -112,7 +113,16 @@ impl<'a> Lexer<'a> {
                     lookahead.next(); // Consume '/'
                     match lookahead.next() {
                         Some('/') => {
-                            // Line comment
+                            // Check if it is a doc comment (///) but not a quadruple slash (////)
+                            let mut lookahead2 = lookahead.clone();
+                            if let Some('/') = lookahead2.next() {
+                                if lookahead2.next() != Some('/') {
+                                    // It is a /// comment, do NOT skip it here.
+                                    break;
+                                }
+                            }
+
+                            // Normal Line comment (// or ////)
                             self.advance(); // consume '/'
                             self.advance(); // consume '/'
                             while let Some(&ch) = self.peek() {
@@ -252,7 +262,30 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '*' => { self.advance(); Token::Star }
-                '/' => { self.advance(); Token::Slash }
+                '/' => {
+                    self.advance();
+                    // Since skip_whitespace didn't consume `///`, we must be at one now if next is `/`
+                    if self.peek() == Some(&'/') {
+                        self.advance();
+                        if self.peek() == Some(&'/') {
+                            self.advance();
+                            let mut comment = String::new();
+                            while let Some(&ch) = self.peek() {
+                                if ch == '\n' {
+                                    break;
+                                }
+                                comment.push(self.advance().unwrap());
+                            }
+                            Token::DocComment(comment.trim().to_string())
+                        } else {
+                            // Should theoretically not happen if skip_whitespace works, 
+                            // but fallback to returning Slash (or just a comment token if we had one).
+                            Token::Slash
+                        }
+                    } else {
+                        Token::Slash
+                    }
+                }
                 '%' => { self.advance(); Token::Mod }
                 '(' => { self.advance(); Token::LParen }
                 ')' => { self.advance(); Token::RParen }

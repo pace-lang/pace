@@ -21,12 +21,7 @@ pub struct Package {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum Dependency {
-    /// A Git dependency (e.g., git = "url", branch = "main")
-    Git {
-        git: String,
-        branch: Option<String>,
-        rev: Option<String>,
-    },
+
     /// A local path dependency (e.g., path = "../foo")
     Path {
         path: String,
@@ -89,17 +84,7 @@ impl PaceToml {
                     inline.insert("path", path.into());
                     table.insert(name, toml_edit::Item::Value(toml_edit::Value::InlineTable(inline)));
                 }
-                Dependency::Git { git, branch, rev } => {
-                    let mut inline = toml_edit::InlineTable::new();
-                    inline.insert("git", git.into());
-                    if let Some(b) = branch {
-                        inline.insert("branch", b.into());
-                    }
-                    if let Some(r) = rev {
-                        inline.insert("rev", r.into());
-                    }
-                    table.insert(name, toml_edit::Item::Value(toml_edit::Value::InlineTable(inline)));
-                }
+
             }
         }
         

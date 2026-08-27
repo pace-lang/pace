@@ -69,7 +69,7 @@ impl AotCompiler {
 
     fn register_interfaces(&mut self, stmts: &[Stmt]) {
         for stmt in stmts {
-            if let Stmt::InterfaceDecl { name: interface_name, methods, generic_params: _ } = stmt {
+            if let Stmt::InterfaceDecl { name: interface_name, methods, generic_params: _, .. } = stmt {
                 let mut method_map = HashMap::new();
                 let mut m_offset = 16; // 0: drop, 8: size
                 
@@ -113,7 +113,7 @@ impl AotCompiler {
         let _ptr_ty = self.module.target_config().pointer_type();
         
         for stmt in stmts {
-            if let Stmt::ClassDecl { name: class_name, fields, methods, implements, generic_params: _ } | Stmt::ActorDecl { name: class_name, fields, methods, implements, generic_params: _ } = stmt {
+            if let Stmt::ClassDecl { name: class_name, fields, methods, implements, generic_params: _, .. } | Stmt::ActorDecl { name: class_name, fields, methods, implements, generic_params: _, .. } = stmt {
                 let is_actor = matches!(stmt, Stmt::ActorDecl { .. });
                 let mut field_map = HashMap::new();
                 let mut offset = 16; // 8 bytes for ARC, 8 bytes for vtable pointer
@@ -255,7 +255,7 @@ impl AotCompiler {
                     vtable_id,
                 };
                 self.class_layouts.insert(class_name.clone(), layout);
-            } else if let Stmt::EnumDecl { name: enum_name, variants, generic_params: _ } = stmt {
+            } else if let Stmt::EnumDecl { name: enum_name, variants, generic_params: _, .. } = stmt {
                 let mut max_size = 16; // 8 for ARC, 8 for Tag
                 let mut variant_map = HashMap::new();
                 
@@ -306,7 +306,7 @@ impl AotCompiler {
                 };
                 self.enum_layouts.insert(enum_name.clone(), layout);
                 
-            } else if let Stmt::StructDecl { name: struct_name, fields, generic_params: _ } = stmt {
+            } else if let Stmt::StructDecl { name: struct_name, fields, generic_params: _, .. } = stmt {
                 let mut field_map = HashMap::new();
                 let mut offset = 0; // Structs have no header
                 for field in fields {
@@ -371,7 +371,7 @@ impl AotCompiler {
                         func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(class_name), Some(&self.struct_layouts), Some(&self.enum_layouts)));
                     }
                 }
-            } else if let Stmt::InterfaceDecl { name: interface_name, methods, generic_params: _ } = stmt {
+            } else if let Stmt::InterfaceDecl { name: interface_name, methods, generic_params: _, .. } = stmt {
                 for method in methods {
                     if let Stmt::FuncDecl { name: method_name, params: _, return_type, .. } = method {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");

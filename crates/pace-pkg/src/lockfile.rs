@@ -14,8 +14,6 @@ pub struct PaceLock {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LockedPackage {
     pub version: Option<String>,
-    pub git: Option<String>,
-    pub rev: Option<String>,
     pub path: Option<String>,
 }
 

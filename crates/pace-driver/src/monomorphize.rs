@@ -137,7 +137,7 @@ impl Monomorphizer {
 
         let is_actor = matches!(generic_decl, Stmt::ActorDecl { .. });
         match generic_decl {
-            Stmt::ClassDecl { name: _, generic_params, fields, methods, implements } | Stmt::ActorDecl { name: _, generic_params, fields, methods, implements } => {
+            Stmt::ClassDecl { name: _, generic_params, fields, methods, implements, .. } | Stmt::ActorDecl { name: _, generic_params, fields, methods, implements, .. } => {
                 let params = generic_params.unwrap();
                 let mut type_mapping = HashMap::new();
                 for (i, p) in params.iter().enumerate() {
@@ -189,6 +189,7 @@ impl Monomorphizer {
                         fields: new_fields,
                         methods: new_methods,
                         implements: new_implements,
+                        doc_comment: None,
                     }
                 } else {
                     Stmt::ClassDecl {
@@ -197,11 +198,12 @@ impl Monomorphizer {
                         fields: new_fields,
                         methods: new_methods,
                         implements: new_implements,
+                        doc_comment: None,
                     }
                 };
                 self.generated_classes.insert(concrete_name, instantiated);
             }
-            Stmt::InterfaceDecl { name: _, generic_params, methods } => {
+            Stmt::InterfaceDecl { name: _, generic_params, methods, .. } => {
                 let params = generic_params.unwrap();
                 let mut type_mapping = HashMap::new();
                 for (i, p) in params.iter().enumerate() {
@@ -219,10 +221,11 @@ impl Monomorphizer {
                     name: concrete_name.clone(),
                     generic_params: None, // It's concrete now!
                     methods: new_methods,
+                    doc_comment: None,
                 };
                 self.generated_classes.insert(concrete_name, instantiated);
             }
-            Stmt::EnumDecl { name: _, generic_params, variants } => {
+            Stmt::EnumDecl { name: _, generic_params, variants, .. } => {
                 let params = generic_params.unwrap();
                 let mut type_mapping = HashMap::new();
                 for (i, p) in params.iter().enumerate() {
@@ -247,6 +250,7 @@ impl Monomorphizer {
                     name: concrete_name.clone(),
                     generic_params: None, // It's concrete now!
                     variants: new_variants,
+                    doc_comment: None,
                 };
                 self.generated_classes.insert(concrete_name, instantiated);
             }

@@ -7,21 +7,19 @@ struct RegistryResponse {
     latest_version: Option<String>,
 }
 
-pub fn execute(name: String, path: Option<String>, git: Option<String>, version: Option<String>) -> Result<()> {
+pub fn execute(name: String, path: Option<String>, version: Option<String>) -> Result<()> {
     let current_dir = std::env::current_dir().map_err(|e| miette::miette!("Failed to get current dir: {}", e))?;
     
     // Determine the dependency type
     let dep = if let Some(p) = path {
         Dependency::Path { path: p }
-    } else if let Some(g) = git {
-        // Simple git format for now
-        Dependency::Git { git: g, branch: None, rev: None }
     } else if let Some(v) = version {
         Dependency::Version(v)
     } else {
         println!("🔍 Looking up '{}' in the registry...", name);
         // Make sync HTTP request using ureq
-        let url = format!("http://localhost:3000/api/packages/{}", name);
+        let registry_url = std::env::var("PACE_REGISTRY_URL").unwrap_or_else(|_| "https://registry.pace.dev".to_string());
+        let url = format!("{}/api/packages/{}", registry_url, name);
         let resp = match ureq::get(&url).call() {
             Ok(r) => {
                 if r.status() == 404 {
