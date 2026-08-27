@@ -81,6 +81,7 @@ pub struct Environment {
     pub structs: HashMap<String, ClassSignature>,
     pub enums: HashMap<String, EnumSignature>,
     pub actors: HashMap<String, ActorSignature>,
+    pub symbol_types: HashMap<String, Type>,
 }
 
 impl Environment {
@@ -92,6 +93,7 @@ impl Environment {
             structs: HashMap::new(),
             enums: HashMap::new(),
             actors: HashMap::new(),
+            symbol_types: HashMap::new(),
         };
         e.inject_prelude();
         e
@@ -329,8 +331,9 @@ impl Environment {
             if let Some(existing) = scope.get(&name) {
                 return Err(existing.span);
             }
-            scope.insert(name, VarInfo { ty, span, is_used: false, is_mutable });
+            scope.insert(name.clone(), VarInfo { ty: ty.clone(), span, is_used: false, is_mutable });
         }
+        self.symbol_types.insert(name, ty);
         Ok(())
     }
 

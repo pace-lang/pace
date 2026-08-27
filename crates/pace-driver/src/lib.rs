@@ -50,15 +50,22 @@ impl CompilerSession {
     }
 
 
-    fn load_file(&self, path: &std::path::Path, module_name: &str, visited: &mut std::collections::HashSet<std::path::PathBuf>) -> Result<Vec<Stmt>> {
+    fn load_file(&self, path: &std::path::Path, module_name: &str, visited: &mut std::collections::HashSet<std::path::PathBuf>, override_path: Option<&std::path::Path>, override_src: Option<&str>) -> Result<Vec<Stmt>> {
         let path_buf = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         if visited.contains(&path_buf) {
             return Ok(Vec::new()); // Already loaded, prevent cycles
         }
         visited.insert(path_buf.clone());
 
-        let src = std::fs::read_to_string(&path_buf)
-            .into_diagnostic()?;
+        let src = if let Some(op) = override_path {
+            if path_buf == *op {
+                override_src.unwrap_or("").to_string()
+            } else {
+                std::fs::read_to_string(&path_buf).into_diagnostic()?
+            }
+        } else {
+            std::fs::read_to_string(&path_buf).into_diagnostic()?
+        };
         
         let mut ast = match pace_parser::parse(&src, &path.display().to_string()) {
             Ok(ast) => ast,
@@ -134,7 +141,7 @@ impl CompilerSession {
                     // Inject the exact resolved mod_name back into the AST so resolve.rs doesn't have to guess relative paths
                     *import_path = mod_name.clone();
                     
-                    let mut imported_ast = self.load_file(&resolved_path, &mod_name, visited)?;
+                    let mut imported_ast = self.load_file(&resolved_path, &mod_name, visited, override_path, override_src)?;
                     final_ast.append(&mut imported_ast);
                 } else {
                     return Err(miette::miette!("Cannot find module '{}' at {:?}", import_path, resolved_path));
@@ -152,7 +159,7 @@ impl CompilerSession {
         let mut visited = std::collections::HashSet::new();
         let path_buf = std::path::Path::new(path);
         let module_name = path_buf.canonicalize().unwrap_or_else(|_| path_buf.to_path_buf()).to_string_lossy().into_owned();
-        let ast = self.load_file(path_buf, &module_name, &mut visited)?;
+        let ast = self.load_file(path_buf, &module_name, &mut visited, None, None)?;
         // Symbol Resolution and Name Mangling pass
         let resolved_ast = resolve::SymbolResolver::run(ast)?;
 
@@ -166,31 +173,65 @@ impl CompilerSession {
         let src = std::fs::read_to_string(path).into_diagnostic()?;
         
         // Run typechecker on the parsed AST
-        match pace_ty::check(&mono_ast, &src, &path_buf.display().to_string()) {
-            Ok(warnings) => {
-                for mut warning in warnings {
-                    let mut is_valid_span = true;
-                    match &mut warning {
-                        pace_errors::SemanticWarning::NamingConvention { src: s, span, .. } |
-                        pace_errors::SemanticWarning::UnusedItem { src: s, span, .. } => {
-                            if span.0 + span.1 <= src.len() {
-                                *s = miette::NamedSource::new(path_buf.display().to_string(), src.clone());
-                            } else {
-                                is_valid_span = false;
-                            }
-                        }
-                    }
-                    if is_valid_span {
-                        eprintln!("{:?}", miette::Report::new(warning));
+        let (warnings, type_errors, _env) = pace_ty::check(&mono_ast, &src, &path_buf.display().to_string());
+        for mut warning in warnings {
+            let mut is_valid_span = true;
+            match &mut warning {
+                pace_errors::SemanticWarning::NamingConvention { src: s, span, .. } |
+                pace_errors::SemanticWarning::UnusedItem { src: s, span, .. } => {
+                    if span.0 + span.1 <= src.len() {
+                        *s = miette::NamedSource::new(path_buf.display().to_string(), src.clone());
+                    } else {
+                        is_valid_span = false;
                     }
                 }
             }
-            Err(type_errors) => {
-                return Err(Report::new(MultipleTypeErrors { errors: type_errors }));
+            if is_valid_span {
+                eprintln!("{:?}", miette::Report::new(warning));
             }
+        }
+        if !type_errors.is_empty() {
+            return Err(Report::new(MultipleTypeErrors { errors: type_errors }));
         }
         
         Ok(mono_ast)
+    }
+
+    pub fn check_file_with_source(&self, path: &std::path::Path, src: &str) -> Result<(Vec<Stmt>, Vec<pace_ty::TypeError>, pace_ty::Environment)> {
+        let mut visited = std::collections::HashSet::new();
+        let path_buf = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let module_name = path_buf.to_string_lossy().into_owned();
+        let ast = self.load_file(&path_buf, &module_name, &mut visited, Some(&path_buf), Some(src))?;
+        // Symbol Resolution and Name Mangling pass
+        let resolved_ast = resolve::SymbolResolver::run(ast)?;
+
+        // Flatten the AST before monomorphization and type checking!
+        let flat_ast = Self::flatten_ast(&resolved_ast);
+        let mono_ast = monomorphize::Monomorphizer::run(flat_ast).unwrap_or_else(|_| resolved_ast.clone());
+
+        // Apply Dead Code Elimination (Tree Shaking)
+        let mono_ast = shake::TreeShaker::run(mono_ast);
+        
+        // Run typechecker on the parsed AST
+        let (warnings, type_errors, env) = pace_ty::check(&mono_ast, src, &path_buf.display().to_string());
+        for mut warning in warnings {
+            let mut is_valid_span = true;
+            match &mut warning {
+                pace_errors::SemanticWarning::NamingConvention { src: s, span, .. } |
+                pace_errors::SemanticWarning::UnusedItem { src: s, span, .. } => {
+                    if span.0 + span.1 <= src.len() {
+                        *s = miette::NamedSource::new(path_buf.display().to_string(), src.to_string());
+                    } else {
+                        is_valid_span = false;
+                    }
+                }
+            }
+            if is_valid_span {
+                eprintln!("{:?}", miette::Report::new(warning));
+            }
+        }
+        
+        Ok((mono_ast, type_errors, env))
     }
     
 
@@ -324,28 +365,12 @@ impl CompilerSession {
         let mono_ast = shake::TreeShaker::run(mono_ast);
 
         // Run typechecker on the parsed AST
-        match pace_ty::check(&mono_ast, src, "source") {
-            Ok(warnings) => {
-                for mut warning in warnings {
-                    let mut is_valid_span = true;
-                    match &mut warning {
-                        pace_errors::SemanticWarning::NamingConvention { src: s, span, .. } |
-                        pace_errors::SemanticWarning::UnusedItem { src: s, span, .. } => {
-                            if span.0 + span.1 <= src.len() {
-                                *s = miette::NamedSource::new("source", src.to_string());
-                            } else {
-                                is_valid_span = false;
-                            }
-                        }
-                    }
-                    if is_valid_span {
-                        eprintln!("{:?}", miette::Report::new(warning));
-                    }
-                }
-            }
-            Err(type_errors) => {
-                return Err(Report::new(MultipleTypeErrors { errors: type_errors }));
-            }
+        let (warnings, type_errors, _env) = pace_ty::check(&mono_ast, src, "source");
+        for warning in warnings {
+            eprintln!("{:?}", miette::Report::new(warning));
+        }
+        if !type_errors.is_empty() {
+            return Err(Report::new(MultipleTypeErrors { errors: type_errors }));
         }
 
         Ok(mono_ast)

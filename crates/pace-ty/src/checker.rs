@@ -4,10 +4,19 @@ use crate::env::{Environment, Type, FunctionSignature, ClassSignature, EnumSigna
 
 use std::collections::HashMap;
 
+impl TypeChecker {
+    pub fn get_span_for(&self, token: &str) -> (usize, usize) {
+        if let Some(idx) = self.src.find(token) {
+            (idx, token.len())
+        } else {
+            (0, 0)
+        }
+    }
+}
 pub struct TypeChecker {
     pub file_name: String,
     pub src: String,
-    env: Environment,
+    pub env: Environment,
     current_return_type: Option<Type>,
     current_class: Option<String>,
     current_module: String,
@@ -652,7 +661,7 @@ impl TypeChecker {
                                 name: name.clone(),
                                 help_text,
                                 src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()),
-                                span: (0, 0), // we don't have span for Expr::Identifier yet in AST, so (0,0) is fine
+                                span: self.get_span_for(&name),
                             });
                             Type::Error
                         }
@@ -715,13 +724,13 @@ impl TypeChecker {
                 if let Expr::Identifier(name) = &**target {
                     if let Some(var_info) = self.env.get_mut(name) {
                         if !var_info.is_mutable {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: var_info.span,
                                 message: format!("Cannot assign to immutable variable '{}'", name)
                             }); return Type::Error; };
                         }
                         
                         if var_info.ty != val_ty && var_info.ty != Type::Unknown && val_ty != Type::Unknown && var_info.ty != Type::Any && val_ty != Type::Any {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: var_info.span,
                                 message: format!("Type mismatch: cannot assign {:?} to variable of type {:?}", val_ty, var_info.ty)
                             }); return Type::Error; };
                         }
@@ -740,7 +749,7 @@ impl TypeChecker {
                                 name: name.clone(),
                                 help_text,
                                 src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()),
-                                span: (0, 0), // we don't have span for Expr::Identifier yet in AST, so (0,0) is fine
+                                span: self.get_span_for(&name),
                             });
                             Type::Error
                         }

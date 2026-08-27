@@ -4,9 +4,18 @@ use tower_lsp::{Client, LanguageServer};
 use pace_driver::CompilerSession;
 
 
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use pace_ast::Stmt;
+
 pub struct PaceLanguageServer {
     pub client: Client,
     pub session: CompilerSession,
+    pub ast_cache: Arc<RwLock<HashMap<Url, Vec<Stmt>>>>,
+    pub src_cache: Arc<RwLock<HashMap<Url, String>>>,
+    pub env_cache: Arc<RwLock<HashMap<Url, pace_ty::Environment>>>,
+    pub root_uri: Arc<RwLock<Option<Url>>>,
 }
 
 impl PaceLanguageServer {
@@ -14,26 +23,33 @@ impl PaceLanguageServer {
         Self {
             client,
             session: CompilerSession::new(),
+            ast_cache: Arc::new(RwLock::new(HashMap::new())),
+            src_cache: Arc::new(RwLock::new(HashMap::new())),
+            env_cache: Arc::new(RwLock::new(HashMap::new())),
+            root_uri: Arc::new(RwLock::new(None)),
         }
     }
 
     async fn check_and_publish_diagnostics(&self, uri: Url, src: &str) {
         let mut diagnostics = Vec::new();
         
-        let ast_result = self.session.check_source(src);
+        let path = if let Ok(p) = uri.to_file_path() { p } else { return; };
+        let ast_result = self.session.check_file_with_source(&path, src);
+        
+        self.src_cache.write().await.insert(uri.clone(), src.to_string());
         
         match ast_result {
-            Ok(_) => {
-                // No errors
+            Ok((ast, type_errors, env)) => {
+                self.ast_cache.write().await.insert(uri.clone(), ast);
+                self.env_cache.write().await.insert(uri.clone(), env);
+                
+                for err in &type_errors {
+                    diagnostics.push(map_type_error(err, src));
+                }
             },
             Err(e) => {
-                // It's a miette::Report.
-                // We map miette errors to LSP Diagnostics.
-                if let Some(multiple_ty_errors) = e.downcast_ref::<pace_driver::MultipleTypeErrors>() {
-                    for err in &multiple_ty_errors.errors {
-                        diagnostics.push(map_type_error(err, src));
-                    }
-                } else if let Some(multiple_syntax_errors) = e.downcast_ref::<pace_errors::MultipleSyntaxErrors>() {
+                // Syntax or package errors
+                if let Some(multiple_syntax_errors) = e.downcast_ref::<pace_errors::MultipleSyntaxErrors>() {
                     for err in &multiple_syntax_errors.errors {
                         diagnostics.push(map_syntax_error(err, src));
                     }
@@ -61,8 +77,8 @@ fn get_position(src: &str, offset: usize) -> Position {
     let mut line = 0;
     let mut char_idx = 0;
     
-    for (i, c) in src.chars().enumerate() {
-        if i == offset {
+    for (i, c) in src.char_indices() {
+        if i >= offset {
             break;
         }
         if c == '\n' {
@@ -74,6 +90,66 @@ fn get_position(src: &str, offset: usize) -> Position {
     }
     
     Position { line, character: char_idx }
+}
+
+fn position_to_offset(src: &str, pos: Position) -> Option<usize> {
+    let mut current_line = 0;
+    let mut current_char = 0;
+    
+    for (i, c) in src.char_indices() {
+        if current_line == pos.line && current_char == pos.character {
+            return Some(i);
+        }
+        if c == '\n' {
+            current_line += 1;
+            current_char = 0;
+        } else {
+            current_char += 1;
+        }
+    }
+    
+    if current_line == pos.line && current_char == pos.character {
+        Some(src.len())
+    } else {
+        None
+    }
+}
+
+fn get_word_at_position(src: &str, pos: Position) -> Option<String> {
+    let lines: Vec<&str> = src.lines().collect();
+    if pos.line as usize >= lines.len() {
+        return None;
+    }
+    
+    let line = lines[pos.line as usize];
+    let char_idx = pos.character as usize;
+    if char_idx >= line.len() {
+        return None;
+    }
+    
+    let mut start = char_idx;
+    while start > 0 {
+        let c = line.chars().nth(start - 1)?;
+        if !c.is_alphanumeric() && c != '_' {
+            break;
+        }
+        start -= 1;
+    }
+    
+    let mut end = char_idx;
+    while end < line.len() {
+        let c = line.chars().nth(end)?;
+        if !c.is_alphanumeric() && c != '_' {
+            break;
+        }
+        end += 1;
+    }
+    
+    if start < end {
+        Some(line[start..end].to_string())
+    } else {
+        None
+    }
 }
 
 fn map_syntax_error(err: &pace_errors::SyntaxError, src: &str) -> Diagnostic {
@@ -146,10 +222,22 @@ fn map_type_error(err: &pace_ty::TypeError, src: &str) -> Diagnostic {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for PaceLanguageServer {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+        if let Some(uri) = params.root_uri {
+            *self.root_uri.write().await = Some(uri);
+        }
+        
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
+                definition_provider: Some(OneOf::Left(true)),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+                completion_provider: Some(CompletionOptions {
+                    resolve_provider: Some(false),
+                    trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
+                    ..Default::default()
+                }),
                 ..ServerCapabilities::default()
             },
             ..Default::default()
@@ -160,6 +248,27 @@ impl LanguageServer for PaceLanguageServer {
         self.client
             .log_message(MessageType::INFO, "Pace language server initialized")
             .await;
+            
+        let root_uri = self.root_uri.read().await.clone();
+        
+        if let Some(uri) = root_uri {
+            if let Ok(path) = uri.to_file_path() {
+                self.client.log_message(MessageType::INFO, format!("Scanning workspace: {}", path.display())).await;
+                
+                for entry in walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+                    let p = entry.path();
+                    if p.is_file() && p.extension().map_or(false, |ext| ext == "pace") {
+                        if let Ok(src) = std::fs::read_to_string(p) {
+                            if let Ok(file_uri) = Url::from_file_path(p) {
+                                self.check_and_publish_diagnostics(file_uri, &src).await;
+                            }
+                        }
+                    }
+                }
+                
+                self.client.log_message(MessageType::INFO, "Workspace scanning complete").await;
+            }
+        }
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -173,6 +282,208 @@ impl LanguageServer for PaceLanguageServer {
     async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
         if let Some(change) = params.content_changes.pop() {
             self.check_and_publish_diagnostics(params.text_document.uri, &change.text).await;
+        }
+    }
+
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        
+        let src_cache = self.src_cache.read().await;
+        if let Some(src) = src_cache.get(&uri) {
+            if let Some(word) = get_word_at_position(src, pos) {
+                let mut hover_text = format!("Symbol: `{}`", word);
+                
+                let env_cache = self.env_cache.read().await;
+                if let Some(env) = env_cache.get(&uri) {
+                    if let Some(ty) = env.symbol_types.get(&word) {
+                        hover_text = format!("```pace\nlet {}: {:?}\n```", word, ty);
+                    } else if let Some(func) = env.functions.get(&word) {
+                        let params_str = func.params.iter().map(|p| format!("{:?}", p)).collect::<Vec<_>>().join(", ");
+                        hover_text = format!("```pace\nfunc {}({}) -> {:?}\n```", word, params_str, func.return_type);
+                    } else if let Some(cls) = env.classes.get(&word) {
+                        hover_text = format!("```pace\nclass {}\n```", word);
+                    } else if let Some(strct) = env.structs.get(&word) {
+                        hover_text = format!("```pace\nstruct {}\n```", word);
+                    } else if let Some(enm) = env.enums.get(&word) {
+                        hover_text = format!("```pace\nenum {}\n```", word);
+                    } else if let Some(act) = env.actors.get(&word) {
+                        hover_text = format!("```pace\nactor {}\n```", word);
+                    }
+                }
+                
+                return Ok(Some(Hover {
+                    contents: HoverContents::Scalar(MarkedString::String(hover_text)),
+                    range: None,
+                }));
+            }
+        }
+        
+        Ok(None)
+    }
+
+    async fn goto_definition(&self, params: GotoDefinitionParams) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let pos = params.text_document_position_params.position;
+        
+        let src_cache = self.src_cache.read().await;
+        let ast_cache = self.ast_cache.read().await;
+        
+        if let Some(src) = src_cache.get(&uri) {
+            if let Some(word) = get_word_at_position(src, pos) {
+                if let Some(ast) = ast_cache.get(&uri) {
+                    // Try to find the symbol declaration in the AST
+                    for stmt in ast {
+                        match stmt {
+                            pace_ast::Stmt::FuncDecl { name, .. } |
+                            pace_ast::Stmt::VarDecl { name, .. } |
+                            pace_ast::Stmt::ClassDecl { name, .. } |
+                            pace_ast::Stmt::StructDecl { name, .. } |
+                            pace_ast::Stmt::EnumDecl { name, .. } |
+                            pace_ast::Stmt::ActorDecl { name, .. } |
+                            pace_ast::Stmt::InterfaceDecl { name, .. } => {
+                                // Basic matching. `pace_ast::Stmt::ClassDecl` etc don't have span yet, 
+                                // but we can use the ones that do.
+                                if name == &word || name.ends_with(&format!("__{}", word)) {
+                                    if let pace_ast::Stmt::FuncDecl { span, .. } | pace_ast::Stmt::VarDecl { span, .. } = stmt {
+                                        let start = get_position(src, span.0);
+                                        let end = get_position(src, span.0 + span.1);
+                                        return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                                            uri: uri.clone(),
+                                            range: Range { start, end },
+                                        })));
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(None)
+    }
+
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let mut responses = Vec::new();
+        
+        for diag in params.context.diagnostics {
+            if diag.message.starts_with("Unknown identifier '") {
+                let parts: Vec<&str> = diag.message.split('\'').collect();
+                if parts.len() >= 2 {
+                    let ident = parts[1];
+                    let mut target_uri = None;
+                    let env_cache = self.env_cache.read().await;
+                    for (uri, env) in env_cache.iter() {
+                        if uri != &params.text_document.uri && (env.functions.contains_key(ident) || env.classes.contains_key(ident) || env.symbol_types.contains_key(ident) || env.structs.contains_key(ident) || env.actors.contains_key(ident) || env.enums.contains_key(ident)) {
+                            target_uri = Some(uri.clone());
+                            break;
+                        }
+                    }
+                    
+                    let mut import_path = None;
+                    if let Some(target) = target_uri {
+                        if let (Ok(current_path), Ok(target_path)) = (params.text_document.uri.to_file_path(), target.to_file_path()) {
+                            if let Some(parent) = current_path.parent() {
+                                if let Some(mut rel_path) = pathdiff::diff_paths(&target_path, parent) {
+                                    rel_path.set_extension(""); // Remove .pace
+                                    let mut path_str = rel_path.to_string_lossy().into_owned();
+                                    if !path_str.starts_with(".") && !path_str.starts_with("/") {
+                                        path_str = format!("./{}", path_str);
+                                    }
+                                    import_path = Some(path_str);
+                                }
+                            }
+                        }
+                    }
+                    
+                    if let Some(path) = import_path {
+                        let mut changes = std::collections::HashMap::new();
+                        let edit = TextEdit {
+                            range: Range {
+                                start: Position { line: 0, character: 0 },
+                                end: Position { line: 0, character: 0 },
+                            },
+                            new_text: format!("import \"{}\";\n", path),
+                        };
+                        changes.insert(params.text_document.uri.clone(), vec![edit]);
+                        
+                        let action = CodeAction {
+                            title: format!("Import '{}'", path),
+                            kind: Some(CodeActionKind::QUICKFIX),
+                            diagnostics: Some(vec![diag.clone()]),
+                            edit: Some(WorkspaceEdit {
+                                changes: Some(changes),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        };
+                        
+                        responses.push(CodeActionOrCommand::CodeAction(action));
+                    }
+                }
+            }
+        }
+        
+        if responses.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(responses))
+        }
+    }
+
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let uri = params.text_document_position.text_document.uri;
+        let mut items = Vec::new();
+
+        let env_cache = self.env_cache.read().await;
+        if let Some(env) = env_cache.get(&uri) {
+            // Suggest variables
+            for (name, ty) in &env.symbol_types {
+                items.push(CompletionItem {
+                    label: name.clone(),
+                    kind: Some(CompletionItemKind::VARIABLE),
+                    detail: Some(format!("{:?}", ty)),
+                    ..Default::default()
+                });
+            }
+
+            // Suggest functions
+            for (name, func) in &env.functions {
+                let params_str = func.params.iter().map(|p| format!("{:?}", p)).collect::<Vec<_>>().join(", ");
+                items.push(CompletionItem {
+                    label: name.clone(),
+                    kind: Some(CompletionItemKind::FUNCTION),
+                    detail: Some(format!("func {}({}) -> {:?}", name, params_str, func.return_type)),
+                    ..Default::default()
+                });
+            }
+
+            // Suggest classes
+            for name in env.classes.keys() {
+                items.push(CompletionItem {
+                    label: name.clone(),
+                    kind: Some(CompletionItemKind::CLASS),
+                    ..Default::default()
+                });
+            }
+            
+            // Standard library modules
+            let std_modules = vec!["std:math", "std:io", "std:fs", "std:net", "std:time"];
+            for mod_name in std_modules {
+                items.push(CompletionItem {
+                    label: mod_name.to_string(),
+                    kind: Some(CompletionItemKind::MODULE),
+                    ..Default::default()
+                });
+            }
+        }
+
+        if items.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(CompletionResponse::Array(items)))
         }
     }
 }

@@ -16,3 +16,5 @@ pace-driver = { path = "../pace-driver" }
 pace-errors = { path = "../pace-errors" }
 pace-ast = { path = "../pace-ast" }
 pace-ty = { path = "../pace-ty" }
+walkdir.workspace = true
+pathdiff = "0.2.3"

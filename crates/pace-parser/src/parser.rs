@@ -117,6 +117,13 @@ impl<'a> Parser<'a> {
             _ => {
                 let expr = self.parse_expr()?;
                 if !self.match_token(Token::Semi) {
+                    if let Expr::Call { callee, .. } = &expr {
+                        if self.current_token == Token::LBrace {
+                            if let Expr::Identifier(name) = &**callee {
+                                return Err(pace_errors::SyntaxError { message: format!("Functions and methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+                            }
+                        }
+                    }
                     return Err(pace_errors::SyntaxError { message: "Expected ';' after expression".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
                 }
                 Ok(Stmt::Expr(expr))
@@ -579,6 +586,14 @@ impl<'a> Parser<'a> {
                     match stmt {
                         Stmt::VarDecl { .. } => fields.push(stmt),
                         Stmt::FuncDecl { .. } => methods.push(stmt),
+                        Stmt::Expr(pace_ast::Expr::Call { callee, .. }) => {
+                            if let pace_ast::Expr::Identifier(name) = *callee {
+                                self.errors.push(pace_errors::SyntaxError { message: format!("Methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+                            } else {
+                                self.errors.push(pace_errors::SyntaxError { message: "Classes can only contain fields and methods".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+                            }
+                            self.synchronize();
+                        }
                         _ => {
                             self.errors.push(pace_errors::SyntaxError { message: "Classes can only contain fields and methods".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
                             self.synchronize();
@@ -633,6 +648,14 @@ impl<'a> Parser<'a> {
                     match stmt {
                         Stmt::VarDecl { .. } => fields.push(stmt),
                         Stmt::FuncDecl { .. } => methods.push(stmt),
+                        Stmt::Expr(pace_ast::Expr::Call { callee, .. }) => {
+                            if let pace_ast::Expr::Identifier(name) = *callee {
+                                self.errors.push(pace_errors::SyntaxError { message: format!("Methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+                            } else {
+                                self.errors.push(pace_errors::SyntaxError { message: "Actors can only contain fields and methods".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+                            }
+                            self.synchronize();
+                        }
                         _ => {
                             self.errors.push(pace_errors::SyntaxError { message: "Actors can only contain fields and methods".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
                             self.synchronize();
