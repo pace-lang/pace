@@ -1,0 +1,10 @@
+func runLoopTest() {
+    print("--- Testing Loops ---");
+    var i = 0;
+    var sum = 0;
+    while i < 5 {
+        sum = sum + i;
+        i = i + 1;
+    }
+    print("Sum of 0 to 4 is: ${sum}");
+}

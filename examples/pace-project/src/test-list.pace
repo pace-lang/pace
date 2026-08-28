@@ -1,0 +1,16 @@
+import std:collections;
+
+func runListTest() {
+    print("--- Testing Lists ---");
+    let list = List<Int>();
+    list.push(10);
+    list.push(20);
+    list.push(30);
+    print("List size: ${list.length()}");
+    print("First element: ${list.get(0)}");
+    print("Second element: ${list.get(1)}");
+    print("Third element: ${list.get(2)}");
+    
+    list.drop();
+    print("Dropped list");
+}

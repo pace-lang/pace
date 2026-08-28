@@ -27,5 +27,5 @@ editors/vscode/out/
 *.vsix
 
 # Local examples and test projects
-examples/
+# examples/
 build/

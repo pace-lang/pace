@@ -1,0 +1,8 @@
+func runClosureTest() {
+    print("--- Testing Closures ---");
+    let addOne = (x: Int) => x + 1;
+    print("5 + 1 = ${addOne(5)}");
+    
+    let multiply = (a: Int, b: Int) -> Int => a * b;
+    print("3 * 4 = ${multiply(3, 4)}");
+}

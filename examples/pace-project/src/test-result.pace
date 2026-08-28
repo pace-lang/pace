@@ -1,0 +1,15 @@
+func divide(a: Int, b: Int) -> Result<Int, String> {
+    if b == 0 {
+        return Result<Int, String>::Err("Division by zero");
+    }
+    return Result<Int, String>::Ok(a / b);
+}
+
+func runResultTest() -> Result<Bool, String> {
+    print("--- Testing Results ---");
+    let res = divide(10, 2);
+    let val = res?;
+    print("10 / 2 result: ");
+    print(val);
+    return Result<Bool, String>::Ok(true);
+}

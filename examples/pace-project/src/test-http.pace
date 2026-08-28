@@ -1,0 +1,12 @@
+import std:http;
+
+func runHttpTest() -> Result<Bool, String> {
+    print("--- Testing HTTP ---");
+    // We just test if it returns a Result, the actual URL doesn't matter much
+    // because it uses native FFI which might fail locally but we just want to test compilation
+    let res = Http::get("https://jsonplaceholder.typicode.com/users/1");
+    let val = res?;
+    print("Http::get result: ");
+    print(val);
+    return Result<Bool, String>::Ok(true);
+}

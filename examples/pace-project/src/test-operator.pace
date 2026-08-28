@@ -1,0 +1,10 @@
+func runOperatorTest() {
+    print("--- Testing Operators ---");
+    let a = 10;
+    let b = 3;
+    print("10 + 3 = ${a + b}");
+    print("10 - 3 = ${a - b}");
+    print("10 * 3 = ${a * b}");
+    print("10 / 3 = ${a / b}");
+    print("10 % 3 = ${a % b}");
+}

@@ -25,7 +25,7 @@ pub struct MultipleSyntaxErrors {
     pub errors: Vec<SyntaxError>,
 }
 
-#[derive(Error, Diagnostic, Debug)]
+#[derive(Clone, Error, Diagnostic, Debug)]
 pub enum TypeError {
     #[error("Unknown identifier '{name}'")]
     #[diagnostic(code(P2001), help("{help_text}"))]
@@ -100,7 +100,7 @@ pub enum TypeError {
     }
 }
 
-#[derive(Error, Diagnostic, Debug)]
+#[derive(Clone, Error, Diagnostic, Debug)]
 pub enum SemanticWarning {
     #[error("Variable or function '{name}' should use camelCase")]
     #[diagnostic(code(W1001::naming_convention), severity(warning))]

@@ -1,0 +1,35 @@
+import "./test-class";
+import "./test-interface";
+import "./test-operator";
+import "./test-conditions";
+import "./test-loop";
+import "./test-actor";
+import "./test-closure";
+import "./test-result";
+import "./test-string";
+import "./test-map";
+import "./test-list";
+import "./test-math";
+import "./test-http";
+import "./test-fs";
+
+func main() {
+    print("⚡ Running Pace Test Suite...");
+    
+    runClassTest();
+    runInterfaceTest();
+    runOperatorTest();
+    runConditionsTest();
+    runLoopTest();
+    runActorTest();
+    runClosureTest();
+    runResultTest();
+    runStringTest();
+    runMapTest();
+    runListTest();
+    runMathTest();
+    runHttpTest();
+    runFsTest();
+    
+    print("✅ All tests executed.");
+}

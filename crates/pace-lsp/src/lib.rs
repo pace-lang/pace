@@ -39,19 +39,30 @@ impl PaceLanguageServer {
         self.src_cache.write().await.insert(uri.clone(), src.to_string());
         
         match ast_result {
-            Ok((ast, type_errors, env)) => {
+            Ok((ast, warnings, type_errors, env)) => {
                 self.ast_cache.write().await.insert(uri.clone(), ast);
                 self.env_cache.write().await.insert(uri.clone(), env);
                 
+                let active_file = path.display().to_string();
+                for warn in &warnings {
+                    if let Some(diag) = map_warning(warn, src, &active_file) {
+                        diagnostics.push(diag);
+                    }
+                }
                 for err in &type_errors {
-                    diagnostics.push(map_type_error(err, src));
+                    if let Some(diag) = map_type_error(err, src, &active_file) {
+                        diagnostics.push(diag);
+                    }
                 }
             },
             Err(e) => {
+                let active_file = path.display().to_string();
                 // Syntax or package errors
                 if let Some(multiple_syntax_errors) = e.downcast_ref::<pace_errors::MultipleSyntaxErrors>() {
                     for err in &multiple_syntax_errors.errors {
-                        diagnostics.push(map_syntax_error(err, src));
+                        if let Some(diag) = map_syntax_error(err, src, &active_file) {
+                            diagnostics.push(diag);
+                        }
                     }
                 } else {
                     // Generic error
@@ -153,23 +164,69 @@ fn get_word_at_position(src: &str, pos: Position) -> Option<String> {
     }
 }
 
-fn map_syntax_error(err: &pace_errors::SyntaxError, src: &str) -> Diagnostic {
+fn map_warning(warn: &pace_errors::SemanticWarning, src: &str, active_file: &str) -> Option<Diagnostic> {
+    use pace_errors::SemanticWarning::*;
+    let severity = DiagnosticSeverity::WARNING;
+    
+    let (message, start_offset, length, warn_src) = match warn {
+        NamingConvention { name, span, src: s, .. } => {
+            (format!("Variable or function '{}' should use camelCase", name), span.0, span.1, s.name())
+        },
+        UnusedItem { kind, name, span, src: s, .. } => {
+            (format!("Unused {} '{}'", kind, name), span.0, span.1, s.name())
+        }
+    };
+    
+    if warn_src != active_file {
+        return None;
+    }
+    
+    let start = get_position(src, start_offset);
+    let end = get_position(src, start_offset + length);
+    
+    Some(Diagnostic {
+        range: Range { start, end },
+        severity: Some(severity),
+        message,
+        ..Default::default()
+    })
+}
+
+fn map_syntax_error(err: &pace_errors::SyntaxError, src: &str, active_file: &str) -> Option<Diagnostic> {
+    if err.src.name() != active_file {
+        return None;
+    }
+
     let (offset, length) = err.span;
     let start = get_position(src, offset);
     let end = get_position(src, offset + length);
     
-    Diagnostic {
+    Some(Diagnostic {
         range: Range { start, end },
         severity: Some(DiagnosticSeverity::ERROR),
         message: err.message.clone(),
         ..Default::default()
-    }
+    })
 }
 
-fn map_type_error(err: &pace_ty::TypeError, src: &str) -> Diagnostic {
+fn map_type_error(err: &pace_ty::TypeError, src: &str, active_file: &str) -> Option<Diagnostic> {
     use pace_ty::TypeError::*;
     let severity = DiagnosticSeverity::ERROR;
     
+    let err_src_name = match err {
+        Generic { src: s, .. } |
+        TypeMismatch { src: s, .. } |
+        UnknownIdentifier { src: s, .. } |
+        DuplicateDeclaration { src: s, .. } |
+        UnknownType { src: s, .. } |
+        InvalidWeakReference { src: s, .. } |
+        OwnershipViolation { src: s, .. } => s.name(),
+    };
+
+    if err_src_name != active_file {
+        return None;
+    }
+
     let (message, start_offset, length) = match err {
         Generic { span, message: msg, .. } => {
             (msg.clone(), span.0, span.1)
@@ -218,7 +275,7 @@ fn map_type_error(err: &pace_ty::TypeError, src: &str) -> Diagnostic {
         ]);
     }
     
-    diag
+    Some(diag)
 }
 
 #[tower_lsp::async_trait]

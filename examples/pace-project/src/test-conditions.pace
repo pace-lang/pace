@@ -1,0 +1,11 @@
+func runConditionsTest() {
+    print("--- Testing Conditions ---");
+    let val = 42;
+    if val > 50 {
+        print("Greater than 50");
+    } else if val == 42 {
+        print("Exactly 42");
+    } else {
+        print("Less than 50 and not 42");
+    }
+}

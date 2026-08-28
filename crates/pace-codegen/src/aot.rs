@@ -317,9 +317,10 @@ impl AotCompiler {
     }
 
     pub fn compile_to_object(mut self, stmts: &[Stmt]) -> Result<Vec<u8>, CodegenError> {
+        let flat_stmts = crate::flatten_ast(stmts);
         // Run Monomorphization Pass
         let mut mono = crate::monomorphize::MonomorphizationPass::new();
-        mono.process(stmts);
+        mono.process(&flat_stmts);
         let final_stmts = &mono.final_stmts;
 
         // Register layouts for classes and interfaces

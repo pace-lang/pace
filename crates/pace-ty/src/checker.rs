@@ -6,16 +6,23 @@ use std::collections::HashMap;
 
 impl TypeChecker {
     pub fn get_span_for(&self, token: &str) -> (usize, usize) {
-        if let Some(idx) = self.src.find(token) {
-            (idx, token.len())
-        } else {
-            (0, 0)
+        if let Some(src) = self.sources.get(&self.current_module) {
+            if let Some(idx) = src.find(token) {
+                return (idx, token.len());
+            }
         }
+        (0, 0)
+    }
+
+    pub fn get_source(&self) -> miette::NamedSource<String> {
+        let name = self.current_module.clone();
+        let src = self.sources.get(&name).cloned().unwrap_or_default();
+        miette::NamedSource::new(name, src)
     }
 }
 pub struct TypeChecker {
     pub file_name: String,
-    pub src: String,
+    pub sources: HashMap<String, String>,
     pub env: Environment,
     current_return_type: Option<Type>,
     current_class: Option<String>,
@@ -23,19 +30,29 @@ pub struct TypeChecker {
     generic_params_in_scope: Vec<String>,
     pub warnings: Vec<pace_errors::SemanticWarning>,
     pub errors: Vec<TypeError>,
+    pub current_span: (usize, usize),
+}
+
+pub fn check(ast: &[Stmt], sources: HashMap<String, String>, entry_module: &str) -> (Vec<pace_errors::SemanticWarning>, Vec<TypeError>, Environment) {
+    let mut checker = TypeChecker::new(sources, entry_module);
+    
+    // We set the initial current_module to the entry module
+    checker.current_module = entry_module.to_string();
+    checker.check(ast);
+    (checker.warnings, checker.errors, checker.env)
 }
 
 impl Default for TypeChecker {
     fn default() -> Self {
-        Self::new("", "")
+        Self::new(HashMap::new(), "")
     }
 }
 
 impl TypeChecker {
-    pub fn new(src: &str, file_name: &str) -> Self {
+    pub fn new(sources: HashMap<String, String>, file_name: &str) -> Self {
         Self {
             file_name: file_name.to_string(),
-            src: src.to_string(),
+            sources,
             env: Environment::new(),
             current_return_type: None,
             current_class: None,
@@ -43,6 +60,7 @@ impl TypeChecker {
             generic_params_in_scope: Vec::new(),
             warnings: Vec::new(),
             errors: Vec::new(),
+            current_span: (0, 0),
         }
     }
 
@@ -51,7 +69,7 @@ impl TypeChecker {
         if let Err(original_span) = self.env.define(name.clone(), ty, span, is_mutable) {
             self.errors.push(TypeError::DuplicateDeclaration {
                 name,
-                src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()),
+                src: self.get_source(),
                 span,
                 original_span,
             });
@@ -59,8 +77,11 @@ impl TypeChecker {
     }
 
     pub fn check(&mut self, stmts: &[Stmt]) {
-        // Pass 1: Hoisting
-        self.hoist_declarations(stmts);
+        // Pass 1: Register all types
+        self.register_types(stmts);
+
+        // Pass 2: Resolve all signatures
+        self.resolve_signatures(stmts);
 
         // Pass 2: Checking bodies
         for stmt in stmts {
@@ -82,21 +103,20 @@ impl TypeChecker {
                 self.warnings.push(pace_errors::SemanticWarning::UnusedItem {
                     kind: kind.to_string(),
                     name,
-                    src: miette::NamedSource::new("", String::new()),
+                    src: self.get_source(),
                     span: var_info.span,
                 });
             }
         }
     }
 
-    fn hoist_declarations(&mut self, stmts: &[Stmt])  {
-        // Pre-register names so resolve_type_name knows what is a class/struct/interface
+    fn register_types(&mut self, stmts: &[Stmt]) {
         for stmt in stmts {
             match stmt {
                 Stmt::Module { name, body } => {
                     let old_module = self.current_module.clone();
                     self.current_module = name.clone();
-                    self.hoist_declarations(body);
+                    self.register_types(body);
                     self.current_module = old_module;
                 }
                 Stmt::ClassDecl { name, .. } | Stmt::InterfaceDecl { name, .. } => {
@@ -114,9 +134,17 @@ impl TypeChecker {
                 _ => {}
             }
         }
+    }
 
+    fn resolve_signatures(&mut self, stmts: &[Stmt]) {
         for stmt in stmts {
             match stmt {
+                Stmt::Module { name, body } => {
+                    let old_module = self.current_module.clone();
+                    self.current_module = name.clone();
+                    self.resolve_signatures(body);
+                    self.current_module = old_module;
+                }
                 Stmt::FuncDecl { name, params, return_type, span, visibility, generic_params, is_static, .. } => {
                     let mut param_types = Vec::new();
                     for param in params {
@@ -130,7 +158,7 @@ impl TypeChecker {
                     if !is_camel_case(name) && name != "main" && !name.contains("__") {
                         self.warnings.push(pace_errors::SemanticWarning::NamingConvention {
                             name: name.clone(),
-                            src: miette::NamedSource::new("", String::new()),
+                            src: self.get_source(),
                             span: *span,
                         });
                     }
@@ -385,6 +413,7 @@ impl TypeChecker {
                 self.check_expr(expr);
             }
             Stmt::VarDecl { name, is_mutable, type_annotation, initializer, span, .. } => {
+                self.current_span = *span;
                 let mut inferred_type = Type::Unknown;
                 
                 if let Some(init_expr) = initializer {
@@ -405,7 +434,7 @@ impl TypeChecker {
                     
                     if !is_match {
                         self.define_var(name.clone(), expected_type.clone(), *span, *is_mutable);
-                        { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                        { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                             message: format!(
                                 "Type mismatch: expected {:?}, found {:?}",
                                 expected_type, inferred_type
@@ -416,7 +445,7 @@ impl TypeChecker {
                 }
                 
                 if inferred_type == Type::Unknown {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                         message: format!("Cannot infer type for variable '{}'", name)
                     }); return (); };
                 }
@@ -424,7 +453,7 @@ impl TypeChecker {
                 if !is_camel_case(name) && !name.contains("__") {
                     self.warnings.push(pace_errors::SemanticWarning::NamingConvention {
                         name: name.clone(),
-                        src: miette::NamedSource::new("", String::new()),
+                        src: self.get_source(),
                         span: *span,
                     });
                 }
@@ -456,12 +485,12 @@ impl TypeChecker {
                     }
                     
                     if !is_match {
-                        { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                        { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                             message: format!("Type mismatch: expected return type {:?}, found {:?}", expected, ret_ty)
                         }); return (); };
                     }
                 } else {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                         message: "Return statement outside of function".to_string()
                     }); return (); };
                 }
@@ -469,7 +498,7 @@ impl TypeChecker {
             Stmt::If { condition, then_branch, else_branch } => {
                 let cond_ty = self.check_expr(condition);
                 if cond_ty != Type::Bool && cond_ty != Type::Unknown {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                         message: "If condition must be a boolean".to_string()
                     }); return (); };
                 }
@@ -481,7 +510,7 @@ impl TypeChecker {
             Stmt::While { condition, body } => {
                 let cond_ty = self.check_expr(condition);
                 if cond_ty != Type::Bool && cond_ty != Type::Unknown {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                         message: "While condition must be a boolean".to_string()
                     }); return (); };
                 }
@@ -516,7 +545,8 @@ impl TypeChecker {
                     self.pop_scope_and_check_unused();
                 }
             }
-            Stmt::FuncDecl { name: _, params, body, return_type, generic_params, is_static, .. } => {
+            Stmt::FuncDecl { name: _, params, body, return_type, generic_params, is_static, span, .. } => {
+                self.current_span = *span;
                 let prev_return = self.current_return_type.clone();
                 let prev_generics = self.generic_params_in_scope.clone();
                 
@@ -582,13 +612,13 @@ impl TypeChecker {
                                 // For simplicity, we just check if it exists right now
                                 // In a full compiler, we'd check parameter counts and types
                             } else {
-                                { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                                { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                     message: format!("Class '{}' does not implement method '{}' from interface '{}'", name, m_name, iface_name)
                                 }); return (); };
                             }
                         }
                     } else {
-                        { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                        { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                             message: format!("Interface '{}' not found", iface_name)
                         }); return (); };
                     }
@@ -623,7 +653,7 @@ impl TypeChecker {
                 for part in parts {
                     let ty = self.check_expr(part);
                     if ty != Type::String && ty != Type::Int && ty != Type::Float && ty != Type::Bool {
-                        { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                        { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                             message: format!("Cannot interpolate value of type {:?}", ty)
                         }); return Type::Error; };
                     }
@@ -699,7 +729,7 @@ impl TypeChecker {
                             self.errors.push(TypeError::UnknownIdentifier {
                                 name: name.clone(),
                                 help_text,
-                                src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()),
+                                src: self.get_source(),
                                 span: self.get_span_for(&name),
                             });
                             Type::Error
@@ -721,7 +751,7 @@ impl TypeChecker {
                 }
                 
                 if !types_match && left_ty != Type::Unknown && right_ty != Type::Unknown && left_ty != Type::Any && right_ty != Type::Any {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                         message: format!("Type mismatch in binary operation: {:?} and {:?}", left_ty, right_ty)
                     }); return Type::Error; };
                 }
@@ -731,7 +761,7 @@ impl TypeChecker {
                         if left_ty == Type::Int || left_ty == Type::Float || left_ty == Type::Unknown || left_ty == Type::Any || right_ty == Type::Unknown || right_ty == Type::Any {
                             left_ty
                         } else {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                            { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                 message: "Arithmetic operations require numeric types".to_string()
                             }); Type::Error }
                         }
@@ -741,7 +771,7 @@ impl TypeChecker {
                         if left_ty == Type::Int || left_ty == Type::Float {
                             Type::Bool
                         } else {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                            { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                 message: "Relational operations require numeric types".to_string()
                             }); Type::Error }
                         }
@@ -750,7 +780,7 @@ impl TypeChecker {
                         if left_ty == Type::Bool {
                             Type::Bool
                         } else {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                            { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                 message: "Logical operations require boolean types".to_string()
                             }); Type::Error }
                         }
@@ -761,44 +791,49 @@ impl TypeChecker {
                 let val_ty = self.check_expr(value);
                 
                 if let Expr::Identifier(name) = &**target {
+                    let mut is_err = false;
+                    let mut err_msg = String::new();
+                    let mut var_span = (0, 0);
+                    
                     if let Some(var_info) = self.env.get_mut(name) {
                         if !var_info.is_mutable {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: var_info.span,
-                                message: format!("Cannot assign to immutable variable '{}'", name)
-                            }); return Type::Error; };
+                            is_err = true;
+                            err_msg = format!("Cannot assign to immutable variable '{}'", name);
+                            var_span = var_info.span;
+                        } else if var_info.ty != val_ty && var_info.ty != Type::Unknown && val_ty != Type::Unknown && var_info.ty != Type::Any && val_ty != Type::Any {
+                            is_err = true;
+                            err_msg = format!("Type mismatch: cannot assign {:?} to variable of type {:?}", val_ty, var_info.ty);
+                            var_span = var_info.span;
+                        } else {
+                            var_info.is_used = true;
                         }
-                        
-                        if var_info.ty != val_ty && var_info.ty != Type::Unknown && val_ty != Type::Unknown && var_info.ty != Type::Any && val_ty != Type::Any {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: var_info.span,
-                                message: format!("Type mismatch: cannot assign {:?} to variable of type {:?}", val_ty, var_info.ty)
-                            }); return Type::Error; };
-                        }
-                        
-                        var_info.is_used = true;
-                        val_ty
                     } else {
-                        {
-                            let suggestion = self.env.find_closest_variable(&name);
-                            let help_text = if let Some(sug) = suggestion {
-                                format!("Did you mean '{}'?", sug)
-                            } else {
-                                "Variable does not exist.".to_string()
-                            };
-                            self.errors.push(TypeError::UnknownIdentifier {
-                                name: name.clone(),
-                                help_text,
-                                src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()),
-                                span: self.get_span_for(&name),
-                            });
-                            Type::Error
-                        }
+                        let suggestion = self.env.find_closest_variable(&name);
+                        let help_text = if let Some(sug) = suggestion {
+                            format!("Did you mean '{}'?", sug)
+                        } else {
+                            "Variable does not exist.".to_string()
+                        };
+                        self.errors.push(TypeError::UnknownIdentifier {
+                            name: name.clone(),
+                            help_text,
+                            src: self.get_source(),
+                            span: self.get_span_for(&name),
+                        });
+                        return Type::Error;
                     }
+                    
+                    if is_err {
+                        self.errors.push(TypeError::Generic { src: self.get_source(), span: var_span, message: err_msg });
+                        return Type::Error;
+                    }
+                    val_ty
                 } else if let Expr::MemberAccess { object, property: _, computed_class: _, is_static_operator: _ } = &**target {
                     let _obj_ty = self.check_expr(object);
                     // Simple validation for now - real validation needs class layout check
                     val_ty
                 } else {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                         message: "Invalid assignment target".to_string()
                     }); Type::Error }
                 }
@@ -834,7 +869,7 @@ impl TypeChecker {
                 // For first-class function values (closures, callbacks)
                 if let Type::Function { params, return_type } = &callee_ty {
                     if params.len() != args.len() {
-                        { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                        { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                             message: format!("Function expects {} arguments, got {}", params.len(), args.len())
                         }); return Type::Error; };
                     }
@@ -842,7 +877,7 @@ impl TypeChecker {
                     for (i, arg_ty) in arg_types.iter().enumerate() {
                         let expected_ty = &params[i];
                         if expected_ty != &Type::Any && expected_ty != arg_ty && arg_ty != &Type::Unknown {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                            { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                 message: format!("Type mismatch in argument {}: expected {:?}, got {:?}", i + 1, expected_ty, arg_ty)
                             }); return Type::Error; };
                         }
@@ -854,12 +889,12 @@ impl TypeChecker {
                 if let Expr::Identifier(func_name) = &**callee
                     && let Some(sig) = self.env.functions.get(func_name) {
                         if sig.visibility == Visibility::Private && sig.module != self.current_module {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                            { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                 message: format!("Function '{}' is private and cannot be accessed outside of module '{}'", func_name, sig.module)
                             }); return Type::Error; };
                         }
                         if sig.params.len() != args.len() {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                            { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                 message: format!("Function '{}' expects {} arguments, got {}", func_name, sig.params.len(), args.len())
                             }); return Type::Error; };
                         }
@@ -867,7 +902,7 @@ impl TypeChecker {
                         for (i, arg_ty) in arg_types.iter().enumerate() {
                             let expected_ty = &sig.params[i];
                             if expected_ty != &Type::Any && expected_ty != arg_ty {
-                                { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                                { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                     message: format!("Type mismatch in argument {}: expected {:?}, got {:?}", i + 1, expected_ty, arg_ty)
                                 }); return Type::Error; };
                             }
@@ -898,12 +933,12 @@ impl TypeChecker {
                 // Allow :: ONLY on namespaces, and . ONLY on instances.
                 // Exception: allow . on namespaces ONLY if it's NOT an enum variant (for backwards compatibility while we transition)
                 if *is_static_operator && !is_namespace_access {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                         message: format!("The '::' operator can only be used for static or namespace access (object was {:?}, base_ident {:?}, classes={:?})", object, base_ident, self.env.classes.keys())
                     }); return Type::Error; };
                 }
                 if !*is_static_operator && is_namespace_access {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                         message: "The '.' operator can only be used for instance access. Use '::' for static/namespace access.".to_string()
                     }); return Type::Error; };
                 }
@@ -915,7 +950,7 @@ impl TypeChecker {
                         let sig = match self.env.classes.get(name) {
                             Some(s) => s,
                             None => {
-                                self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                                self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                     message: format!("Type '{}' is not defined", name)
                                 });
                                 return Type::Error;
@@ -927,7 +962,7 @@ impl TypeChecker {
                         let sig = match self.env.actors.get(name) {
                             Some(s) => s,
                             None => {
-                                self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                                self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                     message: format!("Actor '{}' is not defined", name)
                                 });
                                 return Type::Error;
@@ -939,7 +974,7 @@ impl TypeChecker {
                         let sig = match self.env.structs.get(name) {
                             Some(s) => s,
                             None => {
-                                self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                                self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                     message: format!("Type '{}' is not defined", name)
                                 });
                                 return Type::Error;
@@ -951,7 +986,7 @@ impl TypeChecker {
                         let sig = match self.env.enums.get(name) {
                             Some(s) => s,
                             None => {
-                                self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                                self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                     message: format!("Enum '{}' is not defined", name)
                                 });
                                 return Type::Error;
@@ -960,12 +995,12 @@ impl TypeChecker {
                         if sig.variants.contains_key(property) {
                             return Type::Enum(name.clone());
                         }
-                        { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                        { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                             message: format!("Enum '{}' has no variant '{}'", name, property)
                         }); return Type::Error; };
                     },
                     _ => {
-                        { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                        { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                             message: format!("Cannot access property '{}' on non-object type", property)
                         }); return Type::Error; };
                     }
@@ -977,7 +1012,7 @@ impl TypeChecker {
                 if let Some(ty) = fields.get(property) {
                     if let Type::Actor(ref a_name) = obj_ty {
                         if Some(a_name.clone()) != self.current_class {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                            { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                 message: format!("Actor fields are isolated and cannot be accessed from outside actor '{}'", a_name.split("__").last().unwrap_or(a_name))
                             }); return Type::Error; };
                         }
@@ -987,7 +1022,7 @@ impl TypeChecker {
                 if let Some(m_sig) = methods.get(property) {
                     if m_sig.visibility == Visibility::Private {
                         if self.current_class.as_deref() != Some(&*class_name) {
-                            { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                            { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                                 message: format!("Method '{}' is private and cannot be accessed from outside class/actor '{}'", property, class_name.split("__").last().unwrap_or(&class_name))
                             }); return Type::Error; };
                         }
@@ -997,7 +1032,7 @@ impl TypeChecker {
                     }
                     return m_sig.return_type.clone();
                 }
-                { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0),
+                { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
                     message: format!("Property '{}' not found on type '{}'", property, &class_name)
                 }); Type::Error }
             }
@@ -1006,7 +1041,7 @@ impl TypeChecker {
                 if let Type::Promise(t) = inner_ty {
                     *t
                 } else {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: "Cannot await a non-promise type".to_string() }); Type::Error }
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Cannot await a non-promise type".to_string() }); Type::Error }
                 }
             }
             Expr::Unwrap(inner) => {
@@ -1014,7 +1049,7 @@ impl TypeChecker {
                 if let Type::Nullable(t) = inner_ty {
                     *t
                 } else {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: "Cannot unwrap a non-nullable type".to_string() }); Type::Error }
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Cannot unwrap a non-nullable type".to_string() }); Type::Error }
                 }
             }
             Expr::Try(inner) => {
@@ -1024,10 +1059,10 @@ impl TypeChecker {
                         if name.starts_with("Result_") {
                             if let Some(Type::Enum(ret_name)) = &self.current_return_type {
                                 if !ret_name.starts_with("Result_") {
-                                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: "Cannot use ? on a Result in a function that does not return Result".to_string() }); return Type::Error; };
+                                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Cannot use ? on a Result in a function that does not return Result".to_string() }); return Type::Error; };
                                 }
                             } else {
-                                { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: "Cannot use ? on a Result in a function that does not return Result".to_string() }); return Type::Error; };
+                                { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Cannot use ? on a Result in a function that does not return Result".to_string() }); return Type::Error; };
                             }
                             if let Some(Some(fields)) = sig.variants.get("Ok") {
                                 if let Some(t) = fields.first() {
@@ -1038,10 +1073,10 @@ impl TypeChecker {
                         } else if name.starts_with("Option_") {
                             if let Some(Type::Enum(ret_name)) = &self.current_return_type {
                                 if !ret_name.starts_with("Option_") {
-                                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: "Cannot use ? on an Option in a function that does not return Option".to_string() }); return Type::Error; };
+                                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Cannot use ? on an Option in a function that does not return Option".to_string() }); return Type::Error; };
                                 }
                             } else {
-                                { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: "Cannot use ? on an Option in a function that does not return Option".to_string() }); return Type::Error; };
+                                { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Cannot use ? on an Option in a function that does not return Option".to_string() }); return Type::Error; };
                             }
                             if let Some(Some(fields)) = sig.variants.get("Some") {
                                 if let Some(t) = fields.first() {
@@ -1052,7 +1087,7 @@ impl TypeChecker {
                         }
                     }
                 }
-                { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: "The ? operator can only be applied to Result or Option types".to_string() }); Type::Error }
+                { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "The ? operator can only be applied to Result or Option types".to_string() }); Type::Error }
             }
             Expr::NullCoalesce { left, right } => {
                 let left_ty = self.check_expr(left);
@@ -1063,10 +1098,10 @@ impl TypeChecker {
                     } else if right_ty == Type::Null {
                         Type::Nullable(inner)
                     } else {
-                        { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: format!("Null coalesce type mismatch: {:?} and {:?}", *inner, right_ty) }); Type::Error }
+                        { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: format!("Null coalesce type mismatch: {:?} and {:?}", *inner, right_ty) }); Type::Error }
                     }
                 } else {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: "Left side of ?? must be nullable".to_string() }); Type::Error }
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Left side of ?? must be nullable".to_string() }); Type::Error }
                 }
             }
             Expr::OptionalMemberAccess { object, property } => {
@@ -1083,7 +1118,7 @@ impl TypeChecker {
                     let (class_name, sig) = match &*inner {
                         Type::Class(name) => (name, self.env.classes.get(name).unwrap()),
                         Type::Struct(name) => (name, self.env.structs.get(name).unwrap()),
-                        _ => { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: "Optional access on non-object".to_string() }); return Type::Error; },
+                        _ => { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Optional access on non-object".to_string() }); return Type::Error; },
                     };
                     
                     if let Some(f_ty) = sig.fields.get(property) {
@@ -1092,9 +1127,9 @@ impl TypeChecker {
                     if let Some(m_sig) = sig.methods.get(property) {
                         return Type::Nullable(Box::new(m_sig.return_type.clone()));
                     }
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: format!("Property '{}' not found on type '{}'", property, &class_name) }); Type::Error }
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: format!("Property '{}' not found on type '{}'", property, &class_name) }); Type::Error }
                 } else {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: "Optional member access on non-nullable type".to_string() }); Type::Error }
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Optional member access on non-nullable type".to_string() }); Type::Error }
                 }
             }
         }
@@ -1174,7 +1209,7 @@ impl TypeChecker {
             pace_ast::Pattern::Literal(expr) => {
                 let ty = self.check_expr(expr);
                 if expected_type != &ty && expected_type != &Type::Unknown && ty != Type::Unknown {
-                    { self.errors.push(TypeError::Generic { src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: (0, 0), message: format!("Pattern type mismatch: expected {:?}, got {:?}", expected_type, ty) }); return (); };
+                    { self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: format!("Pattern type mismatch: expected {:?}, got {:?}", expected_type, ty) }); return (); };
                 }
                 ()
             },

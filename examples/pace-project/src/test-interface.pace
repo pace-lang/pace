@@ -1,0 +1,23 @@
+interface Animal {
+    func speak() -> String;
+}
+
+class Dog implement Animal {
+    func speak() -> String {
+        return "Woof";
+    }
+}
+
+class Cat implement Animal {
+    func speak() -> String {
+        return "Meow";
+    }
+}
+
+func runInterfaceTest() {
+    print("--- Testing Interfaces ---");
+    let d = Dog();
+    let c = Cat();
+    print("Dog says: "); print(d.speak());
+    print("Cat says: "); print(c.speak());
+}

@@ -19,15 +19,7 @@ impl TreeShaker {
         
         // Build an index of all declarations
         let mut decls = std::collections::HashMap::new();
-        for stmt in &ast {
-            if let Stmt::FuncDecl { name, .. } |
-                   Stmt::ClassDecl { name, .. } | Stmt::ActorDecl { name, .. } |
-                   Stmt::StructDecl { name, .. } |
-                   Stmt::EnumDecl { name, .. } |
-                   Stmt::InterfaceDecl { name, .. } = stmt {
-                decls.insert(name.clone(), stmt.clone());
-            }
-        }
+        shaker.index_decls(&ast, &mut decls);
         
         // Iteratively trace reachable symbols until fixed point
         let mut queue = vec!["main".to_string()];
@@ -39,20 +31,53 @@ impl TreeShaker {
         }
         
         // Filter out unreachable declarations
-        ast.into_iter().filter(|stmt| {
+        shaker.filter_ast(ast)
+    }
+
+    fn index_decls(&self, ast: &[Stmt], decls: &mut std::collections::HashMap<String, Stmt>) {
+        for stmt in ast {
             match stmt {
                 Stmt::FuncDecl { name, .. } |
                 Stmt::ClassDecl { name, .. } | Stmt::ActorDecl { name, .. } |
                 Stmt::StructDecl { name, .. } |
                 Stmt::EnumDecl { name, .. } |
-                Stmt::InterfaceDecl { name, .. } => shaker.reachable.contains(name),
-                _ => true, // Keep expressions, variable declarations in top level, etc.
+                Stmt::InterfaceDecl { name, .. } => {
+                    decls.insert(name.clone(), stmt.clone());
+                }
+                Stmt::Module { body, .. } => {
+                    self.index_decls(body, decls);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn filter_ast(&self, ast: Vec<Stmt>) -> Vec<Stmt> {
+        ast.into_iter().filter_map(|stmt| {
+            match stmt {
+                Stmt::FuncDecl { ref name, .. } |
+                Stmt::ClassDecl { ref name, .. } | Stmt::ActorDecl { ref name, .. } |
+                Stmt::StructDecl { ref name, .. } |
+                Stmt::EnumDecl { ref name, .. } |
+                Stmt::InterfaceDecl { ref name, .. } => {
+                    if self.reachable.contains(name) { Some(stmt) } else { None }
+                }
+                Stmt::Module { name, body } => {
+                    let filtered_body = self.filter_ast(body);
+                    Some(Stmt::Module { name, body: filtered_body })
+                }
+                _ => Some(stmt), // Keep expressions, variable declarations in top level, etc.
             }
         }).collect()
     }
 
     fn trace_stmt(&mut self, stmt: &Stmt, queue: &mut Vec<String>) {
         match stmt {
+            Stmt::Module { body, .. } => {
+                for s in body {
+                    self.trace_stmt(s, queue);
+                }
+            }
             Stmt::Expr(expr) => self.trace_expr(expr, queue),
             Stmt::VarDecl { initializer, type_annotation, .. } => {
                 if let Some(expr) = initializer {

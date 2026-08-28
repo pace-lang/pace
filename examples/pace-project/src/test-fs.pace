@@ -1,0 +1,22 @@
+import std:fs;
+
+func runFsTest() -> Result<Bool, String> {
+    print("--- Testing FS ---");
+    let path = "test_output.txt";
+    let writeRes = File::writeText(path, "Hello from Pace FS!");
+    let wVal = writeRes?;
+    print("Write result: ");
+    print(wVal);
+    
+    let existsRes = File::exists(path);
+    let eVal = existsRes?;
+    print("Exists result: ");
+    print(eVal);
+    
+    let readRes = File::readText(path);
+    let rVal = readRes?;
+    print("Read result: ");
+    print(rVal);
+    
+    return Result<Bool, String>::Ok(true);
+}

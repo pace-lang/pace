@@ -1,0 +1,20 @@
+import std:collections;
+
+func runMapTest() {
+    print("--- Testing Maps ---");
+    let map = Map<String, Int>();
+    map.set("Alice", 25);
+    map.set("Bob", 30);
+    map.set("Alice", 26); // Override
+    
+    print("Map size: ${map.length()}");
+    let aliceAge = map.get("Alice");
+    print("Alice's age: ${aliceAge}");
+    
+    if map.contains("Bob") {
+        print("Map contains Bob");
+    }
+    if map.contains("Charlie") == false {
+        print("Map does not contain Charlie");
+    }
+}
