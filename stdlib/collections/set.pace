@@ -10,32 +10,69 @@ class Set<T> implement Iterable<T> {
         self.list = List<T>();
     }
 
-    func insert(val: T) -> Bool {
+    func add(val: T) -> Bool {
+        if self.list.contains(val) {
+            return false;
+        }
+        self.list.add(val);
+        return true;
+    }
+    
+    func addAll(other: List<T>) {
         var i = 0;
-        let len = self.list.length();
-        while i < len {
-            if self.list.get(i) == val {
-                return false;
-            }
+        let l = other.length();
+        while i < l {
+            self.add(other.get(i));
             i = i + 1;
         }
-        self.list.push(val);
-        return true;
+    }
+    
+    func remove(val: T) -> Bool {
+        let idx = self.list.indexOf(val);
+        if idx >= 0 {
+            self.list.remove(idx);
+            return true;
+        }
+        return false;
+    }
+    
+    func clear() {
+        self.list.clear();
     }
 
     func contains(val: T) -> Bool {
-        var i = 0;
-        let len = self.list.length();
-        while i < len {
-            if self.list.get(i) == val {
-                return true;
-            }
-            i = i + 1;
-        }
-        return false;
+        return self.list.contains(val);
     }
 
     func length() -> Int {
         return self.list.length();
+    }
+    
+    func union(other: Set<T>) -> Set<T> {
+        let newSet = Set<T>();
+        var i = 0;
+        while i < self.length() {
+            newSet.add(self.list.get(i));
+            i = i + 1;
+        }
+        var j = 0;
+        while j < other.length() {
+            newSet.add(other.list.get(j));
+            j = j + 1;
+        }
+        return newSet;
+    }
+    
+    func intersection(other: Set<T>) -> Set<T> {
+        let newSet = Set<T>();
+        var i = 0;
+        while i < self.length() {
+            let item = self.list.get(i);
+            if other.contains(item) {
+                newSet.add(item);
+            }
+            i = i + 1;
+        }
+        return newSet;
     }
 }

@@ -68,20 +68,24 @@ pub enum Token {
 
 #[derive(Clone)]
 pub struct Lexer<'a> {
-    src: std::iter::Peekable<std::str::Chars<'a>>,
+    src: &'a str,
     pub byte_pos: usize,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(src: &'a str) -> Self {
         Self {
-            src: src.chars().peekable(),
+            src,
             byte_pos: 0,
         }
     }
 
+    fn peek(&self) -> Option<char> {
+        self.src[self.byte_pos..].chars().next()
+    }
+
     fn advance(&mut self) -> Option<char> {
-        if let Some(c) = self.src.next() {
+        if let Some(c) = self.peek() {
             self.byte_pos += c.len_utf8();
             Some(c)
         } else {
@@ -89,65 +93,36 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn peek(&mut self) -> Option<&char> {
-        self.src.peek()
-    }
-
     fn skip_whitespace(&mut self) {
         loop {
-            match self.peek() {
-                Some(&c) if c.is_whitespace() => {
-                    self.advance();
-                }
-                Some(&'/') => {
-                    // Let's check the next character without advancing the first '/' yet, 
-                    // unless we're sure it's a comment.
-                    // To do this properly with peekable, we need a custom lookahead, 
-                    // but we can just use `as_str()` since `src` is essentially an iterator over chars,
-                    // wait, `std::iter::Peekable<std::str::Chars>` doesn't have `as_str()`.
-                    // So we must temporarily advance to see the second char.
-                    // Since it's complex to un-advance in standard Rust iterators without a specific design,
-                    // let's do a simple workaround: If we see '/', we can clone the iterator to peek ahead.
-                    let mut lookahead = self.src.clone();
-                    lookahead.next(); // Consume '/'
-                    match lookahead.next() {
-                        Some('/') => {
-                            // Check if it is a doc comment (///) but not a quadruple slash (////)
-                            let mut lookahead2 = lookahead.clone();
-                            if let Some('/') = lookahead2.next() {
-                                if lookahead2.next() != Some('/') {
-                                    // It is a /// comment, do NOT skip it here.
-                                    break;
-                                }
-                            }
+            let tail = &self.src[self.byte_pos..];
+            if tail.is_empty() {
+                break;
+            }
 
-                            // Normal Line comment (// or ////)
-                            self.advance(); // consume '/'
-                            self.advance(); // consume '/'
-                            while let Some(&ch) = self.peek() {
-                                if ch == '\n' {
-                                    break;
-                                }
-                                self.advance();
-                            }
-                        }
-                        Some('*') => {
-                            // Block comment
-                            self.advance(); // consume '/'
-                            self.advance(); // consume '*'
-                            let mut prev = '\0';
-                            while let Some(&ch) = self.peek() {
-                                self.advance();
-                                if prev == '*' && ch == '/' {
-                                    break;
-                                }
-                                prev = ch;
-                            }
-                        }
-                        _ => break, // Not a comment, break loop
-                    }
+            if tail.starts_with("///") && !tail.starts_with("////") {
+                // Doc comment, stop skipping
+                break;
+            } else if tail.starts_with("//") {
+                if let Some(idx) = tail.find('\n') {
+                    self.byte_pos += idx + 1;
+                } else {
+                    self.byte_pos = self.src.len();
                 }
-                _ => break,
+            } else if tail.starts_with("/*") {
+                if let Some(idx) = tail.find("*/") {
+                    self.byte_pos += idx + 2;
+                } else {
+                    self.byte_pos = self.src.len();
+                }
+            } else if let Some(c) = tail.chars().next() {
+                if c.is_whitespace() {
+                    self.byte_pos += c.len_utf8();
+                } else {
+                    break;
+                }
+            } else {
+                break;
             }
         }
     }
@@ -161,157 +136,83 @@ impl<'a> Lexer<'a> {
     }
 
     fn next_token_inner(&mut self) -> Token {
+        let tail = &self.src[self.byte_pos..];
+        if tail.is_empty() {
+            return Token::Eof;
+        }
 
-        if let Some(&c) = self.peek() {
-            if c.is_alphabetic() {
-                return self.ident();
+        if tail.starts_with("///") {
+            self.byte_pos += 3; // consume '///'
+            let mut comment = String::new();
+            while let Some(c) = self.advance() {
+                if c == '\n' {
+                    break;
+                }
+                comment.push(c);
             }
-            if c.is_ascii_digit() {
-                return self.number();
-            }
-            match c {
-                ':' => {
-                    self.advance();
-                    if let Some(&':') = self.peek() {
-                        self.advance();
-                        Token::ColonColon
-                    } else {
-                        Token::Colon
-                    }
-                }
-                '.' => { self.advance(); Token::Dot }
-                ';' => { self.advance(); Token::Semi }
-                '=' => {
-                    self.advance();
-                    if self.peek() == Some(&'=') {
-                        self.advance();
-                        Token::EqEq
-                    } else if self.peek() == Some(&'>') {
-                        self.advance();
-                        Token::FatArrow
-                    } else {
-                        Token::Eq
-                    }
-                }
-                '?' => {
-                    self.advance();
-                    if self.peek() == Some(&'.') {
-                        self.advance();
-                        Token::QuestionDot
-                    } else if self.peek() == Some(&'?') {
-                        self.advance();
-                        Token::QuestionQuestion
-                    } else {
-                        Token::Question
-                    }
-                }
-                '!' => {
-                    self.advance();
-                    if self.peek() == Some(&'=') {
-                        self.advance();
-                        Token::NotEq
-                    } else {
-                        Token::Bang
-                    }
-                }
-                '+' => { self.advance(); Token::Plus }
-                '-' => {
-                    self.advance();
-                    if self.peek() == Some(&'>') {
-                        self.advance();
-                        Token::Arrow
-                    } else {
-                        Token::Minus
-                    }
-                }
-                '<' => {
-                    self.advance();
-                    if self.peek() == Some(&'=') {
-                        self.advance();
-                        Token::LessEq
-                    } else {
-                        Token::Less
-                    }
-                }
-                '>' => {
-                    self.advance();
-                    if self.peek() == Some(&'=') {
-                        self.advance();
-                        Token::GreaterEq
-                    } else {
-                        Token::Greater
-                    }
-                }
-                '&' => {
-                    self.advance();
-                    if self.peek() == Some(&'&') {
-                        self.advance();
-                        Token::AndAnd
-                    } else {
-                        Token::Ident("&".to_string())
-                    }
-                }
-                '|' => {
-                    self.advance();
-                    if self.peek() == Some(&'|') {
-                        self.advance();
-                        Token::PipePipe
-                    } else {
-                        Token::Ident("|".to_string())
-                    }
-                }
-                '*' => { self.advance(); Token::Star }
-                '/' => {
-                    self.advance();
-                    // Since skip_whitespace didn't consume `///`, we must be at one now if next is `/`
-                    if self.peek() == Some(&'/') {
-                        self.advance();
-                        if self.peek() == Some(&'/') {
-                            self.advance();
-                            let mut comment = String::new();
-                            while let Some(&ch) = self.peek() {
-                                if ch == '\n' {
-                                    break;
-                                }
-                                comment.push(self.advance().unwrap());
-                            }
-                            Token::DocComment(comment.trim().to_string())
-                        } else {
-                            // Should theoretically not happen if skip_whitespace works, 
-                            // but fallback to returning Slash (or just a comment token if we had one).
-                            Token::Slash
-                        }
-                    } else {
-                        Token::Slash
-                    }
-                }
-                '%' => { self.advance(); Token::Mod }
-                '(' => { self.advance(); Token::LParen }
-                ')' => { self.advance(); Token::RParen }
-                '{' => { self.advance(); Token::LBrace }
-                '}' => { self.advance(); Token::RBrace }
-                ',' => { self.advance(); Token::Comma }
-                '"' => self.string(),
-                _ => {
-                    self.advance();
-                    Token::Ident(c.to_string())
-                }
-            }
-        } else {
-            Token::Eof
+            return Token::DocComment(comment.trim().to_string());
+        }
+
+        let c = self.peek().unwrap();
+
+        if c.is_alphabetic() {
+            return self.ident();
+        }
+        if c.is_ascii_digit() {
+            return self.number();
+        }
+
+        // Multi-character operators
+        if tail.starts_with("::") { self.byte_pos += 2; return Token::ColonColon; }
+        if tail.starts_with("==") { self.byte_pos += 2; return Token::EqEq; }
+        if tail.starts_with("=>") { self.byte_pos += 2; return Token::FatArrow; }
+        if tail.starts_with("?.") { self.byte_pos += 2; return Token::QuestionDot; }
+        if tail.starts_with("??") { self.byte_pos += 2; return Token::QuestionQuestion; }
+        if tail.starts_with("!=") { self.byte_pos += 2; return Token::NotEq; }
+        if tail.starts_with("->") { self.byte_pos += 2; return Token::Arrow; }
+        if tail.starts_with("<=") { self.byte_pos += 2; return Token::LessEq; }
+        if tail.starts_with(">=") { self.byte_pos += 2; return Token::GreaterEq; }
+        if tail.starts_with("&&") { self.byte_pos += 2; return Token::AndAnd; }
+        if tail.starts_with("||") { self.byte_pos += 2; return Token::PipePipe; }
+
+        self.advance(); // consume 1 char
+        match c {
+            ':' => Token::Colon,
+            '.' => Token::Dot,
+            ';' => Token::Semi,
+            '=' => Token::Eq,
+            '?' => Token::Question,
+            '!' => Token::Bang,
+            '+' => Token::Plus,
+            '-' => Token::Minus,
+            '<' => Token::Less,
+            '>' => Token::Greater,
+            '&' => Token::Ident("&".to_string()),
+            '|' => Token::Ident("|".to_string()),
+            '*' => Token::Star,
+            '/' => Token::Slash,
+            '%' => Token::Mod,
+            '(' => Token::LParen,
+            ')' => Token::RParen,
+            '{' => Token::LBrace,
+            '}' => Token::RBrace,
+            ',' => Token::Comma,
+            '"' => self.string_inner(),
+            _ => Token::Ident(c.to_string()),
         }
     }
 
     fn ident(&mut self) -> Token {
-        let mut s = String::new();
-        while let Some(&c) = self.peek() {
+        let start = self.byte_pos;
+        while let Some(c) = self.peek() {
             if c.is_alphanumeric() || c == '_' {
-                s.push(self.advance().unwrap());
+                self.advance();
             } else {
                 break;
             }
         }
-        match s.as_str() {
+        let s = &self.src[start..self.byte_pos];
+        match s {
             "let" => Token::Let,
             "var" => Token::Var,
             "const" => Token::Const,
@@ -342,41 +243,52 @@ impl<'a> Lexer<'a> {
             "while" => Token::While,
             "loop" => Token::Loop,
             "match" => Token::Match,
-            _ => Token::Ident(s),
+            _ => Token::Ident(s.to_string()),
         }
     }
 
     fn number(&mut self) -> Token {
-        let mut s = String::new();
+        let start = self.byte_pos;
         let mut is_float = false;
-        while let Some(&c) = self.peek() {
+        while let Some(c) = self.peek() {
             if c.is_ascii_digit() {
-                s.push(self.advance().unwrap());
+                self.advance();
             } else if c == '.' {
                 is_float = true;
-                s.push(self.advance().unwrap());
+                self.advance();
             } else {
                 break;
             }
         }
+        let s = &self.src[start..self.byte_pos];
         if is_float {
-            Token::Float(s.parse().unwrap())
+            Token::Float(s.parse().unwrap_or(0.0))
         } else {
-            Token::Int(s.parse().unwrap())
+            Token::Int(s.parse().unwrap_or(0))
         }
     }
 
-    fn string(&mut self) -> Token {
-        self.advance(); // skip quote
+    fn string_inner(&mut self) -> Token {
+        // the opening quote has already been consumed
         let mut s = String::new();
-        while let Some(&c) = self.peek() {
-            if c != '"' {
-                s.push(self.advance().unwrap());
-            } else {
-                break;
+        while let Some(c) = self.advance() {
+            match c {
+                '"' => break,
+                '\\' => {
+                    if let Some(ec) = self.advance() {
+                        match ec {
+                            'n' => s.push('\n'),
+                            'r' => s.push('\r'),
+                            't' => s.push('\t'),
+                            '\\' => s.push('\\'),
+                            '"' => s.push('"'),
+                            _ => s.push(ec),
+                        }
+                    }
+                }
+                _ => s.push(c),
             }
         }
-        self.advance(); // skip quote
         Token::String(s)
     }
 }

@@ -1,0 +1,11 @@
+import std:datetime;
+
+func runDateTimeTest() {
+    print("--- Testing DateTime ---");
+    let now = DateTime::now();
+    print("Current Year: ${now.getYear()}");
+    
+    // Test Duration
+    let dur = Duration(120);
+    print("Duration in minutes: ${dur.inMinutes()}");
+}

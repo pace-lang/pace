@@ -737,6 +737,9 @@ impl TypeChecker {
                         } else {
                             {
                             let suggestion = self.env.find_closest_variable(&name);
+                            if name == "StringBuilder" {
+                                println!("DEBUG: env.classes keys: {:?}", self.env.classes.keys());
+                            }
                             let help_text = if let Some(sug) = suggestion {
                                 format!("Did you mean '{}'?", sug)
                             } else {

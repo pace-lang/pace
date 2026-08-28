@@ -11,7 +11,10 @@ import "./test-map";
 import "./test-list";
 import "./test-math";
 import "./test-http";
-import "./test-fs";
+import "./test-io";
+import "./test-datetime";
+import "./test-os";
+import "./test-process";
 
 func main() {
     print("⚡ Running Pace Test Suite...");
@@ -29,7 +32,10 @@ func main() {
     runListTest();
     runMathTest();
     runHttpTest();
-    runFsTest();
+    runIoTest();
+    runDateTimeTest();
+    runOsTest();
+    runProcessTest();
     
     print("✅ All tests executed.");
 }

@@ -176,11 +176,71 @@ pub fn declare_runtime_functions<M: Module>(module: &mut M, ptr_ty: Type) -> Has
         let fs_read_text_id = module.declare_function("fsReadText", Linkage::Import, &sig_fs_read_text).unwrap();
         funcs.insert("fsReadText".to_string(), fs_read_text_id);
 
+        let mut sig_fs_delete_file = module.make_signature();
+        sig_fs_delete_file.params.push(AbiParam::new(ptr_ty));
+        sig_fs_delete_file.returns.push(AbiParam::new(types::I64));
+        let fs_delete_file_id = module.declare_function("fsDeleteFile", Linkage::Import, &sig_fs_delete_file).unwrap();
+        funcs.insert("fsDeleteFile".to_string(), fs_delete_file_id);
+
+        let mut sig_fs_mkdir = module.make_signature();
+        sig_fs_mkdir.params.push(AbiParam::new(ptr_ty));
+        sig_fs_mkdir.returns.push(AbiParam::new(types::I64));
+        let fs_mkdir_id = module.declare_function("fsMakeDir", Linkage::Import, &sig_fs_mkdir).unwrap();
+        funcs.insert("fsMakeDir".to_string(), fs_mkdir_id);
+
+        let mut sig_fs_dir_exists = module.make_signature();
+        sig_fs_dir_exists.params.push(AbiParam::new(ptr_ty));
+        sig_fs_dir_exists.returns.push(AbiParam::new(types::I64));
+        let fs_dir_exists_id = module.declare_function("fsDirExists", Linkage::Import, &sig_fs_dir_exists).unwrap();
+        funcs.insert("fsDirExists".to_string(), fs_dir_exists_id);
+
+        let mut sig_os_getenv = module.make_signature();
+        sig_os_getenv.params.push(AbiParam::new(ptr_ty));
+        sig_os_getenv.returns.push(AbiParam::new(ptr_ty));
+        let os_getenv_id = module.declare_function("osGetEnv", Linkage::Import, &sig_os_getenv).unwrap();
+        funcs.insert("osGetEnv".to_string(), os_getenv_id);
+
+        let mut sig_os_name = module.make_signature();
+        sig_os_name.returns.push(AbiParam::new(ptr_ty));
+        let os_name_id = module.declare_function("osName", Linkage::Import, &sig_os_name).unwrap();
+        funcs.insert("osName".to_string(), os_name_id);
+
+        let mut sig_process_run = module.make_signature();
+        sig_process_run.params.push(AbiParam::new(ptr_ty));
+        sig_process_run.returns.push(AbiParam::new(ptr_ty));
+        let process_run_id = module.declare_function("processRun", Linkage::Import, &sig_process_run).unwrap();
+        funcs.insert("processRun".to_string(), process_run_id);
+
+        let mut sig_process_exit = module.make_signature();
+        sig_process_exit.params.push(AbiParam::new(types::I64));
+        let process_exit_id = module.declare_function("processExit", Linkage::Import, &sig_process_exit).unwrap();
+        funcs.insert("processExit".to_string(), process_exit_id);
+
         let mut sig_http_get = module.make_signature();
         sig_http_get.params.push(AbiParam::new(ptr_ty));
         sig_http_get.returns.push(AbiParam::new(ptr_ty));
         let http_get_id = module.declare_function("httpGet", Linkage::Import, &sig_http_get).unwrap();
         funcs.insert("httpGet".to_string(), http_get_id);
+
+        let mut sig_http_post = module.make_signature();
+        sig_http_post.params.push(AbiParam::new(ptr_ty));
+        sig_http_post.params.push(AbiParam::new(ptr_ty));
+        sig_http_post.returns.push(AbiParam::new(ptr_ty));
+        let http_post_id = module.declare_function("httpPost", Linkage::Import, &sig_http_post).unwrap();
+        funcs.insert("httpPost".to_string(), http_post_id);
+
+        let mut sig_http_put = module.make_signature();
+        sig_http_put.params.push(AbiParam::new(ptr_ty));
+        sig_http_put.params.push(AbiParam::new(ptr_ty));
+        sig_http_put.returns.push(AbiParam::new(ptr_ty));
+        let http_put_id = module.declare_function("httpPut", Linkage::Import, &sig_http_put).unwrap();
+        funcs.insert("httpPut".to_string(), http_put_id);
+
+        let mut sig_http_delete = module.make_signature();
+        sig_http_delete.params.push(AbiParam::new(ptr_ty));
+        sig_http_delete.returns.push(AbiParam::new(ptr_ty));
+        let http_delete_id = module.declare_function("httpDelete", Linkage::Import, &sig_http_delete).unwrap();
+        funcs.insert("httpDelete".to_string(), http_delete_id);
 
         let mut sig_get_last_error = module.make_signature();
         sig_get_last_error.returns.push(AbiParam::new(ptr_ty));

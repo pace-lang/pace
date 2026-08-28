@@ -66,11 +66,25 @@ impl JITCompiler {
         builder.symbol("__pace_promise_resolve", pace_runtime::__pace_promise_resolve as *const u8);
         builder.symbol("__pace_promise_await", pace_runtime::__pace_promise_await as *const u8);
         
-        // Add FS, HTTP, and String symbols
+        // Add FS, OS, Process, HTTP, and String symbols
         builder.symbol("fsWriteText", pace_runtime::__pace_fs_write as *const u8);
         builder.symbol("fsExists", pace_runtime::__pace_fs_exists as *const u8);
         builder.symbol("fsReadText", pace_runtime::__pace_fs_read as *const u8);
+        builder.symbol("fsDeleteFile", pace_runtime::__pace_fs_delete as *const u8);
+        builder.symbol("fsMakeDir", pace_runtime::__pace_fs_mkdir as *const u8);
+        builder.symbol("fsDirExists", pace_runtime::__pace_fs_dir_exists as *const u8);
+        
+        builder.symbol("osGetEnv", pace_runtime::__pace_os_getenv as *const u8);
+        builder.symbol("osName", pace_runtime::__pace_os_name as *const u8);
+        
+        builder.symbol("processRun", pace_runtime::__pace_process_run as *const u8);
+        builder.symbol("processExit", pace_runtime::__pace_process_exit as *const u8);
+        
         builder.symbol("httpGet", pace_runtime::__pace_http_get as *const u8);
+        builder.symbol("httpPost", pace_runtime::__pace_http_post as *const u8);
+        builder.symbol("httpPut", pace_runtime::__pace_http_put as *const u8);
+        builder.symbol("httpDelete", pace_runtime::__pace_http_delete as *const u8);
+        
         builder.symbol("getLastError", pace_runtime::__pace_get_last_error as *const u8);
         builder.symbol("stringSplit", pace_runtime::__pace_string_split as *const u8);
         builder.symbol("stringReplace", pace_runtime::__pace_string_replace as *const u8);

@@ -1,4 +1,4 @@
-// Standard Time module
+// Standard DateTime module
 
 class DateTime {
     var timestamp: Int;
@@ -9,12 +9,16 @@ class DateTime {
         self.isUtc = isUtc;
     }
 
+    static func now() -> DateTime {
+        let ts = time(0);
+        return DateTime(ts, true);
+    }
+
     func toUnixTimestamp() -> Int {
         return self.timestamp;
     }
 
     func getYear() -> Int {
-        // Calls the runtime intrinsic __pace_get_year
         return getYear(self.timestamp);
     }
 
@@ -45,10 +49,4 @@ class Duration {
     func inHours() -> Int {
         return self.seconds / 3600;
     }
-}
-
-func now() -> DateTime {
-    // Calls the runtime intrinsic __pace_time
-    let ts = time(0);
-    return DateTime(ts, true);
 }

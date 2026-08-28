@@ -157,12 +157,7 @@ impl CompilerSession {
         Ok(final_ast)
     }
 
-    pub fn check_file(&self, path: &str) -> Result<Vec<Stmt>> {
-        let mut visited = std::collections::HashSet::new();
-        let path_buf = std::path::Path::new(path);
-        let module_name = path_buf.canonicalize().unwrap_or_else(|_| path_buf.to_path_buf()).to_string_lossy().into_owned();
-        let mut sources = std::collections::HashMap::new();
-        let ast = self.load_file(path_buf, &module_name, &mut visited, None, None, &mut sources)?;
+    fn process_ast_pipeline(&self, ast: Vec<Stmt>, sources: std::collections::HashMap<String, String>, module_path: &str) -> Result<(Vec<Stmt>, Vec<pace_errors::SemanticWarning>, Vec<pace_ty::TypeError>, pace_ty::Environment)> {
         // Symbol Resolution and Name Mangling pass
         let resolved_ast = resolve::SymbolResolver::run(ast)?;
 
@@ -172,9 +167,21 @@ impl CompilerSession {
         // Apply Dead Code Elimination (Tree Shaking)
         let mono_ast = shake::TreeShaker::run(mono_ast);
         
-        
         // Run typechecker on the parsed AST
-        let (warnings, type_errors, _env) = pace_ty::check(&mono_ast, sources, &path_buf.display().to_string());
+        let (warnings, type_errors, env) = pace_ty::check(&mono_ast, sources, module_path);
+        
+        Ok((mono_ast, warnings, type_errors, env))
+    }
+
+    pub fn check_file(&self, path: &str) -> Result<Vec<Stmt>> {
+        let mut visited = std::collections::HashSet::new();
+        let path_buf = std::path::Path::new(path);
+        let module_name = path_buf.canonicalize().unwrap_or_else(|_| path_buf.to_path_buf()).to_string_lossy().into_owned();
+        let mut sources = std::collections::HashMap::new();
+        let ast = self.load_file(path_buf, &module_name, &mut visited, None, None, &mut sources)?;
+        
+        let (mono_ast, warnings, type_errors, _env) = self.process_ast_pipeline(ast, sources, &path_buf.display().to_string())?;
+        
         for warning in warnings {
             eprintln!("{:?}", miette::Report::new(warning));
         }
@@ -191,17 +198,9 @@ impl CompilerSession {
         let module_name = path_buf.to_string_lossy().into_owned();
         let mut sources = std::collections::HashMap::new();
         let ast = self.load_file(&path_buf, &module_name, &mut visited, Some(&path_buf), Some(src), &mut sources)?;
-        // Symbol Resolution and Name Mangling pass
-        let resolved_ast = resolve::SymbolResolver::run(ast)?;
-
-        // Monomorphization without flattening
-        let mono_ast = monomorphize::Monomorphizer::run(resolved_ast.clone()).unwrap_or_else(|_| resolved_ast.clone());
-
-        // Apply Dead Code Elimination (Tree Shaking)
-        let mono_ast = shake::TreeShaker::run(mono_ast);
         
-        // Run typechecker on the parsed AST
-        let (warnings, type_errors, env) = pace_ty::check(&mono_ast, sources, &path_buf.display().to_string());
+        let (mono_ast, warnings, type_errors, env) = self.process_ast_pipeline(ast, sources, &path_buf.display().to_string())?;
+        
         for warning in &warnings {
             eprintln!("{:?}", miette::Report::new(warning.clone()));
         }
@@ -316,20 +315,11 @@ impl CompilerSession {
             }
         };
 
-        // Symbol Resolution and Name Mangling pass
-        let resolved_ast = resolve::SymbolResolver::run(ast)?;
-
-        // Monomorphization without flattening
-        let mono_ast = monomorphize::Monomorphizer::run(resolved_ast.clone()).unwrap_or_else(|_| resolved_ast.clone());
-
-        // Apply Dead Code Elimination (Tree Shaking)
-        let mono_ast = shake::TreeShaker::run(mono_ast);
-
         let mut sources = std::collections::HashMap::new();
         sources.insert("source".to_string(), src.to_string());
 
-        // Run typechecker on the parsed AST
-        let (warnings, type_errors, _env) = pace_ty::check(&mono_ast, sources, "source");
+        let (mono_ast, warnings, type_errors, _env) = self.process_ast_pipeline(ast, sources, "source")?;
+        
         for warning in warnings {
             eprintln!("{:?}", miette::Report::new(warning));
         }

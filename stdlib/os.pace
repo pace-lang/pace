@@ -1,0 +1,15 @@
+// OS module for interacting with the operating system
+
+class OS {
+    static func getEnv(key: String) -> Option<String> {
+        let ptr = osGetEnv(key);
+        if ptr == null {
+            return Option<String>::None;
+        }
+        return Option<String>::Some(ptr);
+    }
+    
+    static func name() -> String {
+        return osName();
+    }
+}

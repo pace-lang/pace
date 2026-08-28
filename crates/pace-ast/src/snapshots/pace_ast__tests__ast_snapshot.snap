@@ -17,6 +17,7 @@ VarDecl {
         },
     ),
     is_static: false,
+    visibility: Public,
     initializer: Some(
         IntLiteral(
             42,

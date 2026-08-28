@@ -1,4 +1,4 @@
-// File System stdlib using native FFI
+// IO module for File and Directory operations
 
 class File {
     static func writeText(path: String, content: String) -> Result<Bool, String> {
@@ -21,5 +21,28 @@ class File {
             return Result<String, String>::Err(getLastError());
         }
         return Result<String, String>::Ok(ptr);
+    }
+    
+    static func delete(path: String) -> Result<Bool, String> {
+        if fsDeleteFile(path) != 0 {
+            return Result<Bool, String>::Ok(true);
+        }
+        return Result<Bool, String>::Err(getLastError());
+    }
+}
+
+class Directory {
+    static func make(path: String) -> Result<Bool, String> {
+        if fsMakeDir(path) != 0 {
+            return Result<Bool, String>::Ok(true);
+        }
+        return Result<Bool, String>::Err(getLastError());
+    }
+    
+    static func exists(path: String) -> Result<Bool, String> {
+        if fsDirExists(path) != 0 {
+            return Result<Bool, String>::Ok(true);
+        }
+        return Result<Bool, String>::Err(getLastError());
     }
 }

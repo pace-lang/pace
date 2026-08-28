@@ -29,4 +29,4 @@ editors/vscode/out/
 # Local examples and test projects
 # examples/
 build/
-.txt/
+test_output_dir/

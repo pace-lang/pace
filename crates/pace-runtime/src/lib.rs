@@ -345,7 +345,7 @@ pub extern "C" fn __pace_fs_exists(path: *const std::ffi::c_char) -> i64 {
     unsafe {
         let p_str = std::ffi::CStr::from_ptr(path).to_string_lossy().into_owned();
         match std::fs::metadata(p_str) {
-            Ok(_) => 1,
+            Ok(m) => if m.is_file() { 1 } else { 0 },
             Err(e) => {
                 set_last_error(&e.to_string());
                 0
@@ -369,6 +369,102 @@ pub extern "C" fn __pace_fs_read(path: *const std::ffi::c_char) -> *mut std::ffi
     }
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_fs_delete(path: *const std::ffi::c_char) -> i64 {
+    if path.is_null() { return 0; }
+    unsafe {
+        let p_str = std::ffi::CStr::from_ptr(path).to_string_lossy().into_owned();
+        match std::fs::remove_file(p_str) {
+            Ok(_) => 1,
+            Err(e) => {
+                set_last_error(&e.to_string());
+                0
+            }
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_fs_mkdir(path: *const std::ffi::c_char) -> i64 {
+    if path.is_null() { return 0; }
+    unsafe {
+        let p_str = std::ffi::CStr::from_ptr(path).to_string_lossy().into_owned();
+        match std::fs::create_dir_all(p_str) {
+            Ok(_) => 1,
+            Err(e) => {
+                set_last_error(&e.to_string());
+                0
+            }
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_fs_dir_exists(path: *const std::ffi::c_char) -> i64 {
+    if path.is_null() { return 0; }
+    unsafe {
+        let p_str = std::ffi::CStr::from_ptr(path).to_string_lossy().into_owned();
+        match std::fs::metadata(p_str) {
+            Ok(m) => if m.is_dir() { 1 } else { 0 },
+            Err(e) => {
+                set_last_error(&e.to_string());
+                0
+            }
+        }
+    }
+}
+
+// ==========================================
+// OS AND PROCESS RUNTIME
+// ==========================================
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_os_getenv(key: *const std::ffi::c_char) -> *mut std::ffi::c_char {
+    if key.is_null() { return std::ptr::null_mut(); }
+    unsafe {
+        let k_str = std::ffi::CStr::from_ptr(key).to_string_lossy().into_owned();
+        match std::env::var(k_str) {
+            Ok(val) => std::ffi::CString::new(val).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_os_name() -> *mut std::ffi::c_char {
+    std::ffi::CString::new(std::env::consts::OS).unwrap().into_raw()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_process_run(command: *const std::ffi::c_char) -> *mut std::ffi::c_char {
+    if command.is_null() { return std::ptr::null_mut(); }
+    unsafe {
+        let cmd_str = std::ffi::CStr::from_ptr(command).to_string_lossy().into_owned();
+        
+        let output = if cfg!(target_os = "windows") {
+            std::process::Command::new("cmd").args(["/C", &cmd_str]).output()
+        } else {
+            std::process::Command::new("sh").args(["-c", &cmd_str]).output()
+        };
+        
+        match output {
+            Ok(out) => {
+                let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+                std::ffi::CString::new(stdout).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+            }
+            Err(e) => {
+                set_last_error(&e.to_string());
+                std::ptr::null_mut()
+            }
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_process_exit(code: i64) -> ! {
+    std::process::exit(code as i32);
+}
+
 // ==========================================
 // HTTP RUNTIME (Network)
 // ==========================================
@@ -379,6 +475,68 @@ pub extern "C" fn __pace_http_get(url: *const std::ffi::c_char) -> *mut std::ffi
     unsafe {
         let u_str = std::ffi::CStr::from_ptr(url).to_string_lossy().into_owned();
         match ureq::get(&u_str).call() {
+            Ok(response) => {
+                let mut content = String::new();
+                use std::io::Read;
+                let _ = response.into_body().into_reader().read_to_string(&mut content);
+                std::ffi::CString::new(content).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+            }
+            Err(e) => {
+                set_last_error(&e.to_string());
+                std::ptr::null_mut()
+            }
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_http_post(url: *const std::ffi::c_char, body: *const std::ffi::c_char) -> *mut std::ffi::c_char {
+    if url.is_null() || body.is_null() { return std::ptr::null_mut(); }
+    unsafe {
+        let u_str = std::ffi::CStr::from_ptr(url).to_string_lossy().into_owned();
+        let b_str = std::ffi::CStr::from_ptr(body).to_string_lossy().into_owned();
+        match ureq::post(&u_str).send(&b_str) {
+            Ok(response) => {
+                let mut content = String::new();
+                use std::io::Read;
+                let _ = response.into_body().into_reader().read_to_string(&mut content);
+                std::ffi::CString::new(content).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+            }
+            Err(e) => {
+                set_last_error(&e.to_string());
+                std::ptr::null_mut()
+            }
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_http_put(url: *const std::ffi::c_char, body: *const std::ffi::c_char) -> *mut std::ffi::c_char {
+    if url.is_null() || body.is_null() { return std::ptr::null_mut(); }
+    unsafe {
+        let u_str = std::ffi::CStr::from_ptr(url).to_string_lossy().into_owned();
+        let b_str = std::ffi::CStr::from_ptr(body).to_string_lossy().into_owned();
+        match ureq::put(&u_str).send(&b_str) {
+            Ok(response) => {
+                let mut content = String::new();
+                use std::io::Read;
+                let _ = response.into_body().into_reader().read_to_string(&mut content);
+                std::ffi::CString::new(content).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+            }
+            Err(e) => {
+                set_last_error(&e.to_string());
+                std::ptr::null_mut()
+            }
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_http_delete(url: *const std::ffi::c_char) -> *mut std::ffi::c_char {
+    if url.is_null() { return std::ptr::null_mut(); }
+    unsafe {
+        let u_str = std::ffi::CStr::from_ptr(url).to_string_lossy().into_owned();
+        match ureq::delete(&u_str).call() {
             Ok(response) => {
                 let mut content = String::new();
                 use std::io::Read;

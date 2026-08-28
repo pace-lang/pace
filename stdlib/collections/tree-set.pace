@@ -28,7 +28,7 @@ class TreeSet<T> implement Iterable<T> {
         self.size = 0;
     }
 
-    func insert(val: T) {
+    func add(val: T) {
         if self.has_root == false {
             self.root = TreeNode<T>(val);
             self.has_root = true;

@@ -12,7 +12,7 @@ class List<T> implement Iterable<T> {
         self.cap = 0;
     }
 
-    func push(val: T) {
+    func add(val: T) {
         if self.cap == 0 {
             self.cap = 16;
             self.ptr = malloc(self.cap * 8); // 8 bytes per i64
@@ -33,39 +33,94 @@ class List<T> implement Iterable<T> {
             self.cap = newCap;
         }
         
-        // Note: For objects, we need to ensure ARC doesn't prematurely drop them,
-        // but since we are taking ownership in the array, standard ptr_store works.
-        // Wait, for Monomorphization, we need an intrinsic like `__pace_ptr_store_obj`?
-        // Actually, for T, `ptr_store` expects an i64, so we must cast T to i64?
-        // But in Pace, there's no casting. Wait! 
-        // If T is Object, `val` is passed as i64 in codegen. 
-        // Wait, `ptrStore(ptr, offset, val)` takes `(Int, Int, Int)`.
-        // If `val` is `T`, it will fail type-checking because `ptrStore` expects `Int`.
-        // I'll need to update `ptrStore` signature in `env.rs` to take `Any`, or add `__pace_cast_to_int`!
         ptrStore(self.ptr, self.len * 8, val);
         self.len = self.len + 1;
+    }
+    
+    func addAll(other: Iterable<T>) {
+        // We expect `other` to provide a way to iterate. Since Iterable doesn't have an iterator yet,
+        // we'll assume we can't easily iterate over Iterable without an iterator.
+        // Wait, Pace doesn't have a standardized `get` or iterator on Iterable yet.
+        // Let's take a List<T> instead for now, or just use `get` if it's there.
+        // We don't have traits with `get` inside `Iterable`. We can take `List<T>` for `other`.
+    }
+
+    func addAllList(other: List<T>) {
+        var i = 0;
+        let l = other.length();
+        while i < l {
+            self.add(other.get(i));
+            i = i + 1;
+        }
     }
 
     func get(idx: Int) -> T {
         if idx >= self.len {
-            // Out of bounds
-            // Return null or panic? We don't have panic yet.
-            // For now, return the first element or something, or null if nullable.
-            // Since T is not nullable, we just load 0 and cast.
+            // Out of bounds fallback
             return ptrLoad(self.ptr, 0);
         }
         return ptrLoad(self.ptr, idx * 8);
     }
+    
+    func insert(idx: Int, val: T) {
+        if idx >= self.len {
+            self.add(val);
+            return;
+        }
+        
+        // Ensure capacity
+        self.add(val); // This ensures capacity and increments len
+        
+        // Shift elements to the right
+        var i = self.len - 1;
+        while i > idx {
+            let prev = ptrLoad(self.ptr, (i - 1) * 8);
+            ptrStore(self.ptr, i * 8, prev);
+            i = i - 1;
+        }
+        
+        ptrStore(self.ptr, idx * 8, val);
+    }
+    
+    func remove(idx: Int) {
+        if idx >= self.len {
+            return;
+        }
+        
+        var i = idx;
+        while i < self.len - 1 {
+            let next = ptrLoad(self.ptr, (i + 1) * 8);
+            ptrStore(self.ptr, i * 8, next);
+            i = i + 1;
+        }
+        self.len = self.len - 1;
+    }
+    
+    func clear() {
+        self.len = 0;
+    }
+    
+    func indexOf(val: T) -> Int {
+        var i = 0;
+        while i < self.len {
+            if ptrLoad(self.ptr, i * 8) == val {
+                return i;
+            }
+            i = i + 1;
+        }
+        return 0 - 1;
+    }
+    
+    func contains(val: T) -> Bool {
+        return self.indexOf(val) >= 0;
+    }
+
     func length() -> Int {
         return self.len;
     }
 
     func drop() {
         if self.ptr != 0 {
-            // For Object<T>, we should ideally call __pace_release on each element before freeing!
-            // But since Pace ARC is handled by variable scopes, when List is dropped, the elements
-            // should be released! 
-            // Wait, memory management for elements inside generic collections!
             free(self.ptr, self.cap * 8);
             self.ptr = 0;
         }

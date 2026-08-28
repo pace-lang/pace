@@ -1,4 +1,4 @@
-import std:string_builder;
+import std:string;
 
 func concat_test() {
     let sb = StringBuilder();

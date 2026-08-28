@@ -3,9 +3,9 @@ import std:collections;
 func runMapTest() {
     print("--- Testing Maps ---");
     let map = Map<String, Int>();
-    map.set("Alice", 25);
-    map.set("Bob", 30);
-    map.set("Alice", 26); // Override
+    map.put("Alice", 25);
+    map.put("Bob", 30);
+    map.put("Alice", 26); // Override
     
     print("Map size: ${map.length()}");
     let aliceAge = map.get("Alice");

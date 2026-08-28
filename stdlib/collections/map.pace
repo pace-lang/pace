@@ -22,12 +22,12 @@ class Map<K, V> implement Iterable<K> {
         var i = 0;
         let capacity = 65536; // Initial capacity
         while i < capacity {
-            self.buckets.push(List<MapEntry<K, V>>());
+            self.buckets.add(List<MapEntry<K, V>>());
             i = i + 1;
         }
     }
 
-    func set(key: K, val: V) {
+    func put(key: K, val: V) {
         var index = hash(key) % self.buckets.length();
         if index < 0 {
             index = index * (0 - 1);
@@ -48,8 +48,39 @@ class Map<K, V> implement Iterable<K> {
         
         // Key not found, append a new entry
         let entry = MapEntry<K, V>(key, val);
-        bucket.push(entry);
+        bucket.add(entry);
         self.count = self.count + 1;
+    }
+
+    func putAll(other: Map<K, V>) {
+        let keys = other.keys();
+        var i = 0;
+        let l = keys.length();
+        while i < l {
+            let k = keys.get(i);
+            self.put(k, other.get(k));
+            i = i + 1;
+        }
+    }
+
+    func remove(key: K) -> Bool {
+        var index = hash(key) % self.buckets.length();
+        if index < 0 {
+            index = index * (0 - 1);
+        }
+        
+        let bucket = self.buckets.get(index);
+        var i = 0;
+        let len = bucket.length();
+        while i < len {
+            if bucket.get(i).key == key {
+                bucket.remove(i);
+                self.count = self.count - 1;
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
     }
 
     func get(k: K) -> V {
@@ -91,6 +122,50 @@ class Map<K, V> implement Iterable<K> {
             i = i + 1;
         }
         return false;
+    }
+    
+    func keys() -> List<K> {
+        let list = List<K>();
+        var i = 0;
+        let numBuckets = self.buckets.length();
+        while i < numBuckets {
+            let bucket = self.buckets.get(i);
+            var j = 0;
+            let bucketLen = bucket.length();
+            while j < bucketLen {
+                list.add(bucket.get(j).key);
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return list;
+    }
+    
+    func values() -> List<V> {
+        let list = List<V>();
+        var i = 0;
+        let numBuckets = self.buckets.length();
+        while i < numBuckets {
+            let bucket = self.buckets.get(i);
+            var j = 0;
+            let bucketLen = bucket.length();
+            while j < bucketLen {
+                list.add(bucket.get(j).value);
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return list;
+    }
+    
+    func clear() {
+        var i = 0;
+        let capacity = 65536;
+        while i < capacity {
+            self.buckets.get(i).clear();
+            i = i + 1;
+        }
+        self.count = 0;
     }
     
     func length() -> Int {

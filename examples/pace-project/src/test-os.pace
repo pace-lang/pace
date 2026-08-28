@@ -1,0 +1,6 @@
+import std:os;
+
+func runOsTest() {
+    print("--- Testing OS ---");
+    print("OS Name: ${OS::name()}");
+}

@@ -1,5 +1,6 @@
 // String utilities
 import "./collections/list";
+import "./string-builder";
 
 class StringUtil {
     static func split(s: String, delim: String) -> List<String> {
@@ -10,7 +11,7 @@ class StringUtil {
         while i < len {
             let offset = (i + 1) * 8;
             let str: String = ptrLoad(ptr, offset);
-            list.push(str);
+            list.add(str);
             i = i + 1;
         }
         free(ptr, (len + 1) * 8);
@@ -35,5 +36,21 @@ class StringUtil {
 
     static func startsWith(s: String, search: String) -> Bool {
         return stringStartsWith(s, search) != 0;
+    }
+    
+    static func join(list: List<String>, delim: String) -> String {
+        let sb = StringBuilder();
+        var i = 0;
+        let len = list.length();
+        while i < len {
+            sb.append(list.get(i));
+            if i < len - 1 {
+                sb.append(delim);
+            }
+            i = i + 1;
+        }
+        let res = sb.build();
+        sb.free();
+        return res;
     }
 }

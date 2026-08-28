@@ -249,7 +249,97 @@ impl Environment {
             },
         );
         self.register_function(
+            "fsDeleteFile".to_string(),
+            FunctionSignature {
+                params: vec![Type::String],
+                return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "fsMakeDir".to_string(),
+            FunctionSignature {
+                params: vec![Type::String],
+                return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "fsDirExists".to_string(),
+            FunctionSignature {
+                params: vec![Type::String],
+                return_type: Type::Int,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "osGetEnv".to_string(),
+            FunctionSignature {
+                params: vec![Type::String],
+                return_type: Type::Nullable(Box::new(Type::String)),
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "osName".to_string(),
+            FunctionSignature {
+                params: vec![],
+                return_type: Type::String,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "processRun".to_string(),
+            FunctionSignature {
+                params: vec![Type::String],
+                return_type: Type::Nullable(Box::new(Type::String)),
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "processExit".to_string(),
+            FunctionSignature {
+                params: vec![Type::Int],
+                return_type: Type::Void,
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
             "httpGet".to_string(),
+            FunctionSignature {
+                params: vec![Type::String],
+                return_type: Type::Nullable(Box::new(Type::String)),
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "httpPost".to_string(),
+            FunctionSignature {
+                params: vec![Type::String, Type::String],
+                return_type: Type::Nullable(Box::new(Type::String)),
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "httpPut".to_string(),
+            FunctionSignature {
+                params: vec![Type::String, Type::String],
+                return_type: Type::Nullable(Box::new(Type::String)),
+                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "httpDelete".to_string(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),

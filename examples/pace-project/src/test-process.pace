@@ -1,0 +1,9 @@
+import std:process;
+
+func runProcessTest() -> Result<Bool, String> {
+    print("--- Testing Process ---");
+    let res = Process::run("echo Hello from Process!");
+    let out = res?;
+    print(out);
+    return Result<Bool, String>::Ok(true);
+}
