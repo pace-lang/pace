@@ -8,7 +8,11 @@ use miette::{Diagnostic, Result};
 pub struct PaceToml {
     pub package: Package,
     #[serde(default)]
+    pub sdk: Option<HashMap<String, String>>,
+    #[serde(default)]
     pub dependencies: HashMap<String, Dependency>,
+    #[serde(rename = "dev-dependencies", default)]
+    pub dev_dependencies: HashMap<String, Dependency>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -16,6 +20,11 @@ pub struct Package {
     pub name: String,
     pub version: String,
     pub description: Option<String>,
+    pub license: Option<String>,
+    pub authors: Option<Vec<String>>,
+    pub repository: Option<String>,
+    #[serde(default)]
+    pub platforms: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

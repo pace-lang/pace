@@ -15,7 +15,18 @@ pub fn execute(is_pkg: bool) -> Result<()> {
 
     let default_name = if dir_name.is_empty() { "my_project".to_string() } else { dir_name };
 
-    let toml_content = format!("[package]\nname = \"{}\"\nversion = \"0.1.0\"\n\n[dependencies]\n", default_name);
+    let toml_content = format!(
+r#"[package]
+name = "{0}"
+version = "0.1.0"
+
+[sdk]
+pace = ">=0.1.0 <1.0.0"
+
+[dependencies]
+
+[dev-dependencies]
+"#, default_name);
     std::fs::write(&pace_toml, toml_content)
         .map_err(|e| miette::miette!("Failed to write pace.toml: {}", e))?;
 
@@ -25,8 +36,8 @@ pub fn execute(is_pkg: bool) -> Result<()> {
             .map_err(|e| miette::miette!("Failed to create src directory: {}", e))?;
         if is_pkg {
             let lib_content = "func greet() {\n    print(\"Hello from Pace package!\");\n}\n";
-            std::fs::write(src_path.join("lib.pace"), lib_content)
-                .map_err(|e| miette::miette!("Failed to write src/lib.pace: {}", e))?;
+            std::fs::write(src_path.join(format!("{}.pace", default_name)), lib_content)
+                .map_err(|e| miette::miette!("Failed to write src/{}.pace: {}", default_name, e))?;
         } else {
             let main_content = "func main() {\n    print(\"⚡ Pace is ready.\");\n}\n";
             std::fs::write(src_path.join("main.pace"), main_content)

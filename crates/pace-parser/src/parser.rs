@@ -109,6 +109,7 @@ impl<'a> Parser<'a> {
             Token::For => self.parse_for_stmt(),
             Token::Match => self.parse_match_stmt(),
             Token::Import => self.parse_import_stmt(),
+            Token::Export => self.parse_export_stmt(),
             Token::LBrace => self.parse_block(),
             Token::Return => {
                 self.advance();
@@ -427,27 +428,6 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_unquoted_path(&mut self) -> Result<String, pace_errors::SyntaxError> {
-        let mut path = String::new();
-        loop {
-            match &self.current_token {
-                Token::Dot => path.push('.'),
-                Token::Slash => path.push('/'),
-                Token::Minus => path.push('-'),
-                Token::Colon => path.push(':'),
-                Token::Ident(id) => path.push_str(id),
-                Token::Int(n) => path.push_str(&n.to_string()),
-                _ => break,
-            }
-            self.advance();
-        }
-        if path.is_empty() {
-            Err(pace_errors::SyntaxError { message: "Expected path".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span })
-        } else {
-            Ok(path)
-        }
-    }
-
     fn parse_import_stmt(&mut self) -> Result<Stmt, pace_errors::SyntaxError> {
         self.advance(); // consume 'import'
         
@@ -457,7 +437,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 p
             }
-            _ => self.parse_unquoted_path()?,
+            _ => return Err(pace_errors::SyntaxError { message: "Import path must be a quoted string".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span }),
         };
 
         let mut alias = None;
@@ -511,6 +491,25 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Stmt::Import { path, alias, show, hide })
+    }
+
+    fn parse_export_stmt(&mut self) -> Result<Stmt, pace_errors::SyntaxError> {
+        self.advance(); // consume 'export'
+        
+        let path = match &self.current_token {
+            Token::String(s) => {
+                let p = s.clone();
+                self.advance();
+                p
+            }
+            _ => return Err(pace_errors::SyntaxError { message: "Export path must be a quoted string".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span }),
+        };
+
+        if !self.match_token(Token::Semi) {
+            return Err(pace_errors::SyntaxError { message: "Expected ';' after export statement".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
+        }
+
+        Ok(Stmt::Export { path })
     }
 
     fn parse_func_decl(&mut self, is_async: bool, visibility: Visibility, is_static: bool, doc_comment: Option<String>) -> Result<Stmt, pace_errors::SyntaxError> {

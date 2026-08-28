@@ -114,6 +114,10 @@ pub enum Stmt {
         show: Option<Vec<String>>,
         hide: Option<Vec<String>>,
     },
+    /// An export statement
+    Export {
+        path: String,
+    },
     /// A module containing statements
     Module {
         name: String,

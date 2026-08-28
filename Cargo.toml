@@ -26,6 +26,7 @@ flate2 = "1.0.28"
 walkdir = "2.4.0"
 ureq = { version = "3.4", features = ["json"] }
 dialoguer = "0.12"
+semver = "1.0"
 
 # Local workspace crates
 pace-ast = { path = "crates/pace-ast" }

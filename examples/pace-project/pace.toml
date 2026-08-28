@@ -1,3 +1,11 @@
 [package]
 name = "pace-project"
 version = "0.1.0"
+
+[sdk]
+pace = ">=0.1.0 <1.0.0"
+
+[dependencies]
+pace-package = { path = "../pace-package" }
+
+[dev-dependencies]

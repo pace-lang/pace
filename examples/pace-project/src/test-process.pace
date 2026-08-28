@@ -1,4 +1,4 @@
-import std:process;
+import "pace:process";
 
 func runProcessTest() -> Result<Bool, String> {
     print("--- Testing Process ---");

@@ -80,7 +80,7 @@ impl SymbolResolver {
                     
                     if is_export {
                         let clean_name = name.replace("pkg:", "").replace("-", "_").replace("/", "_").replace(".", "_").replace(":", "_");
-                        let mangled_name = if clean_name == "std_core" {
+                        let mangled_name = if clean_name == "pace_core" {
                             original_name.clone()
                         } else if original_name == "main" {
                             original_name.clone()
@@ -125,7 +125,6 @@ impl SymbolResolver {
                 for item in body.iter() {
                     if let Stmt::Import { path, alias, show, hide } = item {
                         let imported_mod_name = path.clone();
-                        let mut to_reexport = Vec::new();
                         if let Some(imported_exports) = self.exports.get(&imported_mod_name) {
 
                             if let Some(alias_name) = alias {
@@ -154,8 +153,20 @@ impl SymbolResolver {
                                         }
                                     } else {
                                         local_scope.insert(sym.clone(), export.clone());
-                                        to_reexport.push((sym.clone(), export.clone()));
                                     }
+                                }
+                            }
+                        }
+                    } else if let Stmt::Export { path } = item {
+                        let imported_mod_name = path.clone();
+                        let mut to_reexport = Vec::new();
+                        if let Some(imported_exports) = self.exports.get(&imported_mod_name) {
+                            for (sym, export) in imported_exports {
+                                if export.visibility == Visibility::Private { continue; }
+                                
+                                if !local_declarations.contains_key(sym) {
+                                    local_scope.insert(sym.clone(), export.clone());
+                                    to_reexport.push((sym.clone(), export.clone()));
                                 }
                             }
                         }

@@ -1,4 +1,4 @@
-import std:io;
+import "pace:io";
 
 func runIoTest() -> Result<Bool, String> {
     print("--- Testing IO ---");

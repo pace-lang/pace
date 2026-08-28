@@ -1,4 +1,4 @@
-import std:string;
+import "pace:string";
 func runStringTest() {
     print("--- Testing Strings ---");
     let s1 = "Hello";

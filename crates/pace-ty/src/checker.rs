@@ -94,7 +94,7 @@ impl TypeChecker {
     fn pop_scope_and_check_unused(&mut self) {
         let unused = self.env.pop_scope();
         for (name, var_info) in unused {
-            if !var_info.is_used && !name.starts_with('_') && name != "self" {
+            if !var_info.is_used && !name.starts_with('_') && name != "self" && var_info.span != (0, 0) {
                 let kind = if matches!(var_info.ty, Type::Function { .. }) {
                     "function"
                 } else {
@@ -650,7 +650,7 @@ impl TypeChecker {
             Stmt::InterfaceDecl { .. } => {}
             Stmt::StructDecl { .. } => {}
             Stmt::EnumDecl { .. } => {}
-            Stmt::Import { .. } => {}
+            Stmt::Import { .. } | Stmt::Export { .. } => {},
         }
         ()
     }

@@ -1,7 +1,7 @@
 // Standard Collections Module
 
-import "./collections/list";
-import "./collections/set";
-import "./collections/queue";
-import "./collections/map";
-import "./collections/tree-set";
+export "./collections/list";
+export "./collections/set";
+export "./collections/queue";
+export "./collections/map";
+export "./collections/tree-set";

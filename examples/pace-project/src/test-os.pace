@@ -1,4 +1,4 @@
-import std:os;
+import "pace:os";
 
 func runOsTest() {
     print("--- Testing OS ---");

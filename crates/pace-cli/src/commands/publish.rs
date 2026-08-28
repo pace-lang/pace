@@ -13,15 +13,53 @@ pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
     let resolved_file = resolve_file(None)?;
     println!("🧪 Checking {} before publishing...", resolved_file);
     session.check_file(&resolved_file)?;
-    println!("✅ Check passed!");
+    println!("✅ Check passed for main entry point.");
+
+    // Check tests/ and examples/
+    for dir in &["tests", "examples"] {
+        let dir_path = current_dir.join(dir);
+        if dir_path.exists() && dir_path.is_dir() {
+            for entry in WalkDir::new(&dir_path) {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("pace") {
+                        let relative_str = path.strip_prefix(&current_dir).unwrap().to_string_lossy();
+                        println!("🧪 Checking {} before publishing...", relative_str);
+                        let path_str = path.to_string_lossy();
+                        session.check_file(&path_str)?;
+                    }
+                }
+            }
+        }
+    }
+    println!("✅ All additional checks passed!");
     
     // Load manifest
     let manifest = PaceToml::load_from_dir(&current_dir)
         .map_err(|e| miette::miette!("Failed to load pace.toml. Are you in a pace project? {}", e))?;
+        
+    crate::utils::check_sdk_compatibility(&manifest)?;
     
     let pkg_name = &manifest.package.name;
     let pkg_version = &manifest.package.version;
-    let pkg_desc = manifest.package.description.clone().unwrap_or_else(|| String::new());
+    
+    let pkg_desc = manifest.package.description.clone()
+        .ok_or_else(|| miette::miette!("Missing 'description' in pace.toml"))?;
+    if pkg_desc.is_empty() {
+        return Err(miette::miette!("'description' in pace.toml cannot be empty"));
+    }
+    
+    let _pkg_license = manifest.package.license.clone()
+        .ok_or_else(|| miette::miette!("Missing 'license' in pace.toml"))?;
+        
+    let pkg_authors = manifest.package.authors.clone()
+        .ok_or_else(|| miette::miette!("Missing 'authors' in pace.toml"))?;
+    if pkg_authors.is_empty() {
+        return Err(miette::miette!("'authors' in pace.toml cannot be empty"));
+    }
+        
+    let _pkg_repo = manifest.package.repository.clone()
+        .ok_or_else(|| miette::miette!("Missing 'repository' in pace.toml"))?;
 
     if dry_run {
         println!("🔍 Dry run: Packaging {} v{}...", pkg_name, pkg_version);

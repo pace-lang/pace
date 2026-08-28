@@ -1,5 +1,3 @@
-import std:collections;
-
 func greet() {
     print("Hello from Pace package!");
 }

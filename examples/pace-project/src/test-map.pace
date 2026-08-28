@@ -1,4 +1,4 @@
-import std:collections;
+import "pace:collections";
 
 func runMapTest() {
     print("--- Testing Maps ---");

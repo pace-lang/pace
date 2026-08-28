@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 pub struct Monomorphizer {
     pub generic_classes: HashMap<String, Stmt>,
+    pub generic_class_modules: HashMap<String, String>,
     pub generated_classes: HashMap<String, Stmt>,
     pub all_interfaces: HashMap<String, Stmt>, // Stores all interfaces (generic and concrete)
 }
@@ -17,6 +18,7 @@ impl Monomorphizer {
     pub fn new() -> Self {
         Self {
             generic_classes: HashMap::new(),
+            generic_class_modules: HashMap::new(),
             generated_classes: HashMap::new(),
             all_interfaces: HashMap::new(),
         }
@@ -50,26 +52,29 @@ impl Monomorphizer {
                     if let Stmt::ClassDecl { name: cname, generic_params, .. } | Stmt::ActorDecl { name: cname, generic_params, .. } = &inner_stmt
                         && generic_params.is_some() {
                             mono.generic_classes.insert(cname.clone(), inner_stmt.clone());
+                            mono.generic_class_modules.insert(cname.clone(), name.clone());
                             continue;
                         }
                     if let Stmt::InterfaceDecl { name: iname, generic_params, .. } = &inner_stmt {
                         mono.all_interfaces.insert(iname.clone(), inner_stmt.clone());
                         if generic_params.is_some() {
                             mono.generic_classes.insert(iname.clone(), inner_stmt.clone());
+                            mono.generic_class_modules.insert(iname.clone(), name.clone());
                             continue;
                         }
                     }
                     if let Stmt::EnumDecl { name: ename, generic_params, .. } = &inner_stmt
                         && generic_params.is_some() {
                             mono.generic_classes.insert(ename.clone(), inner_stmt.clone());
+                            mono.generic_class_modules.insert(ename.clone(), name.clone());
                             continue;
                         }
                     new_body.push(inner_stmt);
                 }
                 final_ast.push(Stmt::Module { name, body: new_body });
-                continue;
+            } else {
+                final_ast.push(stmt);
             }
-            final_ast.push(stmt);
         }
 
         // Pass 2: Rewrite AST and instantiate generics
@@ -87,16 +92,26 @@ impl Monomorphizer {
         }
         
         // Append all newly generated classes to the end of the AST
-        let mut generated: Vec<Stmt> = mono.generated_classes.into_values().collect();
-        let mut generics: Vec<Stmt> = mono.generic_classes.into_values().collect();
-        if let Some(Stmt::Module { body, name: _ }) = rewritten_ast.last_mut() {
+        let mut generated = Vec::new();
+        for (concrete_name, instantiated_stmt) in mono.generated_classes {
+            // Find original generic name (strip _TypeArgs...)
+            let base_name = concrete_name.split('_').next().unwrap_or(&concrete_name).to_string();
+            let original_module = mono.generic_class_modules.get(&base_name)
+                .cloned()
+                .unwrap_or_else(|| "unknown_module".to_string());
+                
+            generated.push(Stmt::Module {
+                name: original_module,
+                body: vec![instantiated_stmt],
+            });
+        }
+        
+        if let Some(Stmt::Module { body, .. }) = rewritten_ast.last_mut() {
             body.append(&mut generated);
-            body.append(&mut generics);
         } else {
             rewritten_ast.append(&mut generated);
-            rewritten_ast.append(&mut generics);
         }
-
+        
         Ok(rewritten_ast)
     }
 

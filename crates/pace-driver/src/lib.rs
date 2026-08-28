@@ -76,61 +76,85 @@ impl CompilerSession {
             }
         };
 
-        // Auto-inject std:core if not the core library itself
+        // Auto-inject pace:core if not the core library itself
         if path_buf.file_stem().unwrap_or_default() != "core" {
-            ast.insert(0, Stmt::Import { path: "std:core".to_string(), alias: None, show: None, hide: None });
+            ast.insert(0, Stmt::Import { path: "pace:core".to_string(), alias: None, show: None, hide: None });
         }
+
+        let target_platform = std::env::var("PACE_TARGET").unwrap_or_else(|_| "native".to_string());
 
         // Resolve imports recursively
         let mut final_ast = Vec::new();
         for stmt in &mut ast {
-            if let Stmt::Import { path: import_path, .. } = stmt {
+            if let Stmt::Import { path: import_path, .. } | Stmt::Export { path: import_path } = stmt {
                 let resolved_path;
                 
-                if import_path.starts_with("std:") {
-                    let path_without_std = import_path.strip_prefix("std:").unwrap_or(import_path);
+                if import_path.starts_with("pace:") {
+                    let path_without_pace = import_path.strip_prefix("pace:").unwrap_or(import_path);
                     if let Ok(stdlib_path) = std::env::var("PACE_STDLIB") {
-                        resolved_path = std::path::Path::new(&stdlib_path).join(format!("{}.pace", path_without_std));
+                        resolved_path = std::path::Path::new(&stdlib_path).join(format!("{}.pace", path_without_pace));
                     } else if let Ok(home_path) = std::env::var("PACE_HOME") {
-                        resolved_path = std::path::Path::new(&home_path).join("stdlib").join(format!("{}.pace", path_without_std));
+                        resolved_path = std::path::Path::new(&home_path).join("stdlib").join(format!("{}.pace", path_without_pace));
                     } else {
                         // Fallback to compile-time repository root
                         let manifest_dir = env!("CARGO_MANIFEST_DIR");
                         let fallback_path = std::path::Path::new(manifest_dir).join("../../stdlib");
-                        resolved_path = fallback_path.join(format!("{}.pace", path_without_std));
+                        resolved_path = fallback_path.join(format!("{}.pace", path_without_pace));
                         if !resolved_path.exists() {
                             return Err(miette::miette!("Package Error: Standard library not found at '{}'. Please set PACE_STDLIB or PACE_HOME.", resolved_path.display()));
                         }
                     }
+                } else if import_path.starts_with("self:") {
+                    let path_without_self = import_path.strip_prefix("self:").unwrap();
+                    let current_dir = std::env::current_dir().unwrap();
+                    resolved_path = current_dir.join("src").join(format!("{}.pace", path_without_self));
                 } else if import_path.starts_with("./") || import_path.starts_with("../") {
                     let parent_dir = path_buf.parent().unwrap_or(std::path::Path::new(""));
                     resolved_path = parent_dir.join(format!("{}.pace", import_path));
-                } else {
-                    // External package
+                } else if import_path.starts_with("package:") {
+                    let path_without_pkg = import_path.strip_prefix("package:").unwrap();
+                    
+                    let (pkg_name, sub_path) = if let Some(idx) = path_without_pkg.find('/') {
+                        (&path_without_pkg[..idx], &path_without_pkg[idx + 1..])
+                    } else {
+                        (path_without_pkg, path_without_pkg)
+                    };
+
                     let current_dir = std::env::current_dir().unwrap();
                     let lock_opt = pace_pkg::lockfile::PaceLock::load_from_dir(&current_dir).unwrap_or(None);
                         
                     if let Some(lock) = lock_opt {
-                        if let Some(pkg) = lock.packages.get(import_path) {
+                        if let Some(pkg) = lock.packages.get(pkg_name) {
                             if let Some(path) = &pkg.path {
                                 let pkg_path = std::path::PathBuf::from(path);
-                                // Default entry point is src/lib.pace as per design
-                                resolved_path = pkg_path.join("src").join("lib.pace");
+                                
+                                // Platform validation
+                                if let Ok(manifest) = pace_pkg::manifest::PaceToml::load_from_dir(&pkg_path) {
+                                    if let Some(platforms) = manifest.package.platforms {
+                                        if !platforms.contains(&target_platform) {
+                                            return Err(miette::miette!("Error: package '{}' is not compatible with target '{}'.\n\nSupported targets:\n  {}\n\nCurrent target:\n  {}", pkg_name, target_platform, platforms.join("\n  "), target_platform));
+                                        }
+                                    }
+                                }
+                                
+                                resolved_path = pkg_path.join("src").join(format!("{}.pace", sub_path));
                             } else {
-                                return Err(miette::miette!("Package Error: External package '{}' missing path in pace.lock.", import_path));
+                                return Err(miette::miette!("Package Error: External package '{}' missing path in pace.lock.", pkg_name));
                             }
                         } else {
-                            return Err(miette::miette!("Package Error: External package '{}' not found in pace.lock. Did you run 'pace fetch'?", import_path));
+                            return Err(miette::miette!("Package Error: External package '{}' not found in pace.lock. Did you run 'pace fetch'?", pkg_name));
                         }
                     } else {
                         // Fallback for when there's no lockfile
                         let packages_dir = current_dir.join("packages");
-                        resolved_path = packages_dir.join(format!("{}.pace", import_path));
+                        resolved_path = packages_dir.join(pkg_name).join("src").join(format!("{}.pace", sub_path));
                     }
 
                     if !resolved_path.exists() {
-                        return Err(miette::miette!("Package Error: External package '{}' not found at expected path: {}", import_path, resolved_path.display()));
+                        return Err(miette::miette!("Package Error: External package module '{}' not found at expected path: {}", import_path, resolved_path.display()));
                     }
+                } else {
+                    return Err(miette::miette!("Invalid import path format: '{}'. Must start with pace:, package:, self:, or ./", import_path));
                 }
                 
                 if resolved_path.exists() {
