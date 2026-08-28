@@ -413,6 +413,20 @@ impl JITCompiler {
             }
         }
 
+        // Pass 1.5: Declare global variables
+        for stmt in final_stmts {
+            if let Stmt::VarDecl { name, .. } = stmt {
+                let id = self.context.module.declare_data(name, Linkage::Export, true, false)
+                    .map_err(|e| CodegenError { message: e.to_string() })?;
+                self.context.global_vars.insert(name.clone(), id);
+                
+                let mut data = DataDescription::new();
+                data.define_zeroinit(8); // Allocate 8 bytes for an I64/ptr
+                self.context.module.define_data(id, &data)
+                    .map_err(|e| CodegenError { message: e.to_string() })?;
+            }
+        }
+
         let mut func_returns = HashMap::new();
         for stmt in final_stmts {
             if let Stmt::FuncDecl { name, return_type, .. } = stmt {
@@ -502,8 +516,8 @@ impl JITCompiler {
         }
 
         let mut pending_closures: Vec<(String, pace_ast::Expr, Vec<(String, crate::translator::VarType)>)> = Vec::new();
-        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures };
-        for stmt in stmts {
+        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures, is_global_context: true };
+        for stmt in final_stmts {
             match stmt {
                 Stmt::VarDecl { .. } | Stmt::Expr(_) | Stmt::If { .. } | Stmt::While { .. } | Stmt::Loop { .. } | Stmt::Match { .. } => {
                     let (val, _) = translator.translate_stmt(stmt)?;
@@ -796,7 +810,7 @@ impl JITCompiler {
         let mut last_val = None;
         let mut terminated = false;
         let mut pending_closures: Vec<(String, pace_ast::Expr, Vec<(String, crate::translator::VarType)>)> = Vec::new();
-        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures };
+        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures, is_global_context: false };
         for stmt in body {
             let (val, term) = translator.translate_stmt(stmt)?;
             last_val = Some(val);
@@ -899,7 +913,7 @@ impl JITCompiler {
         
         let mut terminated = false;
         let mut pending_closures: Vec<(String, pace_ast::Expr, Vec<(String, crate::translator::VarType)>)> = Vec::new();
-        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures };
+        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures, is_global_context: false };
         
         // Closure body is a single Expr, not Stmt! Wait, Expr::Closure has a `body: Box<Expr>`.
         // We can synthesize a Stmt::Expr or Stmt::Return.

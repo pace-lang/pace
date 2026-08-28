@@ -336,12 +336,25 @@ impl AotCompiler {
                 }
                 sig.returns.push(AbiParam::new(types::I64));
                 
-                // main must be exported, others can be local
-                let linkage = if name == "main" { Linkage::Export } else { Linkage::Local };
+                let internal_name = if name == "main" { "__user_main" } else { name };
                 
-                let id = self.context.module.declare_function(name, linkage, &sig)
+                let id = self.context.module.declare_function(internal_name, cranelift_module::Linkage::Local, &sig)
                     .map_err(|e| CodegenError { message: e.to_string() })?;
                 self.context.funcs.insert(name.clone(), id);
+            }
+        }
+
+        // Pass 1.5: Declare global variables
+        for stmt in final_stmts {
+            if let Stmt::VarDecl { name, .. } = stmt {
+                let id = self.context.module.declare_data(name, cranelift_module::Linkage::Export, true, false)
+                    .map_err(|e| CodegenError { message: e.to_string() })?;
+                self.context.global_vars.insert(name.clone(), id);
+                
+                let mut data = cranelift_module::DataDescription::new();
+                data.define_zeroinit(8); // Allocate 8 bytes for an I64/ptr
+                self.context.module.define_data(id, &data)
+                    .map_err(|e| CodegenError { message: e.to_string() })?;
             }
         }
 
@@ -413,6 +426,53 @@ impl AotCompiler {
                 self.generate_enum_constructors(enum_name, variants)?;
             }
         }
+
+        // Pass 3: Compile implicit `main` that executes top-level code and calls `__user_main` if it exists.
+        self.ctx.func.signature.returns.push(cranelift::prelude::AbiParam::new(cranelift::prelude::types::I64));
+        let mut builder = cranelift::prelude::FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+                
+        let entry_block = builder.create_block();
+        builder.append_block_params_for_function_params(entry_block);
+        builder.switch_to_block(entry_block);
+        builder.seal_block(entry_block);
+
+        let mut variables = HashMap::new();
+        let mut var_index = 0;
+        let mut last_val = None;
+        
+        let mut pending_closures: Vec<(String, pace_ast::Expr, Vec<(String, crate::translator::VarType)>)> = Vec::new();
+        let mut translator = crate::translator::Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures, is_global_context: true };
+        for stmt in final_stmts { // original ast
+            match stmt {
+                Stmt::VarDecl { .. } | Stmt::Expr(_) | Stmt::If { .. } | Stmt::While { .. } | Stmt::Loop { .. } | Stmt::Match { .. } => {
+                    let (val, _) = translator.translate_stmt(stmt)?;
+                    last_val = Some(val);
+                }
+                _ => {}
+            }
+        }
+        drop(translator);
+
+        // Call main if it exists
+        if let Some(&main_id) = self.context.funcs.get("main") {
+            let local_func = self.context.module.declare_func_in_func(main_id, builder.func);
+            let call = builder.ins().call(local_func, &[]);
+            let res = builder.inst_results(call)[0];
+            last_val = Some(res);
+        }
+
+        let ret_val = last_val.unwrap_or_else(|| builder.ins().iconst(cranelift::prelude::types::I64, 0));
+        builder.ins().return_(&[ret_val]);
+        builder.finalize(self.context.module.target_config());
+
+        let id = self.context.module
+            .declare_function("main", cranelift_module::Linkage::Export, &self.ctx.func.signature)
+            .map_err(|e| CodegenError { message: e.to_string() })?;
+
+        self.context.module.define_function(id, &mut self.ctx)
+            .map_err(|e| CodegenError { message: e.to_string() })?;
+
+        self.context.module.clear_context(&mut self.ctx);
 
         let product = self.context.module.finish();
         let bytes = product.emit().map_err(|e| CodegenError { message: e.to_string() })?;
@@ -667,7 +727,7 @@ impl AotCompiler {
         let mut last_val = None;
         let mut terminated = false;
         let mut pending_closures: Vec<(String, pace_ast::Expr, Vec<(String, crate::translator::VarType)>)> = Vec::new();
-        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures };
+        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures, is_global_context: false };
         for stmt in body {
             let (val, term) = translator.translate_stmt(stmt)?;
             last_val = Some(val);
@@ -757,7 +817,7 @@ impl AotCompiler {
         
         let mut terminated = false;
         let mut pending_closures: Vec<(String, pace_ast::Expr, Vec<(String, crate::translator::VarType)>)> = Vec::new();
-        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures };
+        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures, is_global_context: false };
         
         let body_stmt = pace_ast::Stmt::Expr(*body);
         let (val, term) = translator.translate_stmt(&body_stmt)?;

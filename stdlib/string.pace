@@ -1,8 +1,8 @@
 // String utilities
 import "./collections/list";
 
-public class StringUtil {
-    public static func split(s: String, delim: String) -> List<String> {
+class StringUtil {
+    static func split(s: String, delim: String) -> List<String> {
         let ptr = stringSplit(s, delim);
         let len: Int = ptrLoad(ptr, 0);
         let list = List<String>();
@@ -17,23 +17,23 @@ public class StringUtil {
         return list;
     }
 
-    public static func replace(s: String, old: String, newStr: String) -> String {
+    static func replace(s: String, old: String, newStr: String) -> String {
         return stringReplace(s, old, newStr);
     }
 
-    public static func substring(s: String, start: Int, end: Int) -> String {
+    static func substring(s: String, start: Int, end: Int) -> String {
         return stringSubstring(s, start, end);
     }
 
-    public static func trim(s: String) -> String {
+    static func trim(s: String) -> String {
         return stringTrim(s);
     }
 
-    public static func indexOf(s: String, search: String) -> Int {
+    static func indexOf(s: String, search: String) -> Int {
         return stringIndexOf(s, search);
     }
 
-    public static func startsWith(s: String, search: String) -> Bool {
+    static func startsWith(s: String, search: String) -> Bool {
         return stringStartsWith(s, search) != 0;
     }
 }

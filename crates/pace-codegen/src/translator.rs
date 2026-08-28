@@ -109,6 +109,7 @@ pub struct Translator<'a, 'b, M: Module> {
     pub var_index: &'a mut usize,
     pub func_returns: &'a HashMap<String, VarType>,
     pub pending_closures: &'a mut Vec<(String, pace_ast::Expr, Vec<(String, VarType)>)>,
+    pub is_global_context: bool,
 }
 
 impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
@@ -127,6 +128,16 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 } else {
                     self.builder.ins().iconst(types::I64, 0)
                 };
+                
+                if self.is_global_context {
+                    if let Some(&data_id) = self.context.global_vars.get(name) {
+                        let local_data = self.context.module.declare_data_in_func(data_id, self.builder.func);
+                        let ptr = self.builder.ins().symbol_value(self.context.module.target_config().pointer_type(), local_data);
+                        self.builder.ins().store(cranelift::prelude::MemFlagsData::new(), val, ptr, 0);
+                        return Ok((val, false));
+                    }
+                }
+                
                 let val_ty = self.builder.func.dfg.value_type(val);
                 let var = self.builder.declare_var(val_ty);
                 self.builder.def_var(var, val);
@@ -726,6 +737,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         self.builder.ins().call(local_retain, &[val]);
                     }
                     Ok(val)
+                } else if let Some(&data_id) = self.context.global_vars.get(name) {
+                    let ptr_ty = self.context.module.target_config().pointer_type();
+                    let local_data = self.context.module.declare_data_in_func(data_id, self.builder.func);
+                    let ptr = self.builder.ins().symbol_value(ptr_ty, local_data);
+                    Ok(self.builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), ptr, 0))
                 } else {
                     Err(CodegenError { message: format!("Undefined variable: {} (enum_layouts: {:?})", name, self.context.enum_layouts.keys().collect::<Vec<_>>()) })
                 }
@@ -891,6 +907,12 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             self.builder.ins().call(local_retain, &[val]);
                         }
                         self.builder.def_var(*var, val);
+                        Ok(val)
+                    } else if let Some(&data_id) = self.context.global_vars.get(name) {
+                        let ptr_ty = self.context.module.target_config().pointer_type();
+                        let local_data = self.context.module.declare_data_in_func(data_id, self.builder.func);
+                        let ptr = self.builder.ins().symbol_value(ptr_ty, local_data);
+                        self.builder.ins().store(cranelift::prelude::MemFlagsData::new(), val, ptr, 0);
                         Ok(val)
                     } else {
                         Err(CodegenError { message: format!("Variable '{}' not found in JIT environment", name) })

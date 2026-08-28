@@ -15,6 +15,7 @@ mod tests {
             name: "x".to_string(),
             is_mutable: false,
             is_static: false,
+            visibility: crate::stmt::Visibility::Public,
             type_annotation: Some(crate::stmt::TypeAnnotation {
                 module_prefix: None,
                 name: "Int".to_string(),

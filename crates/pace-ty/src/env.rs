@@ -38,6 +38,15 @@ pub struct EnumSignature {
 }
 
 #[derive(Debug, Clone)]
+pub struct GlobalVariableSignature {
+    pub ty: Type,
+    pub is_mutable: bool,
+    pub visibility: Visibility,
+    pub module: String,
+    pub span: (usize, usize),
+}
+
+#[derive(Debug, Clone)]
 pub struct FunctionSignature {
     pub params: Vec<Type>,
     pub return_type: Type,
@@ -82,6 +91,7 @@ pub struct Environment {
     pub enums: HashMap<String, EnumSignature>,
     pub actors: HashMap<String, ActorSignature>,
     pub symbol_types: HashMap<String, Type>,
+    pub global_vars: HashMap<String, GlobalVariableSignature>,
 }
 
 impl Environment {
@@ -94,6 +104,7 @@ impl Environment {
             enums: HashMap::new(),
             actors: HashMap::new(),
             symbol_types: HashMap::new(),
+            global_vars: HashMap::new(),
         };
         e.inject_prelude();
         e
@@ -400,6 +411,10 @@ impl Environment {
     
     pub fn register_actor(&mut self, name: String, sig: ActorSignature) {
         self.actors.insert(name, sig);
+    }
+
+    pub fn register_global_var(&mut self, name: String, sig: GlobalVariableSignature) {
+        self.global_vars.insert(name, sig);
     }
 
     pub fn register_function(&mut self, name: String, sig: FunctionSignature) {

@@ -393,6 +393,20 @@ impl TypeChecker {
                             methods: HashMap::new(),
                         });
                     }
+                Stmt::VarDecl { name, type_annotation, is_mutable, visibility, span, .. } => {
+                    let ty = if let Some(annot) = type_annotation {
+                        self.resolve_type_name(annot)
+                    } else {
+                        Type::Unknown
+                    };
+                    self.env.register_global_var(name.clone(), crate::env::GlobalVariableSignature {
+                        ty,
+                        is_mutable: *is_mutable,
+                        visibility: visibility.clone(),
+                        module: self.current_module.clone(),
+                        span: *span,
+                    });
+                }
                 _ => {}
             }
         }
@@ -718,6 +732,8 @@ impl TypeChecker {
                             Type::Struct(name.clone())
                         } else if self.env.enums.contains_key(name) {
                             Type::Enum(name.clone())
+                        } else if let Some(global) = self.env.global_vars.get(name) {
+                            global.ty.clone()
                         } else {
                             {
                             let suggestion = self.env.find_closest_variable(&name);
@@ -806,6 +822,16 @@ impl TypeChecker {
                             var_span = var_info.span;
                         } else {
                             var_info.is_used = true;
+                        }
+                    } else if let Some(global) = self.env.global_vars.get(name) {
+                        if !global.is_mutable {
+                            is_err = true;
+                            err_msg = format!("Cannot assign to immutable global variable '{}'", name);
+                            var_span = global.span;
+                        } else if global.ty != val_ty && global.ty != Type::Unknown && val_ty != Type::Unknown && global.ty != Type::Any && val_ty != Type::Any {
+                            is_err = true;
+                            err_msg = format!("Type mismatch: cannot assign {:?} to global variable of type {:?}", val_ty, global.ty);
+                            var_span = global.span;
                         }
                     } else {
                         let suggestion = self.env.find_closest_variable(&name);

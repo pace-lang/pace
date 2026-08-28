@@ -85,9 +85,7 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        let visibility = if self.match_token(Token::Public) {
-            Visibility::Public
-        } else if self.match_token(Token::Private) {
+        let visibility = if self.match_token(Token::Private) {
             Visibility::Private
         } else {
             Visibility::Public // Default is public
@@ -97,8 +95,8 @@ impl<'a> Parser<'a> {
         let is_static = self.match_token(Token::Static);
 
         match self.current_token {
-            Token::Let => self.parse_var_decl(false, is_static), // doc_comments on vars omitted for now
-            Token::Var => self.parse_var_decl(true, is_static),
+            Token::Let => self.parse_var_decl(false, is_static, visibility), // doc_comments on vars omitted for now
+            Token::Var => self.parse_var_decl(true, is_static, visibility),
             Token::Func => self.parse_func_decl(is_async, visibility, is_static, doc_comment),
             Token::Class => self.parse_class_decl(doc_comment),
             Token::Actor => self.parse_actor_decl(doc_comment),
@@ -947,7 +945,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_var_decl(&mut self, is_mutable: bool, is_static: bool) -> Result<Stmt, pace_errors::SyntaxError> {
+    fn parse_var_decl(&mut self, is_mutable: bool, is_static: bool, visibility: Visibility) -> Result<Stmt, pace_errors::SyntaxError> {
         let start_pos = self.current_span.0;
         self.advance(); // consume let/var
         let name = match &self.current_token {
@@ -975,6 +973,7 @@ impl<'a> Parser<'a> {
             is_mutable,
             type_annotation,
             is_static,
+            visibility,
             initializer,
             span: (start_pos, (self.current_span.0 + self.current_span.1).saturating_sub(start_pos)),
         })

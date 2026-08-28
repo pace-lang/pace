@@ -11,6 +11,7 @@ pub struct CodegenContext<M: Module> {
     pub enum_layouts: HashMap<String, EnumLayout>,
     pub string_cache: HashMap<String, String>,
     pub string_id: usize,
+    pub global_vars: HashMap<String, cranelift_module::DataId>,
 }
 
 impl<M: Module> CodegenContext<M> {
@@ -27,6 +28,7 @@ impl<M: Module> CodegenContext<M> {
             enum_layouts: HashMap::new(),
             string_cache: HashMap::new(),
             string_id: 0,
+            global_vars: HashMap::new(),
         }
     }
 }

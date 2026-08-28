@@ -15,12 +15,13 @@ impl Monomorphizer {
     pub fn instantiate_stmt(&self, stmt: &Stmt) -> Stmt {
         match stmt {
             Stmt::Expr(expr) => Stmt::Expr(self.instantiate_expr(expr)),
-            Stmt::VarDecl { name, is_mutable, type_annotation, is_static, initializer, span } => {
+            Stmt::VarDecl { name, is_mutable, type_annotation, is_static, visibility, initializer, span } => {
                 Stmt::VarDecl {
                     name: name.clone(),
                     is_mutable: *is_mutable,
                     type_annotation: type_annotation.as_ref().map(|t| self.instantiate_type_annotation(t)),
                     is_static: *is_static,
+                    visibility: visibility.clone(),
                     initializer: initializer.as_ref().map(|e| self.instantiate_expr(e)),
                     span: *span,
                 }
@@ -318,12 +319,13 @@ impl TypeFlattener {
     fn do_flatten_stmt(&self, stmt: &Stmt) -> Stmt {
         match stmt {
             Stmt::Expr(expr) => Stmt::Expr(self.flatten_expr(expr)),
-            Stmt::VarDecl { name, is_mutable, type_annotation, is_static, initializer, span } => {
+            Stmt::VarDecl { name, is_mutable, type_annotation, is_static, visibility, initializer, span } => {
                 Stmt::VarDecl {
                     name: name.clone(),
                     is_mutable: *is_mutable,
                     type_annotation: type_annotation.as_ref().map(|t| self.flatten_type_annotation(t)),
                     is_static: *is_static,
+                    visibility: visibility.clone(),
                     initializer: initializer.as_ref().map(|e| self.flatten_expr(e)),
                     span: *span,
                 }

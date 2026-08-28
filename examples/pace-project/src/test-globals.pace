@@ -1,0 +1,41 @@
+// This file demonstrates the use of Global Variables in Pace.
+
+// Global variables are eager-initialized before main() starts.
+var app_name: String = "Pace Global Example";
+var execution_count: Int = 0;
+var is_active: Bool = true;
+
+func increment_count() {
+    execution_count = execution_count + 1;
+    print(execution_count);
+}
+
+func print_status() {
+    print(app_name);
+    print("Is Active:");
+    print(is_active);
+}
+
+func main() {
+    print("=== Global Variables Test ===");
+    print_status();
+    
+    print("--- Incrementing ---");
+    increment_count();
+    increment_count();
+    increment_count();
+    
+    print("--- Shadowing Test ---");
+    // This local variable shadows the global variable
+    var execution_count: Int = 999;
+    print("Local shadowed count:");
+    print(execution_count);
+    
+    // Mutating the local variable doesn't affect the global variable
+    execution_count = 1000;
+    
+    print("--- Final Global State ---");
+    // We can't access the global execution_count here because of shadowing, 
+    // but the increment_count function uses the global one.
+    increment_count();
+}
