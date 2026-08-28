@@ -164,6 +164,54 @@ fn get_word_at_position(src: &str, pos: Position) -> Option<String> {
     }
 }
 
+fn get_string_at_position(src: &str, pos: Position) -> Option<String> {
+    let lines: Vec<&str> = src.lines().collect();
+    if pos.line as usize >= lines.len() {
+        return None;
+    }
+    
+    let line = lines[pos.line as usize];
+    let char_idx = pos.character as usize;
+    if char_idx >= line.len() {
+        return None;
+    }
+    
+    let mut start = char_idx;
+    let mut found_start_quote = false;
+    while start > 0 {
+        start -= 1;
+        if line.chars().nth(start) == Some('"') {
+            found_start_quote = true;
+            start += 1; // Move past the quote
+            break;
+        }
+    }
+    
+    if !found_start_quote {
+        return None;
+    }
+    
+    let mut end = char_idx;
+    let mut found_end_quote = false;
+    while end < line.len() {
+        if line.chars().nth(end) == Some('"') {
+            found_end_quote = true;
+            break;
+        }
+        end += 1;
+    }
+    
+    if !found_end_quote {
+        return None;
+    }
+    
+    if start <= end {
+        Some(line[start..end].to_string())
+    } else {
+        None
+    }
+}
+
 fn map_warning(warn: &pace_errors::SemanticWarning, src: &str, active_file: &str) -> Option<Diagnostic> {
     use pace_errors::SemanticWarning::*;
     let severity = DiagnosticSeverity::WARNING;
@@ -388,6 +436,27 @@ impl LanguageServer for PaceLanguageServer {
         let ast_cache = self.ast_cache.read().await;
         
         if let Some(src) = src_cache.get(&uri) {
+            // First check if we're hovering over a string (likely an import path)
+            if let Some(string_content) = get_string_at_position(src, pos) {
+                if string_content.starts_with("pace:") || string_content.starts_with("package:") || string_content.starts_with("self:") || string_content.starts_with("./") || string_content.starts_with("../") {
+                    if let Ok(path_buf) = uri.to_file_path() {
+                        if let Ok(resolved_path) = pace_driver::CompilerSession::resolve_import_path(&string_content, &path_buf) {
+                            if resolved_path.exists() {
+                                if let Ok(resolved_uri) = Url::from_file_path(resolved_path) {
+                                    return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                                        uri: resolved_uri,
+                                        range: Range { 
+                                            start: Position { line: 0, character: 0 },
+                                            end: Position { line: 0, character: 0 },
+                                        },
+                                    })));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if let Some(word) = get_word_at_position(src, pos) {
                 if let Some(ast) = ast_cache.get(&uri) {
                     // Try to find the symbol declaration in the AST

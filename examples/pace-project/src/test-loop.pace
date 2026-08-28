@@ -1,3 +1,5 @@
+import "pace:collections";
+
 func runLoopTest() {
     print("--- Testing Loops ---");
     var i = 0;
@@ -7,4 +9,16 @@ func runLoopTest() {
         i = i + 1;
     }
     print("Sum of 0 to 4 is: ${sum}");
+
+    print("--- Testing For Loop ---");
+    let list = List<Int>();
+    list.add(10);
+    list.add(20);
+    list.add(30);
+
+    var forSum = 0;
+    for item in list {
+        forSum = forSum + item;
+    }
+    print("Sum of list is: ${forSum}");
 }

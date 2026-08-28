@@ -8,7 +8,7 @@ func concat_test() {
         i = i + 1;
     }
     // ensure we build and then optionally free
-    let result = sb.build();
+    sb.build();
     sb.free();
 }
 

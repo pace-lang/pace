@@ -1,6 +1,6 @@
 // String utilities
 import "./collections/list";
-import "./string-builder";
+export "./string-builder";
 
 class StringUtil {
     static func split(s: String, delim: String) -> List<String> {
