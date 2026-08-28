@@ -14,6 +14,7 @@ mod tests {
         let ast = Stmt::VarDecl {
             name: "x".to_string(),
             is_mutable: false,
+            is_static: false,
             type_annotation: Some(crate::stmt::TypeAnnotation {
                 module_prefix: None,
                 name: "Int".to_string(),

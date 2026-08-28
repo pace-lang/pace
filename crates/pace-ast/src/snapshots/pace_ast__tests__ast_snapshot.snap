@@ -7,11 +7,16 @@ VarDecl {
     is_mutable: false,
     type_annotation: Some(
         TypeAnnotation {
+            module_prefix: None,
             name: "Int",
             args: [],
             is_nullable: false,
+            is_function: false,
+            function_params: None,
+            function_return: None,
         },
     ),
+    is_static: false,
     initializer: Some(
         IntLiteral(
             42,

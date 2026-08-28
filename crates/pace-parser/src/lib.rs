@@ -12,13 +12,13 @@ pub fn parse(src: &str, file_name: &str) -> Result<Vec<Stmt>, Vec<pace_errors::S
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+
     use pace_ast::Stmt;
 
     #[test]
     fn test_parse_let_decl() {
         let src = "let x: Int = 5;";
-        let stmts = crate::parse(src).unwrap();
+        let stmts = crate::parse(src, "test").unwrap();
         assert_eq!(stmts.len(), 1);
     }
     
@@ -29,7 +29,7 @@ mod tests {
             import "./models/user";
             import "http";
         "#;
-        let stmts = crate::parse(src).unwrap();
+        let stmts = crate::parse(src, "test").unwrap();
         assert_eq!(stmts.len(), 3);
         
         match &stmts[0] {
