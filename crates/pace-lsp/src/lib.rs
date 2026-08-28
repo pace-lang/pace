@@ -528,7 +528,7 @@ impl LanguageServer for PaceLanguageServer {
             }
             
             // Standard library modules
-            let std_modules = vec!["std:math", "std:fs", "std:net", "std:time"];
+            let std_modules = vec!["std:math", "std:io", "std:http", "std:datetime", "std:os", "std:process", "std:collections"];
             for mod_name in std_modules {
                 items.push(CompletionItem {
                     label: mod_name.to_string(),
