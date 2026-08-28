@@ -141,15 +141,15 @@ pub fn declare_runtime_functions<M: Module>(module: &mut M, ptr_ty: Type) -> Has
         funcs.insert("float_to_string".to_string(), float_to_str_id);
         funcs.insert("bool_to_string".to_string(), bool_to_str_id);
         funcs.insert("free".to_string(), free_id);
-        funcs.insert("ptr_store".to_string(), ptr_store_id);
-        funcs.insert("ptr_load".to_string(), ptr_load_id);
+        funcs.insert("ptrStore".to_string(), ptr_store_id);
+        funcs.insert("ptrLoad".to_string(), ptr_load_id);
         funcs.insert("time".to_string(), time_id);
-        funcs.insert("get_year".to_string(), get_year_id);
+        funcs.insert("getYear".to_string(), get_year_id);
         funcs.insert("hash".to_string(), hash_id);
-        funcs.insert("sb_new".to_string(), sb_new_id);
-        funcs.insert("sb_append".to_string(), sb_append_id);
-        funcs.insert("sb_build".to_string(), sb_build_id);
-        funcs.insert("sb_free".to_string(), sb_free_id);
+        funcs.insert("sbNew".to_string(), sb_new_id);
+        funcs.insert("sbAppend".to_string(), sb_append_id);
+        funcs.insert("sbBuild".to_string(), sb_build_id);
+        funcs.insert("sbFree".to_string(), sb_free_id);
         funcs.insert("__pace_mailbox_create".to_string(), mb_create_id);
         funcs.insert("__pace_mailbox_send".to_string(), mb_send_id);
         funcs.insert("__pace_mailbox_destroy".to_string(), mb_destroy_id);
@@ -161,73 +161,73 @@ pub fn declare_runtime_functions<M: Module>(module: &mut M, ptr_ty: Type) -> Has
         sig_fs_write_text.params.push(AbiParam::new(ptr_ty));
         sig_fs_write_text.params.push(AbiParam::new(ptr_ty));
         sig_fs_write_text.returns.push(AbiParam::new(types::I64));
-        let fs_write_text_id = module.declare_function("fs_writeText", Linkage::Import, &sig_fs_write_text).unwrap();
-        funcs.insert("fs_writeText".to_string(), fs_write_text_id);
+        let fs_write_text_id = module.declare_function("fsWriteText", Linkage::Import, &sig_fs_write_text).unwrap();
+        funcs.insert("fsWriteText".to_string(), fs_write_text_id);
 
         let mut sig_fs_exists = module.make_signature();
         sig_fs_exists.params.push(AbiParam::new(ptr_ty));
         sig_fs_exists.returns.push(AbiParam::new(types::I64));
-        let fs_exists_id = module.declare_function("fs_exists", Linkage::Import, &sig_fs_exists).unwrap();
-        funcs.insert("fs_exists".to_string(), fs_exists_id);
+        let fs_exists_id = module.declare_function("fsExists", Linkage::Import, &sig_fs_exists).unwrap();
+        funcs.insert("fsExists".to_string(), fs_exists_id);
 
         let mut sig_fs_read_text = module.make_signature();
         sig_fs_read_text.params.push(AbiParam::new(ptr_ty));
         sig_fs_read_text.returns.push(AbiParam::new(ptr_ty));
-        let fs_read_text_id = module.declare_function("fs_readText", Linkage::Import, &sig_fs_read_text).unwrap();
-        funcs.insert("fs_readText".to_string(), fs_read_text_id);
+        let fs_read_text_id = module.declare_function("fsReadText", Linkage::Import, &sig_fs_read_text).unwrap();
+        funcs.insert("fsReadText".to_string(), fs_read_text_id);
 
         let mut sig_http_get = module.make_signature();
         sig_http_get.params.push(AbiParam::new(ptr_ty));
         sig_http_get.returns.push(AbiParam::new(ptr_ty));
-        let http_get_id = module.declare_function("http_get", Linkage::Import, &sig_http_get).unwrap();
-        funcs.insert("http_get".to_string(), http_get_id);
+        let http_get_id = module.declare_function("httpGet", Linkage::Import, &sig_http_get).unwrap();
+        funcs.insert("httpGet".to_string(), http_get_id);
 
         let mut sig_get_last_error = module.make_signature();
         sig_get_last_error.returns.push(AbiParam::new(ptr_ty));
-        let get_last_error_id = module.declare_function("get_last_error", Linkage::Import, &sig_get_last_error).unwrap();
-        funcs.insert("get_last_error".to_string(), get_last_error_id);
+        let get_last_error_id = module.declare_function("getLastError", Linkage::Import, &sig_get_last_error).unwrap();
+        funcs.insert("getLastError".to_string(), get_last_error_id);
 
         let mut sig_string_split = module.make_signature();
         sig_string_split.params.push(AbiParam::new(ptr_ty));
         sig_string_split.params.push(AbiParam::new(ptr_ty));
         sig_string_split.returns.push(AbiParam::new(types::I64));
-        let string_split_id = module.declare_function("string_split", Linkage::Import, &sig_string_split).unwrap();
-        funcs.insert("string_split".to_string(), string_split_id);
+        let string_split_id = module.declare_function("stringSplit", Linkage::Import, &sig_string_split).unwrap();
+        funcs.insert("stringSplit".to_string(), string_split_id);
 
         let mut sig_string_replace = module.make_signature();
         sig_string_replace.params.push(AbiParam::new(ptr_ty));
         sig_string_replace.params.push(AbiParam::new(ptr_ty));
         sig_string_replace.params.push(AbiParam::new(ptr_ty));
         sig_string_replace.returns.push(AbiParam::new(ptr_ty));
-        let string_replace_id = module.declare_function("string_replace", Linkage::Import, &sig_string_replace).unwrap();
-        funcs.insert("string_replace".to_string(), string_replace_id);
+        let string_replace_id = module.declare_function("stringReplace", Linkage::Import, &sig_string_replace).unwrap();
+        funcs.insert("stringReplace".to_string(), string_replace_id);
 
         let mut sig_string_substring = module.make_signature();
         sig_string_substring.params.push(AbiParam::new(ptr_ty));
         sig_string_substring.params.push(AbiParam::new(types::I64));
         sig_string_substring.params.push(AbiParam::new(types::I64));
         sig_string_substring.returns.push(AbiParam::new(ptr_ty));
-        let string_substring_id = module.declare_function("string_substring", Linkage::Import, &sig_string_substring).unwrap();
-        funcs.insert("string_substring".to_string(), string_substring_id);
+        let string_substring_id = module.declare_function("stringSubstring", Linkage::Import, &sig_string_substring).unwrap();
+        funcs.insert("stringSubstring".to_string(), string_substring_id);
 
         let mut sig_string_trim = module.make_signature();
         sig_string_trim.params.push(AbiParam::new(ptr_ty));
         sig_string_trim.returns.push(AbiParam::new(ptr_ty));
-        let string_trim_id = module.declare_function("string_trim", Linkage::Import, &sig_string_trim).unwrap();
-        funcs.insert("string_trim".to_string(), string_trim_id);
+        let string_trim_id = module.declare_function("stringTrim", Linkage::Import, &sig_string_trim).unwrap();
+        funcs.insert("stringTrim".to_string(), string_trim_id);
 
         let mut sig_string_index_of = module.make_signature();
         sig_string_index_of.params.push(AbiParam::new(ptr_ty));
         sig_string_index_of.params.push(AbiParam::new(ptr_ty));
         sig_string_index_of.returns.push(AbiParam::new(types::I64));
-        let string_index_of_id = module.declare_function("string_index_of", Linkage::Import, &sig_string_index_of).unwrap();
-        funcs.insert("string_index_of".to_string(), string_index_of_id);
+        let string_index_of_id = module.declare_function("stringIndexOf", Linkage::Import, &sig_string_index_of).unwrap();
+        funcs.insert("stringIndexOf".to_string(), string_index_of_id);
 
         let mut sig_string_starts_with = module.make_signature();
         sig_string_starts_with.params.push(AbiParam::new(ptr_ty));
         sig_string_starts_with.params.push(AbiParam::new(ptr_ty));
         sig_string_starts_with.returns.push(AbiParam::new(types::I64));
-        let string_starts_with_id = module.declare_function("string_starts_with", Linkage::Import, &sig_string_starts_with).unwrap();
-        funcs.insert("string_starts_with".to_string(), string_starts_with_id);
+        let string_starts_with_id = module.declare_function("stringStartsWith", Linkage::Import, &sig_string_starts_with).unwrap();
+        funcs.insert("stringStartsWith".to_string(), string_starts_with_id);
     funcs
 }

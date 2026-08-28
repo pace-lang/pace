@@ -147,7 +147,7 @@ impl Environment {
             },
         );
         self.register_function(
-            "ptr_store".to_string(),
+            "ptrStore".to_string(),
             FunctionSignature {
                 params: vec![Type::Int, Type::Int, Type::Any],
                 return_type: Type::Void,
@@ -156,7 +156,7 @@ impl Environment {
             },
         );
         self.register_function(
-            "ptr_load".to_string(),
+            "ptrLoad".to_string(),
             FunctionSignature {
                 params: vec![Type::Int, Type::Int],
                 return_type: Type::Any,
@@ -174,7 +174,7 @@ impl Environment {
             },
         );
         self.register_function(
-            "sb_new".to_string(),
+            "sbNew".to_string(),
             FunctionSignature {
                 params: vec![],
                 return_type: Type::Int,
@@ -183,7 +183,7 @@ impl Environment {
             },
         );
         self.register_function(
-            "sb_append".to_string(),
+            "sbAppend".to_string(),
             FunctionSignature {
                 params: vec![Type::Int, Type::String],
                 return_type: Type::Void,
@@ -192,7 +192,7 @@ impl Environment {
             },
         );
         self.register_function(
-            "sb_build".to_string(),
+            "sbBuild".to_string(),
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::String,
@@ -201,7 +201,7 @@ impl Environment {
             },
         );
         self.register_function(
-            "sb_free".to_string(),
+            "sbFree".to_string(),
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Void,
@@ -211,7 +211,7 @@ impl Environment {
         );
         // FS and HTTP FFI functions
         self.register_function(
-            "fs_writeText".to_string(),
+            "fsWriteText".to_string(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int, // Returns 1 on success, 0 on failure
@@ -220,7 +220,7 @@ impl Environment {
             },
         );
         self.register_function(
-            "fs_exists".to_string(),
+            "fsExists".to_string(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
@@ -229,7 +229,7 @@ impl Environment {
             },
         );
         self.register_function(
-            "fs_readText".to_string(),
+            "fsReadText".to_string(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
@@ -238,7 +238,7 @@ impl Environment {
             },
         );
         self.register_function(
-            "http_get".to_string(),
+            "httpGet".to_string(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
@@ -247,7 +247,7 @@ impl Environment {
             },
         );
         self.register_function(
-            "string_split".to_string(),
+            "stringSplit".to_string(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int, // Actually it returns Int pointer
@@ -255,7 +255,7 @@ impl Environment {
             }
         );
         self.register_function(
-            "string_replace".to_string(),
+            "stringReplace".to_string(),
             FunctionSignature {
                 params: vec![Type::String, Type::String, Type::String],
                 return_type: Type::String,
@@ -263,7 +263,7 @@ impl Environment {
             }
         );
         self.register_function(
-            "string_substring".to_string(),
+            "stringSubstring".to_string(),
             FunctionSignature {
                 params: vec![Type::String, Type::Int, Type::Int],
                 return_type: Type::String,
@@ -271,7 +271,7 @@ impl Environment {
             }
         );
         self.register_function(
-            "string_trim".to_string(),
+            "stringTrim".to_string(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::String,
@@ -279,7 +279,7 @@ impl Environment {
             }
         );
         self.register_function(
-            "string_index_of".to_string(),
+            "stringIndexOf".to_string(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int,
@@ -287,7 +287,7 @@ impl Environment {
             }
         );
         self.register_function(
-            "string_starts_with".to_string(),
+            "stringStartsWith".to_string(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int,
@@ -295,7 +295,7 @@ impl Environment {
             }
         );
         self.register_function(
-            "get_last_error".to_string(),
+            "getLastError".to_string(),
             FunctionSignature {
                 params: vec![],
                 return_type: Type::String,
@@ -303,7 +303,7 @@ impl Environment {
             }
         );
         self.register_function(
-            "get_year".to_string(),
+            "getYear".to_string(),
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,

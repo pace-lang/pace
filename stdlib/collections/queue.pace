@@ -27,8 +27,8 @@ class Queue<T> implement Iterable<T> {
             var i = self.head;
             var j = 0;
             while i < self.tail {
-                let v = ptr_load(self.ptr, i * 8);
-                ptr_store(newPtr, j * 8, v);
+                let v = ptrLoad(self.ptr, i * 8);
+                ptrStore(newPtr, j * 8, v);
                 i = i + 1;
                 j = j + 1;
             }
@@ -39,16 +39,16 @@ class Queue<T> implement Iterable<T> {
             self.head = 0;
             self.tail = j;
         }
-        ptr_store(self.ptr, self.tail * 8, val);
+        ptrStore(self.ptr, self.tail * 8, val);
         self.tail = self.tail + 1;
     }
 
     func dequeue() -> T {
         if self.head >= self.tail {
             // Empty queue
-            return ptr_load(self.ptr, 0);
+            return ptrLoad(self.ptr, 0);
         }
-        let v = ptr_load(self.ptr, self.head * 8);
+        let v = ptrLoad(self.ptr, self.head * 8);
         self.head = self.head + 1;
         
         // Reset if empty to save space

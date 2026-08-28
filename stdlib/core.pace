@@ -50,12 +50,6 @@ interface Clone {
     func clone() -> Self
 }
 
-interface Default {
-    // Note: Pace currently doesn't support static interface methods properly
-    // but defining this as a placeholder for when static methods are added.
-    // static func default() -> Self
-}
-
 interface Iterable<T> {
     func length() -> Int;
 

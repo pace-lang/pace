@@ -15,7 +15,7 @@ class DateTime {
 
     func getYear() -> Int {
         // Calls the runtime intrinsic __pace_get_year
-        return get_year(self.timestamp);
+        return getYear(self.timestamp);
     }
 
     func difference(other: DateTime) -> Duration {

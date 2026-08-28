@@ -3,27 +3,37 @@ import "./collections/list";
 
 public class StringUtil {
     public static func split(s: String, delim: String) -> List<String> {
-        // returning a List requires parsing the IntArray from FFI
-        return List<String>();
+        let ptr = stringSplit(s, delim);
+        let len: Int = ptrLoad(ptr, 0);
+        let list = List<String>();
+        var i = 0;
+        while i < len {
+            let offset = (i + 1) * 8;
+            let str: String = ptrLoad(ptr, offset);
+            list.push(str);
+            i = i + 1;
+        }
+        free(ptr, (len + 1) * 8);
+        return list;
     }
 
     public static func replace(s: String, old: String, newStr: String) -> String {
-        return string_replace(s, old, newStr);
+        return stringReplace(s, old, newStr);
     }
 
     public static func substring(s: String, start: Int, end: Int) -> String {
-        return string_substring(s, start, end);
+        return stringSubstring(s, start, end);
     }
 
     public static func trim(s: String) -> String {
-        return string_trim(s);
+        return stringTrim(s);
     }
 
     public static func indexOf(s: String, search: String) -> Int {
-        return string_index_of(s, search);
+        return stringIndexOf(s, search);
     }
 
     public static func startsWith(s: String, search: String) -> Bool {
-        return string_starts_with(s, search) != 0;
+        return stringStartsWith(s, search) != 0;
     }
 }

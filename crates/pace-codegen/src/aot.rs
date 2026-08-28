@@ -1,23 +1,17 @@
+use crate::translator::Translator;
 use cranelift::prelude::*;
 use cranelift_object::{ObjectBuilder, ObjectModule};
 use cranelift_module::{Module, FuncId, Linkage, DataDescription};
 use pace_ast::Stmt;
 use std::collections::HashMap;
 use crate::translator::VarType;
-use crate::compiler::{CodegenError, ClassLayout, InterfaceLayout, StructLayout, EnumLayout};
-use crate::translator::Translator;
+use crate::layouts::{StructLayout, ClassLayout, InterfaceLayout, EnumLayout, CodegenError};
+use crate::context::CodegenContext;
 
 pub struct AotCompiler {
-    builder_context: FunctionBuilderContext,
-    ctx: codegen::Context,
-    module: ObjectModule,
-    funcs: HashMap<String, FuncId>,
-    class_layouts: HashMap<String, ClassLayout>,
-    struct_layouts: HashMap<String, StructLayout>,
-    interface_layouts: HashMap<String, InterfaceLayout>,
-    enum_layouts: HashMap<String, EnumLayout>,
-    string_cache: HashMap<String, String>,
-    string_id: usize,
+    pub context: CodegenContext<ObjectModule>,
+    pub builder_context: cranelift::prelude::FunctionBuilderContext,
+    pub ctx: cranelift::codegen::Context,
 }
 
 impl Default for AotCompiler {
@@ -47,23 +41,15 @@ impl AotCompiler {
             cranelift_module::default_libcall_names()
         ).unwrap();
         
-        let mut module = ObjectModule::new(builder);
+        let module = ObjectModule::new(builder);
 
-        let ptr_ty = module.target_config().pointer_type();
-        let funcs = crate::runtime::declare_runtime_functions(&mut module, ptr_ty);
+        
 
 
         Self {
-            builder_context: FunctionBuilderContext::new(),
-            ctx: module.make_context(),
-            module,
-            funcs,
-            class_layouts: HashMap::new(),
-            struct_layouts: HashMap::new(),
-            interface_layouts: HashMap::new(),
-            enum_layouts: HashMap::new(),
-            string_cache: HashMap::new(),
-            string_id: 0,
+            context: CodegenContext::new(module),
+            builder_context: cranelift::prelude::FunctionBuilderContext::new(),
+            ctx: cranelift::codegen::Context::new(),
         }
     }
 
@@ -86,16 +72,16 @@ impl AotCompiler {
                     name: interface_name.clone(),
                     methods: method_map.clone(),
                 };
-                self.interface_layouts.insert(interface_name.clone(), layout);
+                self.context.interface_layouts.insert(interface_name.clone(), layout);
 
                 // Insert a dummy ClassLayout for the interface so translate_expr can find its methods by type_name
                 let dummy_vtable_name = format!("__iface_vtable_{}", interface_name);
-                let dummy_vtable_id = self.module.declare_data(&dummy_vtable_name, Linkage::Local, false, false).unwrap();
+                let dummy_vtable_id = self.context.module.declare_data(&dummy_vtable_name, Linkage::Local, false, false).unwrap();
                 
                 let mut data_ctx = DataDescription::new();
                 let vtable_bytes = vec![0u8; 16];
                 data_ctx.define(vtable_bytes.into_boxed_slice());
-                self.module.define_data(dummy_vtable_id, &data_ctx).unwrap();
+                self.context.module.define_data(dummy_vtable_id, &data_ctx).unwrap();
                 
                 let dummy_class_layout = ClassLayout {
                     name: interface_name.clone(),
@@ -104,13 +90,13 @@ impl AotCompiler {
                     methods: method_map,
                     vtable_id: dummy_vtable_id,
                 };
-                self.class_layouts.insert(interface_name.clone(), dummy_class_layout);
+                self.context.class_layouts.insert(interface_name.clone(), dummy_class_layout);
             }
         }
     }
 
     fn register_classes(&mut self, stmts: &[Stmt]) -> Result<(), CodegenError> {
-        let _ptr_ty = self.module.target_config().pointer_type();
+        let _ptr_ty = self.context.module.target_config().pointer_type();
         
         for stmt in stmts {
             if let Stmt::ClassDecl { name: class_name, fields, methods, implements, generic_params: _, .. } | Stmt::ActorDecl { name: class_name, fields, methods, implements, generic_params: _, .. } = stmt {
@@ -127,10 +113,10 @@ impl AotCompiler {
                 for field in fields {
                     if let Stmt::VarDecl { name: field_name, type_annotation, is_static, initializer, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
-                        let field_ty = crate::translator::parse_vartype(ty_str, Some(class_name), Some(&self.struct_layouts), Some(&self.enum_layouts));
+                        let field_ty = crate::translator::parse_vartype(ty_str, Some(class_name), Some(&self.context.struct_layouts), Some(&self.context.enum_layouts));
                         if *is_static {
                             let global_name = format!("{}_{}", class_name, field_name);
-                            let data_id = self.module.declare_data(&global_name, Linkage::Export, true, false)
+                            let data_id = self.context.module.declare_data(&global_name, Linkage::Export, true, false)
                                 .expect("Failed to declare static field");
                             let mut data_ctx = DataDescription::new();
                             
@@ -153,7 +139,7 @@ impl AotCompiler {
                             }
                             
                             data_ctx.define(init_bytes.into_boxed_slice());
-                            self.module.define_data(data_id, &data_ctx)
+                            self.context.module.define_data(data_id, &data_ctx)
                                 .expect("Failed to define static field data");
                             static_fields.insert(field_name.clone(), (data_id, field_ty));
                         } else {
@@ -169,7 +155,7 @@ impl AotCompiler {
                 
                 // Seed methods from interface if implemented
                 if let Some(iface_annotation) = implements
-                    && let Some(iface_layout) = self.interface_layouts.get(&iface_annotation.name) {
+                    && let Some(iface_layout) = self.context.interface_layouts.get(&iface_annotation.name) {
                         for (m_name, m_off) in &iface_layout.methods {
                             method_map.insert(m_name.clone(), *m_off);
                             if *m_off >= m_offset {
@@ -178,14 +164,14 @@ impl AotCompiler {
                         }
                     }
                 
-                let ptr_ty = self.module.target_config().pointer_type();
+                let ptr_ty = self.context.module.target_config().pointer_type();
                 
                 let drop_name = format!("__drop_{}", class_name);
-                let mut drop_sig = self.module.make_signature();
+                let mut drop_sig = self.context.module.make_signature();
                 drop_sig.params.push(AbiParam::new(ptr_ty)); // obj ptr
-                let drop_id = self.module.declare_function(&drop_name, Linkage::Local, &drop_sig)
+                let drop_id = self.context.module.declare_function(&drop_name, Linkage::Local, &drop_sig)
                     .map_err(|e| CodegenError { message: e.to_string() })?;
-                self.funcs.insert(drop_name.clone(), drop_id);
+                self.context.funcs.insert(drop_name.clone(), drop_id);
                 
                 for method_stmt in methods {
                     if let Stmt::FuncDecl { name: method_name, params, is_static, .. } = method_stmt {
@@ -195,7 +181,7 @@ impl AotCompiler {
                         }
                         
                         let full_name = format!("{}_{}", class_name, method_name);
-                        let mut sig = self.module.make_signature();
+                        let mut sig = self.context.module.make_signature();
                         if !is_static {
                             sig.params.push(AbiParam::new(ptr_ty)); // self
                         }
@@ -204,19 +190,19 @@ impl AotCompiler {
                         }
                         sig.returns.push(AbiParam::new(types::I64));
                         
-                        let id = self.module.declare_function(&full_name, Linkage::Local, &sig)
+                        let id = self.context.module.declare_function(&full_name, Linkage::Local, &sig)
                             .map_err(|e| CodegenError { message: e.to_string() })?;
-                        self.funcs.insert(full_name.clone(), id);
+                        self.context.funcs.insert(full_name.clone(), id);
                         
                         if !is_static && method_name != "init" {
                             if is_actor {
                                 let async_name = format!("__async_{}_{}", class_name, method_name);
-                                let mut async_sig = self.module.make_signature();
+                                let mut async_sig = self.context.module.make_signature();
                                 async_sig.params.push(AbiParam::new(types::I64));
                                 async_sig.returns.push(AbiParam::new(types::I64));
-                                let async_id = self.module.declare_function(&async_name, Linkage::Local, &async_sig)
+                                let async_id = self.context.module.declare_function(&async_name, Linkage::Local, &async_sig)
                                     .map_err(|e| CodegenError { message: e.to_string() })?;
-                                self.funcs.insert(async_name.clone(), async_id);
+                                self.context.funcs.insert(async_name.clone(), async_id);
                                 vtable_funcs.insert(method_name.clone(), async_id);
                             } else {
                                 vtable_funcs.insert(method_name.clone(), id);
@@ -226,7 +212,7 @@ impl AotCompiler {
                 }
                 
                 let vtable_name = format!("__vtable_{}", class_name);
-                let vtable_id = self.module.declare_data(&vtable_name, Linkage::Local, false, false)
+                let vtable_id = self.context.module.declare_data(&vtable_name, Linkage::Local, false, false)
                     .map_err(|e| CodegenError { message: e.to_string() })?;
                     
                 let mut data_ctx = DataDescription::new();
@@ -235,16 +221,16 @@ impl AotCompiler {
                 vtable_bytes[8..16].copy_from_slice(&size.to_ne_bytes());
                 data_ctx.define(vtable_bytes.into_boxed_slice());
                 
-                let drop_ref = self.module.declare_func_in_data(drop_id, &mut data_ctx);
+                let drop_ref = self.context.module.declare_func_in_data(drop_id, &mut data_ctx);
                 data_ctx.write_function_addr(0, drop_ref);
                 
                 for (m_name, func_id) in &vtable_funcs {
                     let byte_offset = *method_map.get(m_name).unwrap();
-                    let func_ref = self.module.declare_func_in_data(*func_id, &mut data_ctx);
+                    let func_ref = self.context.module.declare_func_in_data(*func_id, &mut data_ctx);
                     data_ctx.write_function_addr(byte_offset as u32, func_ref);
                 }
                 
-                self.module.define_data(vtable_id, &data_ctx)
+                self.context.module.define_data(vtable_id, &data_ctx)
                     .map_err(|e| CodegenError { message: e.to_string() })?;
                     
                 let layout = ClassLayout {
@@ -254,19 +240,19 @@ impl AotCompiler {
                     methods: method_map,
                     vtable_id,
                 };
-                self.class_layouts.insert(class_name.clone(), layout);
+                self.context.class_layouts.insert(class_name.clone(), layout);
             } else if let Stmt::EnumDecl { name: enum_name, variants, generic_params: _, .. } = stmt {
                 let mut max_size = 16; // 8 for ARC, 8 for Tag
                 let mut variant_map = HashMap::new();
                 
-                let ptr_ty = self.module.target_config().pointer_type();
+                let ptr_ty = self.context.module.target_config().pointer_type();
                 
                 let drop_name = format!("__drop_{}", enum_name);
-                let mut drop_sig = self.module.make_signature();
+                let mut drop_sig = self.context.module.make_signature();
                 drop_sig.params.push(AbiParam::new(ptr_ty)); // obj ptr
-                let drop_id = self.module.declare_function(&drop_name, Linkage::Local, &drop_sig)
+                let drop_id = self.context.module.declare_function(&drop_name, Linkage::Local, &drop_sig)
                     .map_err(|e| CodegenError { message: e.to_string() })?;
-                self.funcs.insert(drop_name.clone(), drop_id);
+                self.context.funcs.insert(drop_name.clone(), drop_id);
                 
                 for (tag_idx, variant) in variants.iter().enumerate() {
                     let mut variant_types = Vec::new();
@@ -274,7 +260,7 @@ impl AotCompiler {
                     
                     if let Some(fields) = &variant.fields {
                         for field_ty in fields {
-                            let field_var_type = crate::translator::parse_vartype(&field_ty.name, Some(enum_name), Some(&self.struct_layouts), Some(&self.enum_layouts));
+                            let field_var_type = crate::translator::parse_vartype(&field_ty.name, Some(enum_name), Some(&self.context.struct_layouts), Some(&self.context.enum_layouts));
                             variant_types.push(field_var_type);
                             variant_size += 8;
                         }
@@ -287,15 +273,15 @@ impl AotCompiler {
                     variant_map.insert(variant.name.clone(), (tag_idx as u64, variant_types.clone()));
                     
                     let constructor_name = format!("{}_{}", enum_name, variant.name);
-                    let mut sig = self.module.make_signature();
+                    let mut sig = self.context.module.make_signature();
                     for _ in 0..variant_types.len() {
                         sig.params.push(AbiParam::new(types::I64));
                     }
                     sig.returns.push(AbiParam::new(ptr_ty));
                     
-                    let constructor_id = self.module.declare_function(&constructor_name, Linkage::Local, &sig)
+                    let constructor_id = self.context.module.declare_function(&constructor_name, Linkage::Local, &sig)
                         .map_err(|e| CodegenError { message: e.to_string() })?;
-                    self.funcs.insert(constructor_name, constructor_id);
+                    self.context.funcs.insert(constructor_name, constructor_id);
                 }
                 
                 let layout = EnumLayout {
@@ -304,7 +290,7 @@ impl AotCompiler {
                     variants: variant_map,
                     drop_func_id: drop_id,
                 };
-                self.enum_layouts.insert(enum_name.clone(), layout);
+                self.context.enum_layouts.insert(enum_name.clone(), layout);
                 
             } else if let Stmt::StructDecl { name: struct_name, fields, generic_params: _, .. } = stmt {
                 let mut field_map = HashMap::new();
@@ -312,7 +298,7 @@ impl AotCompiler {
                 for field in fields {
                     if let Stmt::VarDecl { name: field_name, type_annotation, .. } = field {
                         let ty_str = type_annotation.as_ref().map(|t| t.name.as_str()).unwrap_or("Unknown");
-                        let field_ty = crate::translator::parse_vartype(ty_str, Some(struct_name), Some(&self.struct_layouts), Some(&self.enum_layouts));
+                        let field_ty = crate::translator::parse_vartype(ty_str, Some(struct_name), Some(&self.context.struct_layouts), Some(&self.context.enum_layouts));
                         field_map.insert(field_name.clone(), (offset, field_ty));
                         offset += 8;
                     }
@@ -324,7 +310,7 @@ impl AotCompiler {
                     static_fields: HashMap::new(),
                     size: offset,
                 };
-                self.struct_layouts.insert(struct_name.clone(), layout);
+                self.context.struct_layouts.insert(struct_name.clone(), layout);
             }
         }
         Ok(())
@@ -343,7 +329,7 @@ impl AotCompiler {
         // Pass 1: Declare all functions
         for stmt in final_stmts {
             if let Stmt::FuncDecl { name, params, .. } = stmt {
-                let mut sig = self.module.make_signature();
+                let mut sig = self.context.module.make_signature();
                 for _ in params {
                     sig.params.push(AbiParam::new(types::I64));
                 }
@@ -352,9 +338,9 @@ impl AotCompiler {
                 // main must be exported, others can be local
                 let linkage = if name == "main" { Linkage::Export } else { Linkage::Local };
                 
-                let id = self.module.declare_function(name, linkage, &sig)
+                let id = self.context.module.declare_function(name, linkage, &sig)
                     .map_err(|e| CodegenError { message: e.to_string() })?;
-                self.funcs.insert(name.clone(), id);
+                self.context.funcs.insert(name.clone(), id);
             }
         }
 
@@ -362,13 +348,13 @@ impl AotCompiler {
         for stmt in final_stmts {
             if let Stmt::FuncDecl { name, return_type, .. } = stmt {
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
-                func_returns.insert(name.clone(), crate::translator::parse_vartype(ret, None, Some(&self.struct_layouts), Some(&self.enum_layouts)));
+                func_returns.insert(name.clone(), crate::translator::parse_vartype(ret, None, Some(&self.context.struct_layouts), Some(&self.context.enum_layouts)));
             } else if let Stmt::ClassDecl { name: class_name, methods, .. } | Stmt::ActorDecl { name: class_name, methods, .. } = stmt {
                 for method in methods {
                     if let Stmt::FuncDecl { name: method_name, params: _, return_type, .. } = method {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         let full_name = format!("{}_{}", class_name, method_name);
-                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(class_name), Some(&self.struct_layouts), Some(&self.enum_layouts)));
+                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(class_name), Some(&self.context.struct_layouts), Some(&self.context.enum_layouts)));
                     }
                 }
             } else if let Stmt::InterfaceDecl { name: interface_name, methods, generic_params: _, .. } = stmt {
@@ -376,7 +362,7 @@ impl AotCompiler {
                     if let Stmt::FuncDecl { name: method_name, params: _, return_type, .. } = method {
                         let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                         let full_name = format!("{}_{}", interface_name, method_name);
-                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(interface_name), Some(&self.struct_layouts), Some(&self.enum_layouts)));
+                        func_returns.insert(full_name, crate::translator::parse_vartype(ret, Some(interface_name), Some(&self.context.struct_layouts), Some(&self.context.enum_layouts)));
                     }
                 }
             }
@@ -385,7 +371,7 @@ impl AotCompiler {
                 // Pass 2: Define all functions and class methods
         for stmt in final_stmts {
             if let Stmt::FuncDecl { name, params, body, return_type, .. } = stmt {
-                let id = *self.funcs.get(name).unwrap();
+                let id = *self.context.funcs.get(name).unwrap();
                 let ret = return_type.as_ref().map(|t| t.name.as_str()).unwrap_or("Int");
                 self.compile_function(name, params, body, id, &func_returns, ret, None)?;
             } else if let Stmt::ClassDecl { name: class_name, methods, .. } | Stmt::ActorDecl { name: class_name, methods, .. } = stmt {
@@ -394,7 +380,7 @@ impl AotCompiler {
                 for method_stmt in methods {
                     if let Stmt::FuncDecl { name: method_name, params, body, return_type, is_static, .. } = method_stmt {
                         let full_name = format!("{}_{}", class_name, method_name);
-                        let id = *self.funcs.get(&full_name).unwrap();
+                        let id = *self.context.funcs.get(&full_name).unwrap();
                         
                         let mut all_params = vec![];
                         if !is_static {
@@ -427,7 +413,7 @@ impl AotCompiler {
             }
         }
 
-        let product = self.module.finish();
+        let product = self.context.module.finish();
         let bytes = product.emit().map_err(|e| CodegenError { message: e.to_string() })?;
         
         Ok(bytes)
@@ -435,14 +421,14 @@ impl AotCompiler {
 
     fn generate_async_wrapper(&mut self, class_name: &str, method_name: &str, num_args: usize) -> Result<(), CodegenError> {
         let async_name = format!("__async_{}_{}", class_name, method_name);
-        let id = *self.funcs.get(&async_name).unwrap();
-        let target_id = *self.funcs.get(&format!("{}_{}", class_name, method_name)).unwrap();
+        let id = *self.context.funcs.get(&async_name).unwrap();
+        let target_id = *self.context.funcs.get(&format!("{}_{}", class_name, method_name)).unwrap();
         
         self.ctx.func.signature.params.push(AbiParam::new(types::I64)); // arg_ptr
         self.ctx.func.signature.returns.push(AbiParam::new(types::I64));
         
         let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
-        let entry_block = builder.create_block();
+                let entry_block = builder.create_block();
         builder.append_block_params_for_function_params(entry_block);
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
@@ -456,7 +442,7 @@ impl AotCompiler {
         }
         
         // Call the real method
-        let local_target = self.module.declare_func_in_func(target_id, builder.func);
+        let local_target = self.context.module.declare_func_in_func(target_id, builder.func);
         let call = builder.ins().call(local_target, &call_args);
         
         let results = builder.inst_results(call);
@@ -467,28 +453,28 @@ impl AotCompiler {
         };
         
         // Free the tuple allocated by the caller
-        let free_id = *self.funcs.get("free").unwrap();
-        let local_free = self.module.declare_func_in_func(free_id, builder.func);
+        let free_id = *self.context.funcs.get("free").unwrap();
+        let local_free = self.context.module.declare_func_in_func(free_id, builder.func);
         let size_val = builder.ins().iconst(types::I64, ((num_args + 1) * 8) as i64);
         builder.ins().call(local_free, &[arg_ptr, size_val]);
         
         builder.ins().return_(&[ret_val]);
-        builder.finalize(self.module.target_config());
+        builder.finalize(self.context.module.target_config());
         
-        self.module.define_function(id, &mut self.ctx).map_err(|e| CodegenError { message: e.to_string() })?;
-        self.module.clear_context(&mut self.ctx);
+        self.context.module.define_function(id, &mut self.ctx).map_err(|e| CodegenError { message: e.to_string() })?;
+        self.context.module.clear_context(&mut self.ctx);
         Ok(())
     }
 
     fn generate_drop_function(&mut self, class_name: &str) -> Result<(), CodegenError> {
-        let layout = self.class_layouts.get(class_name).unwrap().clone();
+        let layout = self.context.class_layouts.get(class_name).unwrap().clone();
         let drop_name = format!("__drop_{}", class_name);
-        let func_id = *self.funcs.get(&drop_name).unwrap();
+        let func_id = *self.context.funcs.get(&drop_name).unwrap();
         
-        self.ctx.func.signature.params.push(AbiParam::new(self.module.target_config().pointer_type()));
+        self.ctx.func.signature.params.push(AbiParam::new(self.context.module.target_config().pointer_type()));
         
         let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
-        let entry_block = builder.create_block();
+                let entry_block = builder.create_block();
         builder.append_block_params_for_function_params(entry_block);
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
@@ -498,35 +484,35 @@ impl AotCompiler {
         for (field_name, &(offset, ref ty)) in &layout.fields {
             if field_name == "__mailbox" {
                 let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, offset as i32);
-                let destroy_id = *self.funcs.get("__pace_mailbox_destroy").unwrap();
-                let local_destroy = self.module.declare_func_in_func(destroy_id, builder.func);
+                let destroy_id = *self.context.funcs.get("__pace_mailbox_destroy").unwrap();
+                let local_destroy = self.context.module.declare_func_in_func(destroy_id, builder.func);
                 builder.ins().call(local_destroy, &[val]);
             } else if matches!(ty, VarType::Object(_)) {
                 let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, offset as i32);
-                let release_id = *self.funcs.get("release").unwrap();
-                let local_release = self.module.declare_func_in_func(release_id, builder.func);
+                let release_id = *self.context.funcs.get("release").unwrap();
+                let local_release = self.context.module.declare_func_in_func(release_id, builder.func);
                 builder.ins().call(local_release, &[val]);
             }
         }
         
         builder.ins().return_(&[]);
-        builder.finalize(self.module.target_config());
+        builder.finalize(self.context.module.target_config());
         
-        self.module.define_function(func_id, &mut self.ctx)
+        self.context.module.define_function(func_id, &mut self.ctx)
             .map_err(|e| CodegenError { message: e.to_string() })?;
             
-        self.module.clear_context(&mut self.ctx);
+        self.context.module.clear_context(&mut self.ctx);
         Ok(())
     }
 
     fn generate_enum_drop_function(&mut self, enum_name: &str) -> Result<(), CodegenError> {
-        let layout = self.enum_layouts.get(enum_name).unwrap().clone();
+        let layout = self.context.enum_layouts.get(enum_name).unwrap().clone();
         let func_id = layout.drop_func_id;
         
-        self.ctx.func.signature.params.push(AbiParam::new(self.module.target_config().pointer_type()));
+        self.ctx.func.signature.params.push(AbiParam::new(self.context.module.target_config().pointer_type()));
         
         let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
-        let entry_block = builder.create_block();
+                let entry_block = builder.create_block();
         builder.append_block_params_for_function_params(entry_block);
         builder.switch_to_block(entry_block);
         
@@ -560,8 +546,8 @@ impl AotCompiler {
             for ty in fields {
                 if matches!(ty, VarType::Object(_)) {
                     let val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), obj_ptr, offset);
-                    let release_id = *self.funcs.get("release").unwrap();
-                    let local_release = self.module.declare_func_in_func(release_id, builder.func);
+                    let release_id = *self.context.funcs.get("release").unwrap();
+                    let local_release = self.context.module.declare_func_in_func(release_id, builder.func);
                     builder.ins().call(local_release, &[val]);
                 }
                 offset += 8;
@@ -576,21 +562,21 @@ impl AotCompiler {
         
         builder.seal_block(entry_block);
         
-        builder.finalize(self.module.target_config());
+        builder.finalize(self.context.module.target_config());
         
-        self.module.define_function(func_id, &mut self.ctx)
+        self.context.module.define_function(func_id, &mut self.ctx)
             .map_err(|e| CodegenError { message: e.to_string() })?;
             
-        self.module.clear_context(&mut self.ctx);
+        self.context.module.clear_context(&mut self.ctx);
         Ok(())
     }
 
     fn generate_enum_constructors(&mut self, enum_name: &str, variants: &[pace_ast::EnumVariant]) -> Result<(), CodegenError> {
-        let layout = self.enum_layouts.get(enum_name).unwrap().clone();
+        let layout = self.context.enum_layouts.get(enum_name).unwrap().clone();
         
         for variant in variants {
             let constructor_name = format!("{}_{}", enum_name, variant.name);
-            let func_id = *self.funcs.get(&constructor_name).unwrap();
+            let func_id = *self.context.funcs.get(&constructor_name).unwrap();
             let (tag_id, fields) = layout.variants.get(&variant.name).unwrap();
             
             for _ in 0..fields.len() {
@@ -599,13 +585,13 @@ impl AotCompiler {
             self.ctx.func.signature.returns.push(AbiParam::new(types::I64));
             
             let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
-            let entry_block = builder.create_block();
+                    let entry_block = builder.create_block();
             builder.append_block_params_for_function_params(entry_block);
             builder.switch_to_block(entry_block);
             builder.seal_block(entry_block);
             
-            let malloc_id = *self.funcs.get("malloc").unwrap();
-            let local_malloc = self.module.declare_func_in_func(malloc_id, builder.func);
+            let malloc_id = *self.context.funcs.get("malloc").unwrap();
+            let local_malloc = self.context.module.declare_func_in_func(malloc_id, builder.func);
             let size_val = builder.ins().iconst(types::I64, layout.max_size as i64);
             let call = builder.ins().call(local_malloc, &[size_val]);
             let obj_ptr = builder.inst_results(call)[0];
@@ -622,8 +608,8 @@ impl AotCompiler {
                 builder.ins().store(cranelift::prelude::MemFlagsData::new(), arg_val, obj_ptr, offset);
                 
                 if matches!(field_ty, VarType::Object(_)) {
-                    let retain_id = *self.funcs.get("retain").unwrap();
-                    let local_retain = self.module.declare_func_in_func(retain_id, builder.func);
+                    let retain_id = *self.context.funcs.get("retain").unwrap();
+                    let local_retain = self.context.module.declare_func_in_func(retain_id, builder.func);
                     builder.ins().call(local_retain, &[arg_val]);
                 }
                 
@@ -631,12 +617,12 @@ impl AotCompiler {
             }
             
             builder.ins().return_(&[obj_ptr]);
-            builder.finalize(self.module.target_config());
+            builder.finalize(self.context.module.target_config());
             
-            self.module.define_function(func_id, &mut self.ctx)
+            self.context.module.define_function(func_id, &mut self.ctx)
                 .map_err(|e| CodegenError { message: e.to_string() })?;
                 
-            self.module.clear_context(&mut self.ctx);
+            self.context.module.clear_context(&mut self.ctx);
         }
         Ok(())
     }
@@ -651,15 +637,15 @@ impl AotCompiler {
         ret_type_str: &str,
         current_class: Option<&str>,
     ) -> Result<(), CodegenError> {
-        let ret_ty = crate::translator::parse_vartype(ret_type_str, current_class, Some(&self.struct_layouts), Some(&self.enum_layouts));
+        let ret_ty = crate::translator::parse_vartype(ret_type_str, current_class, Some(&self.context.struct_layouts), Some(&self.context.enum_layouts));
         self.ctx.func.signature.returns.push(AbiParam::new(ret_ty.to_cranelift_type()));
         for param in params {
-            let ty = crate::translator::parse_type_annotation(&param.type_annotation, current_class, Some(&self.struct_layouts), Some(&self.enum_layouts));
+            let ty = crate::translator::parse_type_annotation(&param.type_annotation, current_class, Some(&self.context.struct_layouts), Some(&self.context.enum_layouts));
             self.ctx.func.signature.params.push(AbiParam::new(ty.to_cranelift_type()));
         }
 
         let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
-        let entry_block = builder.create_block();
+                let entry_block = builder.create_block();
         builder.append_block_params_for_function_params(entry_block);
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
@@ -672,16 +658,17 @@ impl AotCompiler {
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
             
-            let param_ty = crate::translator::parse_type_annotation(&param.type_annotation, current_class, Some(&self.struct_layouts), Some(&self.enum_layouts));
+            let param_ty = crate::translator::parse_type_annotation(&param.type_annotation, current_class, Some(&self.context.struct_layouts), Some(&self.context.enum_layouts));
             variables.insert(param.name.clone(), (var, param_ty));
             var_index += 1;
         }
 
         let mut last_val = None;
         let mut terminated = false;
-        let mut pending_closures = Vec::new();
+        let mut pending_closures: Vec<(String, pace_ast::Expr, Vec<(String, crate::translator::VarType)>)> = Vec::new();
+        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures };
         for stmt in body {
-            let (val, term) = Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, stmt, &mut variables, &mut var_index, func_returns, &mut self.string_cache, &mut self.string_id, &mut pending_closures)?;
+            let (val, term) = translator.translate_stmt(stmt)?;
             last_val = Some(val);
             if term {
                 terminated = true;
@@ -694,18 +681,18 @@ impl AotCompiler {
             builder.ins().return_(&[ret]);
         }
         
-        builder.finalize(self.module.target_config());
+        builder.finalize(self.context.module.target_config());
         
-        self.module
+        self.context.module
             .define_function(func_id, &mut self.ctx)
             .map_err(|e| {
                 println!("Cranelift Verifier Error in function {}: {:?}", _name, e);
                 CodegenError { message: e.to_string() }
             })?;
         
-        self.module.clear_context(&mut self.ctx);
+        self.context.module.clear_context(&mut self.ctx);
         
-        for (fn_name, expr, captured_vars) in pending_closures {
+        for (fn_name, expr, captured_vars) in pending_closures.into_iter() {
             self.compile_closure(&fn_name, expr, captured_vars, func_returns, current_class)?;
         }
         
@@ -725,19 +712,19 @@ impl AotCompiler {
             _ => return Err(CodegenError { message: "Invalid closure expression".to_string() }),
         };
         
-        let mut sig = self.module.make_signature();
-        sig.params.push(AbiParam::new(self.module.target_config().pointer_type())); // env pointer
+        let mut sig = self.context.module.make_signature();
+        sig.params.push(AbiParam::new(self.context.module.target_config().pointer_type())); // env pointer
         for _ in &params {
             sig.params.push(AbiParam::new(types::I64));
         }
         sig.returns.push(AbiParam::new(types::I64)); // Assume returning I64 for now
         
-        let func_id = self.module.declare_function(fn_name, Linkage::Export, &sig).unwrap();
+        let func_id = self.context.module.declare_function(fn_name, Linkage::Export, &sig).unwrap();
         
         self.ctx.func.signature = sig;
         
         let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
-        let entry_block = builder.create_block();
+                let entry_block = builder.create_block();
         builder.append_block_params_for_function_params(entry_block);
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
@@ -762,16 +749,17 @@ impl AotCompiler {
             let val = builder.block_params(entry_block)[i + 1]; // +1 because env_ptr is at 0
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
-            let param_ty = crate::translator::parse_type_annotation(&param.1, current_class, Some(&self.struct_layouts), Some(&self.enum_layouts));
+            let param_ty = crate::translator::parse_type_annotation(&param.1, current_class, Some(&self.context.struct_layouts), Some(&self.context.enum_layouts));
             variables.insert(param.0.clone(), (var, param_ty));
             var_index += 1;
         }
         
         let mut terminated = false;
-        let mut pending_closures = Vec::new();
+        let mut pending_closures: Vec<(String, pace_ast::Expr, Vec<(String, crate::translator::VarType)>)> = Vec::new();
+        let mut translator = Translator { context: &mut self.context, builder: &mut builder, variables: &mut variables, var_index: &mut var_index, func_returns: &func_returns, pending_closures: &mut pending_closures };
         
         let body_stmt = pace_ast::Stmt::Expr(*body);
-        let (val, term) = crate::translator::Translator::translate_stmt(&mut self.module, &self.funcs, &self.class_layouts, &self.struct_layouts, &self.enum_layouts, &mut builder, &body_stmt, &mut variables, &mut var_index, func_returns, &mut self.string_cache, &mut self.string_id, &mut pending_closures)?;
+        let (val, term) = translator.translate_stmt(&body_stmt)?;
         let last_val = Some(val);
         if term {
             terminated = true;
@@ -782,10 +770,10 @@ impl AotCompiler {
             builder.ins().return_(&[ret]);
         }
         
-        builder.finalize(self.module.target_config());
-        self.module.define_function(func_id, &mut self.ctx)
+        builder.finalize(self.context.module.target_config());
+        self.context.module.define_function(func_id, &mut self.ctx)
             .map_err(|e| CodegenError { message: e.to_string() })?;
-        self.module.clear_context(&mut self.ctx);
+        self.context.module.clear_context(&mut self.ctx);
         
         // Recursively compile any nested closures
         for (nested_fn, nested_expr, nested_captured) in pending_closures {

@@ -25,7 +25,7 @@ mod tests {
     #[test]
     fn test_import_parsing() {
         let src = r#"
-            import std:io;
+            import std:string;
             import "./models/user";
             import "http";
         "#;
@@ -33,7 +33,7 @@ mod tests {
         assert_eq!(stmts.len(), 3);
         
         match &stmts[0] {
-            Stmt::Import { path, .. } => assert_eq!(path, "std:io"),
+            Stmt::Import { path, .. } => assert_eq!(path, "std:string"),
             _ => panic!("Expected Import"),
         }
         match &stmts[1] {

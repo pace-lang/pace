@@ -17,7 +17,7 @@ class IntArray {
             self.cap = 100;
             self.ptr = malloc(self.cap * 8); // 8 bytes per i64
         }
-        ptr_store(self.ptr, self.len * 8, val);
+        ptrStore(self.ptr, self.len * 8, val);
         self.len = self.len + 1;
     }
 
@@ -26,7 +26,7 @@ class IntArray {
             // Out of bounds, ideally panic here
             return 0;
         }
-        return ptr_load(self.ptr, idx * 8);
+        return ptrLoad(self.ptr, idx * 8);
     }
 
     func drop() {
