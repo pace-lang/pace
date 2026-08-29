@@ -1,5 +1,4 @@
 import "pace:process";
-
 func runProcessTest() -> Result<Bool, String> {
     print("--- Testing Process ---");
     let res = Process::run("echo Hello from Process!");
@@ -7,3 +6,4 @@ func runProcessTest() -> Result<Bool, String> {
     print(out);
     return Result<Bool, String>::Ok(true);
 }
+

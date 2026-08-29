@@ -2,24 +2,25 @@ class Person {
     var name: String;
     var age: Int;
     static var count: Int = 0;
-    
+
     func init(name: String, age: Int) {
         self.name = name;
         self.age = age;
         Person::count = Person::count + 1;
     }
-    
+
     func greet() {
         print("Hello, my name is ${self.name} and I am ${self.age} years old");
     }
-    
+
     private func unusedMethod() {
-        // Intentionally unused to trigger linter
     }
-    
+
+    // Intentionally unused to trigger linter
     static func createDefault() -> Person {
         return Person("Default", 0);
     }
+
 }
 
 func runClassTest() {
@@ -28,6 +29,6 @@ func runClassTest() {
     p.greet();
     let p2 = Person::createDefault();
     print("Total persons created: ${Person::count}");
-    
     let unused_snake_case_var = 42; // Triggers both unused and naming convention warnings
 }
+

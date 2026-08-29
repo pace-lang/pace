@@ -1,60 +1,93 @@
-// Core Compiler Intrinsics
-// These structs are backed by native compiler representations (I64, F64, etc.)
-// They exist here so developers can attach methods to them.
-struct Int {}
-struct Float {}
-struct Bool {}
-struct String {}
-struct Char {}
-struct Byte {}
+struct Int {
+}
 
-// Type System constructs
-struct Void {}
-struct Any {}
-struct Never {}
-struct Error {}
+struct Float {
+}
 
-// Option and Result Algebraic Data Types
+struct Bool {
+}
+
+struct String {
+}
+
+struct Char {
+}
+
+struct Byte {
+}
+
+struct Void {
+}
+
+struct Any {
+}
+
+struct Never {
+}
+
+struct Error {
+}
+
 enum Option<T> {
     Some(T),
-    None,
+    None
 }
 
 enum Result<T, E> {
     Ok(T),
-    Err(E),
+    Err(E)
 }
 
-// Fundamental Protocols
 interface Equatable {
-    func equals(other: Self) -> Bool
+    // Core Compiler Intrinsics
+    func equals(other: Self) -> Bool {
+    }
+
 }
 
 interface Comparable {
-    func compareTo(other: Self) -> Int
+    func compareTo(other: Self) -> Int {
+    }
+
 }
 
 interface Hashable {
-    func hash() -> Int
+    func hash() -> Int {
+    }
+
 }
 
 interface Display {
-    func display() -> String
+    func display() -> String {
+    }
+
 }
 
 interface Debug {
-    func debug() -> String
+    func debug() -> String {
+    }
+
 }
 
 interface Clone {
-    func clone() -> Self
+    func clone() -> Self {
+    }
+
 }
 
 interface Iterable<T> {
-    func length() -> Int;
+    func length() -> Int {
+    }
 
-    // Default method (Trait)
     func isEmpty() -> Bool {
         return self.length() == 0;
     }
+
 }
+
+// These structs are backed by native compiler representations (I64, F64, etc.)
+// They exist here so developers can attach methods to them.
+// Type System constructs
+// Option and Result Algebraic Data Types
+// Fundamental Protocols
+// Default method (Trait)

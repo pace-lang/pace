@@ -17,4 +17,6 @@ class StringBuilder {
         sbFree(self.ptr);
         self.ptr = 0;
     }
+
 }
+

@@ -13,3 +13,4 @@ func runResultTest() -> Result<Bool, String> {
     print(val);
     return Result<Bool, String>::Ok(true);
 }
+

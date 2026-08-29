@@ -1,7 +1,6 @@
-// Standard Dynamic List Implementation
-// Backed by raw memory allocation for high performance and no leaks (ARC drop)
-
 class List<T> implement Iterable<T> {
+    // Standard Dynamic List Implementation
+    // Backed by raw memory allocation for high performance and no leaks (ARC drop)
     var ptr: Int;
     var len: Int;
     var cap: Int;
@@ -15,36 +14,33 @@ class List<T> implement Iterable<T> {
     func add(val: T) {
         if self.cap == 0 {
             self.cap = 16;
-            self.ptr = malloc(self.cap * 8); // 8 bytes per i64
+            self.ptr = malloc(self.cap * 8);
         } else if self.len >= self.cap {
+            // 8 bytes per i64
             let newCap = self.cap * 2;
-            let newPtr = malloc(newCap * 8);
-            
-            // Copy old data
+            let newPtr = malloc(newCap * 8); // Copy old data
             var i = 0;
             while i < self.len {
                 let v = ptrLoad(self.ptr, i * 8);
                 ptrStore(newPtr, i * 8, v);
                 i = i + 1;
             }
-            
             free(self.ptr, self.cap * 8);
             self.ptr = newPtr;
             self.cap = newCap;
         }
-        
         ptrStore(self.ptr, self.len * 8, val);
         self.len = self.len + 1;
     }
-    
+
     func addAll(other: Iterable<T>) {
-        // We expect `other` to provide a way to iterate. Since Iterable doesn't have an iterator yet,
-        // we'll assume we can't easily iterate over Iterable without an iterator.
-        // Wait, Pace doesn't have a standardized `get` or iterator on Iterable yet.
-        // Let's take a List<T> instead for now, or just use `get` if it's there.
-        // We don't have traits with `get` inside `Iterable`. We can take `List<T>` for `other`.
     }
 
+    // We expect `other` to provide a way to iterate. Since Iterable doesn't have an iterator yet,
+    // we'll assume we can't easily iterate over Iterable without an iterator.
+    // Wait, Pace doesn't have a standardized `get` or iterator on Iterable yet.
+    // Let's take a List<T> instead for now, or just use `get` if it's there.
+    // We don't have traits with `get` inside `Iterable`. We can take `List<T>` for `other`.
     func addAllList(other: List<T>) {
         var i = 0;
         let l = other.length();
@@ -56,21 +52,20 @@ class List<T> implement Iterable<T> {
 
     func get(idx: Int) -> T {
         if idx >= self.len {
-            // Out of bounds fallback
             return ptrLoad(self.ptr, 0);
         }
         return ptrLoad(self.ptr, idx * 8);
     }
-    
+
+    // Out of bounds fallback
     func insert(idx: Int, val: T) {
         if idx >= self.len {
             self.add(val);
             return;
         }
-        
+        self.add(val);
         // Ensure capacity
-        self.add(val); // This ensures capacity and increments len
-        
+        // This ensures capacity and increments len
         // Shift elements to the right
         var i = self.len - 1;
         while i > idx {
@@ -78,15 +73,13 @@ class List<T> implement Iterable<T> {
             ptrStore(self.ptr, i * 8, prev);
             i = i - 1;
         }
-        
         ptrStore(self.ptr, idx * 8, val);
     }
-    
+
     func remove(idx: Int) {
         if idx >= self.len {
             return;
         }
-        
         var i = idx;
         while i < self.len - 1 {
             let next = ptrLoad(self.ptr, (i + 1) * 8);
@@ -95,11 +88,11 @@ class List<T> implement Iterable<T> {
         }
         self.len = self.len - 1;
     }
-    
+
     func clear() {
         self.len = 0;
     }
-    
+
     func indexOf(val: T) -> Int {
         var i = 0;
         while i < self.len {
@@ -110,7 +103,7 @@ class List<T> implement Iterable<T> {
         }
         return 0 - 1;
     }
-    
+
     func contains(val: T) -> Bool {
         return self.indexOf(val) >= 0;
     }
@@ -125,4 +118,6 @@ class List<T> implement Iterable<T> {
             self.ptr = 0;
         }
     }
+
 }
+

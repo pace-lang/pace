@@ -1,9 +1,7 @@
 import "./list";
-
-// Standard Dynamic Set Implementation
-// Uses a List internally and deduplicates on insert
-
 class Set<T> implement Iterable<T> {
+    // Standard Dynamic Set Implementation
+    // Uses a List internally and deduplicates on insert
     var list: List<T>;
 
     func init() {
@@ -17,7 +15,7 @@ class Set<T> implement Iterable<T> {
         self.list.add(val);
         return true;
     }
-    
+
     func addAll(other: List<T>) {
         var i = 0;
         let l = other.length();
@@ -26,7 +24,7 @@ class Set<T> implement Iterable<T> {
             i = i + 1;
         }
     }
-    
+
     func remove(val: T) -> Bool {
         let idx = self.list.indexOf(val);
         if idx >= 0 {
@@ -35,7 +33,7 @@ class Set<T> implement Iterable<T> {
         }
         return false;
     }
-    
+
     func clear() {
         self.list.clear();
     }
@@ -47,7 +45,7 @@ class Set<T> implement Iterable<T> {
     func length() -> Int {
         return self.list.length();
     }
-    
+
     func union(other: Set<T>) -> Set<T> {
         let newSet = Set<T>();
         var i = 0;
@@ -62,7 +60,7 @@ class Set<T> implement Iterable<T> {
         }
         return newSet;
     }
-    
+
     func intersection(other: Set<T>) -> Set<T> {
         let newSet = Set<T>();
         var i = 0;
@@ -75,4 +73,6 @@ class Set<T> implement Iterable<T> {
         }
         return newSet;
     }
+
 }
+

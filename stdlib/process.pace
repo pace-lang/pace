@@ -1,6 +1,5 @@
-// Process module for managing OS processes
-
 class Process {
+    // Process module for managing OS processes
     static func run(command: String) -> Result<String, String> {
         let ptr = processRun(command);
         if ptr == null {
@@ -8,8 +7,10 @@ class Process {
         }
         return Result<String, String>::Ok(ptr);
     }
-    
+
     static func exit(code: Int) -> Never {
         processExit(code);
     }
+
 }
+

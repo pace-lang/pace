@@ -1,5 +1,4 @@
 // Standard Math module
-
 func max(a: Int, b: Int) -> Int {
     if a > b {
         return a;
@@ -25,3 +24,4 @@ func isEven(a: Int) -> Bool {
     let mul = div * 2;
     return a == mul;
 }
+

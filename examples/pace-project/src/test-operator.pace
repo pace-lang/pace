@@ -8,3 +8,4 @@ func runOperatorTest() {
     print("10 / 3 = ${a / b}");
     print("10 % 3 = ${a % b}");
 }
+

@@ -9,3 +9,4 @@ func runConditionsTest() {
         print("Less than 50 and not 42");
     }
 }
+

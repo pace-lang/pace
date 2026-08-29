@@ -1,8 +1,7 @@
-// String utilities
 import "./collections/list";
 export "./string-builder";
-
 class StringUtil {
+    // String utilities
     static func split(s: String, delim: String) -> List<String> {
         let ptr = stringSplit(s, delim);
         let len: Int = ptrLoad(ptr, 0);
@@ -37,7 +36,7 @@ class StringUtil {
     static func startsWith(s: String, search: String) -> Bool {
         return stringStartsWith(s, search) != 0;
     }
-    
+
     static func join(list: List<String>, delim: String) -> String {
         let sb = StringBuilder();
         var i = 0;
@@ -53,4 +52,6 @@ class StringUtil {
         sb.free();
         return res;
     }
+
 }
+

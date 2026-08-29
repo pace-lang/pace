@@ -1,16 +1,14 @@
 import "pace:collections";
-
 func runMapTest() {
     print("--- Testing Maps ---");
     let map = Map<String, Int>();
     map.put("Alice", 25);
     map.put("Bob", 30);
-    map.put("Alice", 26); // Override
-    
+    map.put("Alice", 26);
     print("Map size: ${map.length()}");
+    // Override
     let aliceAge = map.get("Alice");
     print("Alice's age: ${aliceAge}");
-    
     if map.contains("Bob") {
         print("Map contains Bob");
     }
@@ -18,3 +16,4 @@ func runMapTest() {
         print("Map does not contain Charlie");
     }
 }
+

@@ -1,5 +1,4 @@
 import "pace:collections";
-
 func map_test() -> Int {
     let map = Map<Int, Int>();
     var i = 0;
@@ -7,7 +6,6 @@ func map_test() -> Int {
         map.put(i, i * 2);
         i = i + 1;
     }
-    
     var sum = 0;
     i = 0;
     while i < 10000 {
@@ -16,6 +14,8 @@ func map_test() -> Int {
     }
     return sum;
 }
+
 func main() {
     print(map_test());
 }
+

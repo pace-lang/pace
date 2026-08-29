@@ -1,7 +1,6 @@
-// Standard Dynamic Queue Implementation
-// Backed by raw memory allocation for high performance and no leaks (ARC drop)
-
 class Queue<T> implement Iterable<T> {
+    // Standard Dynamic Queue Implementation
+    // Backed by raw memory allocation for high performance and no leaks (ARC drop)
     var ptr: Int;
     var head: Int;
     var tail: Int;
@@ -17,13 +16,12 @@ class Queue<T> implement Iterable<T> {
     func enqueue(val: T) {
         if self.cap == 0 {
             self.cap = 16;
-            self.ptr = malloc(self.cap * 8); // 8 bytes per i64
+            self.ptr = malloc(self.cap * 8);
         } else if self.tail >= self.cap {
+            // 8 bytes per i64
             // For simplicity, we just reallocate instead of ring buffer for now
             let newCap = self.cap * 2;
-            let newPtr = malloc(newCap * 8);
-            
-            // Copy old data
+            let newPtr = malloc(newCap * 8); // Copy old data
             var i = self.head;
             var j = 0;
             while i < self.tail {
@@ -32,7 +30,6 @@ class Queue<T> implement Iterable<T> {
                 i = i + 1;
                 j = j + 1;
             }
-            
             free(self.ptr, self.cap * 8);
             self.ptr = newPtr;
             self.cap = newCap;
@@ -45,21 +42,19 @@ class Queue<T> implement Iterable<T> {
 
     func dequeue() -> T {
         if self.head >= self.tail {
-            // Empty queue
             return ptrLoad(self.ptr, 0);
         }
+        // Empty queue
         let v = ptrLoad(self.ptr, self.head * 8);
         self.head = self.head + 1;
-        
-        // Reset if empty to save space
         if self.head == self.tail {
             self.head = 0;
             self.tail = 0;
         }
-        
         return v;
     }
-    
+
+    // Reset if empty to save space
     func length() -> Int {
         return self.tail - self.head;
     }
@@ -70,4 +65,6 @@ class Queue<T> implement Iterable<T> {
             self.ptr = 0;
         }
     }
+
 }
+

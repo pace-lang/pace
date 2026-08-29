@@ -12,6 +12,7 @@ actor Counter {
     func get_count() -> Int {
         return self.count;
     }
+
 }
 
 func runActorTest() {
@@ -22,3 +23,4 @@ func runActorTest() {
     print("Actor count: ");
     print(await c.get_count());
 }
+

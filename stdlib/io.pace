@@ -1,6 +1,5 @@
-// IO module for File and Directory operations
-
 class File {
+    // IO module for File and Directory operations
     static func writeText(path: String, content: String) -> Result<Bool, String> {
         if fsWriteText(path, content) != 0 {
             return Result<Bool, String>::Ok(true);
@@ -22,13 +21,14 @@ class File {
         }
         return Result<String, String>::Ok(ptr);
     }
-    
+
     static func delete(path: String) -> Result<Bool, String> {
         if fsDeleteFile(path) != 0 {
             return Result<Bool, String>::Ok(true);
         }
         return Result<Bool, String>::Err(getLastError());
     }
+
 }
 
 class Directory {
@@ -38,11 +38,13 @@ class Directory {
         }
         return Result<Bool, String>::Err(getLastError());
     }
-    
+
     static func exists(path: String) -> Result<Bool, String> {
         if fsDirExists(path) != 0 {
             return Result<Bool, String>::Ok(true);
         }
         return Result<Bool, String>::Err(getLastError());
     }
+
 }
+

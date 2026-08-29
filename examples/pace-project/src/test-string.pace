@@ -2,30 +2,23 @@ import "pace:string";
 func runStringTest() {
     print("--- Testing Strings ---");
     let s1 = "Hello";
-    let s2 = "World";
-    
-    // Testing Interpolation (built-in string builder replacement)
+    let s2 = "World"; // Testing Interpolation (built-in string builder replacement)
     print("Interpolated: ${s1} ${s2}");
-    
     // StringUtil methods
     let csv = "apple,banana,cherry";
     let fruits = StringUtil::split(csv, ",");
     print("Split length: ${fruits.length()}");
     print("Fruit 0: ${fruits.get(0)}");
-    
     let replaced = StringUtil::replace("hello world", "world", "pace");
     print("Replaced: ${replaced}");
-    
     let sub = StringUtil::substring("hello world", 0, 5);
     print("Substring: ${sub}");
-    
     let trimmed = StringUtil::trim("   hello   ");
     print("Trimmed: ${trimmed}");
-    
     let idx = StringUtil::indexOf("hello world", "world");
     print("Index of 'world': ${idx}");
-    
     if StringUtil::startsWith("pace is fast", "pace") {
         print("Starts with 'pace': true");
     }
 }
+

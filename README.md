@@ -8,52 +8,32 @@ This repository contains the completely Pace compiler and standard library.
 ## Syntax Example
 
 ```pace
-import http
-
-interface Repository {
-    async func getUser(id: Int) -> User?
+interface Counter {
+    func increment();
+    func getValue() -> Int;
 }
 
-class UserService implement Repository {
-    private let client: HttpClient
+class SimpleCounter implement Counter {
+    private var count: Int = 0;
 
-    init(client: HttpClient) {
-        self.client = client
+    func init() {}
+
+    func increment() {
+        self.count = self.count + 1;
     }
 
-    async func getUser(id: Int) -> User? {
-        let response = await client.get("/users/{id}")
-
-        if response.status != 200 {
-            return null
-        }
-
-        return response.json()
-    }
-}
-
-actor UserCache {
-    private var users: Map<Int, User> = {}
-
-    func get(id: Int) -> User? {
-        return users[id]
-    }
-
-    func set(user: User) {
-        users[user.id] = user
+    func getValue() -> Int {
+        return self.count;
     }
 }
 
 async func main() {
-    let service = UserService(client: HttpClient())
-
-    let user = await service.getUser(id: 42)
-
-    if user != null {
-        print("Hello {user.name}")
-    } else {
-        print("User not found")
-    }
+    let counter = SimpleCounter();
+    counter.increment();
+    counter.increment();
+    
+    let value = counter.getValue();
+    print("Counter value: ${value}");
 }
 ```
 

@@ -1,18 +1,15 @@
 import "pace:math";
-
 func runMathTest() {
     print("--- Testing Math ---");
     let a = 10;
     let b = 25;
-    
     print("max(${a}, ${b}) = ${max(a, b)}");
     print("min(${a}, ${b}) = ${min(a, b)}");
-    
     if isEven(a) {
         print("${a} is even");
     }
-    
     if isOdd(b) {
         print("${b} is odd");
     }
 }
+

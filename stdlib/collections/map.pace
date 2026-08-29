@@ -1,24 +1,23 @@
 import "./list";
-
 class MapEntry<K, V> {
     var key: K;
     var value: V;
-    
+
     func init(k: K, v: V) {
         self.key = k;
         self.value = v;
     }
+
 }
 
-// True Hash-based Map Implementation
 class Map<K, V> implement Iterable<K> {
+    // True Hash-based Map Implementation
     var buckets: List<List<MapEntry<K, V>>>;
     var count: Int;
 
     func init() {
         self.buckets = List<List<MapEntry<K, V>>>();
         self.count = 0;
-        
         var i = 0;
         let capacity = 65536; // Initial capacity
         while i < capacity {
@@ -32,9 +31,7 @@ class Map<K, V> implement Iterable<K> {
         if index < 0 {
             index = index * (0 - 1);
         }
-        
         let bucket = self.buckets.get(index);
-        
         var i = 0;
         let len = bucket.length();
         while i < len {
@@ -45,7 +42,6 @@ class Map<K, V> implement Iterable<K> {
             }
             i = i + 1;
         }
-        
         // Key not found, append a new entry
         let entry = MapEntry<K, V>(key, val);
         bucket.add(entry);
@@ -68,7 +64,6 @@ class Map<K, V> implement Iterable<K> {
         if index < 0 {
             index = index * (0 - 1);
         }
-        
         let bucket = self.buckets.get(index);
         var i = 0;
         let len = bucket.length();
@@ -88,9 +83,7 @@ class Map<K, V> implement Iterable<K> {
         if index < 0 {
             index = index * (0 - 1);
         }
-        
         let bucket = self.buckets.get(index);
-        
         var i = 0;
         let len = bucket.length();
         while i < len {
@@ -100,19 +93,16 @@ class Map<K, V> implement Iterable<K> {
             }
             i = i + 1;
         }
-        
-        // Assuming key exists for now
-        return bucket.get(0).value; 
+        return bucket.get(0).value;
     }
 
+    // Assuming key exists for now
     func contains(k: K) -> Bool {
         var index = hash(k) % self.buckets.length();
         if index < 0 {
             index = index * (0 - 1);
         }
-        
         let bucket = self.buckets.get(index);
-        
         var i = 0;
         let len = bucket.length();
         while i < len {
@@ -123,7 +113,7 @@ class Map<K, V> implement Iterable<K> {
         }
         return false;
     }
-    
+
     func keys() -> List<K> {
         let list = List<K>();
         var i = 0;
@@ -140,7 +130,7 @@ class Map<K, V> implement Iterable<K> {
         }
         return list;
     }
-    
+
     func values() -> List<V> {
         let list = List<V>();
         var i = 0;
@@ -157,7 +147,7 @@ class Map<K, V> implement Iterable<K> {
         }
         return list;
     }
-    
+
     func clear() {
         var i = 0;
         let capacity = 65536;
@@ -167,8 +157,10 @@ class Map<K, V> implement Iterable<K> {
         }
         self.count = 0;
     }
-    
+
     func length() -> Int {
         return self.count;
     }
+
 }
+

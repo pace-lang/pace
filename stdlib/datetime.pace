@@ -1,6 +1,5 @@
-// Standard DateTime module
-
 class DateTime {
+    // Standard DateTime module
     var timestamp: Int;
     var isUtc: Bool;
 
@@ -29,6 +28,7 @@ class DateTime {
         }
         return Duration(diff);
     }
+
 }
 
 class Duration {
@@ -49,4 +49,6 @@ class Duration {
     func inHours() -> Int {
         return self.seconds / 3600;
     }
+
 }
+
