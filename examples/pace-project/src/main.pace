@@ -16,6 +16,7 @@ import "./test-datetime";
 import "./test-os";
 import "self:test-process";
 import "package:pace-package";
+import "package:toml" as toml;
 
 func main() {
     print("⚡ Running Pace Test Suite...");
@@ -40,6 +41,7 @@ func main() {
     
     print("--- Testing External Package ---");
     greet();
+    toml.greet();
 
     print("\n✅ All tests executed.");
 }

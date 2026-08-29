@@ -85,9 +85,9 @@ pace = ">=0.1.0 <1.0.0"
     std::fs::write(tests_path.join("basic_test.pace"), "func test_basic() {\n    print(\"Basic test passed\");\n}\n")
         .map_err(|e| miette::miette!("Failed to write tests/basic_test.pace: {}", e))?;
         
-    // Create examples/demo as a full project
-    let demo_path = examples_path.join("demo");
-    std::fs::create_dir_all(demo_path.join("src")).map_err(|e| miette::miette!("Failed to create examples/demo/src: {}", e))?;
+    // Create examples as a full project
+    let demo_path = examples_path;
+    std::fs::create_dir_all(demo_path.join("src")).map_err(|e| miette::miette!("Failed to create examples/src: {}", e))?;
     
     let demo_toml = format!(
 r#"[package]
@@ -99,14 +99,13 @@ description = "Example demo for {0}"
 pace = ">=0.1.0 <1.0.0"
 
 [dependencies]
-{0} = {{ path = "../.." }}
+{0} = {{ path = ".." }}
 "#, name);
     std::fs::write(demo_path.join("pace.toml"), demo_toml)
-        .map_err(|e| miette::miette!("Failed to write examples/demo/pace.toml: {}", e))?;
+        .map_err(|e| miette::miette!("Failed to write examples/pace.toml: {}", e))?;
         
-    std::fs::write(demo_path.join("src").join("main.pace"), format!("import \"package:{}\"\n\nfunc main() {{\n    print(\"Running demo\");\n}}\n", name))
-        .map_err(|e| miette::miette!("Failed to write examples/demo/src/main.pace: {}", e))?;
-    
+    std::fs::write(demo_path.join("src").join("main.pace"), format!("import \"package:{}\";\n\nfunc main() {{\n    print(\"Running demo\");\n}}\n", name))
+        .map_err(|e| miette::miette!("Failed to write examples/src/main.pace: {}", e))?;
     
     Ok(())
 }

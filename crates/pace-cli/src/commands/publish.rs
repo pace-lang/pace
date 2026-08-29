@@ -130,6 +130,17 @@ pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
     write!(body, "--{}\r\nContent-Disposition: form-data; name=\"version\"\r\n\r\n{}\r\n", boundary, pkg_version).unwrap();
     // Description part
     write!(body, "--{}\r\nContent-Disposition: form-data; name=\"description\"\r\n\r\n{}\r\n", boundary, pkg_desc).unwrap();
+    // Manifest part
+    // Manifest part
+    let manifest_json = serde_json::to_string(&manifest).unwrap_or_else(|_| "{}".to_string());
+    write!(body, "--{}\r\nContent-Disposition: form-data; name=\"manifest\"\r\n\r\n{}\r\n", boundary, manifest_json).unwrap();
+    // Readme part
+    let current_dir = std::env::current_dir().unwrap_or_default();
+    let readme_content = std::fs::read_to_string(current_dir.join("README.md"))
+        .or_else(|_| std::fs::read_to_string(current_dir.join("readme.md")))
+        .unwrap_or_default();
+    write!(body, "--{}\r\nContent-Disposition: form-data; name=\"readme\"\r\n\r\n{}\r\n", boundary, readme_content).unwrap();
+
     
     // Tarball part
     write!(body, "--{}\r\nContent-Disposition: form-data; name=\"tarball\"; filename=\"{}-{}.tar.gz\"\r\nContent-Type: application/gzip\r\n\r\n", boundary, pkg_name, pkg_version).unwrap();
@@ -160,7 +171,7 @@ pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
         .send(&body)
     {
         Ok(r) => {
-            if r.status() != 200 {
+            if r.status() != 200 && r.status() != 201 {
                 let text = r.into_body().read_to_string().unwrap_or_default();
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
                     if let Some(err_msg) = json.get("error").and_then(|v| v.as_str()) {

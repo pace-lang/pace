@@ -1,0 +1,10 @@
+[package]
+name = "demo"
+version = "0.1.0"
+description = "Example demo for toml"
+
+[sdk]
+pace = ">=0.1.0 <1.0.0"
+
+[dependencies]
+toml = { path = ".." }

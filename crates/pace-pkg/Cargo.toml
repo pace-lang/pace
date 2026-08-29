@@ -16,4 +16,7 @@ tempfile.workspace = true
 tar.workspace = true
 flate2.workspace = true
 ureq.workspace = true
+semver.workspace = true
 thiserror = "2"
+pubgrub = "0.4.0"
+sha2 = "0.11.0"

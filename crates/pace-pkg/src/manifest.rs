@@ -116,4 +116,25 @@ impl PaceToml {
         fs::write(&toml_path, doc.to_string())?;
         Ok(())
     }
+
+    /// Update a dependency version while strictly preserving user formatting and comments
+    pub fn update_dependency_version(dir: &Path, name: &str, new_version: &str) -> Result<(), ManifestError> {
+        let toml_path = dir.join("pace.toml");
+        let content = fs::read_to_string(&toml_path)?;
+        let mut doc = content.parse::<toml_edit::DocumentMut>().map_err(|e| ManifestError::EditError(e.to_string()))?;
+        
+        if let Some(deps) = doc.get_mut("dependencies") {
+            if let Some(table) = deps.as_table_mut() {
+                if table.contains_key(name) {
+                    // Only update if it's a simple version string, don't overwrite { path = "..." }
+                    if table[name].is_str() {
+                        table[name] = toml_edit::value(new_version);
+                    }
+                }
+            }
+        }
+        
+        fs::write(&toml_path, doc.to_string())?;
+        Ok(())
+    }
 }

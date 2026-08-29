@@ -47,6 +47,10 @@ enum Commands {
         /// Name of the package to remove
         name: String,
     },
+    /// Update dependencies to their latest compatible versions
+    Update,
+    /// Check for outdated dependencies
+    Outdated,
     /// Package and upload the current project to the Pace Registry
     Publish {
         /// Perform a dry run without actually uploading
@@ -105,6 +109,8 @@ fn main() -> Result<()> {
         Commands::Fetch => commands::fetch::execute()?,
         Commands::Add { name, path, version } => commands::add::execute(name, path, version)?,
         Commands::Remove { name } => commands::remove::execute(name)?,
+        Commands::Update => commands::update::execute()?,
+        Commands::Outdated => commands::outdated::execute()?,
         Commands::Publish { dry_run } => commands::publish::execute(&session, dry_run)?,
         Commands::Login { token } => commands::login::login(token)?,
         Commands::Check { file, output_format } => commands::check::execute(&session, file, output_format)?,

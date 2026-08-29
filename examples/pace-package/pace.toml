@@ -1,6 +1,6 @@
 [package]
 name = "pace-package"
-version = "0.1.0"
+version = "0.1.2"
 platforms = ["native", "web"]
 description = "A demo Pace package"
 license = "MIT"
