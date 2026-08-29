@@ -476,66 +476,7 @@ impl TypeChecker {
                 span,
                 ..
             } => {
-                self.current_span = *span;
-                let mut inferred_type = Type::Unknown;
-
-                if let Some(init_expr) = initializer {
-                    inferred_type = self.check_expr(init_expr);
-                }
-
-                if let Some(annotation) = type_annotation {
-                    let expected_type = self.resolve_type_name(annotation);
-                    let mut is_match = false;
-
-                    if inferred_type == expected_type
-                        || inferred_type == Type::Unknown
-                        || expected_type == Type::Any
-                        || inferred_type == Type::Any
-                    {
-                        is_match = true;
-                    } else if let Type::Nullable(inner) = &expected_type {
-                        if inferred_type == Type::Null || inferred_type == **inner {
-                            is_match = true;
-                        }
-                    }
-
-                    if !is_match {
-                        self.define_var(name.clone(), expected_type.clone(), *span, *is_mutable);
-                        {
-                            self.errors.push(TypeError::Generic {
-                                src: self.get_source(),
-                                span: self.current_span,
-                                message: format!(
-                                    "Type mismatch: expected {:?}, found {:?}",
-                                    expected_type, inferred_type
-                                ),
-                            });
-                            return ();
-                        };
-                    }
-                    inferred_type = expected_type;
-                }
-
-                if inferred_type == Type::Unknown {
-                    {
-                        self.errors.push(TypeError::Generic {
-                            src: self.get_source(),
-                            span: self.current_span,
-                            message: format!("Cannot infer type for variable '{}'", name),
-                        });
-                        return ();
-                    };
-                }
-
-                if !is_camel_case(name) && !name.contains("__") {
-                    self.warnings
-                        .push(pace_errors::SemanticWarning::NamingConvention {
-                            name: name.clone(),
-                            src: self.get_source(),
-                            span: *span,
-                        });
-                }
-                self.define_var(name.clone(), inferred_type, *span, *is_mutable);
+                self.check_stmt_var_decl(name, *is_mutable, type_annotation.as_ref(), initializer.as_ref(), *span);
             }
             Stmt::Block(stmts) => {
                 self.env.push_scope();
@@ -661,7 +602,6 @@ impl TypeChecker {
                 }
             }
             Stmt::FuncDecl {
-                name: _,
                 params,
                 body,
                 return_type,
@@ -670,51 +610,7 @@ impl TypeChecker {
                 span,
                 ..
             } => {
-                self.current_span = *span;
-                let prev_return = self.current_return_type.clone();
-                let prev_generics = self.generic_params_in_scope.clone();
-
-                if let Some(gps) = generic_params {
-                    self.generic_params_in_scope.extend(gps.clone());
-                }
-
-                let ret_ty = if let Some(rt) = return_type {
-                    self.resolve_type_name(rt)
-                } else {
-                    Type::Void
-                };
-                self.current_return_type = Some(ret_ty);
-
-                self.env.push_scope();
-
-                // Add `self` if we are inside a class/struct AND the method is not static
-                if let Some(class_name) = &self.current_class {
-                    if !is_static {
-                        let self_ty = if self.env.structs.contains_key(class_name) {
-                            Type::Struct(class_name.clone())
-                        } else if self.env.actors.contains_key(class_name) {
-                            Type::Actor(class_name.clone())
-                        } else {
-                            Type::Class(class_name.clone())
-                        };
-                        self.define_var("self".to_string(), self_ty, (0, 0), false);
-                    }
-                }
-
-                // Add parameters to scope
-                for param in params {
-                    let param_type = self.resolve_type_name(&param.type_annotation);
-                    self.define_var(param.name.clone(), param_type, (0, 0), false);
-                }
-
-                // Check body
-                for s in body {
-                    self.check_stmt(s);
-                }
-
-                self.pop_scope_and_check_unused();
-                self.current_return_type = prev_return;
-                self.generic_params_in_scope = prev_generics;
+                self.check_stmt_func_decl(params, body, return_type.as_ref(), generic_params.as_deref(), *is_static, *span);
             }
             Stmt::ClassDecl {
                 name,
@@ -730,53 +626,7 @@ impl TypeChecker {
                 generic_params,
                 ..
             } => {
-                let prev_class = self.current_class.clone();
-                let prev_generics = self.generic_params_in_scope.clone();
-
-                self.current_class = Some(name.clone());
-
-                if let Some(gps) = generic_params {
-                    self.generic_params_in_scope.extend(gps.clone());
-                }
-
-                if let Some(iface_annotation) = implements {
-                    let iface_name = &iface_annotation.name;
-                    // Check if class actually implements the interface
-                    if let Some(iface_sig) = self.env.classes.get(iface_name) {
-                        let class_sig = self.env.classes.get(name).unwrap().clone();
-                        for m_name in iface_sig.methods.keys() {
-                            if let Some(_actual_sig) = class_sig.methods.get(m_name) {
-                                // For simplicity, we just check if it exists right now
-                                // In a full compiler, we'd check parameter counts and types
-                            } else {
-                                {
-                                    self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
-                                    message: format!("Class '{}' does not implement method '{}' from interface '{}'", name, m_name, iface_name)
-                                });
-                                    return ();
-                                };
-                            }
-                        }
-                    } else {
-                        {
-                            self.errors.push(TypeError::Generic {
-                                src: self.get_source(),
-                                span: self.current_span,
-                                message: format!("Interface '{}' not found", iface_name),
-                            });
-                            return ();
-                        };
-                    }
-                }
-
-                self.env.push_scope();
-                for m in methods {
-                    self.check_stmt(m);
-                }
-                self.pop_scope_and_check_unused();
-
-                self.current_class = prev_class;
-                self.generic_params_in_scope = prev_generics;
+                self.check_stmt_class_decl(name, methods, implements.as_ref(), generic_params.as_deref());
             }
             Stmt::InterfaceDecl { .. } => {}
             Stmt::StructDecl { .. } => {}
@@ -784,6 +634,261 @@ impl TypeChecker {
             Stmt::Import { .. } | Stmt::Export { .. } => {}
         }
         ()
+    }
+
+    fn check_stmt_var_decl(
+        &mut self,
+        name: &str,
+        is_mutable: bool,
+        type_annotation: Option<&pace_ast::TypeAnnotation>,
+        initializer: Option<&Expr>,
+        span: (usize, usize),
+    ) {
+        self.current_span = span;
+        let mut inferred_type = Type::Unknown;
+
+        if let Some(init_expr) = initializer {
+            inferred_type = self.check_expr(init_expr);
+        }
+
+        if let Some(annotation) = type_annotation {
+            let expected_type = self.resolve_type_name(annotation);
+            let mut is_match = false;
+
+            if inferred_type == expected_type
+                || inferred_type == Type::Unknown
+                || expected_type == Type::Any
+                || inferred_type == Type::Any
+            {
+                is_match = true;
+            } else if let Type::Nullable(inner) = &expected_type {
+                if inferred_type == Type::Null || inferred_type == **inner {
+                    is_match = true;
+                }
+            }
+
+            if !is_match {
+                self.define_var(name.to_string(), expected_type.clone(), span, is_mutable);
+                self.errors.push(TypeError::Generic {
+                    src: self.get_source(),
+                    span: self.current_span,
+                    message: format!(
+                        "Type mismatch: expected {:?}, found {:?}",
+                        expected_type, inferred_type
+                    ),
+                });
+                return;
+            }
+            inferred_type = expected_type;
+        }
+
+        if inferred_type == Type::Unknown {
+            self.errors.push(TypeError::Generic {
+                src: self.get_source(),
+                span: self.current_span,
+                message: format!("Cannot infer type for variable '{}'", name),
+            });
+            return;
+        }
+
+        if !is_camel_case(name) && !name.contains("__") {
+            self.warnings
+                .push(pace_errors::SemanticWarning::NamingConvention {
+                    name: name.to_string(),
+                    src: self.get_source(),
+                    span,
+                });
+        }
+        self.define_var(name.to_string(), inferred_type, span, is_mutable);
+    }
+
+    fn check_stmt_func_decl(
+        &mut self,
+        params: &[pace_ast::Param],
+        body: &[Stmt],
+        return_type: Option<&pace_ast::TypeAnnotation>,
+        generic_params: Option<&[String]>,
+        is_static: bool,
+        span: (usize, usize),
+    ) {
+        self.current_span = span;
+        let prev_return = self.current_return_type.clone();
+        let prev_generics = self.generic_params_in_scope.clone();
+
+        if let Some(gps) = generic_params {
+            self.generic_params_in_scope.extend(gps.to_vec());
+        }
+
+        let ret_ty = if let Some(rt) = return_type {
+            self.resolve_type_name(rt)
+        } else {
+            Type::Void
+        };
+        self.current_return_type = Some(ret_ty);
+
+        self.env.push_scope();
+
+        // Add `self` if we are inside a class/struct AND the method is not static
+        if let Some(class_name) = &self.current_class {
+            if !is_static {
+                let self_ty = if self.env.structs.contains_key(class_name) {
+                    Type::Struct(class_name.clone())
+                } else if self.env.actors.contains_key(class_name) {
+                    Type::Actor(class_name.clone())
+                } else {
+                    Type::Class(class_name.clone())
+                };
+                self.define_var("self".to_string(), self_ty, (0, 0), false);
+            }
+        }
+
+        // Add parameters to scope
+        for param in params {
+            let param_type = self.resolve_type_name(&param.type_annotation);
+            self.define_var(param.name.clone(), param_type, (0, 0), false);
+        }
+
+        // Check body
+        for s in body {
+            self.check_stmt(s);
+        }
+
+        self.pop_scope_and_check_unused();
+        self.current_return_type = prev_return;
+        self.generic_params_in_scope = prev_generics;
+    }
+
+    fn check_stmt_class_decl(
+        &mut self,
+        name: &str,
+        methods: &[Stmt],
+        implements: Option<&pace_ast::TypeAnnotation>,
+        generic_params: Option<&[String]>,
+    ) {
+        let prev_class = self.current_class.clone();
+        let prev_generics = self.generic_params_in_scope.clone();
+
+        self.current_class = Some(name.to_string());
+
+        if let Some(gps) = generic_params {
+            self.generic_params_in_scope.extend(gps.to_vec());
+        }
+
+        if let Some(iface_annotation) = implements {
+            let iface_name = &iface_annotation.name;
+            // Check if class actually implements the interface
+            if let Some(iface_sig) = self.env.classes.get(iface_name) {
+                let class_sig = self.env.classes.get(name).unwrap().clone();
+                for m_name in iface_sig.methods.keys() {
+                    if class_sig.methods.get(m_name).is_some() {
+                        // For simplicity, we just check if it exists right now
+                        // In a full compiler, we'd check parameter counts and types
+                    } else {
+                        self.errors.push(TypeError::Generic {
+                            src: self.get_source(),
+                            span: self.current_span,
+                            message: format!("Class '{}' does not implement method '{}' from interface '{}'", name, m_name, iface_name)
+                        });
+                        return;
+                    }
+                }
+            } else {
+                self.errors.push(TypeError::Generic {
+                    src: self.get_source(),
+                    span: self.current_span,
+                    message: format!("Interface '{}' not found", iface_name),
+                });
+                return;
+            }
+        }
+
+        self.env.push_scope();
+        for m in methods {
+            self.check_stmt(m);
+        }
+        self.pop_scope_and_check_unused();
+
+        self.current_class = prev_class;
+        self.generic_params_in_scope = prev_generics;
+    }
+
+    fn check_expr_closure(
+        &mut self,
+        params: &[(String, pace_ast::TypeAnnotation)],
+        return_type: Option<&pace_ast::TypeAnnotation>,
+        body: &Expr,
+    ) -> Type {
+        self.env.push_scope();
+
+        let mut param_types = Vec::new();
+        for (param_name, param_ty_ann) in params {
+            let param_ty = self.resolve_type_name(param_ty_ann);
+            param_types.push(param_ty.clone());
+            let _ = self.env.define(param_name.clone(), param_ty, (0, 0), true);
+        }
+
+        let ret_ty = if let Some(rt) = return_type {
+            self.resolve_type_name(rt)
+        } else {
+            Type::Unknown
+        };
+
+        let old_expected_return = self.current_return_type.clone();
+        self.current_return_type = Some(ret_ty.clone());
+
+        let body_ty = self.check_expr(body);
+
+        self.current_return_type = old_expected_return;
+        self.pop_scope_and_check_unused();
+
+        let final_ret = if ret_ty != Type::Unknown {
+            ret_ty
+        } else {
+            body_ty
+        };
+
+        Type::Function {
+            params: param_types,
+            return_type: Box::new(final_ret),
+        }
+    }
+
+    fn check_expr_identifier(&mut self, name: &str) -> Type {
+        if let Some(var_info) = self.env.get_mut(name) {
+            var_info.is_used = true;
+        }
+        match self.env.get(name) {
+            Some(ty) => ty.clone(),
+            None => {
+                // Check if it's a class/struct for instantiation
+                // Check if it's a module item
+                if self.env.classes.contains_key(name) {
+                    Type::Class(name.to_string())
+                } else if self.env.actors.contains_key(name) {
+                    Type::Actor(name.to_string())
+                } else if self.env.structs.contains_key(name) {
+                    Type::Struct(name.to_string())
+                } else if self.env.enums.contains_key(name) {
+                    Type::Enum(name.to_string())
+                } else if let Some(global) = self.env.global_vars.get(name) {
+                    global.ty.clone()
+                } else {
+                    let suggestion = self.env.find_closest_variable(name);
+                    let help_text = if let Some(sug) = suggestion {
+                        format!("Did you mean '{}'?", sug)
+                    } else {
+                        "Variable does not exist.".to_string()
+                    };
+                    self.errors.push(TypeError::UnknownIdentifier {
+                        name: name.to_string(),
+                        help_text,
+                        src: self.get_source(),
+                        span: self.get_span_for(name),
+                    });
+                    Type::Error
+                }
+            }
+        }
     }
 
     fn check_expr(&mut self, expr: &Expr) -> Type {
@@ -818,41 +923,7 @@ impl TypeChecker {
                 params,
                 return_type,
                 body,
-            } => {
-                self.env.push_scope();
-
-                let mut param_types = Vec::new();
-                for (param_name, param_ty_ann) in params {
-                    let param_ty = self.resolve_type_name(param_ty_ann);
-                    param_types.push(param_ty.clone());
-                    let _ = self.env.define(param_name.clone(), param_ty, (0, 0), true);
-                }
-
-                let ret_ty = if let Some(rt) = return_type {
-                    self.resolve_type_name(rt)
-                } else {
-                    Type::Unknown
-                };
-
-                let old_expected_return = self.current_return_type.clone();
-                self.current_return_type = Some(ret_ty.clone());
-
-                let body_ty = self.check_expr(body);
-
-                self.current_return_type = old_expected_return;
-                self.pop_scope_and_check_unused();
-
-                let final_ret = if ret_ty != Type::Unknown {
-                    ret_ty
-                } else {
-                    body_ty
-                };
-
-                Type::Function {
-                    params: param_types,
-                    return_type: Box::new(final_ret),
-                }
-            }
+            } => self.check_expr_closure(params, return_type.as_ref(), body),
             Expr::Block(stmts) => {
                 self.env.push_scope();
                 for stmt in stmts {
@@ -861,45 +932,7 @@ impl TypeChecker {
                 self.pop_scope_and_check_unused();
                 Type::Void
             }
-            Expr::Identifier(name) => {
-                if let Some(var_info) = self.env.get_mut(name) {
-                    var_info.is_used = true;
-                }
-                match self.env.get(name) {
-                    Some(ty) => ty.clone(),
-                    None => {
-                        // Check if it's a class/struct for instantiation
-                        // Check if it's a module item
-                        if self.env.classes.contains_key(name) {
-                            Type::Class(name.clone())
-                        } else if self.env.actors.contains_key(name) {
-                            Type::Actor(name.clone())
-                        } else if self.env.structs.contains_key(name) {
-                            Type::Struct(name.clone())
-                        } else if self.env.enums.contains_key(name) {
-                            Type::Enum(name.clone())
-                        } else if let Some(global) = self.env.global_vars.get(name) {
-                            global.ty.clone()
-                        } else {
-                            {
-                                let suggestion = self.env.find_closest_variable(&name);
-                                let help_text = if let Some(sug) = suggestion {
-                                    format!("Did you mean '{}'?", sug)
-                                } else {
-                                    "Variable does not exist.".to_string()
-                                };
-                                self.errors.push(TypeError::UnknownIdentifier {
-                                    name: name.clone(),
-                                    help_text,
-                                    src: self.get_source(),
-                                    span: self.get_span_for(&name),
-                                });
-                                Type::Error
-                            }
-                        }
-                    }
-                }
-            }
+            Expr::Identifier(name) => self.check_expr_identifier(name),
             Expr::Binary { left, op, right } => {
                 let left_ty = self.check_expr(left);
                 let right_ty = self.check_expr(right);
