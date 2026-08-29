@@ -25,6 +25,8 @@ pub struct Package {
     pub repository: Option<String>,
     #[serde(default)]
     pub platforms: Option<Vec<String>>,
+    #[serde(default)]
+    pub keywords: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

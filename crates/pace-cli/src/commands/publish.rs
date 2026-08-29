@@ -141,7 +141,11 @@ pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
         .unwrap_or_default();
     write!(body, "--{}\r\nContent-Disposition: form-data; name=\"readme\"\r\n\r\n{}\r\n", boundary, readme_content).unwrap();
 
-    
+    // Changelog part
+    let changelog_content = std::fs::read_to_string(current_dir.join("CHANGELOG.md"))
+        .or_else(|_| std::fs::read_to_string(current_dir.join("changelog.md")))
+        .unwrap_or_default();
+    write!(body, "--{}\r\nContent-Disposition: form-data; name=\"changelog\"\r\n\r\n{}\r\n", boundary, changelog_content).unwrap();
     // Tarball part
     write!(body, "--{}\r\nContent-Disposition: form-data; name=\"tarball\"; filename=\"{}-{}.tar.gz\"\r\nContent-Type: application/gzip\r\n\r\n", boundary, pkg_name, pkg_version).unwrap();
     body.extend_from_slice(&tarball_data);
