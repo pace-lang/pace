@@ -28,10 +28,21 @@ pub extern "C" fn __pace_print_string(val: *const std::ffi::c_char) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn __pace_concat_strings(a: *const std::ffi::c_char, b: *const std::ffi::c_char) -> *mut std::ffi::c_char {
+pub extern "C" fn __pace_concat_strings(
+    a: *const std::ffi::c_char,
+    b: *const std::ffi::c_char,
+) -> *mut std::ffi::c_char {
     unsafe {
-        let str_a = if a.is_null() { "" } else { std::ffi::CStr::from_ptr(a).to_str().unwrap_or("") };
-        let str_b = if b.is_null() { "" } else { std::ffi::CStr::from_ptr(b).to_str().unwrap_or("") };
+        let str_a = if a.is_null() {
+            ""
+        } else {
+            std::ffi::CStr::from_ptr(a).to_str().unwrap_or("")
+        };
+        let str_b = if b.is_null() {
+            ""
+        } else {
+            std::ffi::CStr::from_ptr(b).to_str().unwrap_or("")
+        };
         let mut combined = String::with_capacity(str_a.len() + str_b.len());
         combined.push_str(str_a);
         combined.push_str(str_b);
@@ -110,11 +121,11 @@ pub extern "C" fn __pace_release(obj: *mut u8) {
     unsafe {
         if (*rc_ptr).fetch_sub(1, std::sync::atomic::Ordering::Release) == 1 {
             std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire);
-            
+
             // Load vtable pointer from Offset 8
             let vtable_ptr_addr = obj.add(8) as *const *const u8;
             let vtable_ptr = *vtable_ptr_addr;
-            
+
             if !vtable_ptr.is_null() {
                 // Load drop function from VTable Offset 0
                 let drop_fn_addr = vtable_ptr as *const Option<extern "C" fn(*mut u8)>;
@@ -122,11 +133,11 @@ pub extern "C" fn __pace_release(obj: *mut u8) {
                     // Call the drop function to release fields
                     drop_fn(obj);
                 }
-                
+
                 // Load size from VTable Offset 8
                 let size_addr = vtable_ptr.add(8) as *const i64;
                 let size = *size_addr as usize;
-                
+
                 // Deallocate the memory
                 std::alloc::dealloc(obj, std::alloc::Layout::from_size_align(size, 8).unwrap());
             }
@@ -185,7 +196,9 @@ pub extern "C" fn __pace_sb_new() -> *mut String {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_sb_append(ptr: *mut String, s: *const std::ffi::c_char) {
-    if ptr.is_null() || s.is_null() { return; }
+    if ptr.is_null() || s.is_null() {
+        return;
+    }
     unsafe {
         let sb = &mut *ptr;
         let c_str = std::ffi::CStr::from_ptr(s);
@@ -197,7 +210,9 @@ pub extern "C" fn __pace_sb_append(ptr: *mut String, s: *const std::ffi::c_char)
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_sb_build(ptr: *mut String) -> *mut std::ffi::c_char {
-    if ptr.is_null() { return std::ptr::null_mut(); }
+    if ptr.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
         let sb = &*ptr;
         let c_string = std::ffi::CString::new(sb.as_str()).unwrap();
@@ -214,7 +229,6 @@ pub extern "C" fn __pace_sb_free(ptr: *mut String) {
     }
 }
 
-
 thread_local! {
     static LAST_ERROR_MESSAGE: std::cell::RefCell<String> = std::cell::RefCell::new(String::new());
 }
@@ -229,7 +243,8 @@ fn set_last_error(msg: &str) {
 pub extern "C" fn __pace_get_last_error() -> *mut std::ffi::c_char {
     LAST_ERROR_MESSAGE.with(|e| {
         let mut msg = e.borrow_mut();
-        let c_string = std::ffi::CString::new(msg.as_str()).unwrap_or_else(|_| std::ffi::CString::new("").unwrap());
+        let c_string = std::ffi::CString::new(msg.as_str())
+            .unwrap_or_else(|_| std::ffi::CString::new("").unwrap());
         *msg = String::new(); // consume
         c_string.into_raw()
     })
@@ -237,22 +252,28 @@ pub extern "C" fn __pace_get_last_error() -> *mut std::ffi::c_char {
 
 // String FFI Functions
 #[unsafe(no_mangle)]
-pub extern "C" fn __pace_string_split(s: *const std::ffi::c_char, delim: *const std::ffi::c_char) -> *mut i64 {
-    if s.is_null() || delim.is_null() { return std::ptr::null_mut(); }
+pub extern "C" fn __pace_string_split(
+    s: *const std::ffi::c_char,
+    delim: *const std::ffi::c_char,
+) -> *mut i64 {
+    if s.is_null() || delim.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
         let s_str = std::ffi::CStr::from_ptr(s).to_string_lossy();
         let delim_str = std::ffi::CStr::from_ptr(delim).to_string_lossy();
-        
+
         let parts: Vec<&str> = s_str.split(delim_str.as_ref()).collect();
         let len = parts.len();
-        
+
         let mut arr: Vec<i64> = Vec::with_capacity(len + 1);
         arr.push(len as i64);
         for part in parts {
-            let c_str = std::ffi::CString::new(part).unwrap_or_else(|_| std::ffi::CString::new("").unwrap());
+            let c_str = std::ffi::CString::new(part)
+                .unwrap_or_else(|_| std::ffi::CString::new("").unwrap());
             arr.push(c_str.into_raw() as i64);
         }
-        
+
         let ptr = arr.as_mut_ptr();
         std::mem::forget(arr);
         ptr
@@ -260,44 +281,69 @@ pub extern "C" fn __pace_string_split(s: *const std::ffi::c_char, delim: *const 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn __pace_string_replace(s: *const std::ffi::c_char, old: *const std::ffi::c_char, new: *const std::ffi::c_char) -> *mut std::ffi::c_char {
-    if s.is_null() || old.is_null() || new.is_null() { return std::ptr::null_mut(); }
+pub extern "C" fn __pace_string_replace(
+    s: *const std::ffi::c_char,
+    old: *const std::ffi::c_char,
+    new: *const std::ffi::c_char,
+) -> *mut std::ffi::c_char {
+    if s.is_null() || old.is_null() || new.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
         let s_str = std::ffi::CStr::from_ptr(s).to_string_lossy();
         let old_str = std::ffi::CStr::from_ptr(old).to_string_lossy();
         let new_str = std::ffi::CStr::from_ptr(new).to_string_lossy();
-        
+
         let replaced = s_str.replace(old_str.as_ref(), new_str.as_ref());
-        std::ffi::CString::new(replaced).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+        std::ffi::CString::new(replaced)
+            .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+            .into_raw()
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn __pace_string_substring(s: *const std::ffi::c_char, start: i64, end: i64) -> *mut std::ffi::c_char {
-    if s.is_null() { return std::ptr::null_mut(); }
+pub extern "C" fn __pace_string_substring(
+    s: *const std::ffi::c_char,
+    start: i64,
+    end: i64,
+) -> *mut std::ffi::c_char {
+    if s.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
         let s_str = std::ffi::CStr::from_ptr(s).to_string_lossy();
         let len = s_str.len() as i64;
         let start = start.max(0).min(len) as usize;
         let end = end.max(0).min(len) as usize;
-        
+
         let sub = if start <= end { &s_str[start..end] } else { "" };
-        std::ffi::CString::new(sub).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+        std::ffi::CString::new(sub)
+            .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+            .into_raw()
     }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_string_trim(s: *const std::ffi::c_char) -> *mut std::ffi::c_char {
-    if s.is_null() { return std::ptr::null_mut(); }
+    if s.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
         let s_str = std::ffi::CStr::from_ptr(s).to_string_lossy();
-        std::ffi::CString::new(s_str.trim()).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+        std::ffi::CString::new(s_str.trim())
+            .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+            .into_raw()
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn __pace_string_index_of(s: *const std::ffi::c_char, search: *const std::ffi::c_char) -> i64 {
-    if s.is_null() || search.is_null() { return -1; }
+pub extern "C" fn __pace_string_index_of(
+    s: *const std::ffi::c_char,
+    search: *const std::ffi::c_char,
+) -> i64 {
+    if s.is_null() || search.is_null() {
+        return -1;
+    }
     unsafe {
         let s_str = std::ffi::CStr::from_ptr(s).to_string_lossy();
         let search_str = std::ffi::CStr::from_ptr(search).to_string_lossy();
@@ -310,12 +356,21 @@ pub extern "C" fn __pace_string_index_of(s: *const std::ffi::c_char, search: *co
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn __pace_string_starts_with(s: *const std::ffi::c_char, search: *const std::ffi::c_char) -> i64 {
-    if s.is_null() || search.is_null() { return 0; }
+pub extern "C" fn __pace_string_starts_with(
+    s: *const std::ffi::c_char,
+    search: *const std::ffi::c_char,
+) -> i64 {
+    if s.is_null() || search.is_null() {
+        return 0;
+    }
     unsafe {
         let s_str = std::ffi::CStr::from_ptr(s).to_string_lossy();
         let search_str = std::ffi::CStr::from_ptr(search).to_string_lossy();
-        if s_str.starts_with(search_str.as_ref()) { 1 } else { 0 }
+        if s_str.starts_with(search_str.as_ref()) {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -324,11 +379,20 @@ pub extern "C" fn __pace_string_starts_with(s: *const std::ffi::c_char, search: 
 // ==========================================
 
 #[unsafe(no_mangle)]
-pub extern "C" fn __pace_fs_write(path: *const std::ffi::c_char, content: *const std::ffi::c_char) -> i64 {
-    if path.is_null() || content.is_null() { return 0; }
+pub extern "C" fn __pace_fs_write(
+    path: *const std::ffi::c_char,
+    content: *const std::ffi::c_char,
+) -> i64 {
+    if path.is_null() || content.is_null() {
+        return 0;
+    }
     unsafe {
-        let p_str = std::ffi::CStr::from_ptr(path).to_string_lossy().into_owned();
-        let c_str = std::ffi::CStr::from_ptr(content).to_string_lossy().into_owned();
+        let p_str = std::ffi::CStr::from_ptr(path)
+            .to_string_lossy()
+            .into_owned();
+        let c_str = std::ffi::CStr::from_ptr(content)
+            .to_string_lossy()
+            .into_owned();
         match std::fs::write(p_str, c_str) {
             Ok(_) => 1,
             Err(e) => {
@@ -341,11 +405,21 @@ pub extern "C" fn __pace_fs_write(path: *const std::ffi::c_char, content: *const
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_fs_exists(path: *const std::ffi::c_char) -> i64 {
-    if path.is_null() { return 0; }
+    if path.is_null() {
+        return 0;
+    }
     unsafe {
-        let p_str = std::ffi::CStr::from_ptr(path).to_string_lossy().into_owned();
+        let p_str = std::ffi::CStr::from_ptr(path)
+            .to_string_lossy()
+            .into_owned();
         match std::fs::metadata(p_str) {
-            Ok(m) => if m.is_file() { 1 } else { 0 },
+            Ok(m) => {
+                if m.is_file() {
+                    1
+                } else {
+                    0
+                }
+            }
             Err(e) => {
                 set_last_error(&e.to_string());
                 0
@@ -356,11 +430,17 @@ pub extern "C" fn __pace_fs_exists(path: *const std::ffi::c_char) -> i64 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_fs_read(path: *const std::ffi::c_char) -> *mut std::ffi::c_char {
-    if path.is_null() { return std::ptr::null_mut(); }
+    if path.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
-        let p_str = std::ffi::CStr::from_ptr(path).to_string_lossy().into_owned();
+        let p_str = std::ffi::CStr::from_ptr(path)
+            .to_string_lossy()
+            .into_owned();
         match std::fs::read_to_string(p_str) {
-            Ok(content) => std::ffi::CString::new(content).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw(),
+            Ok(content) => std::ffi::CString::new(content)
+                .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+                .into_raw(),
             Err(e) => {
                 set_last_error(&e.to_string());
                 std::ptr::null_mut()
@@ -371,9 +451,13 @@ pub extern "C" fn __pace_fs_read(path: *const std::ffi::c_char) -> *mut std::ffi
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_fs_delete(path: *const std::ffi::c_char) -> i64 {
-    if path.is_null() { return 0; }
+    if path.is_null() {
+        return 0;
+    }
     unsafe {
-        let p_str = std::ffi::CStr::from_ptr(path).to_string_lossy().into_owned();
+        let p_str = std::ffi::CStr::from_ptr(path)
+            .to_string_lossy()
+            .into_owned();
         match std::fs::remove_file(p_str) {
             Ok(_) => 1,
             Err(e) => {
@@ -386,9 +470,13 @@ pub extern "C" fn __pace_fs_delete(path: *const std::ffi::c_char) -> i64 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_fs_mkdir(path: *const std::ffi::c_char) -> i64 {
-    if path.is_null() { return 0; }
+    if path.is_null() {
+        return 0;
+    }
     unsafe {
-        let p_str = std::ffi::CStr::from_ptr(path).to_string_lossy().into_owned();
+        let p_str = std::ffi::CStr::from_ptr(path)
+            .to_string_lossy()
+            .into_owned();
         match std::fs::create_dir_all(p_str) {
             Ok(_) => 1,
             Err(e) => {
@@ -401,11 +489,21 @@ pub extern "C" fn __pace_fs_mkdir(path: *const std::ffi::c_char) -> i64 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_fs_dir_exists(path: *const std::ffi::c_char) -> i64 {
-    if path.is_null() { return 0; }
+    if path.is_null() {
+        return 0;
+    }
     unsafe {
-        let p_str = std::ffi::CStr::from_ptr(path).to_string_lossy().into_owned();
+        let p_str = std::ffi::CStr::from_ptr(path)
+            .to_string_lossy()
+            .into_owned();
         match std::fs::metadata(p_str) {
-            Ok(m) => if m.is_dir() { 1 } else { 0 },
+            Ok(m) => {
+                if m.is_dir() {
+                    1
+                } else {
+                    0
+                }
+            }
             Err(e) => {
                 set_last_error(&e.to_string());
                 0
@@ -420,11 +518,15 @@ pub extern "C" fn __pace_fs_dir_exists(path: *const std::ffi::c_char) -> i64 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_os_getenv(key: *const std::ffi::c_char) -> *mut std::ffi::c_char {
-    if key.is_null() { return std::ptr::null_mut(); }
+    if key.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
         let k_str = std::ffi::CStr::from_ptr(key).to_string_lossy().into_owned();
         match std::env::var(k_str) {
-            Ok(val) => std::ffi::CString::new(val).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw(),
+            Ok(val) => std::ffi::CString::new(val)
+                .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+                .into_raw(),
             Err(_) => std::ptr::null_mut(),
         }
     }
@@ -432,25 +534,37 @@ pub extern "C" fn __pace_os_getenv(key: *const std::ffi::c_char) -> *mut std::ff
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_os_name() -> *mut std::ffi::c_char {
-    std::ffi::CString::new(std::env::consts::OS).unwrap().into_raw()
+    std::ffi::CString::new(std::env::consts::OS)
+        .unwrap()
+        .into_raw()
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_process_run(command: *const std::ffi::c_char) -> *mut std::ffi::c_char {
-    if command.is_null() { return std::ptr::null_mut(); }
+    if command.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
-        let cmd_str = std::ffi::CStr::from_ptr(command).to_string_lossy().into_owned();
-        
+        let cmd_str = std::ffi::CStr::from_ptr(command)
+            .to_string_lossy()
+            .into_owned();
+
         let output = if cfg!(target_os = "windows") {
-            std::process::Command::new("cmd").args(["/C", &cmd_str]).output()
+            std::process::Command::new("cmd")
+                .args(["/C", &cmd_str])
+                .output()
         } else {
-            std::process::Command::new("sh").args(["-c", &cmd_str]).output()
+            std::process::Command::new("sh")
+                .args(["-c", &cmd_str])
+                .output()
         };
-        
+
         match output {
             Ok(out) => {
                 let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-                std::ffi::CString::new(stdout).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+                std::ffi::CString::new(stdout)
+                    .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+                    .into_raw()
             }
             Err(e) => {
                 set_last_error(&e.to_string());
@@ -471,15 +585,22 @@ pub extern "C" fn __pace_process_exit(code: i64) -> ! {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_http_get(url: *const std::ffi::c_char) -> *mut std::ffi::c_char {
-    if url.is_null() { return std::ptr::null_mut(); }
+    if url.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
         let u_str = std::ffi::CStr::from_ptr(url).to_string_lossy().into_owned();
         match ureq::get(&u_str).call() {
             Ok(response) => {
                 let mut content = String::new();
                 use std::io::Read;
-                let _ = response.into_body().into_reader().read_to_string(&mut content);
-                std::ffi::CString::new(content).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+                let _ = response
+                    .into_body()
+                    .into_reader()
+                    .read_to_string(&mut content);
+                std::ffi::CString::new(content)
+                    .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+                    .into_raw()
             }
             Err(e) => {
                 set_last_error(&e.to_string());
@@ -490,17 +611,29 @@ pub extern "C" fn __pace_http_get(url: *const std::ffi::c_char) -> *mut std::ffi
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn __pace_http_post(url: *const std::ffi::c_char, body: *const std::ffi::c_char) -> *mut std::ffi::c_char {
-    if url.is_null() || body.is_null() { return std::ptr::null_mut(); }
+pub extern "C" fn __pace_http_post(
+    url: *const std::ffi::c_char,
+    body: *const std::ffi::c_char,
+) -> *mut std::ffi::c_char {
+    if url.is_null() || body.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
         let u_str = std::ffi::CStr::from_ptr(url).to_string_lossy().into_owned();
-        let b_str = std::ffi::CStr::from_ptr(body).to_string_lossy().into_owned();
+        let b_str = std::ffi::CStr::from_ptr(body)
+            .to_string_lossy()
+            .into_owned();
         match ureq::post(&u_str).send(&b_str) {
             Ok(response) => {
                 let mut content = String::new();
                 use std::io::Read;
-                let _ = response.into_body().into_reader().read_to_string(&mut content);
-                std::ffi::CString::new(content).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+                let _ = response
+                    .into_body()
+                    .into_reader()
+                    .read_to_string(&mut content);
+                std::ffi::CString::new(content)
+                    .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+                    .into_raw()
             }
             Err(e) => {
                 set_last_error(&e.to_string());
@@ -511,17 +644,29 @@ pub extern "C" fn __pace_http_post(url: *const std::ffi::c_char, body: *const st
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn __pace_http_put(url: *const std::ffi::c_char, body: *const std::ffi::c_char) -> *mut std::ffi::c_char {
-    if url.is_null() || body.is_null() { return std::ptr::null_mut(); }
+pub extern "C" fn __pace_http_put(
+    url: *const std::ffi::c_char,
+    body: *const std::ffi::c_char,
+) -> *mut std::ffi::c_char {
+    if url.is_null() || body.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
         let u_str = std::ffi::CStr::from_ptr(url).to_string_lossy().into_owned();
-        let b_str = std::ffi::CStr::from_ptr(body).to_string_lossy().into_owned();
+        let b_str = std::ffi::CStr::from_ptr(body)
+            .to_string_lossy()
+            .into_owned();
         match ureq::put(&u_str).send(&b_str) {
             Ok(response) => {
                 let mut content = String::new();
                 use std::io::Read;
-                let _ = response.into_body().into_reader().read_to_string(&mut content);
-                std::ffi::CString::new(content).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+                let _ = response
+                    .into_body()
+                    .into_reader()
+                    .read_to_string(&mut content);
+                std::ffi::CString::new(content)
+                    .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+                    .into_raw()
             }
             Err(e) => {
                 set_last_error(&e.to_string());
@@ -533,15 +678,22 @@ pub extern "C" fn __pace_http_put(url: *const std::ffi::c_char, body: *const std
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_http_delete(url: *const std::ffi::c_char) -> *mut std::ffi::c_char {
-    if url.is_null() { return std::ptr::null_mut(); }
+    if url.is_null() {
+        return std::ptr::null_mut();
+    }
     unsafe {
         let u_str = std::ffi::CStr::from_ptr(url).to_string_lossy().into_owned();
         match ureq::delete(&u_str).call() {
             Ok(response) => {
                 let mut content = String::new();
                 use std::io::Read;
-                let _ = response.into_body().into_reader().read_to_string(&mut content);
-                std::ffi::CString::new(content).unwrap_or_else(|_| std::ffi::CString::new("").unwrap()).into_raw()
+                let _ = response
+                    .into_body()
+                    .into_reader()
+                    .read_to_string(&mut content);
+                std::ffi::CString::new(content)
+                    .unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
+                    .into_raw()
             }
             Err(e) => {
                 set_last_error(&e.to_string());
@@ -555,9 +707,9 @@ pub extern "C" fn __pace_http_delete(url: *const std::ffi::c_char) -> *mut std::
 // ACTOR RUNTIME (Mailbox, ThreadPool, Promise)
 // ==========================================
 
-use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, mpsc};
 use std::thread;
 
 pub struct Task {
@@ -587,47 +739,51 @@ pub extern "C" fn __pace_init_runtime(num_threads: usize) {
 
         for _ in 0..num_threads {
             let rx = Arc::clone(&receiver);
-            thread::spawn(move || loop {
-                let mb_ptr = {
-                    let lock = rx.lock().unwrap();
-                    lock.recv()
-                };
-                match mb_ptr {
-                    Ok(ptr) => {
-                        let mailbox = unsafe { &*(ptr as *mut Mailbox) };
-                        loop {
-                            let task = {
-                                let mut q = mailbox.queue.lock().unwrap();
-                                q.pop_front()
-                            };
-                            match task {
-                                Some(t) => {
-                                    let result = (t.func)(t.arg);
-                                    if !t.promise.is_null() {
-                                        __pace_promise_resolve(t.promise, result);
-                                    }
-                                }
-                                None => {
-                                    mailbox.is_scheduled.store(false, Ordering::SeqCst);
-                                    // Double-check queue to avoid race condition
-                                    let q = mailbox.queue.lock().unwrap();
-                                    if !q.is_empty() {
-                                        if !mailbox.is_scheduled.swap(true, Ordering::SeqCst) {
-                                            // Keep processing since a message arrived right after we stored false
-                                            continue;
+            thread::spawn(move || {
+                loop {
+                    let mb_ptr = {
+                        let lock = rx.lock().unwrap();
+                        lock.recv()
+                    };
+                    match mb_ptr {
+                        Ok(ptr) => {
+                            let mailbox = unsafe { &*(ptr as *mut Mailbox) };
+                            loop {
+                                let task = {
+                                    let mut q = mailbox.queue.lock().unwrap();
+                                    q.pop_front()
+                                };
+                                match task {
+                                    Some(t) => {
+                                        let result = (t.func)(t.arg);
+                                        if !t.promise.is_null() {
+                                            __pace_promise_resolve(t.promise, result);
                                         }
                                     }
-                                    break;
+                                    None => {
+                                        mailbox.is_scheduled.store(false, Ordering::SeqCst);
+                                        // Double-check queue to avoid race condition
+                                        let q = mailbox.queue.lock().unwrap();
+                                        if !q.is_empty() {
+                                            if !mailbox.is_scheduled.swap(true, Ordering::SeqCst) {
+                                                // Keep processing since a message arrived right after we stored false
+                                                continue;
+                                            }
+                                        }
+                                        break;
+                                    }
                                 }
                             }
                         }
+                        Err(_) => break, // Channel closed
                     }
-                    Err(_) => break, // Channel closed
                 }
             });
         }
 
-        ThreadPool { actor_sender: sender }
+        ThreadPool {
+            actor_sender: sender,
+        }
     });
 }
 
@@ -641,12 +797,23 @@ pub extern "C" fn __pace_mailbox_create() -> *mut Mailbox {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn __pace_mailbox_send(mb: *mut Mailbox, func: extern "C" fn(i64) -> i64, arg: i64, promise: *mut Promise) {
-    if mb.is_null() { return; }
+pub extern "C" fn __pace_mailbox_send(
+    mb: *mut Mailbox,
+    func: extern "C" fn(i64) -> i64,
+    arg: i64,
+    promise: *mut Promise,
+) {
+    if mb.is_null() {
+        return;
+    }
     let mailbox = unsafe { &*mb };
-    
-    mailbox.queue.lock().unwrap().push_back(Task { func, arg, promise });
-    
+
+    mailbox
+        .queue
+        .lock()
+        .unwrap()
+        .push_back(Task { func, arg, promise });
+
     if !mailbox.is_scheduled.swap(true, Ordering::SeqCst) {
         if let Some(pool) = THREAD_POOL.get() {
             let _ = pool.actor_sender.send(mb as usize);
@@ -684,7 +851,9 @@ pub extern "C" fn __pace_promise_create() -> *mut Promise {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_promise_resolve(p: *mut Promise, val: i64) {
-    if p.is_null() { return; }
+    if p.is_null() {
+        return;
+    }
     let promise = unsafe { &*p };
     let mut result = promise.result.lock().unwrap();
     *result = Some(val);
@@ -693,7 +862,9 @@ pub extern "C" fn __pace_promise_resolve(p: *mut Promise, val: i64) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_promise_await(p: *mut Promise) -> i64 {
-    if p.is_null() { return 0; }
+    if p.is_null() {
+        return 0;
+    }
     let promise = unsafe { &*p };
     let mut result = promise.result.lock().unwrap();
     while result.is_none() {

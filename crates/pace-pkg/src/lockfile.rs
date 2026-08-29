@@ -1,9 +1,9 @@
+use crate::manifest::ManifestError;
+use miette::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use miette::Result;
-use crate::manifest::ManifestError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct PaceLock {

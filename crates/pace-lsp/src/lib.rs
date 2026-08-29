@@ -1,13 +1,12 @@
+use pace_driver::CompilerSession;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
-use pace_driver::CompilerSession;
 
-
+use pace_ast::Stmt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use pace_ast::Stmt;
 
 pub struct PaceLanguageServer {
     pub client: Client,
@@ -32,17 +31,24 @@ impl PaceLanguageServer {
 
     async fn check_and_publish_diagnostics(&self, uri: Url, src: &str) {
         let mut diagnostics = Vec::new();
-        
-        let path = if let Ok(p) = uri.to_file_path() { p } else { return; };
+
+        let path = if let Ok(p) = uri.to_file_path() {
+            p
+        } else {
+            return;
+        };
         let ast_result = self.session.check_file_with_source(&path, src);
-        
-        self.src_cache.write().await.insert(uri.clone(), src.to_string());
-        
+
+        self.src_cache
+            .write()
+            .await
+            .insert(uri.clone(), src.to_string());
+
         match ast_result {
             Ok((ast, warnings, type_errors, env)) => {
                 self.ast_cache.write().await.insert(uri.clone(), ast);
                 self.env_cache.write().await.insert(uri.clone(), env);
-                
+
                 let active_file = path.display().to_string();
                 for warn in &warnings {
                     if let Some(diag) = map_warning(warn, src, &active_file) {
@@ -54,11 +60,13 @@ impl PaceLanguageServer {
                         diagnostics.push(diag);
                     }
                 }
-            },
+            }
             Err(e) => {
                 let active_file = path.display().to_string();
                 // Syntax or package errors
-                if let Some(multiple_syntax_errors) = e.downcast_ref::<pace_errors::MultipleSyntaxErrors>() {
+                if let Some(multiple_syntax_errors) =
+                    e.downcast_ref::<pace_errors::MultipleSyntaxErrors>()
+                {
                     for err in &multiple_syntax_errors.errors {
                         if let Some(diag) = map_syntax_error(err, src, &active_file) {
                             diagnostics.push(diag);
@@ -68,8 +76,14 @@ impl PaceLanguageServer {
                     // Generic error
                     let diag = Diagnostic {
                         range: Range {
-                            start: Position { line: 0, character: 0 },
-                            end: Position { line: 0, character: 0 },
+                            start: Position {
+                                line: 0,
+                                character: 0,
+                            },
+                            end: Position {
+                                line: 0,
+                                character: 0,
+                            },
                         },
                         severity: Some(DiagnosticSeverity::ERROR),
                         message: e.to_string(),
@@ -79,15 +93,17 @@ impl PaceLanguageServer {
                 }
             }
         }
-        
-        self.client.publish_diagnostics(uri, diagnostics, None).await;
+
+        self.client
+            .publish_diagnostics(uri, diagnostics, None)
+            .await;
     }
 }
 
 fn get_position(src: &str, offset: usize) -> Position {
     let mut line = 0;
     let mut char_idx = 0;
-    
+
     for (i, c) in src.char_indices() {
         if i >= offset {
             break;
@@ -99,15 +115,18 @@ fn get_position(src: &str, offset: usize) -> Position {
             char_idx += 1;
         }
     }
-    
-    Position { line, character: char_idx }
+
+    Position {
+        line,
+        character: char_idx,
+    }
 }
 
 #[allow(dead_code)]
 fn position_to_offset(src: &str, pos: Position) -> Option<usize> {
     let mut current_line = 0;
     let mut current_char = 0;
-    
+
     for (i, c) in src.char_indices() {
         if current_line == pos.line && current_char == pos.character {
             return Some(i);
@@ -119,7 +138,7 @@ fn position_to_offset(src: &str, pos: Position) -> Option<usize> {
             current_char += 1;
         }
     }
-    
+
     if current_line == pos.line && current_char == pos.character {
         Some(src.len())
     } else {
@@ -132,13 +151,13 @@ fn get_word_at_position(src: &str, pos: Position) -> Option<String> {
     if pos.line as usize >= lines.len() {
         return None;
     }
-    
+
     let line = lines[pos.line as usize];
     let char_idx = pos.character as usize;
     if char_idx >= line.len() {
         return None;
     }
-    
+
     let mut start = char_idx;
     while start > 0 {
         let c = line.chars().nth(start - 1)?;
@@ -147,7 +166,7 @@ fn get_word_at_position(src: &str, pos: Position) -> Option<String> {
         }
         start -= 1;
     }
-    
+
     let mut end = char_idx;
     while end < line.len() {
         let c = line.chars().nth(end)?;
@@ -156,7 +175,7 @@ fn get_word_at_position(src: &str, pos: Position) -> Option<String> {
         }
         end += 1;
     }
-    
+
     if start < end {
         Some(line[start..end].to_string())
     } else {
@@ -169,13 +188,13 @@ fn get_string_at_position(src: &str, pos: Position) -> Option<String> {
     if pos.line as usize >= lines.len() {
         return None;
     }
-    
+
     let line = lines[pos.line as usize];
     let char_idx = pos.character as usize;
     if char_idx >= line.len() {
         return None;
     }
-    
+
     let mut start = char_idx;
     let mut found_start_quote = false;
     while start > 0 {
@@ -186,11 +205,11 @@ fn get_string_at_position(src: &str, pos: Position) -> Option<String> {
             break;
         }
     }
-    
+
     if !found_start_quote {
         return None;
     }
-    
+
     let mut end = char_idx;
     let mut found_end_quote = false;
     while end < line.len() {
@@ -200,11 +219,11 @@ fn get_string_at_position(src: &str, pos: Position) -> Option<String> {
         }
         end += 1;
     }
-    
+
     if !found_end_quote {
         return None;
     }
-    
+
     if start <= end {
         Some(line[start..end].to_string())
     } else {
@@ -212,26 +231,44 @@ fn get_string_at_position(src: &str, pos: Position) -> Option<String> {
     }
 }
 
-fn map_warning(warn: &pace_errors::SemanticWarning, src: &str, active_file: &str) -> Option<Diagnostic> {
+fn map_warning(
+    warn: &pace_errors::SemanticWarning,
+    src: &str,
+    active_file: &str,
+) -> Option<Diagnostic> {
     use pace_errors::SemanticWarning::*;
     let severity = DiagnosticSeverity::WARNING;
-    
+
     let (message, start_offset, length, warn_src) = match warn {
-        NamingConvention { name, span, src: s, .. } => {
-            (format!("Variable or function '{}' should use camelCase", name), span.0, span.1, s.name())
-        },
-        UnusedItem { kind, name, span, src: s, .. } => {
-            (format!("Unused {} '{}'", kind, name), span.0, span.1, s.name())
-        }
+        NamingConvention {
+            name, span, src: s, ..
+        } => (
+            format!("Variable or function '{}' should use camelCase", name),
+            span.0,
+            span.1,
+            s.name(),
+        ),
+        UnusedItem {
+            kind,
+            name,
+            span,
+            src: s,
+            ..
+        } => (
+            format!("Unused {} '{}'", kind, name),
+            span.0,
+            span.1,
+            s.name(),
+        ),
     };
-    
+
     if warn_src != active_file {
         return None;
     }
-    
+
     let start = get_position(src, start_offset);
     let end = get_position(src, start_offset + length);
-    
+
     Some(Diagnostic {
         range: Range { start, end },
         severity: Some(severity),
@@ -240,7 +277,11 @@ fn map_warning(warn: &pace_errors::SemanticWarning, src: &str, active_file: &str
     })
 }
 
-fn map_syntax_error(err: &pace_errors::SyntaxError, src: &str, active_file: &str) -> Option<Diagnostic> {
+fn map_syntax_error(
+    err: &pace_errors::SyntaxError,
+    src: &str,
+    active_file: &str,
+) -> Option<Diagnostic> {
     if err.src.name() != active_file {
         return None;
     }
@@ -248,7 +289,7 @@ fn map_syntax_error(err: &pace_errors::SyntaxError, src: &str, active_file: &str
     let (offset, length) = err.span;
     let start = get_position(src, offset);
     let end = get_position(src, offset + length);
-    
+
     Some(Diagnostic {
         range: Range { start, end },
         severity: Some(DiagnosticSeverity::ERROR),
@@ -260,15 +301,15 @@ fn map_syntax_error(err: &pace_errors::SyntaxError, src: &str, active_file: &str
 fn map_type_error(err: &pace_ty::TypeError, src: &str, active_file: &str) -> Option<Diagnostic> {
     use pace_ty::TypeError::*;
     let severity = DiagnosticSeverity::ERROR;
-    
+
     let err_src_name = match err {
-        Generic { src: s, .. } |
-        TypeMismatch { src: s, .. } |
-        UnknownIdentifier { src: s, .. } |
-        DuplicateDeclaration { src: s, .. } |
-        UnknownType { src: s, .. } |
-        InvalidWeakReference { src: s, .. } |
-        OwnershipViolation { src: s, .. } => s.name(),
+        Generic { src: s, .. }
+        | TypeMismatch { src: s, .. }
+        | UnknownIdentifier { src: s, .. }
+        | DuplicateDeclaration { src: s, .. }
+        | UnknownType { src: s, .. }
+        | InvalidWeakReference { src: s, .. }
+        | OwnershipViolation { src: s, .. } => s.name(),
     };
 
     if err_src_name != active_file {
@@ -276,53 +317,59 @@ fn map_type_error(err: &pace_ty::TypeError, src: &str, active_file: &str) -> Opt
     }
 
     let (message, start_offset, length) = match err {
-        Generic { span, message: msg, .. } => {
-            (msg.clone(), span.0, span.1)
-        },
-        TypeMismatch { message: msg, span, .. } => {
-            (format!("Type mismatch: {}", msg), span.0, span.1)
-        },
-        UnknownIdentifier { name, help_text, span, .. } => {
-            (format!("Unknown identifier '{}'\nHelp: {}", name, help_text), span.0, span.1)
-        },
-        DuplicateDeclaration { name, span, .. } => {
-            (format!("Duplicate declaration of '{}'", name), span.0, span.1)
-        },
-        UnknownType { name, span, .. } => {
-            (format!("Unknown type '{}'", name), span.0, span.1)
-        },
-        InvalidWeakReference { span, .. } => {
-            ("Invalid weak reference".to_string(), span.0, span.1)
-        },
-        OwnershipViolation { message: msg, span, .. } => {
-            (format!("Ownership violation: {}", msg), span.0, span.1)
-        }
+        Generic {
+            span, message: msg, ..
+        } => (msg.clone(), span.0, span.1),
+        TypeMismatch {
+            message: msg, span, ..
+        } => (format!("Type mismatch: {}", msg), span.0, span.1),
+        UnknownIdentifier {
+            name,
+            help_text,
+            span,
+            ..
+        } => (
+            format!("Unknown identifier '{}'\nHelp: {}", name, help_text),
+            span.0,
+            span.1,
+        ),
+        DuplicateDeclaration { name, span, .. } => (
+            format!("Duplicate declaration of '{}'", name),
+            span.0,
+            span.1,
+        ),
+        UnknownType { name, span, .. } => (format!("Unknown type '{}'", name), span.0, span.1),
+        InvalidWeakReference { span, .. } => ("Invalid weak reference".to_string(), span.0, span.1),
+        OwnershipViolation {
+            message: msg, span, ..
+        } => (format!("Ownership violation: {}", msg), span.0, span.1),
     };
-    
+
     let start = get_position(src, start_offset);
     let end = get_position(src, start_offset + length);
-    
+
     let mut diag = Diagnostic {
         range: Range { start, end },
         severity: Some(severity),
         message,
         ..Default::default()
     };
-    
+
     if let DuplicateDeclaration { original_span, .. } = err {
         let orig_start = get_position(src, original_span.0);
         let orig_end = get_position(src, original_span.0 + original_span.1);
-        diag.related_information = Some(vec![
-            DiagnosticRelatedInformation {
-                location: Location {
-                    uri: Url::parse("file:///dummy").unwrap(), // We need actual URI but this is tricky without keeping track. In a real LSP we'd resolve it.
-                    range: Range { start: orig_start, end: orig_end }
+        diag.related_information = Some(vec![DiagnosticRelatedInformation {
+            location: Location {
+                uri: Url::parse("file:///dummy").unwrap(), // We need actual URI but this is tricky without keeping track. In a real LSP we'd resolve it.
+                range: Range {
+                    start: orig_start,
+                    end: orig_end,
                 },
-                message: "Original declaration here".to_string(),
-            }
-        ]);
+            },
+            message: "Original declaration here".to_string(),
+        }]);
     }
-    
+
     Some(diag)
 }
 
@@ -332,10 +379,12 @@ impl LanguageServer for PaceLanguageServer {
         if let Some(uri) = params.root_uri {
             *self.root_uri.write().await = Some(uri);
         }
-        
+
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+                text_document_sync: Some(TextDocumentSyncCapability::Kind(
+                    TextDocumentSyncKind::FULL,
+                )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
@@ -354,14 +403,22 @@ impl LanguageServer for PaceLanguageServer {
         self.client
             .log_message(MessageType::INFO, "Pace language server initialized")
             .await;
-            
+
         let root_uri = self.root_uri.read().await.clone();
-        
+
         if let Some(uri) = root_uri {
             if let Ok(path) = uri.to_file_path() {
-                self.client.log_message(MessageType::INFO, format!("Scanning workspace: {}", path.display())).await;
-                
-                for entry in walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!("Scanning workspace: {}", path.display()),
+                    )
+                    .await;
+
+                for entry in walkdir::WalkDir::new(path)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                {
                     let p = entry.path();
                     if p.is_file() && p.extension().map_or(false, |ext| ext == "pace") {
                         if let Ok(src) = std::fs::read_to_string(p) {
@@ -371,8 +428,10 @@ impl LanguageServer for PaceLanguageServer {
                         }
                     }
                 }
-                
-                self.client.log_message(MessageType::INFO, "Workspace scanning complete").await;
+
+                self.client
+                    .log_message(MessageType::INFO, "Workspace scanning complete")
+                    .await;
             }
         }
     }
@@ -382,31 +441,41 @@ impl LanguageServer for PaceLanguageServer {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.check_and_publish_diagnostics(params.text_document.uri, &params.text_document.text).await;
+        self.check_and_publish_diagnostics(params.text_document.uri, &params.text_document.text)
+            .await;
     }
 
     async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
         if let Some(change) = params.content_changes.pop() {
-            self.check_and_publish_diagnostics(params.text_document.uri, &change.text).await;
+            self.check_and_publish_diagnostics(params.text_document.uri, &change.text)
+                .await;
         }
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
         let uri = params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
-        
+
         let src_cache = self.src_cache.read().await;
         if let Some(src) = src_cache.get(&uri) {
             if let Some(word) = get_word_at_position(src, pos) {
                 let mut hover_text = format!("Symbol: `{}`", word);
-                
+
                 let env_cache = self.env_cache.read().await;
                 if let Some(env) = env_cache.get(&uri) {
                     if let Some(ty) = env.symbol_types.get(&word) {
                         hover_text = format!("```pace\nlet {}: {:?}\n```", word, ty);
                     } else if let Some(func) = env.functions.get(&word) {
-                        let params_str = func.params.iter().map(|p| format!("{:?}", p)).collect::<Vec<_>>().join(", ");
-                        hover_text = format!("```pace\nfunc {}({}) -> {:?}\n```", word, params_str, func.return_type);
+                        let params_str = func
+                            .params
+                            .iter()
+                            .map(|p| format!("{:?}", p))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        hover_text = format!(
+                            "```pace\nfunc {}({}) -> {:?}\n```",
+                            word, params_str, func.return_type
+                        );
                     } else if let Some(_cls) = env.classes.get(&word) {
                         hover_text = format!("```pace\nclass {}\n```", word);
                     } else if let Some(_strct) = env.structs.get(&word) {
@@ -417,37 +486,54 @@ impl LanguageServer for PaceLanguageServer {
                         hover_text = format!("```pace\nactor {}\n```", word);
                     }
                 }
-                
+
                 return Ok(Some(Hover {
                     contents: HoverContents::Scalar(MarkedString::String(hover_text)),
                     range: None,
                 }));
             }
         }
-        
+
         Ok(None)
     }
 
-    async fn goto_definition(&self, params: GotoDefinitionParams) -> Result<Option<GotoDefinitionResponse>> {
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
         let uri = params.text_document_position_params.text_document.uri;
         let pos = params.text_document_position_params.position;
-        
+
         let src_cache = self.src_cache.read().await;
         let ast_cache = self.ast_cache.read().await;
-        
+
         if let Some(src) = src_cache.get(&uri) {
             // First check if we're hovering over a string (likely an import path)
             if let Some(string_content) = get_string_at_position(src, pos) {
-                if string_content.starts_with("pace:") || string_content.starts_with("package:") || string_content.starts_with("self:") || string_content.starts_with("./") || string_content.starts_with("../") {
+                if string_content.starts_with("pace:")
+                    || string_content.starts_with("package:")
+                    || string_content.starts_with("self:")
+                    || string_content.starts_with("./")
+                    || string_content.starts_with("../")
+                {
                     if let Ok(path_buf) = uri.to_file_path() {
-                        if let Ok(resolved_path) = pace_driver::CompilerSession::resolve_import_path(&string_content, &path_buf) {
+                        if let Ok(resolved_path) = pace_driver::CompilerSession::resolve_import_path(
+                            &string_content,
+                            &path_buf,
+                        ) {
                             if resolved_path.exists() {
                                 if let Ok(resolved_uri) = Url::from_file_path(resolved_path) {
                                     return Ok(Some(GotoDefinitionResponse::Scalar(Location {
                                         uri: resolved_uri,
-                                        range: Range { 
-                                            start: Position { line: 0, character: 0 },
-                                            end: Position { line: 0, character: 0 },
+                                        range: Range {
+                                            start: Position {
+                                                line: 0,
+                                                character: 0,
+                                            },
+                                            end: Position {
+                                                line: 0,
+                                                character: 0,
+                                            },
                                         },
                                     })));
                                 }
@@ -462,23 +548,27 @@ impl LanguageServer for PaceLanguageServer {
                     // Try to find the symbol declaration in the AST
                     for stmt in ast {
                         match stmt {
-                            pace_ast::Stmt::FuncDecl { name, .. } |
-                            pace_ast::Stmt::VarDecl { name, .. } |
-                            pace_ast::Stmt::ClassDecl { name, .. } |
-                            pace_ast::Stmt::StructDecl { name, .. } |
-                            pace_ast::Stmt::EnumDecl { name, .. } |
-                            pace_ast::Stmt::ActorDecl { name, .. } |
-                            pace_ast::Stmt::InterfaceDecl { name, .. } => {
-                                // Basic matching. `pace_ast::Stmt::ClassDecl` etc don't have span yet, 
+                            pace_ast::Stmt::FuncDecl { name, .. }
+                            | pace_ast::Stmt::VarDecl { name, .. }
+                            | pace_ast::Stmt::ClassDecl { name, .. }
+                            | pace_ast::Stmt::StructDecl { name, .. }
+                            | pace_ast::Stmt::EnumDecl { name, .. }
+                            | pace_ast::Stmt::ActorDecl { name, .. }
+                            | pace_ast::Stmt::InterfaceDecl { name, .. } => {
+                                // Basic matching. `pace_ast::Stmt::ClassDecl` etc don't have span yet,
                                 // but we can use the ones that do.
                                 if name == &word || name.ends_with(&format!("__{}", word)) {
-                                    if let pace_ast::Stmt::FuncDecl { span, .. } | pace_ast::Stmt::VarDecl { span, .. } = stmt {
+                                    if let pace_ast::Stmt::FuncDecl { span, .. }
+                                    | pace_ast::Stmt::VarDecl { span, .. } = stmt
+                                    {
                                         let start = get_position(src, span.0);
                                         let end = get_position(src, span.0 + span.1);
-                                        return Ok(Some(GotoDefinitionResponse::Scalar(Location {
-                                            uri: uri.clone(),
-                                            range: Range { start, end },
-                                        })));
+                                        return Ok(Some(GotoDefinitionResponse::Scalar(
+                                            Location {
+                                                uri: uri.clone(),
+                                                range: Range { start, end },
+                                            },
+                                        )));
                                     }
                                 }
                             }
@@ -488,13 +578,13 @@ impl LanguageServer for PaceLanguageServer {
                 }
             }
         }
-        
+
         Ok(None)
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let mut responses = Vec::new();
-        
+
         for diag in params.context.diagnostics {
             if diag.message.starts_with("Unknown identifier '") {
                 let parts: Vec<&str> = diag.message.split('\'').collect();
@@ -503,17 +593,29 @@ impl LanguageServer for PaceLanguageServer {
                     let mut target_uri = None;
                     let env_cache = self.env_cache.read().await;
                     for (uri, env) in env_cache.iter() {
-                        if uri != &params.text_document.uri && (env.functions.contains_key(ident) || env.classes.contains_key(ident) || env.symbol_types.contains_key(ident) || env.structs.contains_key(ident) || env.actors.contains_key(ident) || env.enums.contains_key(ident)) {
+                        if uri != &params.text_document.uri
+                            && (env.functions.contains_key(ident)
+                                || env.classes.contains_key(ident)
+                                || env.symbol_types.contains_key(ident)
+                                || env.structs.contains_key(ident)
+                                || env.actors.contains_key(ident)
+                                || env.enums.contains_key(ident))
+                        {
                             target_uri = Some(uri.clone());
                             break;
                         }
                     }
-                    
+
                     let mut import_path = None;
                     if let Some(target) = target_uri {
-                        if let (Ok(current_path), Ok(target_path)) = (params.text_document.uri.to_file_path(), target.to_file_path()) {
+                        if let (Ok(current_path), Ok(target_path)) = (
+                            params.text_document.uri.to_file_path(),
+                            target.to_file_path(),
+                        ) {
                             if let Some(parent) = current_path.parent() {
-                                if let Some(mut rel_path) = pathdiff::diff_paths(&target_path, parent) {
+                                if let Some(mut rel_path) =
+                                    pathdiff::diff_paths(&target_path, parent)
+                                {
                                     rel_path.set_extension(""); // Remove .pace
                                     let mut path_str = rel_path.to_string_lossy().into_owned();
                                     if !path_str.starts_with(".") && !path_str.starts_with("/") {
@@ -524,18 +626,24 @@ impl LanguageServer for PaceLanguageServer {
                             }
                         }
                     }
-                    
+
                     if let Some(path) = import_path {
                         let mut changes = std::collections::HashMap::new();
                         let edit = TextEdit {
                             range: Range {
-                                start: Position { line: 0, character: 0 },
-                                end: Position { line: 0, character: 0 },
+                                start: Position {
+                                    line: 0,
+                                    character: 0,
+                                },
+                                end: Position {
+                                    line: 0,
+                                    character: 0,
+                                },
                             },
                             new_text: format!("import \"{}\";\n", path),
                         };
                         changes.insert(params.text_document.uri.clone(), vec![edit]);
-                        
+
                         let action = CodeAction {
                             title: format!("Import '{}'", path),
                             kind: Some(CodeActionKind::QUICKFIX),
@@ -546,13 +654,13 @@ impl LanguageServer for PaceLanguageServer {
                             }),
                             ..Default::default()
                         };
-                        
+
                         responses.push(CodeActionOrCommand::CodeAction(action));
                     }
                 }
             }
         }
-        
+
         if responses.is_empty() {
             Ok(None)
         } else {
@@ -578,11 +686,19 @@ impl LanguageServer for PaceLanguageServer {
 
             // Suggest functions
             for (name, func) in &env.functions {
-                let params_str = func.params.iter().map(|p| format!("{:?}", p)).collect::<Vec<_>>().join(", ");
+                let params_str = func
+                    .params
+                    .iter()
+                    .map(|p| format!("{:?}", p))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 items.push(CompletionItem {
                     label: name.clone(),
                     kind: Some(CompletionItemKind::FUNCTION),
-                    detail: Some(format!("func {}({}) -> {:?}", name, params_str, func.return_type)),
+                    detail: Some(format!(
+                        "func {}({}) -> {:?}",
+                        name, params_str, func.return_type
+                    )),
                     ..Default::default()
                 });
             }
@@ -595,9 +711,17 @@ impl LanguageServer for PaceLanguageServer {
                     ..Default::default()
                 });
             }
-            
+
             // Standard library modules
-            let std_modules = vec!["std:math", "std:io", "std:http", "std:datetime", "std:os", "std:process", "std:collections"];
+            let std_modules = vec![
+                "std:math",
+                "std:io",
+                "std:http",
+                "std:datetime",
+                "std:os",
+                "std:process",
+                "std:collections",
+            ];
             for mod_name in std_modules {
                 items.push(CompletionItem {
                     label: mod_name.to_string(),
@@ -621,7 +745,10 @@ pub fn run_server() {
         let stdin = tokio::io::stdin();
         let stdout = tokio::io::stdout();
 
-        let (service, socket) = tower_lsp::LspService::new(|client| PaceLanguageServer::new(client));
-        tower_lsp::Server::new(stdin, stdout, socket).serve(service).await;
+        let (service, socket) =
+            tower_lsp::LspService::new(|client| PaceLanguageServer::new(client));
+        tower_lsp::Server::new(stdin, stdout, socket)
+            .serve(service)
+            .await;
     });
 }

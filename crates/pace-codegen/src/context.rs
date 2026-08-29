@@ -1,6 +1,6 @@
-use cranelift_module::{Module, FuncId};
+use crate::layouts::{ClassLayout, EnumLayout, InterfaceLayout, StructLayout};
+use cranelift_module::{FuncId, Module};
 use std::collections::HashMap;
-use crate::layouts::{ClassLayout, StructLayout, InterfaceLayout, EnumLayout};
 
 pub struct CodegenContext<M: Module> {
     pub module: M,
@@ -18,7 +18,7 @@ impl<M: Module> CodegenContext<M> {
     pub fn new(mut module: M) -> Self {
         let ptr_ty = module.target_config().pointer_type();
         let funcs = crate::runtime::declare_runtime_functions(&mut module, ptr_ty);
-        
+
         Self {
             module,
             funcs,

@@ -9,10 +9,10 @@ use thiserror::Error;
 )]
 pub struct SyntaxError {
     pub message: String,
-    
+
     #[source_code]
     pub src: miette::NamedSource<String>,
-    
+
     #[label("Unexpected token")]
     pub span: (usize, usize),
 }
@@ -39,7 +39,10 @@ pub enum TypeError {
     },
 
     #[error("Duplicate declaration of '{name}'")]
-    #[diagnostic(code(P2002), help("You tried to declare two variables or functions with the exact same name."))]
+    #[diagnostic(
+        code(P2002),
+        help("You tried to declare two variables or functions with the exact same name.")
+    )]
     DuplicateDeclaration {
         name: String,
         #[source_code]
@@ -61,7 +64,10 @@ pub enum TypeError {
     },
 
     #[error("Unknown type '{name}'")]
-    #[diagnostic(code(P3002), help("The compiler hasn't seen this type defined anywhere."))]
+    #[diagnostic(
+        code(P3002),
+        help("The compiler hasn't seen this type defined anywhere.")
+    )]
     UnknownType {
         name: String,
         #[source_code]
@@ -69,9 +75,12 @@ pub enum TypeError {
         #[label("Type not found")]
         span: (usize, usize),
     },
-    
+
     #[error("Invalid weak reference")]
-    #[diagnostic(code(P4001), help("You tried to use the 'weak' keyword on a value type or a non-optional variable."))]
+    #[diagnostic(
+        code(P4001),
+        help("You tried to use the 'weak' keyword on a value type or a non-optional variable.")
+    )]
     InvalidWeakReference {
         #[source_code]
         src: NamedSource<String>,
@@ -80,7 +89,12 @@ pub enum TypeError {
     },
 
     #[error("Ownership violation: {message}")]
-    #[diagnostic(code(P4002), help("You tried to illegally transfer or consume an object in a way that violates ARC memory rules."))]
+    #[diagnostic(
+        code(P4002),
+        help(
+            "You tried to illegally transfer or consume an object in a way that violates ARC memory rules."
+        )
+    )]
     OwnershipViolation {
         message: String,
         #[source_code]
@@ -88,7 +102,7 @@ pub enum TypeError {
         #[label("Violation here")]
         span: (usize, usize),
     },
-    
+
     #[error("Type error: {message}")]
     #[diagnostic(code(P3000))]
     Generic {
@@ -97,7 +111,7 @@ pub enum TypeError {
         src: NamedSource<String>,
         #[label("Here")]
         span: (usize, usize),
-    }
+    },
 }
 
 #[derive(Clone, Error, Diagnostic, Debug)]
@@ -111,7 +125,7 @@ pub enum SemanticWarning {
         #[label("Consider renaming to camelCase")]
         span: (usize, usize),
     },
-    
+
     #[error("Unused {kind} '{name}'")]
     #[diagnostic(code(W1002::unused_item), severity(warning))]
     UnusedItem {

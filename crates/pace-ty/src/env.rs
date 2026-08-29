@@ -21,12 +21,18 @@ pub enum Type {
     /// An enum type
     Enum(String),
     /// A function type
-    Function { params: Vec<Type>, return_type: Box<Type> },
+    Function {
+        params: Vec<Type>,
+        return_type: Box<Type>,
+    },
     Unknown, // Used for auto-inference before resolution or error state
     Void,    // Used for functions that don't return anything
     Any,     // Used for built-ins like print that take multiple types
     GenericParameter(String),
-    GenericInstance { base: Box<Type>, args: Vec<Type> },
+    GenericInstance {
+        base: Box<Type>,
+        args: Vec<Type>,
+    },
     /// An asynchronous value that resolves to the inner type
     Promise(Box<Type>),
 }
@@ -144,7 +150,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -153,7 +163,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int, Type::Int],
                 return_type: Type::Void,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -162,7 +176,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int, Type::Int, Type::Any],
                 return_type: Type::Void,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -171,7 +189,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int, Type::Int],
                 return_type: Type::Any,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -180,7 +202,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -189,7 +215,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![],
                 return_type: Type::Int,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -198,7 +228,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int, Type::String],
                 return_type: Type::Void,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -207,7 +241,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::String,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -216,7 +254,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Void,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -226,7 +268,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int, // Returns 1 on success, 0 on failure
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -235,7 +281,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -244,7 +294,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -253,7 +307,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -262,7 +320,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -271,7 +333,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -280,7 +346,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -289,7 +359,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![],
                 return_type: Type::String,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -298,7 +372,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -307,7 +385,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Void,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -316,7 +398,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -325,7 +411,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -334,7 +424,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -343,7 +437,11 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -352,63 +450,102 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int, // Actually it returns Int pointer
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
-            }
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
+                is_static: false,
+            },
         );
         self.register_function(
             "stringReplace".to_string(),
             FunctionSignature {
                 params: vec![Type::String, Type::String, Type::String],
                 return_type: Type::String,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
-            }
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
+                is_static: false,
+            },
         );
         self.register_function(
             "stringSubstring".to_string(),
             FunctionSignature {
                 params: vec![Type::String, Type::Int, Type::Int],
                 return_type: Type::String,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
-            }
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
+                is_static: false,
+            },
         );
         self.register_function(
             "stringTrim".to_string(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::String,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
-            }
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
+                is_static: false,
+            },
         );
         self.register_function(
             "stringIndexOf".to_string(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
-            }
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
+                is_static: false,
+            },
         );
         self.register_function(
             "stringStartsWith".to_string(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
-            }
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
+                is_static: false,
+            },
         );
         self.register_function(
             "getLastError".to_string(),
             FunctionSignature {
                 params: vec![],
                 return_type: Type::String,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None, is_static: false,
-            }
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
+                is_static: false,
+            },
         );
         self.register_function(
             "getYear".to_string(),
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
-                span: (0, 0), is_used: true, visibility: Visibility::Public, module: "std".to_string(), generic_params: None,
+                span: (0, 0),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".to_string(),
+                generic_params: None,
                 is_static: false,
             },
         );
@@ -427,12 +564,26 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, name: String, ty: Type, span: (usize, usize), is_mutable: bool) -> Result<(), (usize, usize)> {
+    pub fn define(
+        &mut self,
+        name: String,
+        ty: Type,
+        span: (usize, usize),
+        is_mutable: bool,
+    ) -> Result<(), (usize, usize)> {
         if let Some(scope) = self.scopes.last_mut() {
             if let Some(existing) = scope.get(&name) {
                 return Err(existing.span);
             }
-            scope.insert(name.clone(), VarInfo { ty: ty.clone(), span, is_used: false, is_mutable });
+            scope.insert(
+                name.clone(),
+                VarInfo {
+                    ty: ty.clone(),
+                    span,
+                    is_used: false,
+                    is_mutable,
+                },
+            );
         }
         self.symbol_types.insert(name, ty);
         Ok(())
@@ -498,7 +649,7 @@ impl Environment {
         }
         false
     }
-    
+
     pub fn register_actor(&mut self, name: String, sig: ActorSignature) {
         self.actors.insert(name, sig);
     }
@@ -516,7 +667,7 @@ impl Environment {
         self.functions.insert(name.clone(), sig);
         let _ = self.define(name, fn_type, span, false);
     }
-    
+
     pub fn register_class(&mut self, name: String, sig: ClassSignature) {
         self.classes.insert(name.clone(), sig);
         let _ = self.define(name.clone(), Type::Class(name), (0, 0), false);
@@ -526,7 +677,7 @@ impl Environment {
         self.structs.insert(name.clone(), sig);
         let _ = self.define(name.clone(), Type::Struct(name), (0, 0), false);
     }
-    
+
     pub fn register_enum(&mut self, name: String, sig: EnumSignature) {
         self.enums.insert(name.clone(), sig);
         let _ = self.define(name.clone(), Type::Enum(name), (0, 0), false);
@@ -535,8 +686,12 @@ impl Environment {
 
 pub fn levenshtein(a: &str, b: &str) -> usize {
     let mut matrix = vec![vec![0; b.len() + 1]; a.len() + 1];
-    for i in 0..=a.len() { matrix[i][0] = i; }
-    for j in 0..=b.len() { matrix[0][j] = j; }
+    for i in 0..=a.len() {
+        matrix[i][0] = i;
+    }
+    for j in 0..=b.len() {
+        matrix[0][j] = j;
+    }
     for (i, ca) in a.chars().enumerate() {
         for (j, cb) in b.chars().enumerate() {
             let cost = if ca == cb { 0 } else { 1 };

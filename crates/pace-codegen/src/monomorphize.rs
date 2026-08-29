@@ -1,4 +1,4 @@
-use pace_ast::{Stmt, Expr, TypeAnnotation, Param};
+use pace_ast::{Expr, Param, Stmt, TypeAnnotation};
 use std::collections::{HashMap, HashSet};
 
 pub struct Monomorphizer {
@@ -15,46 +15,72 @@ impl Monomorphizer {
     pub fn instantiate_stmt(&self, stmt: &Stmt) -> Stmt {
         match stmt {
             Stmt::Expr(expr) => Stmt::Expr(self.instantiate_expr(expr)),
-            Stmt::VarDecl { name, is_mutable, type_annotation, is_static, visibility, initializer, span } => {
-                Stmt::VarDecl {
-                    name: name.clone(),
-                    is_mutable: *is_mutable,
-                    type_annotation: type_annotation.as_ref().map(|t| self.instantiate_type_annotation(t)),
-                    is_static: *is_static,
-                    visibility: visibility.clone(),
-                    initializer: initializer.as_ref().map(|e| self.instantiate_expr(e)),
-                    span: *span,
-                }
+            Stmt::VarDecl {
+                name,
+                is_mutable,
+                type_annotation,
+                is_static,
+                visibility,
+                initializer,
+                span,
+            } => Stmt::VarDecl {
+                name: name.clone(),
+                is_mutable: *is_mutable,
+                type_annotation: type_annotation
+                    .as_ref()
+                    .map(|t| self.instantiate_type_annotation(t)),
+                is_static: *is_static,
+                visibility: visibility.clone(),
+                initializer: initializer.as_ref().map(|e| self.instantiate_expr(e)),
+                span: *span,
+            },
+            Stmt::Block(stmts) => {
+                Stmt::Block(stmts.iter().map(|s| self.instantiate_stmt(s)).collect())
             }
-            Stmt::Block(stmts) => Stmt::Block(stmts.iter().map(|s| self.instantiate_stmt(s)).collect()),
             Stmt::Return(expr) => Stmt::Return(expr.as_ref().map(|e| self.instantiate_expr(e))),
-            Stmt::If { condition, then_branch, else_branch } => {
-                Stmt::If {
-                    condition: self.instantiate_expr(condition),
-                    then_branch: Box::new(self.instantiate_stmt(then_branch)),
-                    else_branch: else_branch.as_ref().map(|b| Box::new(self.instantiate_stmt(b))),
-                }
-            }
-            Stmt::While { condition, body } => {
-                Stmt::While {
-                    condition: self.instantiate_expr(condition),
-                    body: Box::new(self.instantiate_stmt(body)),
-                }
-            }
-            Stmt::Loop { body } => {
-                Stmt::Loop {
-                    body: Box::new(self.instantiate_stmt(body)),
-                }
-            }
-            Stmt::FuncDecl { name, generic_params: _, params, return_type, body, is_async, is_static, visibility, doc_comment, span } => {
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => Stmt::If {
+                condition: self.instantiate_expr(condition),
+                then_branch: Box::new(self.instantiate_stmt(then_branch)),
+                else_branch: else_branch
+                    .as_ref()
+                    .map(|b| Box::new(self.instantiate_stmt(b))),
+            },
+            Stmt::While { condition, body } => Stmt::While {
+                condition: self.instantiate_expr(condition),
+                body: Box::new(self.instantiate_stmt(body)),
+            },
+            Stmt::Loop { body } => Stmt::Loop {
+                body: Box::new(self.instantiate_stmt(body)),
+            },
+            Stmt::FuncDecl {
+                name,
+                generic_params: _,
+                params,
+                return_type,
+                body,
+                is_async,
+                is_static,
+                visibility,
+                doc_comment,
+                span,
+            } => {
                 Stmt::FuncDecl {
                     name: name.clone(),
                     generic_params: None, // Monomorphized functions are no longer generic
-                    params: params.iter().map(|p| Param {
-                        name: p.name.clone(),
-                        type_annotation: self.instantiate_type_annotation(&p.type_annotation),
-                    }).collect(),
-                    return_type: return_type.as_ref().map(|t| self.instantiate_type_annotation(t)),
+                    params: params
+                        .iter()
+                        .map(|p| Param {
+                            name: p.name.clone(),
+                            type_annotation: self.instantiate_type_annotation(&p.type_annotation),
+                        })
+                        .collect(),
+                    return_type: return_type
+                        .as_ref()
+                        .map(|t| self.instantiate_type_annotation(t)),
                     body: body.iter().map(|s| self.instantiate_stmt(s)).collect(),
                     is_async: *is_async,
                     is_static: *is_static,
@@ -63,32 +89,45 @@ impl Monomorphizer {
                     span: *span,
                 }
             }
-            Stmt::ClassDecl { name, generic_params: _, fields, methods, implements, doc_comment } => {
-                Stmt::ClassDecl {
-                    name: name.clone(),
-                    generic_params: None,
-                    fields: fields.iter().map(|f| self.instantiate_stmt(f)).collect(),
-                    methods: methods.iter().map(|m| self.instantiate_stmt(m)).collect(),
-                    implements: implements.as_ref().map(|t| self.instantiate_type_annotation(t)),
-                    doc_comment: doc_comment.clone(),
-                }
-            }
-            Stmt::StructDecl { name, generic_params: _, fields, doc_comment } => {
-                Stmt::StructDecl {
-                    name: name.clone(),
-                    generic_params: None,
-                    fields: fields.iter().map(|f| self.instantiate_stmt(f)).collect(),
-                    doc_comment: doc_comment.clone(),
-                }
-            }
-            Stmt::InterfaceDecl { name, generic_params: _, methods, doc_comment } => {
-                Stmt::InterfaceDecl {
-                    name: name.clone(),
-                    generic_params: None,
-                    methods: methods.iter().map(|m| self.instantiate_stmt(m)).collect(),
-                    doc_comment: doc_comment.clone(),
-                }
-            }
+            Stmt::ClassDecl {
+                name,
+                generic_params: _,
+                fields,
+                methods,
+                implements,
+                doc_comment,
+            } => Stmt::ClassDecl {
+                name: name.clone(),
+                generic_params: None,
+                fields: fields.iter().map(|f| self.instantiate_stmt(f)).collect(),
+                methods: methods.iter().map(|m| self.instantiate_stmt(m)).collect(),
+                implements: implements
+                    .as_ref()
+                    .map(|t| self.instantiate_type_annotation(t)),
+                doc_comment: doc_comment.clone(),
+            },
+            Stmt::StructDecl {
+                name,
+                generic_params: _,
+                fields,
+                doc_comment,
+            } => Stmt::StructDecl {
+                name: name.clone(),
+                generic_params: None,
+                fields: fields.iter().map(|f| self.instantiate_stmt(f)).collect(),
+                doc_comment: doc_comment.clone(),
+            },
+            Stmt::InterfaceDecl {
+                name,
+                generic_params: _,
+                methods,
+                doc_comment,
+            } => Stmt::InterfaceDecl {
+                name: name.clone(),
+                generic_params: None,
+                methods: methods.iter().map(|m| self.instantiate_stmt(m)).collect(),
+                doc_comment: doc_comment.clone(),
+            },
             _ => stmt.clone(),
         }
     }
@@ -108,15 +147,26 @@ impl Monomorphizer {
                 target: Box::new(self.instantiate_expr(target)),
                 value: Box::new(self.instantiate_expr(value)),
             },
-            Expr::MemberAccess { object, property, computed_class, is_static_operator } => Expr::MemberAccess {
+            Expr::MemberAccess {
+                object,
+                property,
+                computed_class,
+                is_static_operator,
+            } => Expr::MemberAccess {
                 object: Box::new(self.instantiate_expr(object)),
                 property: property.clone(),
                 computed_class: computed_class.clone(),
                 is_static_operator: *is_static_operator,
             },
-            Expr::GenericInstantiation { callee, generic_args } => Expr::GenericInstantiation {
+            Expr::GenericInstantiation {
+                callee,
+                generic_args,
+            } => Expr::GenericInstantiation {
                 callee: Box::new(self.instantiate_expr(callee)),
-                generic_args: generic_args.iter().map(|a| self.instantiate_type_annotation(a)).collect(),
+                generic_args: generic_args
+                    .iter()
+                    .map(|a| self.instantiate_type_annotation(a))
+                    .collect(),
             },
             _ => expr.clone(),
         }
@@ -131,11 +181,15 @@ impl Monomorphizer {
             TypeAnnotation {
                 module_prefix: type_ann.module_prefix.clone(),
                 name: type_ann.name.clone(),
-                args: type_ann.args.iter().map(|a| self.instantiate_type_annotation(a)).collect(),
+                args: type_ann
+                    .args
+                    .iter()
+                    .map(|a| self.instantiate_type_annotation(a))
+                    .collect(),
                 is_nullable: type_ann.is_nullable,
                 is_function: false,
                 function_params: None,
-                function_return: None
+                function_return: None,
             }
         }
     }
@@ -145,7 +199,7 @@ pub struct MonomorphizationPass {
     templates: HashMap<String, Stmt>, // Name -> AST Node
     pub final_stmts: Vec<Stmt>,
     queue: Vec<(String, Vec<TypeAnnotation>)>, // template_name, args
-    instantiated: HashSet<String>, // specialized names like "Box_Int"
+    instantiated: HashSet<String>,             // specialized names like "Box_Int"
 }
 
 impl Default for MonomorphizationPass {
@@ -166,17 +220,33 @@ impl MonomorphizationPass {
 
     pub fn process(&mut self, stmts: &[Stmt]) {
         let mut non_generics = Vec::new();
-        
+
         // Pass 1: Extract templates
         for stmt in stmts {
             let (is_generic, name) = match stmt {
-                Stmt::ClassDecl { name, generic_params, .. } => (generic_params.is_some(), Some(name)),
-                Stmt::StructDecl { name, generic_params, .. } => (generic_params.is_some(), Some(name)),
-                Stmt::InterfaceDecl { name, generic_params, .. } => (generic_params.is_some(), Some(name)),
-                Stmt::FuncDecl { name, generic_params, .. } => (generic_params.is_some(), Some(name)),
+                Stmt::ClassDecl {
+                    name,
+                    generic_params,
+                    ..
+                } => (generic_params.is_some(), Some(name)),
+                Stmt::StructDecl {
+                    name,
+                    generic_params,
+                    ..
+                } => (generic_params.is_some(), Some(name)),
+                Stmt::InterfaceDecl {
+                    name,
+                    generic_params,
+                    ..
+                } => (generic_params.is_some(), Some(name)),
+                Stmt::FuncDecl {
+                    name,
+                    generic_params,
+                    ..
+                } => (generic_params.is_some(), Some(name)),
                 _ => (false, None),
             };
-            
+
             if is_generic {
                 if let Some(n) = name {
                     self.templates.insert(n.clone(), stmt.clone());
@@ -185,7 +255,7 @@ impl MonomorphizationPass {
                 non_generics.push(stmt.clone());
             }
         }
-        
+
         // Pass 2: Monomorphize non-generics and scan for generics
         for stmt in non_generics {
             self.scan_stmt(&stmt);
@@ -194,8 +264,15 @@ impl MonomorphizationPass {
 
         // Pass 3: Process the queue
         while let Some((template_name, args)) = self.queue.pop() {
-            let specialized_name = format!("{}_{}", template_name, args.iter().map(Self::flatten_type_name).collect::<Vec<_>>().join("_"));
-            
+            let specialized_name = format!(
+                "{}_{}",
+                template_name,
+                args.iter()
+                    .map(Self::flatten_type_name)
+                    .collect::<Vec<_>>()
+                    .join("_")
+            );
+
             if self.instantiated.contains(&specialized_name) {
                 continue;
             }
@@ -209,7 +286,8 @@ impl MonomorphizationPass {
                     Stmt::InterfaceDecl { generic_params, .. } => generic_params.clone(),
                     Stmt::FuncDecl { generic_params, .. } => generic_params.clone(),
                     _ => None,
-                }.unwrap_or_default();
+                }
+                .unwrap_or_default();
 
                 for (i, param_name) in generic_params.iter().enumerate() {
                     if i < args.len() {
@@ -231,16 +309,20 @@ impl MonomorphizationPass {
 
                 // Scan the newly instantiated statement for more generics
                 self.scan_stmt(&instantiated_stmt);
-                
+
                 self.final_stmts.push(instantiated_stmt);
             }
         }
-        
+
         // Pass 4: Flatten all type annotations in final_stmts
         let flattener = TypeFlattener {};
-        self.final_stmts = self.final_stmts.iter().map(|s| flattener.flatten_stmt(s)).collect();
+        self.final_stmts = self
+            .final_stmts
+            .iter()
+            .map(|s| flattener.flatten_stmt(s))
+            .collect();
     }
-    
+
     pub fn flatten_type_name(ta: &TypeAnnotation) -> String {
         if ta.args.is_empty() {
             ta.name.clone()
@@ -249,15 +331,22 @@ impl MonomorphizationPass {
             format!("{}_{}", ta.name, args_str.join("_"))
         }
     }
-    
+
     fn scan_stmt(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::VarDecl { type_annotation, .. } => {
+            Stmt::VarDecl {
+                type_annotation, ..
+            } => {
                 if let Some(ta) = type_annotation {
                     self.scan_type_annotation(ta);
                 }
             }
-            Stmt::FuncDecl { params, return_type, body, .. } => {
+            Stmt::FuncDecl {
+                params,
+                return_type,
+                body,
+                ..
+            } => {
                 for p in params {
                     self.scan_type_annotation(&p.type_annotation);
                 }
@@ -268,7 +357,12 @@ impl MonomorphizationPass {
                     self.scan_stmt(s);
                 }
             }
-            Stmt::ClassDecl { fields, methods, implements, .. } => {
+            Stmt::ClassDecl {
+                fields,
+                methods,
+                implements,
+                ..
+            } => {
                 for f in fields {
                     self.scan_stmt(f);
                 }
@@ -297,7 +391,7 @@ impl MonomorphizationPass {
             _ => {} // Expressions could contain GenericInstantiation
         }
     }
-    
+
     fn scan_type_annotation(&mut self, ta: &TypeAnnotation) {
         if !ta.args.is_empty() {
             // Found a generic usage!
@@ -319,80 +413,115 @@ impl TypeFlattener {
     fn do_flatten_stmt(&self, stmt: &Stmt) -> Stmt {
         match stmt {
             Stmt::Expr(expr) => Stmt::Expr(self.flatten_expr(expr)),
-            Stmt::VarDecl { name, is_mutable, type_annotation, is_static, visibility, initializer, span } => {
-                Stmt::VarDecl {
-                    name: name.clone(),
-                    is_mutable: *is_mutable,
-                    type_annotation: type_annotation.as_ref().map(|t| self.flatten_type_annotation(t)),
-                    is_static: *is_static,
-                    visibility: visibility.clone(),
-                    initializer: initializer.as_ref().map(|e| self.flatten_expr(e)),
-                    span: *span,
-                }
+            Stmt::VarDecl {
+                name,
+                is_mutable,
+                type_annotation,
+                is_static,
+                visibility,
+                initializer,
+                span,
+            } => Stmt::VarDecl {
+                name: name.clone(),
+                is_mutable: *is_mutable,
+                type_annotation: type_annotation
+                    .as_ref()
+                    .map(|t| self.flatten_type_annotation(t)),
+                is_static: *is_static,
+                visibility: visibility.clone(),
+                initializer: initializer.as_ref().map(|e| self.flatten_expr(e)),
+                span: *span,
+            },
+            Stmt::Block(stmts) => {
+                Stmt::Block(stmts.iter().map(|s| self.do_flatten_stmt(s)).collect())
             }
-            Stmt::Block(stmts) => Stmt::Block(stmts.iter().map(|s| self.do_flatten_stmt(s)).collect()),
             Stmt::Return(expr) => Stmt::Return(expr.as_ref().map(|e| self.flatten_expr(e))),
-            Stmt::If { condition, then_branch, else_branch } => {
-                Stmt::If {
-                    condition: self.flatten_expr(condition),
-                    then_branch: Box::new(self.do_flatten_stmt(then_branch)),
-                    else_branch: else_branch.as_ref().map(|b| Box::new(self.do_flatten_stmt(b))),
-                }
-            }
-            Stmt::While { condition, body } => {
-                Stmt::While {
-                    condition: self.flatten_expr(condition),
-                    body: Box::new(self.do_flatten_stmt(body)),
-                }
-            }
-            Stmt::Loop { body } => {
-                Stmt::Loop {
-                    body: Box::new(self.do_flatten_stmt(body)),
-                }
-            }
-            Stmt::FuncDecl { name, generic_params, params, return_type, body, is_async, is_static, visibility, doc_comment, span } => {
-                Stmt::FuncDecl {
-                    name: name.clone(),
-                    generic_params: generic_params.clone(),
-                    params: params.iter().map(|p| Param {
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => Stmt::If {
+                condition: self.flatten_expr(condition),
+                then_branch: Box::new(self.do_flatten_stmt(then_branch)),
+                else_branch: else_branch
+                    .as_ref()
+                    .map(|b| Box::new(self.do_flatten_stmt(b))),
+            },
+            Stmt::While { condition, body } => Stmt::While {
+                condition: self.flatten_expr(condition),
+                body: Box::new(self.do_flatten_stmt(body)),
+            },
+            Stmt::Loop { body } => Stmt::Loop {
+                body: Box::new(self.do_flatten_stmt(body)),
+            },
+            Stmt::FuncDecl {
+                name,
+                generic_params,
+                params,
+                return_type,
+                body,
+                is_async,
+                is_static,
+                visibility,
+                doc_comment,
+                span,
+            } => Stmt::FuncDecl {
+                name: name.clone(),
+                generic_params: generic_params.clone(),
+                params: params
+                    .iter()
+                    .map(|p| Param {
                         name: p.name.clone(),
                         type_annotation: self.flatten_type_annotation(&p.type_annotation),
-                    }).collect(),
-                    return_type: return_type.as_ref().map(|t| self.flatten_type_annotation(t)),
-                    body: body.iter().map(|s| self.do_flatten_stmt(s)).collect(),
-                    is_async: *is_async,
-                    is_static: *is_static,
-                    visibility: visibility.clone(),
-                    doc_comment: doc_comment.clone(),
-                    span: *span,
-                }
-            }
-            Stmt::ClassDecl { name, generic_params, fields, methods, implements, doc_comment } => {
-                Stmt::ClassDecl {
-                    name: name.clone(),
-                    generic_params: generic_params.clone(),
-                    fields: fields.iter().map(|f| self.do_flatten_stmt(f)).collect(),
-                    methods: methods.iter().map(|m| self.do_flatten_stmt(m)).collect(),
-                    implements: implements.as_ref().map(|t| self.flatten_type_annotation(t)),
-                    doc_comment: doc_comment.clone(),
-                }
-            }
-            Stmt::StructDecl { name, generic_params, fields, doc_comment } => {
-                Stmt::StructDecl {
-                    name: name.clone(),
-                    generic_params: generic_params.clone(),
-                    fields: fields.iter().map(|f| self.do_flatten_stmt(f)).collect(),
-                    doc_comment: doc_comment.clone(),
-                }
-            }
-            Stmt::InterfaceDecl { name, generic_params, methods, doc_comment } => {
-                Stmt::InterfaceDecl {
-                    name: name.clone(),
-                    generic_params: generic_params.clone(),
-                    methods: methods.iter().map(|m| self.do_flatten_stmt(m)).collect(),
-                    doc_comment: doc_comment.clone(),
-                }
-            }
+                    })
+                    .collect(),
+                return_type: return_type
+                    .as_ref()
+                    .map(|t| self.flatten_type_annotation(t)),
+                body: body.iter().map(|s| self.do_flatten_stmt(s)).collect(),
+                is_async: *is_async,
+                is_static: *is_static,
+                visibility: visibility.clone(),
+                doc_comment: doc_comment.clone(),
+                span: *span,
+            },
+            Stmt::ClassDecl {
+                name,
+                generic_params,
+                fields,
+                methods,
+                implements,
+                doc_comment,
+            } => Stmt::ClassDecl {
+                name: name.clone(),
+                generic_params: generic_params.clone(),
+                fields: fields.iter().map(|f| self.do_flatten_stmt(f)).collect(),
+                methods: methods.iter().map(|m| self.do_flatten_stmt(m)).collect(),
+                implements: implements.as_ref().map(|t| self.flatten_type_annotation(t)),
+                doc_comment: doc_comment.clone(),
+            },
+            Stmt::StructDecl {
+                name,
+                generic_params,
+                fields,
+                doc_comment,
+            } => Stmt::StructDecl {
+                name: name.clone(),
+                generic_params: generic_params.clone(),
+                fields: fields.iter().map(|f| self.do_flatten_stmt(f)).collect(),
+                doc_comment: doc_comment.clone(),
+            },
+            Stmt::InterfaceDecl {
+                name,
+                generic_params,
+                methods,
+                doc_comment,
+            } => Stmt::InterfaceDecl {
+                name: name.clone(),
+                generic_params: generic_params.clone(),
+                methods: methods.iter().map(|m| self.do_flatten_stmt(m)).collect(),
+                doc_comment: doc_comment.clone(),
+            },
             _ => stmt.clone(),
         }
     }
@@ -412,15 +541,26 @@ impl TypeFlattener {
                 target: Box::new(self.flatten_expr(target)),
                 value: Box::new(self.flatten_expr(value)),
             },
-            Expr::MemberAccess { object, property, computed_class, is_static_operator } => Expr::MemberAccess {
+            Expr::MemberAccess {
+                object,
+                property,
+                computed_class,
+                is_static_operator,
+            } => Expr::MemberAccess {
                 object: Box::new(self.flatten_expr(object)),
                 property: property.clone(),
                 computed_class: computed_class.clone(),
                 is_static_operator: *is_static_operator,
             },
-            Expr::GenericInstantiation { callee, generic_args } => Expr::GenericInstantiation {
+            Expr::GenericInstantiation {
+                callee,
+                generic_args,
+            } => Expr::GenericInstantiation {
                 callee: Box::new(self.flatten_expr(callee)),
-                generic_args: generic_args.iter().map(|a| self.flatten_type_annotation(a)).collect(),
+                generic_args: generic_args
+                    .iter()
+                    .map(|a| self.flatten_type_annotation(a))
+                    .collect(),
             },
             _ => expr.clone(),
         }

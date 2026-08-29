@@ -176,17 +176,50 @@ impl<'a> Lexer<'a> {
         }
 
         // Multi-character operators
-        if tail.starts_with("::") { self.byte_pos += 2; return Token::ColonColon; }
-        if tail.starts_with("==") { self.byte_pos += 2; return Token::EqEq; }
-        if tail.starts_with("=>") { self.byte_pos += 2; return Token::FatArrow; }
-        if tail.starts_with("?.") { self.byte_pos += 2; return Token::QuestionDot; }
-        if tail.starts_with("??") { self.byte_pos += 2; return Token::QuestionQuestion; }
-        if tail.starts_with("!=") { self.byte_pos += 2; return Token::NotEq; }
-        if tail.starts_with("->") { self.byte_pos += 2; return Token::Arrow; }
-        if tail.starts_with("<=") { self.byte_pos += 2; return Token::LessEq; }
-        if tail.starts_with(">=") { self.byte_pos += 2; return Token::GreaterEq; }
-        if tail.starts_with("&&") { self.byte_pos += 2; return Token::AndAnd; }
-        if tail.starts_with("||") { self.byte_pos += 2; return Token::PipePipe; }
+        if tail.starts_with("::") {
+            self.byte_pos += 2;
+            return Token::ColonColon;
+        }
+        if tail.starts_with("==") {
+            self.byte_pos += 2;
+            return Token::EqEq;
+        }
+        if tail.starts_with("=>") {
+            self.byte_pos += 2;
+            return Token::FatArrow;
+        }
+        if tail.starts_with("?.") {
+            self.byte_pos += 2;
+            return Token::QuestionDot;
+        }
+        if tail.starts_with("??") {
+            self.byte_pos += 2;
+            return Token::QuestionQuestion;
+        }
+        if tail.starts_with("!=") {
+            self.byte_pos += 2;
+            return Token::NotEq;
+        }
+        if tail.starts_with("->") {
+            self.byte_pos += 2;
+            return Token::Arrow;
+        }
+        if tail.starts_with("<=") {
+            self.byte_pos += 2;
+            return Token::LessEq;
+        }
+        if tail.starts_with(">=") {
+            self.byte_pos += 2;
+            return Token::GreaterEq;
+        }
+        if tail.starts_with("&&") {
+            self.byte_pos += 2;
+            return Token::AndAnd;
+        }
+        if tail.starts_with("||") {
+            self.byte_pos += 2;
+            return Token::PipePipe;
+        }
 
         self.advance(); // consume 1 char
         match c {

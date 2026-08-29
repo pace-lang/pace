@@ -1,8 +1,8 @@
-use cranelift_module::{DataId, FuncId};
-use std::collections::HashMap;
-use miette::Diagnostic;
-use thiserror::Error;
 use crate::translator::VarType;
+use cranelift_module::{DataId, FuncId};
+use miette::Diagnostic;
+use std::collections::HashMap;
+use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub struct StructLayout {

@@ -1,22 +1,30 @@
 use miette::Result;
 
 pub fn execute(is_pkg: bool) -> Result<()> {
-    let current_dir = std::env::current_dir().map_err(|e| miette::miette!("Failed to get current dir: {}", e))?;
+    let current_dir =
+        std::env::current_dir().map_err(|e| miette::miette!("Failed to get current dir: {}", e))?;
     let pace_toml = current_dir.join("pace.toml");
 
     if pace_toml.exists() {
-        return Err(miette::miette!("pace.toml already exists in the current directory"));
+        return Err(miette::miette!(
+            "pace.toml already exists in the current directory"
+        ));
     }
 
-    let dir_name = current_dir.file_name()
+    let dir_name = current_dir
+        .file_name()
         .unwrap_or_default()
         .to_string_lossy()
         .to_string();
 
-    let default_name = if dir_name.is_empty() { "my_project".to_string() } else { dir_name };
+    let default_name = if dir_name.is_empty() {
+        "my_project".to_string()
+    } else {
+        dir_name
+    };
 
     let toml_content = format!(
-r#"[package]
+        r#"[package]
 name = "{0}"
 version = "0.1.0"
 
@@ -26,7 +34,9 @@ pace = ">=0.1.0 <1.0.0"
 [dependencies]
 
 [dev-dependencies]
-"#, default_name);
+"#,
+        default_name
+    );
     std::fs::write(&pace_toml, toml_content)
         .map_err(|e| miette::miette!("Failed to write pace.toml: {}", e))?;
 
@@ -45,6 +55,9 @@ pace = ">=0.1.0 <1.0.0"
         }
     }
 
-    println!("✅ Initialized new Pace {} in current directory.", if is_pkg { "package" } else { "project" });
+    println!(
+        "✅ Initialized new Pace {} in current directory.",
+        if is_pkg { "package" } else { "project" }
+    );
     Ok(())
 }

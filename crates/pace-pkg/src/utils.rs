@@ -1,18 +1,18 @@
 use pubgrub::{Ranges, SemanticVersion};
-use semver::{VersionReq, Op};
+use semver::{Op, VersionReq};
 
 pub fn parse_range(req_str: &str) -> Ranges<SemanticVersion> {
     let req = match VersionReq::parse(req_str) {
         Ok(r) => r,
         Err(_) => return Ranges::full(),
     };
-    
+
     let mut final_range = Ranges::full();
     for comp in req.comparators {
         let v = SemanticVersion::new(
             comp.major as u32,
             comp.minor.unwrap_or(0) as u32,
-            comp.patch.unwrap_or(0) as u32
+            comp.patch.unwrap_or(0) as u32,
         );
         let range = match comp.op {
             Op::Exact => Ranges::singleton(v),
@@ -37,7 +37,8 @@ pub fn parse_range(req_str: &str) -> Ranges<SemanticVersion> {
                 Ranges::between(v, upper)
             }
             Op::Tilde => {
-                let upper = SemanticVersion::new(comp.major as u32, comp.minor.unwrap_or(0) as u32 + 1, 0);
+                let upper =
+                    SemanticVersion::new(comp.major as u32, comp.minor.unwrap_or(0) as u32 + 1, 0);
                 Ranges::between(v, upper)
             }
             Op::Wildcard => Ranges::full(),

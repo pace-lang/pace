@@ -1,13 +1,13 @@
+use pace_ast::{Expr, Stmt};
 use std::collections::HashSet;
-use pace_ast::{Stmt, Expr};
 
 pub struct EscapeAnalysis {
     /// Variables that are captured by closures
     pub escaped_vars: HashSet<String>,
-    
+
     /// Stack of scopes. Each scope contains (var_name, closure_depth)
     scope_stack: Vec<Vec<(String, usize)>>,
-    
+
     current_closure_depth: usize,
 }
 
@@ -59,7 +59,9 @@ impl EscapeAnalysis {
 
     fn visit_stmt(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::VarDecl { name, initializer, .. } => {
+            Stmt::VarDecl {
+                name, initializer, ..
+            } => {
                 if let Some(init) = initializer {
                     self.visit_expr(init);
                 }
@@ -75,7 +77,11 @@ impl EscapeAnalysis {
             Stmt::Expr(expr) | Stmt::Return(Some(expr)) => {
                 self.visit_expr(expr);
             }
-            Stmt::If { condition, then_branch, else_branch } => {
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 self.visit_expr(condition);
                 self.visit_stmt(then_branch);
                 if let Some(e) = else_branch {
@@ -143,13 +149,13 @@ impl EscapeAnalysis {
             Expr::Closure { params, body, .. } => {
                 self.current_closure_depth += 1;
                 self.push_scope();
-                
+
                 for (param_name, _) in params {
                     self.declare_var(param_name);
                 }
-                
+
                 self.visit_expr(body);
-                
+
                 self.pop_scope();
                 self.current_closure_depth -= 1;
             }

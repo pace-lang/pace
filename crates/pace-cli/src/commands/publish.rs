@@ -1,14 +1,15 @@
+use crate::utils::resolve_file;
 use miette::Result;
+use pace_driver::CompilerSession;
 use pace_pkg::manifest::PaceToml;
+use std::fs::File;
 use std::io::Write;
 use walkdir::WalkDir;
-use std::fs::File;
-use pace_driver::CompilerSession;
-use crate::utils::resolve_file;
 
 pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
-    let current_dir = std::env::current_dir().map_err(|e| miette::miette!("Failed to get current dir: {}", e))?;
-    
+    let current_dir =
+        std::env::current_dir().map_err(|e| miette::miette!("Failed to get current dir: {}", e))?;
+
     // Run compiler check before packaging
     let resolved_file = resolve_file(None)?;
     println!("🧪 Checking {} before publishing...", resolved_file);
@@ -19,46 +20,59 @@ pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
     for dir in &["tests", "examples"] {
         let dir_path = current_dir.join(dir);
         if dir_path.exists() && dir_path.is_dir() {
-            for entry in WalkDir::new(&dir_path) {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("pace") {
-                        let relative_str = path.strip_prefix(&current_dir).unwrap().to_string_lossy();
-                        println!("🧪 Checking {} before publishing...", relative_str);
-                        let path_str = path.to_string_lossy();
-                        session.check_file(&path_str)?;
-                    }
+            for entry in WalkDir::new(&dir_path).into_iter().flatten() {
+                let path = entry.path();
+                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("pace") {
+                    let relative_str = path.strip_prefix(&current_dir).unwrap().to_string_lossy();
+                    println!("🧪 Checking {} before publishing...", relative_str);
+                    let path_str = path.to_string_lossy();
+                    session.check_file(&path_str)?;
                 }
             }
         }
     }
     println!("✅ All additional checks passed!");
-    
+
     // Load manifest
-    let manifest = PaceToml::load_from_dir(&current_dir)
-        .map_err(|e| miette::miette!("Failed to load pace.toml. Are you in a pace project? {}", e))?;
-        
+    let manifest = PaceToml::load_from_dir(&current_dir).map_err(|e| {
+        miette::miette!("Failed to load pace.toml. Are you in a pace project? {}", e)
+    })?;
+
     crate::utils::check_sdk_compatibility(&manifest)?;
-    
+
     let pkg_name = &manifest.package.name;
     let pkg_version = &manifest.package.version;
-    
-    let pkg_desc = manifest.package.description.clone()
+
+    let pkg_desc = manifest
+        .package
+        .description
+        .clone()
         .ok_or_else(|| miette::miette!("Missing 'description' in pace.toml"))?;
     if pkg_desc.is_empty() {
-        return Err(miette::miette!("'description' in pace.toml cannot be empty"));
+        return Err(miette::miette!(
+            "'description' in pace.toml cannot be empty"
+        ));
     }
-    
-    let _pkg_license = manifest.package.license.clone()
+
+    let _pkg_license = manifest
+        .package
+        .license
+        .clone()
         .ok_or_else(|| miette::miette!("Missing 'license' in pace.toml"))?;
-        
-    let pkg_authors = manifest.package.authors.clone()
+
+    let pkg_authors = manifest
+        .package
+        .authors
+        .clone()
         .ok_or_else(|| miette::miette!("Missing 'authors' in pace.toml"))?;
     if pkg_authors.is_empty() {
         return Err(miette::miette!("'authors' in pace.toml cannot be empty"));
     }
-        
-    let _pkg_repo = manifest.package.repository.clone()
+
+    let _pkg_repo = manifest
+        .package
+        .repository
+        .clone()
         .ok_or_else(|| miette::miette!("Missing 'repository' in pace.toml"))?;
 
     if dry_run {
@@ -87,13 +101,11 @@ pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
                 || relative_str.starts_with("src/")
                 || relative_str.starts_with("tests/");
 
-            if is_allowed {
-                if let Ok(metadata) = std::fs::metadata(path) {
-                    files_to_include.push((relative.to_owned(), path.to_owned()));
-                    total_size += metadata.len();
-                    if dry_run {
-                        println!("  - {} ({} bytes)", relative_str, metadata.len());
-                    }
+            if is_allowed && let Ok(metadata) = std::fs::metadata(path) {
+                files_to_include.push((relative.to_owned(), path.to_owned()));
+                total_size += metadata.len();
+                if dry_run {
+                    println!("  - {} ({} bytes)", relative_str, metadata.len());
                 }
             }
         }
@@ -110,57 +122,92 @@ pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
     {
         let enc = flate2::write::GzEncoder::new(&mut tarball_data, flate2::Compression::default());
         let mut builder = tar::Builder::new(enc);
-        
+
         for (relative, absolute) in files_to_include {
-            let mut f = File::open(&absolute).map_err(|e| miette::miette!("Failed to open file {:?}: {}", absolute, e))?;
-            builder.append_file(relative, &mut f).map_err(|e| miette::miette!("Failed to append to tarball: {}", e))?;
+            let mut f = File::open(&absolute)
+                .map_err(|e| miette::miette!("Failed to open file {:?}: {}", absolute, e))?;
+            builder
+                .append_file(relative, &mut f)
+                .map_err(|e| miette::miette!("Failed to append to tarball: {}", e))?;
         }
-        
-        builder.into_inner().map_err(|e| miette::miette!("Failed to finish tar: {}", e))?
-            .finish().map_err(|e| miette::miette!("Failed to finish gzip: {}", e))?;
+
+        builder
+            .into_inner()
+            .map_err(|e| miette::miette!("Failed to finish tar: {}", e))?
+            .finish()
+            .map_err(|e| miette::miette!("Failed to finish gzip: {}", e))?;
     }
-    
+
     println!("🚀 Uploading {} bytes to registry...", tarball_data.len());
-    
+
     // Build multipart
     let boundary = "--------PaceRegistryBoundary";
     let mut body = Vec::new();
-    
+
     // Version part
-    write!(body, "--{}\r\nContent-Disposition: form-data; name=\"version\"\r\n\r\n{}\r\n", boundary, pkg_version).unwrap();
+    write!(
+        body,
+        "--{}\r\nContent-Disposition: form-data; name=\"version\"\r\n\r\n{}\r\n",
+        boundary, pkg_version
+    )
+    .unwrap();
     // Description part
-    write!(body, "--{}\r\nContent-Disposition: form-data; name=\"description\"\r\n\r\n{}\r\n", boundary, pkg_desc).unwrap();
+    write!(
+        body,
+        "--{}\r\nContent-Disposition: form-data; name=\"description\"\r\n\r\n{}\r\n",
+        boundary, pkg_desc
+    )
+    .unwrap();
     // Manifest part
     // Manifest part
     let manifest_json = serde_json::to_string(&manifest).unwrap_or_else(|_| "{}".to_string());
-    write!(body, "--{}\r\nContent-Disposition: form-data; name=\"manifest\"\r\n\r\n{}\r\n", boundary, manifest_json).unwrap();
+    write!(
+        body,
+        "--{}\r\nContent-Disposition: form-data; name=\"manifest\"\r\n\r\n{}\r\n",
+        boundary, manifest_json
+    )
+    .unwrap();
     // Readme part
     let current_dir = std::env::current_dir().unwrap_or_default();
     let readme_content = std::fs::read_to_string(current_dir.join("README.md"))
         .or_else(|_| std::fs::read_to_string(current_dir.join("readme.md")))
         .unwrap_or_default();
-    write!(body, "--{}\r\nContent-Disposition: form-data; name=\"readme\"\r\n\r\n{}\r\n", boundary, readme_content).unwrap();
+    write!(
+        body,
+        "--{}\r\nContent-Disposition: form-data; name=\"readme\"\r\n\r\n{}\r\n",
+        boundary, readme_content
+    )
+    .unwrap();
 
     // Changelog part
     let changelog_content = std::fs::read_to_string(current_dir.join("CHANGELOG.md"))
         .or_else(|_| std::fs::read_to_string(current_dir.join("changelog.md")))
         .unwrap_or_default();
-    write!(body, "--{}\r\nContent-Disposition: form-data; name=\"changelog\"\r\n\r\n{}\r\n", boundary, changelog_content).unwrap();
+    write!(
+        body,
+        "--{}\r\nContent-Disposition: form-data; name=\"changelog\"\r\n\r\n{}\r\n",
+        boundary, changelog_content
+    )
+    .unwrap();
     // Tarball part
     write!(body, "--{}\r\nContent-Disposition: form-data; name=\"tarball\"; filename=\"{}-{}.tar.gz\"\r\nContent-Type: application/gzip\r\n\r\n", boundary, pkg_name, pkg_version).unwrap();
     body.extend_from_slice(&tarball_data);
     write!(body, "\r\n--{}--\r\n", boundary).unwrap();
-    
-    let registry_url = std::env::var("PACE_REGISTRY_URL").unwrap_or_else(|_| "https://registry.pace.dev".to_string());
+
+    let registry_url = std::env::var("PACE_REGISTRY_URL")
+        .unwrap_or_else(|_| "https://registry.pace.dev".to_string());
     let url = format!("{}/api/packages/{}/publish", registry_url, pkg_name);
-    
+
     // Read credentials token
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let credentials_path = std::path::Path::new(&home_dir).join(".pace").join("credentials.toml");
-    
+    let credentials_path = std::path::Path::new(&home_dir)
+        .join(".pace")
+        .join("credentials.toml");
+
     let token = if credentials_path.exists() {
         let content = std::fs::read_to_string(&credentials_path).unwrap_or_default();
-        content.lines()
+        content
+            .lines()
             .find(|l| l.starts_with("token = "))
             .and_then(|l| l.split('"').nth(1))
             .map(|s| s.to_string())
@@ -171,32 +218,43 @@ pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
 
     let resp = match ureq::post(&url)
         .header("Authorization", &format!("Bearer {}", token))
-        .header("Content-Type", &format!("multipart/form-data; boundary={}", boundary))
+        .header(
+            "Content-Type",
+            &format!("multipart/form-data; boundary={}", boundary),
+        )
         .send(&body)
     {
         Ok(r) => {
             let status = r.status();
             if status == 401 {
-                return Err(miette::miette!("Authentication failed (401 Unauthorized). Please run `pace login` to authenticate."));
+                return Err(miette::miette!(
+                    "Authentication failed (401 Unauthorized). Please run `pace login` to authenticate."
+                ));
             }
             if status != 200 && status != 201 {
                 let text = r.into_body().read_to_string().unwrap_or_default();
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                    if let Some(err_msg) = json.get("error").and_then(|v| v.as_str()) {
-                        return Err(miette::miette!("Registry rejected publish: {}", err_msg));
-                    }
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text)
+                    && let Some(err_msg) = json.get("error").and_then(|v| v.as_str())
+                {
+                    return Err(miette::miette!("Registry rejected publish: {}", err_msg));
                 }
-                return Err(miette::miette!("Failed to publish to registry: http status: {}", status));
+                return Err(miette::miette!(
+                    "Failed to publish to registry: http status: {}",
+                    status
+                ));
             }
             r
         }
         Err(e) => return Err(miette::miette!("Failed to publish to registry: {}", e)),
     };
-        
+
     if resp.status() != 201 && resp.status() != 200 {
-        return Err(miette::miette!("Registry rejected publish: status {}", resp.status()));
+        return Err(miette::miette!(
+            "Registry rejected publish: status {}",
+            resp.status()
+        ));
     }
-    
+
     println!("✅ Successfully published {} v{}!", pkg_name, pkg_version);
     Ok(())
 }

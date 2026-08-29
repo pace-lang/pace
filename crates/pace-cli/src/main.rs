@@ -101,12 +101,10 @@ enum Commands {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    if let Commands::Check { output_format, .. } = &cli.command {
-        if output_format == "json" {
-            miette::set_hook(Box::new(|_| {
-                Box::new(miette::JSONReportHandler::new())
-            })).unwrap();
-        }
+    if let Commands::Check { output_format, .. } = &cli.command
+        && output_format == "json"
+    {
+        miette::set_hook(Box::new(|_| Box::new(miette::JSONReportHandler::new()))).unwrap();
     }
 
     let session = CompilerSession::new();
@@ -115,7 +113,11 @@ fn main() -> Result<()> {
         Commands::New { name, pkg } => commands::new::execute(name, pkg)?,
         Commands::Init { pkg } => commands::init::execute(pkg)?,
         Commands::Fetch => commands::fetch::execute()?,
-        Commands::Add { name, path, version } => commands::add::execute(name, path, version)?,
+        Commands::Add {
+            name,
+            path,
+            version,
+        } => commands::add::execute(name, path, version)?,
         Commands::Remove { name } => commands::remove::execute(name)?,
         Commands::Update => commands::update::execute()?,
         Commands::Clean => commands::clean::execute()?,
@@ -124,7 +126,10 @@ fn main() -> Result<()> {
         Commands::Outdated => commands::outdated::execute()?,
         Commands::Publish { dry_run } => commands::publish::execute(&session, dry_run)?,
         Commands::Login { token } => commands::login::login(token)?,
-        Commands::Check { file, output_format } => commands::check::execute(&session, file, output_format)?,
+        Commands::Check {
+            file,
+            output_format,
+        } => commands::check::execute(&session, file, output_format)?,
         Commands::Build { file, release } => commands::build::execute(&session, file, release)?,
         Commands::Run { file, release } => commands::run::execute(&session, file, release)?,
         Commands::Lsp => pace_lsp::run_server(),

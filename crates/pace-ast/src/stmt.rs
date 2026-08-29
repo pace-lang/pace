@@ -52,7 +52,7 @@ pub enum Stmt {
     ClassDecl {
         name: String,
         generic_params: Option<Vec<String>>,
-        fields: Vec<Stmt>, // VarDecl
+        fields: Vec<Stmt>,  // VarDecl
         methods: Vec<Stmt>, // FuncDecl
         implements: Option<TypeAnnotation>,
         doc_comment: Option<String>,
@@ -61,7 +61,7 @@ pub enum Stmt {
     ActorDecl {
         name: String,
         generic_params: Option<Vec<String>>,
-        fields: Vec<Stmt>, // VarDecl
+        fields: Vec<Stmt>,  // VarDecl
         methods: Vec<Stmt>, // FuncDecl
         implements: Option<TypeAnnotation>,
         doc_comment: Option<String>,
@@ -88,14 +88,9 @@ pub enum Stmt {
         doc_comment: Option<String>,
     },
     /// A while loop
-    While {
-        condition: Expr,
-        body: Box<Stmt>,
-    },
+    While { condition: Expr, body: Box<Stmt> },
     /// An infinite loop
-    Loop {
-        body: Box<Stmt>,
-    },
+    Loop { body: Box<Stmt> },
     /// A for-in loop
     ForIn {
         item: String,
@@ -115,14 +110,9 @@ pub enum Stmt {
         hide: Option<Vec<String>>,
     },
     /// An export statement
-    Export {
-        path: String,
-    },
+    Export { path: String },
     /// A module containing statements
-    Module {
-        name: String,
-        body: Vec<Stmt>,
-    }
+    Module { name: String, body: Vec<Stmt> },
 }
 
 #[derive(Debug, Clone, PartialEq)]

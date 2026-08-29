@@ -1,11 +1,14 @@
 pub mod lexer;
 pub mod parser;
 
-use pace_ast::Stmt;
 pub use lexer::{Lexer, Token};
+use pace_ast::Stmt;
 pub use parser::Parser;
 
-pub fn parse(src: &str, file_name: &str) -> Result<(Vec<Stmt>, Vec<(usize, usize, String)>), Vec<pace_errors::SyntaxError>> {
+pub fn parse(
+    src: &str,
+    file_name: &str,
+) -> Result<(Vec<Stmt>, Vec<(usize, usize, String)>), Vec<pace_errors::SyntaxError>> {
     let mut parser = Parser::new(src, file_name);
     let stmts = parser.parse()?;
     Ok((stmts, parser.lexer.comments))
@@ -22,17 +25,17 @@ mod tests {
         let (stmts, _) = crate::parse(src, "test").unwrap();
         assert_eq!(stmts.len(), 1);
     }
-    
+
     #[test]
     fn test_import_parsing() {
         let src = r#"
-            import std:string;
+            import "std:string";
             import "./models/user";
             import "http";
         "#;
         let (stmts, _) = crate::parse(src, "test").unwrap();
         assert_eq!(stmts.len(), 3);
-        
+
         match &stmts[0] {
             Stmt::Import { path, .. } => assert_eq!(path, "std:string"),
             _ => panic!("Expected Import"),

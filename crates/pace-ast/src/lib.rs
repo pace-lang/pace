@@ -23,7 +23,7 @@ mod tests {
                 is_nullable: false,
                 is_function: false,
                 function_params: None,
-                function_return: None
+                function_return: None,
             }),
             initializer: Some(Expr::IntLiteral(42)),
             span: (0, 0),

@@ -1,6 +1,6 @@
-use pace_ast::{Stmt, Expr, Visibility};
+use miette::{Diagnostic, Report, Result};
+use pace_ast::{Expr, Stmt, Visibility};
 use std::collections::HashMap;
-use miette::{Result, Diagnostic, Report};
 use thiserror::Error;
 
 #[derive(Error, Diagnostic, Debug)]
@@ -61,25 +61,35 @@ impl SymbolResolver {
                     let mut is_export = false;
                     let mut vis = Visibility::Public;
                     let mut original_name = String::new();
-                    
+
                     match item {
-                        Stmt::FuncDecl { name: n, visibility, .. } => {
+                        Stmt::FuncDecl {
+                            name: n,
+                            visibility,
+                            ..
+                        } => {
                             is_export = true;
                             vis = visibility.clone();
                             original_name = n.clone();
                         }
-                        Stmt::ClassDecl { name: n, .. } | Stmt::ActorDecl { name: n, .. } |
-                        Stmt::StructDecl { name: n, .. } |
-                        Stmt::EnumDecl { name: n, .. } |
-                        Stmt::InterfaceDecl { name: n, .. } => {
+                        Stmt::ClassDecl { name: n, .. }
+                        | Stmt::ActorDecl { name: n, .. }
+                        | Stmt::StructDecl { name: n, .. }
+                        | Stmt::EnumDecl { name: n, .. }
+                        | Stmt::InterfaceDecl { name: n, .. } => {
                             is_export = true;
                             original_name = n.clone();
                         }
                         _ => {}
                     }
-                    
+
                     if is_export {
-                        let clean_name = name.replace("pkg:", "").replace("-", "_").replace("/", "_").replace(".", "_").replace(":", "_");
+                        let clean_name = name
+                            .replace("pkg:", "")
+                            .replace("-", "_")
+                            .replace("/", "_")
+                            .replace(".", "_")
+                            .replace(":", "_");
                         let mangled_name = if clean_name == "pace_core" {
                             original_name.clone()
                         } else if original_name == "main" {
@@ -88,15 +98,20 @@ impl SymbolResolver {
                             format!("{}__{}", clean_name, original_name)
                         };
 
-                        module_exports.insert(original_name.clone(), ModuleExport {
-                            name: original_name.clone(),
-                            visibility: vis,
-                            mangled_name: mangled_name.clone(),
-                        });
+                        module_exports.insert(
+                            original_name.clone(),
+                            ModuleExport {
+                                name: original_name.clone(),
+                                visibility: vis,
+                                mangled_name: mangled_name.clone(),
+                            },
+                        );
 
                         match item {
                             Stmt::FuncDecl { name: n, .. } => *n = mangled_name,
-                            Stmt::ClassDecl { name: n, .. } | Stmt::ActorDecl { name: n, .. } => *n = mangled_name,
+                            Stmt::ClassDecl { name: n, .. } | Stmt::ActorDecl { name: n, .. } => {
+                                *n = mangled_name
+                            }
                             Stmt::StructDecl { name: n, .. } => *n = mangled_name,
                             Stmt::EnumDecl { name: n, .. } => *n = mangled_name,
                             Stmt::InterfaceDecl { name: n, .. } => *n = mangled_name,
@@ -113,7 +128,7 @@ impl SymbolResolver {
             if let Stmt::Module { name, body } = stmt {
                 let mut local_scope: HashMap<String, ModuleExport> = HashMap::new();
                 let mut mod_aliases: HashMap<String, String> = HashMap::new();
-                
+
                 let mut local_declarations: HashMap<String, ModuleExport> = HashMap::new();
                 if let Some(exports) = self.exports.get(name) {
                     for (k, v) in exports {
@@ -123,33 +138,47 @@ impl SymbolResolver {
                 }
 
                 for item in body.iter() {
-                    if let Stmt::Import { path, alias, show, hide } = item {
+                    if let Stmt::Import {
+                        path,
+                        alias,
+                        show,
+                        hide,
+                    } = item
+                    {
                         let imported_mod_name = path.clone();
                         if let Some(imported_exports) = self.exports.get(&imported_mod_name) {
-
                             if let Some(alias_name) = alias {
                                 mod_aliases.insert(alias_name.clone(), imported_mod_name.clone());
                             } else {
                                 for (sym, export) in imported_exports {
-                                    if export.visibility == Visibility::Private { continue; }
+                                    if export.visibility == Visibility::Private {
+                                        continue;
+                                    }
                                     if let Some(hide_list) = hide {
-                                        if hide_list.contains(sym) { continue; }
+                                        if hide_list.contains(sym) {
+                                            continue;
+                                        }
                                     }
                                     if let Some(show_list) = show {
-                                        if !show_list.contains(sym) { continue; }
+                                        if !show_list.contains(sym) {
+                                            continue;
+                                        }
                                     }
-                                    
+
                                     if local_declarations.contains_key(sym) {
                                         continue; // Local declarations shadow imports implicitly
                                     }
-                                    
+
                                     if let Some(existing) = local_scope.get(sym) {
                                         if existing.mangled_name != export.mangled_name {
-                                            local_scope.insert(sym.clone(), ModuleExport {
-                                                name: sym.clone(),
-                                                visibility: Visibility::Public,
-                                                mangled_name: "COLLISION".to_string(),
-                                            });
+                                            local_scope.insert(
+                                                sym.clone(),
+                                                ModuleExport {
+                                                    name: sym.clone(),
+                                                    visibility: Visibility::Public,
+                                                    mangled_name: "COLLISION".to_string(),
+                                                },
+                                            );
                                         }
                                     } else {
                                         local_scope.insert(sym.clone(), export.clone());
@@ -162,8 +191,10 @@ impl SymbolResolver {
                         let mut to_reexport = Vec::new();
                         if let Some(imported_exports) = self.exports.get(&imported_mod_name) {
                             for (sym, export) in imported_exports {
-                                if export.visibility == Visibility::Private { continue; }
-                                
+                                if export.visibility == Visibility::Private {
+                                    continue;
+                                }
+
                                 if !local_declarations.contains_key(sym) {
                                     local_scope.insert(sym.clone(), export.clone());
                                     to_reexport.push((sym.clone(), export.clone()));
@@ -188,10 +219,19 @@ impl SymbolResolver {
         Ok(ast)
     }
 
-    fn resolve_stmt(&self, stmt: &mut Stmt, scope: &HashMap<String, ModuleExport>, aliases: &HashMap<String, String>) -> Result<()> {
+    fn resolve_stmt(
+        &self,
+        stmt: &mut Stmt,
+        scope: &HashMap<String, ModuleExport>,
+        aliases: &HashMap<String, String>,
+    ) -> Result<()> {
         match stmt {
             Stmt::Expr(expr) => self.resolve_expr(expr, scope, aliases)?,
-            Stmt::VarDecl { initializer, type_annotation, .. } => {
+            Stmt::VarDecl {
+                initializer,
+                type_annotation,
+                ..
+            } => {
                 if let Some(expr) = initializer {
                     self.resolve_expr(expr, scope, aliases)?;
                 }
@@ -204,7 +244,12 @@ impl SymbolResolver {
                     self.resolve_expr(e, scope, aliases)?;
                 }
             }
-            Stmt::FuncDecl { body, params, return_type, .. } => {
+            Stmt::FuncDecl {
+                body,
+                params,
+                return_type,
+                ..
+            } => {
                 for p in params {
                     self.resolve_type(&mut p.type_annotation, scope, aliases)?;
                 }
@@ -215,22 +260,47 @@ impl SymbolResolver {
                     self.resolve_stmt(s, scope, aliases)?;
                 }
             }
-            Stmt::ClassDecl { fields, methods, implements, .. } | Stmt::ActorDecl { fields, methods, implements, .. } => {
-                for f in fields { self.resolve_stmt(f, scope, aliases)?; }
-                for m in methods { self.resolve_stmt(m, scope, aliases)?; }
-                if let Some(imp) = implements { self.resolve_type(imp, scope, aliases)?; }
+            Stmt::ClassDecl {
+                fields,
+                methods,
+                implements,
+                ..
             }
-            Stmt::If { condition, then_branch, else_branch } => {
+            | Stmt::ActorDecl {
+                fields,
+                methods,
+                implements,
+                ..
+            } => {
+                for f in fields {
+                    self.resolve_stmt(f, scope, aliases)?;
+                }
+                for m in methods {
+                    self.resolve_stmt(m, scope, aliases)?;
+                }
+                if let Some(imp) = implements {
+                    self.resolve_type(imp, scope, aliases)?;
+                }
+            }
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 self.resolve_expr(condition, scope, aliases)?;
                 self.resolve_stmt(then_branch, scope, aliases)?;
-                if let Some(eb) = else_branch { self.resolve_stmt(eb, scope, aliases)?; }
+                if let Some(eb) = else_branch {
+                    self.resolve_stmt(eb, scope, aliases)?;
+                }
             }
             Stmt::While { condition, body } => {
                 self.resolve_expr(condition, scope, aliases)?;
                 self.resolve_stmt(body, scope, aliases)?;
             }
             Stmt::Block(stmts) => {
-                for s in stmts { self.resolve_stmt(s, scope, aliases)?; }
+                for s in stmts {
+                    self.resolve_stmt(s, scope, aliases)?;
+                }
             }
             Stmt::Match { expr, arms } => {
                 self.resolve_expr(expr, scope, aliases)?;
@@ -244,30 +314,45 @@ impl SymbolResolver {
         Ok(())
     }
 
-    fn resolve_expr(&self, expr: &mut Expr, scope: &HashMap<String, ModuleExport>, aliases: &HashMap<String, String>) -> Result<()> {
+    fn resolve_expr(
+        &self,
+        expr: &mut Expr,
+        scope: &HashMap<String, ModuleExport>,
+        aliases: &HashMap<String, String>,
+    ) -> Result<()> {
         match expr {
             Expr::Call { callee, args } => {
                 // If callee is MemberAccess(alias, symbol), resolve it here
-                if let Expr::MemberAccess { object, property, .. } = &**callee {
+                if let Expr::MemberAccess {
+                    object, property, ..
+                } = &**callee
+                {
                     if let Expr::Identifier(obj_name) = &**object {
                         if let Some(mod_name) = aliases.get(obj_name) {
                             if let Some(mod_exports) = self.exports.get(mod_name) {
                                 if let Some(export) = mod_exports.get(property) {
                                     if export.visibility == Visibility::Private {
-                                        return Err(Report::new(ResolutionError::PrivateSymbol { name: property.clone(), span: (0, 0) }));
+                                        return Err(Report::new(ResolutionError::PrivateSymbol {
+                                            name: property.clone(),
+                                            span: (0, 0),
+                                        }));
                                     }
-                                    *callee = Box::new(Expr::Identifier(export.mangled_name.clone()));
+                                    *callee =
+                                        Box::new(Expr::Identifier(export.mangled_name.clone()));
                                 }
                             }
                         }
                     }
                 }
-                
+
                 // If callee is just an Identifier, look it up in scope
                 if let Expr::Identifier(name) = &**callee {
                     if let Some(export) = scope.get(name) {
                         if export.mangled_name == "COLLISION" {
-                            return Err(Report::new(ResolutionError::Collision { name: name.clone(), span: (0, 0) }));
+                            return Err(Report::new(ResolutionError::Collision {
+                                name: name.clone(),
+                                span: (0, 0),
+                            }));
                         }
                         *callee = Box::new(Expr::Identifier(export.mangled_name.clone()));
                     }
@@ -279,12 +364,13 @@ impl SymbolResolver {
                 }
             }
             Expr::Identifier(name) => {
-                if name == "StringUtil" {
-
-                }
+                if name == "StringUtil" {}
                 if let Some(export) = scope.get(name) {
                     if export.mangled_name == "COLLISION" {
-                        return Err(Report::new(ResolutionError::Collision { name: name.clone(), span: (0, 0) }));
+                        return Err(Report::new(ResolutionError::Collision {
+                            name: name.clone(),
+                            span: (0, 0),
+                        }));
                     }
                     *name = export.mangled_name.clone();
                 }
@@ -323,10 +409,17 @@ impl SymbolResolver {
         Ok(())
     }
 
-    fn resolve_pattern(&self, pat: &mut pace_ast::Pattern, scope: &HashMap<String, ModuleExport>, aliases: &HashMap<String, String>) -> Result<()> {
+    fn resolve_pattern(
+        &self,
+        pat: &mut pace_ast::Pattern,
+        scope: &HashMap<String, ModuleExport>,
+        aliases: &HashMap<String, String>,
+    ) -> Result<()> {
         match pat {
             pace_ast::Pattern::Literal(expr) => self.resolve_expr(expr, scope, aliases)?,
-            pace_ast::Pattern::Variant { enum_name, fields, .. } => {
+            pace_ast::Pattern::Variant {
+                enum_name, fields, ..
+            } => {
                 if let Some(name) = enum_name {
                     if let Some(export) = scope.get(name) {
                         *name = export.mangled_name.clone();
@@ -343,25 +436,42 @@ impl SymbolResolver {
         Ok(())
     }
 
-    fn resolve_type(&self, ty: &mut pace_ast::TypeAnnotation, scope: &HashMap<String, ModuleExport>, aliases: &HashMap<String, String>) -> Result<()> {
+    fn resolve_type(
+        &self,
+        ty: &mut pace_ast::TypeAnnotation,
+        scope: &HashMap<String, ModuleExport>,
+        aliases: &HashMap<String, String>,
+    ) -> Result<()> {
         if let Some(prefix) = &ty.module_prefix {
             if let Some(mod_name) = aliases.get(prefix) {
                 if let Some(mod_exports) = self.exports.get(mod_name) {
                     if let Some(export) = mod_exports.get(&ty.name) {
                         if export.visibility == Visibility::Private {
-                            return Err(Report::new(ResolutionError::PrivateSymbol { name: ty.name.clone(), span: (0, 0) }));
+                            return Err(Report::new(ResolutionError::PrivateSymbol {
+                                name: ty.name.clone(),
+                                span: (0, 0),
+                            }));
                         }
                         ty.name = export.mangled_name.clone();
                     } else {
-                        return Err(Report::new(ResolutionError::UnresolvedSymbol { name: ty.name.clone(), span: (0, 0) }));
+                        return Err(Report::new(ResolutionError::UnresolvedSymbol {
+                            name: ty.name.clone(),
+                            span: (0, 0),
+                        }));
                     }
                 }
             } else {
-                return Err(Report::new(ResolutionError::UnresolvedSymbol { name: prefix.clone(), span: (0, 0) }));
+                return Err(Report::new(ResolutionError::UnresolvedSymbol {
+                    name: prefix.clone(),
+                    span: (0, 0),
+                }));
             }
         } else if let Some(export) = scope.get(&ty.name) {
             if export.mangled_name == "COLLISION" {
-                return Err(Report::new(ResolutionError::Collision { name: ty.name.clone(), span: (0, 0) }));
+                return Err(Report::new(ResolutionError::Collision {
+                    name: ty.name.clone(),
+                    span: (0, 0),
+                }));
             }
             ty.name = export.mangled_name.clone();
         }
