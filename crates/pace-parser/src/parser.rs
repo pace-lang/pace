@@ -4,7 +4,7 @@ use crate::lexer::{Lexer, Token};
 pub struct Parser<'a> {
     file_name: String,
     src: String,
-    lexer: Lexer<'a>,
+    pub lexer: Lexer<'a>,
     current_token: Token,
     current_span: (usize, usize),
     pub errors: Vec<pace_errors::SyntaxError>,

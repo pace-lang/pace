@@ -9,11 +9,10 @@ pub fn execute(session: &CompilerSession, file: Option<String>, output_format: S
         println!("Checking {}...", resolved_file);
     }
     
-    let ast = session.check_file(&resolved_file)?;
+    session.check_file(&resolved_file)?;
     
     if output_format != "json" {
         println!("✅ Syntax OK");
-        println!("{:#?}", ast);
     }
     
     Ok(())

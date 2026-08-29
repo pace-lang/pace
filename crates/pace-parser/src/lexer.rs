@@ -71,6 +71,7 @@ pub enum Token {
 pub struct Lexer<'a> {
     src: &'a str,
     pub byte_pos: usize,
+    pub comments: Vec<(usize, usize, String)>,
 }
 
 impl<'a> Lexer<'a> {
@@ -78,6 +79,7 @@ impl<'a> Lexer<'a> {
         Self {
             src,
             byte_pos: 0,
+            comments: Vec::new(),
         }
     }
 
@@ -105,16 +107,26 @@ impl<'a> Lexer<'a> {
                 // Doc comment, stop skipping
                 break;
             } else if tail.starts_with("//") {
+                let start_pos = self.byte_pos;
                 if let Some(idx) = tail.find('\n') {
                     self.byte_pos += idx + 1;
+                    let text = tail[..idx].to_string();
+                    self.comments.push((start_pos, start_pos + idx, text));
                 } else {
                     self.byte_pos = self.src.len();
+                    let text = tail.to_string();
+                    self.comments.push((start_pos, self.src.len(), text));
                 }
             } else if tail.starts_with("/*") {
+                let start_pos = self.byte_pos;
                 if let Some(idx) = tail.find("*/") {
                     self.byte_pos += idx + 2;
+                    let text = tail[..idx + 2].to_string();
+                    self.comments.push((start_pos, start_pos + idx + 2, text));
                 } else {
                     self.byte_pos = self.src.len();
+                    let text = tail.to_string();
+                    self.comments.push((start_pos, self.src.len(), text));
                 }
             } else if let Some(c) = tail.chars().next() {
                 if c.is_whitespace() {

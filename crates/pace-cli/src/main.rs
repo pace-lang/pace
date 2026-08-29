@@ -53,6 +53,10 @@ enum Commands {
     },
     /// Update dependencies to their latest compatible versions
     Update,
+    /// Clean build artifacts (e.g., build/ directory and .o files)
+    Clean,
+    /// Format pace source code files
+    Fmt,
     /// Check for outdated dependencies
     Outdated,
     /// Package and upload the current project to the Pace Registry
@@ -114,6 +118,8 @@ fn main() -> Result<()> {
         Commands::Add { name, path, version } => commands::add::execute(name, path, version)?,
         Commands::Remove { name } => commands::remove::execute(name)?,
         Commands::Update => commands::update::execute()?,
+        Commands::Clean => commands::clean::execute()?,
+        Commands::Fmt => commands::fmt::execute()?,
         Commands::Upgrade => commands::upgrade::execute()?,
         Commands::Outdated => commands::outdated::execute()?,
         Commands::Publish { dry_run } => commands::publish::execute(&session, dry_run)?,

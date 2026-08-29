@@ -12,3 +12,5 @@ pub mod version;
 pub mod outdated;
 pub mod publish;
 pub mod login;
+pub mod clean;
+pub mod fmt;

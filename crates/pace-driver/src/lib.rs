@@ -69,8 +69,8 @@ impl CompilerSession {
         
         sources.insert(module_name.to_string(), src.clone());
         
-        let mut ast = match pace_parser::parse(&src, &path.display().to_string()) {
-            Ok(ast) => ast,
+        let (mut ast, _comments) = match pace_parser::parse(&src, &path.display().to_string()) {
+            Ok(res) => res,
             Err(parse_errors) => {
                 return Err(Report::new(pace_errors::MultipleSyntaxErrors { errors: parse_errors }));
             }
@@ -351,7 +351,7 @@ impl CompilerSession {
 
     pub fn check_source(&self, src: &str) -> Result<Vec<Stmt>> {
         let ast = match pace_parser::parse(src, "source") {
-            Ok(ast) => vec![Stmt::Module { name: "source".to_string(), body: ast }],
+            Ok((ast, _)) => vec![Stmt::Module { name: "source".to_string(), body: ast }],
             Err(parse_errors) => {
                 return Err(Report::new(pace_errors::MultipleSyntaxErrors { errors: parse_errors }));
             }

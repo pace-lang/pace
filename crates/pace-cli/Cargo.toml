@@ -12,6 +12,8 @@ clap = { workspace = true }
 miette = { workspace = true }
 pace-driver = { workspace = true }
 pace-pkg = { workspace = true }
+pace-ast = { workspace = true }
+pace-parser = { workspace = true }
 serde = { workspace = true }
 ureq = { workspace = true }
 walkdir = { workspace = true }
