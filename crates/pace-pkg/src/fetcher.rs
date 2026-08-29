@@ -59,11 +59,13 @@ impl Fetcher {
                         .map_err(|e| miette!("Failed to resolve local path {}: {}", path, e))?;
                     local_paths.insert(pkg_name.clone(), full_path.to_string_lossy().to_string());
                 }
-                Dependency::Version(_constraint) => {
-                    // We map everything to pubgrub::Ranges::full() for this demo, 
-                    // as pubgrub 0.4 doesn't have an easy way to parse semver strings to Range,
-                    // but we will still run pubgrub to resolve transitive dependencies!
-                    pubgrub_deps.insert(pkg_name.clone(), pubgrub::Ranges::full());
+                Dependency::Version(constraint) => {
+                    // Pre-validate that the constraint matches at least one version on the registry.
+                    // This will error if the version does not exist (e.g. user entered a nonexistent version).
+                    let _ = Self::resolve_version(pkg_name, constraint)?;
+                    
+                    let range = crate::utils::parse_range(constraint);
+                    pubgrub_deps.insert(pkg_name.clone(), range);
                 }
             }
         }

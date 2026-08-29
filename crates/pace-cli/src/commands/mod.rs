@@ -7,6 +7,8 @@ pub mod fetch;
 pub mod add;
 pub mod remove;
 pub mod update;
+pub mod upgrade;
+pub mod version;
 pub mod outdated;
 pub mod publish;
 pub mod login;

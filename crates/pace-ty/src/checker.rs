@@ -1272,7 +1272,9 @@ impl TypeChecker {
 
 fn is_camel_case(s: &str) -> bool {
     if s.is_empty() { return true; }
-    let first = s.chars().next().unwrap();
+    let check_str = s.strip_prefix('_').unwrap_or(s);
+    if check_str.is_empty() { return true; }
+    let first = check_str.chars().next().unwrap();
     if first.is_uppercase() { return false; }
-    !s.contains('_')
+    !check_str.contains('_')
 }

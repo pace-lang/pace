@@ -7,5 +7,6 @@ pace = ">=0.1.0 <1.0.0"
 
 [dependencies]
 pace-package = { path = "../pace-package" }
+remote-package = "0.5.0"
 
 [dev-dependencies]

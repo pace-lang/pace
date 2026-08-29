@@ -78,9 +78,9 @@ impl RegistryProvider {
                         // Parse dependencies
                         let mut pubgrub_deps = Vec::new();
                         if let Some(deps_map) = info.dependencies {
-                            for (dep_name, _) in deps_map {
-                                // Default to any if parsing fails (for simplicity in demo)
-                                pubgrub_deps.push((PackageName(dep_name), Ranges::full()));
+                            for (dep_name, constraint) in deps_map {
+                                // Parse standard semver constraints properly
+                                pubgrub_deps.push((PackageName(dep_name), crate::utils::parse_range(&constraint)));
                             }
                         }
                         

@@ -7,7 +7,7 @@ use pace_driver::CompilerSession;
 
 #[derive(Parser)]
 #[command(name = "pace")]
-#[command(about = "The Pace Programming Language", long_about = None)]
+#[command(version, about = "The Pace Programming Language", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -15,6 +15,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Print version information
+    Version,
+    /// Upgrade the Pace CLI to the latest version
+    Upgrade,
     /// Create a new Pace project in a new directory
     New {
         /// The name of the project
@@ -110,6 +114,7 @@ fn main() -> Result<()> {
         Commands::Add { name, path, version } => commands::add::execute(name, path, version)?,
         Commands::Remove { name } => commands::remove::execute(name)?,
         Commands::Update => commands::update::execute()?,
+        Commands::Upgrade => commands::upgrade::execute()?,
         Commands::Outdated => commands::outdated::execute()?,
         Commands::Publish { dry_run } => commands::publish::execute(&session, dry_run)?,
         Commands::Login { token } => commands::login::login(token)?,
@@ -117,6 +122,7 @@ fn main() -> Result<()> {
         Commands::Build { file, release } => commands::build::execute(&session, file, release)?,
         Commands::Run { file, release } => commands::run::execute(&session, file, release)?,
         Commands::Lsp => pace_lsp::run_server(),
+        Commands::Version => commands::version::execute()?,
     }
 
     Ok(())
