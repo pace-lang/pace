@@ -171,14 +171,18 @@ pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
         .send(&body)
     {
         Ok(r) => {
-            if r.status() != 200 && r.status() != 201 {
+            let status = r.status();
+            if status == 401 {
+                return Err(miette::miette!("Authentication failed (401 Unauthorized). Please run `pace login` to authenticate."));
+            }
+            if status != 200 && status != 201 {
                 let text = r.into_body().read_to_string().unwrap_or_default();
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
                     if let Some(err_msg) = json.get("error").and_then(|v| v.as_str()) {
                         return Err(miette::miette!("Registry rejected publish: {}", err_msg));
                     }
                 }
-                return Err(miette::miette!("Registry rejected publish: {}", text));
+                return Err(miette::miette!("Failed to publish to registry: http status: {}", status));
             }
             r
         }

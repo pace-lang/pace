@@ -1,3 +1,3 @@
-# toml
+# remote-package
 
 A Pace package.

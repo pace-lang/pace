@@ -1,0 +1,5 @@
+import "package:remote-package";
+
+func main() {
+    print("Running demo");
+}

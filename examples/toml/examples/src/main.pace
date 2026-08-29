@@ -1,6 +1,0 @@
-import "package:toml";
-
-func main() {
-    print("Running Example");
-    greet();
-}

@@ -194,8 +194,15 @@ impl CompilerSession {
                 }
             } else {
                 // Fallback for when there's no lockfile
-                let packages_dir = current_dir.join("packages");
-                resolved_path = packages_dir.join(pkg_name).join("src").join(format!("{}.pace", sub_path));
+                let mut fallback_path = current_dir.join("packages").join(pkg_name).join("src").join(format!("{}.pace", sub_path));
+                if let Ok(manifest) = pace_pkg::manifest::PaceToml::load_from_dir(&current_dir) {
+                    if let Some(dep) = manifest.dependencies.get(pkg_name) {
+                        if let pace_pkg::manifest::Dependency::Path { path } = dep {
+                            fallback_path = current_dir.join(path).join("src").join(format!("{}.pace", sub_path));
+                        }
+                    }
+                }
+                resolved_path = fallback_path;
             }
 
             if !resolved_path.exists() {
