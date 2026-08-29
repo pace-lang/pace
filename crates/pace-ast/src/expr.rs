@@ -1,3 +1,5 @@
+use crate::Span;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     /// A literal integer (e.g., 42)
@@ -13,7 +15,7 @@ pub enum Expr {
     /// A null literal
     Null,
     /// An identifier (e.g., my_var)
-    Identifier(String),
+    Identifier(String, Span),
     /// A generic instantiation (e.g., Box<Int> or first<String>)
     GenericInstantiation {
         callee: Box<Expr>,

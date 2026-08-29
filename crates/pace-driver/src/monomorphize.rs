@@ -694,7 +694,7 @@ impl Monomorphizer {
                 }
                 // Convert to a simple identifier
                 // Convert to a simple identifier and instantiate the class
-                if let Expr::Identifier(name) = &**callee {
+                if let Expr::Identifier(name, _) = &**callee {
                     let concrete_name = Self::generate_name(name, generic_args);
                     if !self.generated_classes.contains_key(&concrete_name)
                         && let Some(generic_decl) = self.generic_classes.get(name).cloned()
@@ -705,7 +705,7 @@ impl Monomorphizer {
                             generic_args,
                         );
                     }
-                    *expr = Expr::Identifier(concrete_name);
+                    *expr = Expr::Identifier(concrete_name, pace_ast::Span::default());
                 }
             }
             Expr::Call { callee, args } => {

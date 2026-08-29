@@ -561,8 +561,8 @@ impl LanguageServer for PaceLanguageServer {
                                     if let pace_ast::Stmt::FuncDecl { span, .. }
                                     | pace_ast::Stmt::VarDecl { span, .. } = stmt
                                     {
-                                        let start = get_position(src, span.0);
-                                        let end = get_position(src, span.0 + span.1);
+                                        let start = get_position(src, span.start);
+                                        let end = get_position(src, span.start + span.len);
                                         return Ok(Some(GotoDefinitionResponse::Scalar(
                                             Location {
                                                 uri: uri.clone(),

@@ -178,7 +178,7 @@ impl TreeShaker {
     fn trace_expr(&mut self, expr: &Expr, queue: &mut Vec<String>) {
         match expr {
             Expr::Call { callee, args } => {
-                if let Expr::Identifier(name) = &**callee {
+                if let Expr::Identifier(name, _) = &**callee {
                     if !self.reachable.contains(name) {
                         self.reachable.insert(name.clone());
                         queue.push(name.clone());
@@ -189,7 +189,7 @@ impl TreeShaker {
                     self.trace_expr(arg, queue);
                 }
             }
-            Expr::Identifier(name) => {
+            Expr::Identifier(name, _) => {
                 if !self.reachable.contains(name) {
                     self.reachable.insert(name.clone());
                     queue.push(name.clone());

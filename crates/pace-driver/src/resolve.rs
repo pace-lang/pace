@@ -327,7 +327,7 @@ impl SymbolResolver {
                     object, property, ..
                 } = &**callee
                 {
-                    if let Expr::Identifier(obj_name) = &**object {
+                    if let Expr::Identifier(obj_name, _) = &**object {
                         if let Some(mod_name) = aliases.get(obj_name) {
                             if let Some(mod_exports) = self.exports.get(mod_name) {
                                 if let Some(export) = mod_exports.get(property) {
@@ -338,7 +338,7 @@ impl SymbolResolver {
                                         }));
                                     }
                                     *callee =
-                                        Box::new(Expr::Identifier(export.mangled_name.clone()));
+                                        Box::new(Expr::Identifier(export.mangled_name.clone(), pace_ast::Span::default()));
                                 }
                             }
                         }
@@ -346,7 +346,7 @@ impl SymbolResolver {
                 }
 
                 // If callee is just an Identifier, look it up in scope
-                if let Expr::Identifier(name) = &**callee {
+                if let Expr::Identifier(name, _) = &**callee {
                     if let Some(export) = scope.get(name) {
                         if export.mangled_name == "COLLISION" {
                             return Err(Report::new(ResolutionError::Collision {
@@ -354,7 +354,7 @@ impl SymbolResolver {
                                 span: (0, 0),
                             }));
                         }
-                        *callee = Box::new(Expr::Identifier(export.mangled_name.clone()));
+                        *callee = Box::new(Expr::Identifier(export.mangled_name.clone(), pace_ast::Span::default()));
                     }
                 }
 
@@ -363,7 +363,7 @@ impl SymbolResolver {
                     self.resolve_expr(arg, scope, aliases)?;
                 }
             }
-            Expr::Identifier(name) => {
+            Expr::Identifier(name, _) => {
                 if name == "StringUtil" {}
                 if let Some(export) = scope.get(name) {
                     if export.mangled_name == "COLLISION" {

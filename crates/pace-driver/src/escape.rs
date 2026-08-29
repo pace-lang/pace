@@ -101,7 +101,7 @@ impl EscapeAnalysis {
 
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Identifier(name) => {
+            Expr::Identifier(name, _) => {
                 self.reference_var(name);
             }
             Expr::Assign { target, value } => {

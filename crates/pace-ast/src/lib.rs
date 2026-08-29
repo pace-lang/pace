@@ -1,8 +1,10 @@
 pub mod expr;
 pub mod stmt;
+pub mod span;
 
 pub use expr::*;
 pub use stmt::*;
+pub use span::*;
 
 #[cfg(test)]
 mod tests {
@@ -26,7 +28,7 @@ mod tests {
                 function_return: None,
             }),
             initializer: Some(Expr::IntLiteral(42)),
-            span: (0, 0),
+            span: span::Span::default(),
         };
 
         // Snapshot test the debug output of the AST

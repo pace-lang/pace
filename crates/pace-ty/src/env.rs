@@ -49,14 +49,14 @@ pub struct GlobalVariableSignature {
     pub is_mutable: bool,
     pub visibility: Visibility,
     pub module: String,
-    pub span: (usize, usize),
+    pub span: pace_ast::Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct FunctionSignature {
     pub params: Vec<Type>,
     pub return_type: Type,
-    pub span: (usize, usize),
+    pub span: pace_ast::Span,
     pub is_used: bool,
     pub visibility: Visibility,
     pub module: String,
@@ -83,7 +83,7 @@ pub struct ClassSignature {
 #[derive(Debug, Clone)]
 pub struct VarInfo {
     pub ty: Type,
-    pub span: (usize, usize),
+    pub span: pace_ast::Span,
     pub is_used: bool,
     pub is_mutable: bool,
 }
@@ -123,7 +123,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Any], // Accept any type
                 return_type: Type::Void,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true, // Always consider built-ins used
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -137,7 +137,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Any], // Accept any type
                 return_type: Type::Int,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -150,7 +150,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -163,7 +163,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int, Type::Int],
                 return_type: Type::Void,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -176,7 +176,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int, Type::Int, Type::Any],
                 return_type: Type::Void,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -189,7 +189,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int, Type::Int],
                 return_type: Type::Any,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -202,7 +202,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -215,7 +215,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![],
                 return_type: Type::Int,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -228,7 +228,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int, Type::String],
                 return_type: Type::Void,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -241,7 +241,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::String,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -254,7 +254,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Void,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -268,7 +268,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int, // Returns 1 on success, 0 on failure
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -281,7 +281,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -294,7 +294,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -307,7 +307,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -320,7 +320,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -333,7 +333,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -346,7 +346,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -359,7 +359,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![],
                 return_type: Type::String,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -372,7 +372,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -385,7 +385,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Void,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -398,7 +398,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -411,7 +411,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -424,7 +424,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -437,7 +437,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -450,7 +450,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int, // Actually it returns Int pointer
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -463,7 +463,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::String, Type::String],
                 return_type: Type::String,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -476,7 +476,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::Int, Type::Int],
                 return_type: Type::String,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -489,7 +489,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::String,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -502,7 +502,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -515,7 +515,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -528,7 +528,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![],
                 return_type: Type::String,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -541,7 +541,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".to_string(),
@@ -568,9 +568,9 @@ impl Environment {
         &mut self,
         name: String,
         ty: Type,
-        span: (usize, usize),
+        span: pace_ast::Span,
         is_mutable: bool,
-    ) -> Result<(), (usize, usize)> {
+    ) -> Result<(), pace_ast::Span> {
         if let Some(scope) = self.scopes.last_mut() {
             if let Some(existing) = scope.get(&name) {
                 return Err(existing.span);
@@ -670,17 +670,17 @@ impl Environment {
 
     pub fn register_class(&mut self, name: String, sig: ClassSignature) {
         self.classes.insert(name.clone(), sig);
-        let _ = self.define(name.clone(), Type::Class(name), (0, 0), false);
+        let _ = self.define(name.clone(), Type::Class(name), pace_ast::Span::default(), false);
     }
 
     pub fn register_struct(&mut self, name: String, sig: ClassSignature) {
         self.structs.insert(name.clone(), sig);
-        let _ = self.define(name.clone(), Type::Struct(name), (0, 0), false);
+        let _ = self.define(name.clone(), Type::Struct(name), pace_ast::Span::default(), false);
     }
 
     pub fn register_enum(&mut self, name: String, sig: EnumSignature) {
         self.enums.insert(name.clone(), sig);
-        let _ = self.define(name.clone(), Type::Enum(name), (0, 0), false);
+        let _ = self.define(name.clone(), Type::Enum(name), pace_ast::Span::default(), false);
     }
 }
 

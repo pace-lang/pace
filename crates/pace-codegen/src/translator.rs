@@ -582,7 +582,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             Expr::StringLiteral(_) => VarType::String,
             Expr::InterpolatedString(_) => VarType::String,
             Expr::BoolLiteral(_) => VarType::Bool,
-            Expr::Identifier(name) => {
+            Expr::Identifier(name, _) => {
                 if let Some((_, ty)) = self.variables.get(name) {
                     ty.clone()
                 } else {
@@ -596,7 +596,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 computed_class: _,
                 is_static_operator: _,
             } => {
-                if let Expr::Identifier(obj_name) = &**object {
+                if let Expr::Identifier(obj_name, _) = &**object {
                     if let Some(layout) = self.context.class_layouts.get(obj_name) {
                         if let Some((_, f_ty)) = layout.static_fields.get(property) {
                             return f_ty.clone();
@@ -657,7 +657,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             }
             Expr::Null => VarType::Unknown,
             Expr::Call { callee, .. } => {
-                if let Expr::Identifier(name) = &**callee {
+                if let Expr::Identifier(name, _) = &**callee {
                     if let Some(ty) = self.func_returns.get(name) {
                         return ty.clone();
                     } else if self.context.struct_layouts.contains_key(name) {
@@ -683,7 +683,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     is_static_operator: _,
                 } = &**callee
                 {
-                    if let Expr::Identifier(obj_name) = &**object {
+                    if let Expr::Identifier(obj_name, _) = &**object {
                         if obj_name.starts_with("Result_") || obj_name.starts_with("Option_") {
                             return VarType::Enum(obj_name.clone());
                         }
@@ -940,7 +940,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let val = if *b { 1 } else { 0 };
                 Ok(self.builder.ins().iconst(types::I64, val))
             }
-            Expr::Identifier(name) => {
+            Expr::Identifier(name, _) => {
                 if let Some((var, ty)) = self.variables.get(name) {
                     let val = self.builder.use_var(*var);
                     if matches!(ty, VarType::Object(_)) {
@@ -1171,7 +1171,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 if let VarType::Struct(name) = &val_ty {
                     val = self.copy_struct(name, val);
                 }
-                if let Expr::Identifier(name) = &**target {
+                if let Expr::Identifier(name, _) = &**target {
                     if let Some((var, ty)) = self.variables.get(name) {
                         if matches!(ty, VarType::Object(_)) {
                             // Release old value
@@ -1219,7 +1219,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     is_static_operator: _,
                 } = &**target
                 {
-                    if let Expr::Identifier(obj_name) = &**object {
+                    if let Expr::Identifier(obj_name, _) = &**object {
                         let maybe_static_field =
                             if let Some(layout) = self.context.class_layouts.get(obj_name) {
                                 layout.static_fields.get(property)
@@ -1364,7 +1364,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     }
                 }
 
-                if let Expr::Identifier(func_name) = &**callee {
+                if let Expr::Identifier(func_name, _) = &**callee {
                     if func_name == "print" {
                         let arg_expr = &args[0];
                         let arg_ty = self.get_expr_type(arg_expr);
@@ -1531,10 +1531,10 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 } = &**callee
                 {
                     let mut obj_name_opt = None;
-                    if let Expr::Identifier(obj_name) = &**object {
+                    if let Expr::Identifier(obj_name, _) = &**object {
                         obj_name_opt = Some(obj_name.clone());
                     } else if let Expr::GenericInstantiation { callee, .. } = &**object {
-                        if let Expr::Identifier(obj_name) = &**callee {
+                        if let Expr::Identifier(obj_name, _) = &**callee {
                             obj_name_opt = Some(obj_name.clone());
                         }
                     }
@@ -1730,10 +1730,10 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 is_static_operator: _,
             } => {
                 let mut obj_name_opt = None;
-                if let Expr::Identifier(obj_name) = &**object {
+                if let Expr::Identifier(obj_name, _) = &**object {
                     obj_name_opt = Some(obj_name.clone());
                 } else if let Expr::GenericInstantiation { callee, .. } = &**object {
-                    if let Expr::Identifier(obj_name) = &**callee {
+                    if let Expr::Identifier(obj_name, _) = &**callee {
                         obj_name_opt = Some(obj_name.clone());
                     }
                 }

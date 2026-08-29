@@ -141,7 +141,7 @@ impl<'a> Parser<'a> {
                     if let Expr::Call { callee, .. } = &expr {
                         if self.current_token == Token::LBrace || self.current_token == Token::Arrow
                         {
-                            if let Expr::Identifier(name) = &**callee {
+                            if let Expr::Identifier(name, _) = &**callee {
                                 return Err(pace_errors::SyntaxError {
                                     message: format!(
                                         "Functions and methods must be prefixed with 'func'. Did you forget 'func' before '{}'?",
@@ -465,7 +465,7 @@ impl<'a> Parser<'a> {
                     })
                 } else {
                     // Lowercase without parenthesis -> Variable binding
-                    Ok(pace_ast::Pattern::Variable(variant_name, self.current_span))
+                    Ok(pace_ast::Pattern::Variable(variant_name, self.current_span.into()))
                 }
             }
             Token::Int(_) | Token::Float(_) | Token::String(_) | Token::Bool(_) => {
@@ -767,7 +767,7 @@ impl<'a> Parser<'a> {
             is_static,
             visibility,
             doc_comment,
-            span: (
+            span: pace_ast::Span::new(
                 start_pos,
                 (self.current_span.0 + self.current_span.1).saturating_sub(start_pos),
             ),
@@ -816,7 +816,7 @@ impl<'a> Parser<'a> {
                     Stmt::VarDecl { .. } => fields.push(stmt),
                     Stmt::FuncDecl { .. } => methods.push(stmt),
                     Stmt::Expr(pace_ast::Expr::Call { callee, .. }) => {
-                        if let pace_ast::Expr::Identifier(name) = *callee {
+                        if let pace_ast::Expr::Identifier(name, _) = *callee {
                             self.errors.push(pace_errors::SyntaxError { message: format!("Methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
                         } else {
                             self.errors.push(pace_errors::SyntaxError {
@@ -905,7 +905,7 @@ impl<'a> Parser<'a> {
                     Stmt::VarDecl { .. } => fields.push(stmt),
                     Stmt::FuncDecl { .. } => methods.push(stmt),
                     Stmt::Expr(pace_ast::Expr::Call { callee, .. }) => {
-                        if let pace_ast::Expr::Identifier(name) = *callee {
+                        if let pace_ast::Expr::Identifier(name, _) = *callee {
                             self.errors.push(pace_errors::SyntaxError { message: format!("Methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.clone()), span: self.current_span });
                         } else {
                             self.errors.push(pace_errors::SyntaxError {
@@ -1093,7 +1093,7 @@ impl<'a> Parser<'a> {
                 is_static: false, // Interfaces methods are inherently non-static for now
                 visibility: Visibility::Public,
                 doc_comment: None,
-                span: (0, 0),
+                span: pace_ast::Span::default(),
             });
         }
 
@@ -1333,7 +1333,7 @@ impl<'a> Parser<'a> {
             is_static,
             visibility,
             initializer,
-            span: (
+            span: pace_ast::Span::new(
                 start_pos,
                 (self.current_span.0 + self.current_span.1).saturating_sub(start_pos),
             ),
@@ -1351,7 +1351,7 @@ impl<'a> Parser<'a> {
             let value = self.parse_assignment()?; // Right-associative
 
             match expr {
-                Expr::Identifier(_) | Expr::MemberAccess { .. } => {
+                Expr::Identifier(_, _) | Expr::MemberAccess { .. } => {
                     return Ok(Expr::Assign {
                         target: Box::new(expr),
                         value: Box::new(value),
@@ -1663,8 +1663,9 @@ impl<'a> Parser<'a> {
             }
             Token::Ident(id) => {
                 let v = id.clone();
+                let span = self.current_span;
                 self.advance();
-                Ok(Expr::Identifier(v))
+                Ok(Expr::Identifier(v, span.into()))
             }
             Token::LParen => {
                 let _start_span = self.current_span;

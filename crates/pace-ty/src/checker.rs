@@ -5,13 +5,13 @@ use pace_errors::TypeError;
 use std::collections::HashMap;
 
 impl TypeChecker {
-    pub fn get_span_for(&self, token: &str) -> (usize, usize) {
+    pub fn get_span_for(&self, token: &str) -> pace_ast::Span {
         if let Some(src) = self.sources.get(&self.current_module) {
             if let Some(idx) = src.find(token) {
-                return (idx, token.len());
+                return pace_ast::Span::new(idx, token.len());
             }
         }
-        (0, 0)
+        pace_ast::Span::default()
     }
 
     pub fn get_source(&self) -> miette::NamedSource<String> {
@@ -30,7 +30,7 @@ pub struct TypeChecker {
     generic_params_in_scope: Vec<String>,
     pub warnings: Vec<pace_errors::SemanticWarning>,
     pub errors: Vec<TypeError>,
-    pub current_span: (usize, usize),
+    pub current_span: pace_ast::Span,
 }
 
 pub fn check(
@@ -68,17 +68,17 @@ impl TypeChecker {
             generic_params_in_scope: Vec::new(),
             warnings: Vec::new(),
             errors: Vec::new(),
-            current_span: (0, 0),
+            current_span: pace_ast::Span::default(),
         }
     }
 
-    fn define_var(&mut self, name: String, ty: Type, span: (usize, usize), is_mutable: bool) {
-        if let Err(original_span) = self.env.define(name.clone(), ty, span, is_mutable) {
+    fn define_var(&mut self, name: String, ty: Type, span: pace_ast::Span, is_mutable: bool) {
+        if let Err(original_span) = self.env.define(name.clone(), ty, span.into(), is_mutable) {
             self.errors.push(TypeError::DuplicateDeclaration {
                 name,
                 src: self.get_source(),
-                span,
-                original_span,
+                span: span.into(),
+                original_span: original_span.into(),
             });
         }
     }
@@ -104,7 +104,7 @@ impl TypeChecker {
             if !var_info.is_used
                 && !name.starts_with('_')
                 && name != "self"
-                && var_info.span != (0, 0)
+                && var_info.span != pace_ast::Span::default()
             {
                 let kind = if matches!(var_info.ty, Type::Function { .. }) {
                     "function"
@@ -116,7 +116,7 @@ impl TypeChecker {
                         kind: kind.to_string(),
                         name,
                         src: self.get_source(),
-                        span: var_info.span,
+                        span: var_info.span.into(),
                     });
             }
         }
@@ -201,13 +201,13 @@ impl TypeChecker {
                         self.warnings.push(pace_errors::SemanticWarning::NamingConvention {
                             name: name.clone(),
                             src: self.get_source(),
-                            span: *span,
+                            span: (*span).into(),
                         });
                     }
                     let sig = FunctionSignature {
                         params: param_types,
                         return_type: ret_ty,
-                        span: *span,
+                        span: (*span).into(),
                         is_used: false,
                         visibility: visibility.clone(),
                         module: self.current_module.clone(),
@@ -250,7 +250,7 @@ impl TypeChecker {
                             let sig = FunctionSignature {
                                 params: param_types,
                                 return_type: ret_ty,
-                                span: (0, 0),
+                                span: pace_ast::Span::default(),
                                 is_used: true,
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
@@ -304,7 +304,7 @@ impl TypeChecker {
                             let sig = FunctionSignature {
                                 params: param_types,
                                 return_type: ret_ty,
-                                span: (0, 0),
+                                span: pace_ast::Span::default(),
                                 is_used: true,
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
@@ -356,7 +356,7 @@ impl TypeChecker {
                     if let Some(params) = generic_params {
                         self.env.push_scope();
                         for param in params {
-                            self.define_var(param.clone(), Type::GenericParameter(param.clone()), (0, 0), false);
+                            self.define_var(param.clone(), Type::GenericParameter(param.clone()), pace_ast::Span::default(), false);
                         }
                     }
 
@@ -402,7 +402,7 @@ impl TypeChecker {
                             let sig = FunctionSignature {
                                 params: param_types,
                                 return_type: ret_ty,
-                                span: (0, 0),
+                                span: pace_ast::Span::default(),
                                 is_used: true,
                                 visibility: visibility.clone(),
                                 module: self.current_module.clone(),
@@ -446,7 +446,7 @@ impl TypeChecker {
                         is_mutable: *is_mutable,
                         visibility: visibility.clone(),
                         module: self.current_module.clone(),
-                        span: *span,
+                        span: (*span).into(),
                     });
                 }
                 _ => {}
@@ -512,7 +512,7 @@ impl TypeChecker {
                         {
                             self.errors.push(TypeError::Generic {
                                 src: self.get_source(),
-                                span: self.current_span,
+                                span: self.current_span.into(),
                                 message: format!(
                                     "Type mismatch: expected return type {:?}, found {:?}",
                                     expected, ret_ty
@@ -525,7 +525,7 @@ impl TypeChecker {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: "Return statement outside of function".to_string(),
                         });
                         return ();
@@ -542,7 +542,7 @@ impl TypeChecker {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: "If condition must be a boolean".to_string(),
                         });
                         return ();
@@ -559,7 +559,7 @@ impl TypeChecker {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: "While condition must be a boolean".to_string(),
                         });
                         return ();
@@ -588,7 +588,7 @@ impl TypeChecker {
                 }
 
                 self.env.push_scope();
-                self.define_var(item.clone(), item_ty, (0, 0), false);
+                self.define_var(item.clone(), item_ty, pace_ast::Span::default(), false);
                 self.check_stmt(body);
                 self.pop_scope_and_check_unused();
             }
@@ -642,7 +642,7 @@ impl TypeChecker {
         is_mutable: bool,
         type_annotation: Option<&pace_ast::TypeAnnotation>,
         initializer: Option<&Expr>,
-        span: (usize, usize),
+        span: pace_ast::Span,
     ) {
         self.current_span = span;
         let mut inferred_type = Type::Unknown;
@@ -671,7 +671,7 @@ impl TypeChecker {
                 self.define_var(name.to_string(), expected_type.clone(), span, is_mutable);
                 self.errors.push(TypeError::Generic {
                     src: self.get_source(),
-                    span: self.current_span,
+                    span: self.current_span.into(),
                     message: format!(
                         "Type mismatch: expected {:?}, found {:?}",
                         expected_type, inferred_type
@@ -685,7 +685,7 @@ impl TypeChecker {
         if inferred_type == Type::Unknown {
             self.errors.push(TypeError::Generic {
                 src: self.get_source(),
-                span: self.current_span,
+                span: self.current_span.into(),
                 message: format!("Cannot infer type for variable '{}'", name),
             });
             return;
@@ -696,7 +696,7 @@ impl TypeChecker {
                 .push(pace_errors::SemanticWarning::NamingConvention {
                     name: name.to_string(),
                     src: self.get_source(),
-                    span,
+                    span: span.into(),
                 });
         }
         self.define_var(name.to_string(), inferred_type, span, is_mutable);
@@ -709,7 +709,7 @@ impl TypeChecker {
         return_type: Option<&pace_ast::TypeAnnotation>,
         generic_params: Option<&[String]>,
         is_static: bool,
-        span: (usize, usize),
+        span: pace_ast::Span,
     ) {
         self.current_span = span;
         let prev_return = self.current_return_type.clone();
@@ -738,14 +738,14 @@ impl TypeChecker {
                 } else {
                     Type::Class(class_name.clone())
                 };
-                self.define_var("self".to_string(), self_ty, (0, 0), false);
+                self.define_var("self".to_string(), self_ty, pace_ast::Span::default(), false);
             }
         }
 
         // Add parameters to scope
         for param in params {
             let param_type = self.resolve_type_name(&param.type_annotation);
-            self.define_var(param.name.clone(), param_type, (0, 0), false);
+            self.define_var(param.name.clone(), param_type, pace_ast::Span::default(), false);
         }
 
         // Check body
@@ -786,7 +786,7 @@ impl TypeChecker {
                     } else {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: format!("Class '{}' does not implement method '{}' from interface '{}'", name, m_name, iface_name)
                         });
                         return;
@@ -795,7 +795,7 @@ impl TypeChecker {
             } else {
                 self.errors.push(TypeError::Generic {
                     src: self.get_source(),
-                    span: self.current_span,
+                    span: self.current_span.into(),
                     message: format!("Interface '{}' not found", iface_name),
                 });
                 return;
@@ -824,7 +824,7 @@ impl TypeChecker {
         for (param_name, param_ty_ann) in params {
             let param_ty = self.resolve_type_name(param_ty_ann);
             param_types.push(param_ty.clone());
-            let _ = self.env.define(param_name.clone(), param_ty, (0, 0), true);
+            let _ = self.env.define(param_name.clone(), param_ty, pace_ast::Span::default(), true);
         }
 
         let ret_ty = if let Some(rt) = return_type {
@@ -883,7 +883,7 @@ impl TypeChecker {
                         name: name.to_string(),
                         help_text,
                         src: self.get_source(),
-                        span: self.get_span_for(name),
+                        span: self.get_span_for(name).into(),
                     });
                     Type::Error
                 }
@@ -908,7 +908,7 @@ impl TypeChecker {
                         {
                             self.errors.push(TypeError::Generic {
                                 src: self.get_source(),
-                                span: self.current_span,
+                                span: self.current_span.into(),
                                 message: format!("Cannot interpolate value of type {:?}", ty),
                             });
                             return Type::Error;
@@ -932,7 +932,7 @@ impl TypeChecker {
                 self.pop_scope_and_check_unused();
                 Type::Void
             }
-            Expr::Identifier(name) => self.check_expr_identifier(name),
+            Expr::Identifier(name, _) => self.check_expr_identifier(name),
             Expr::Binary { left, op, right } => {
                 let left_ty = self.check_expr(left);
                 let right_ty = self.check_expr(right);
@@ -954,7 +954,7 @@ impl TypeChecker {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: format!(
                                 "Type mismatch in binary operation: {:?} and {:?}",
                                 left_ty, right_ty
@@ -982,7 +982,7 @@ impl TypeChecker {
                             {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
-                                    span: self.current_span,
+                                    span: self.current_span.into(),
                                     message: "Arithmetic operations require numeric types"
                                         .to_string(),
                                 });
@@ -998,7 +998,7 @@ impl TypeChecker {
                             {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
-                                    span: self.current_span,
+                                    span: self.current_span.into(),
                                     message: "Relational operations require numeric types"
                                         .to_string(),
                                 });
@@ -1013,7 +1013,7 @@ impl TypeChecker {
                             {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
-                                    span: self.current_span,
+                                    span: self.current_span.into(),
                                     message: "Logical operations require boolean types".to_string(),
                                 });
                                 Type::Error
@@ -1025,10 +1025,10 @@ impl TypeChecker {
             Expr::Assign { target, value } => {
                 let val_ty = self.check_expr(value);
 
-                if let Expr::Identifier(name) = &**target {
+                if let Expr::Identifier(name, _) = &**target {
                     let mut is_err = false;
                     let mut err_msg = String::new();
-                    let mut var_span = (0, 0);
+                    let mut var_span = pace_ast::Span::default();
 
                     if let Some(var_info) = self.env.get_mut(name) {
                         if !var_info.is_mutable {
@@ -1080,7 +1080,7 @@ impl TypeChecker {
                             name: name.clone(),
                             help_text,
                             src: self.get_source(),
-                            span: self.get_span_for(&name),
+                            span: self.get_span_for(&name).into(),
                         });
                         return Type::Error;
                     }
@@ -1088,7 +1088,7 @@ impl TypeChecker {
                     if is_err {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: var_span,
+                            span: var_span.into(),
                             message: err_msg,
                         });
                         return Type::Error;
@@ -1108,7 +1108,7 @@ impl TypeChecker {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: "Invalid assignment target".to_string(),
                         });
                         Type::Error
@@ -1156,7 +1156,7 @@ impl TypeChecker {
                         {
                             self.errors.push(TypeError::Generic {
                                 src: self.get_source(),
-                                span: self.current_span,
+                                span: self.current_span.into(),
                                 message: format!(
                                     "Function expects {} arguments, got {}",
                                     params.len(),
@@ -1176,7 +1176,7 @@ impl TypeChecker {
                             {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
-                                    span: self.current_span,
+                                    span: self.current_span.into(),
                                     message: format!(
                                         "Type mismatch in argument {}: expected {:?}, got {:?}",
                                         i + 1,
@@ -1192,12 +1192,12 @@ impl TypeChecker {
                 }
 
                 // For direct global function calls
-                if let Expr::Identifier(func_name) = &**callee
+                if let Expr::Identifier(func_name, _) = &**callee
                     && let Some(sig) = self.env.functions.get(func_name)
                 {
                     if sig.visibility == Visibility::Private && sig.module != self.current_module {
                         {
-                            self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
+                            self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(),
                                 message: format!("Function '{}' is private and cannot be accessed outside of module '{}'", func_name, sig.module)
                             });
                             return Type::Error;
@@ -1207,7 +1207,7 @@ impl TypeChecker {
                         {
                             self.errors.push(TypeError::Generic {
                                 src: self.get_source(),
-                                span: self.current_span,
+                                span: self.current_span.into(),
                                 message: format!(
                                     "Function '{}' expects {} arguments, got {}",
                                     func_name,
@@ -1225,7 +1225,7 @@ impl TypeChecker {
                             {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
-                                    span: self.current_span,
+                                    span: self.current_span.into(),
                                     message: format!(
                                         "Type mismatch in argument {}: expected {:?}, got {:?}",
                                         i + 1,
@@ -1252,10 +1252,10 @@ impl TypeChecker {
             } => {
                 let mut is_namespace_access = false;
                 let mut base_ident = None;
-                if let Expr::Identifier(name) = &**object {
+                if let Expr::Identifier(name, _) = &**object {
                     base_ident = Some(name.clone());
                 } else if let Expr::GenericInstantiation { callee, .. } = &**object {
-                    if let Expr::Identifier(name) = &**callee {
+                    if let Expr::Identifier(name, _) = &**callee {
                         base_ident = Some(name.clone());
                     }
                 }
@@ -1273,7 +1273,7 @@ impl TypeChecker {
                 // Exception: allow . on namespaces ONLY if it's NOT an enum variant (for backwards compatibility while we transition)
                 if *is_static_operator && !is_namespace_access {
                     {
-                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
+                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(),
                         message: format!("The '::' operator can only be used for static or namespace access (object was {:?}, base_ident {:?}, classes={:?})", object, base_ident, self.env.classes.keys())
                     });
                         return Type::Error;
@@ -1281,7 +1281,7 @@ impl TypeChecker {
                 }
                 if !*is_static_operator && is_namespace_access {
                     {
-                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
+                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(),
                         message: "The '.' operator can only be used for instance access. Use '::' for static/namespace access.".to_string()
                     });
                         return Type::Error;
@@ -1297,7 +1297,7 @@ impl TypeChecker {
                             None => {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
-                                    span: self.current_span,
+                                    span: self.current_span.into(),
                                     message: format!("Type '{}' is not defined", name),
                                 });
                                 return Type::Error;
@@ -1316,7 +1316,7 @@ impl TypeChecker {
                             None => {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
-                                    span: self.current_span,
+                                    span: self.current_span.into(),
                                     message: format!("Actor '{}' is not defined", name),
                                 });
                                 return Type::Error;
@@ -1335,7 +1335,7 @@ impl TypeChecker {
                             None => {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
-                                    span: self.current_span,
+                                    span: self.current_span.into(),
                                     message: format!("Type '{}' is not defined", name),
                                 });
                                 return Type::Error;
@@ -1354,7 +1354,7 @@ impl TypeChecker {
                             None => {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
-                                    span: self.current_span,
+                                    span: self.current_span.into(),
                                     message: format!("Enum '{}' is not defined", name),
                                 });
                                 return Type::Error;
@@ -1366,7 +1366,7 @@ impl TypeChecker {
                         {
                             self.errors.push(TypeError::Generic {
                                 src: self.get_source(),
-                                span: self.current_span,
+                                span: self.current_span.into(),
                                 message: format!("Enum '{}' has no variant '{}'", name, property),
                             });
                             return Type::Error;
@@ -1376,7 +1376,7 @@ impl TypeChecker {
                         {
                             self.errors.push(TypeError::Generic {
                                 src: self.get_source(),
-                                span: self.current_span,
+                                span: self.current_span.into(),
                                 message: format!(
                                     "Cannot access property '{}' on non-object type",
                                     property
@@ -1394,7 +1394,7 @@ impl TypeChecker {
                     if let Type::Actor(ref a_name) = obj_ty {
                         if Some(a_name.clone()) != self.current_class {
                             {
-                                self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
+                                self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(),
                                 message: format!("Actor fields are isolated and cannot be accessed from outside actor '{}'", a_name.split("__").last().unwrap_or(a_name))
                             });
                                 return Type::Error;
@@ -1407,7 +1407,7 @@ impl TypeChecker {
                     if m_sig.visibility == Visibility::Private {
                         if self.current_class.as_deref() != Some(&*class_name) {
                             {
-                                self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
+                                self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(),
                                 message: format!("Method '{}' is private and cannot be accessed from outside class/actor '{}'", property, class_name.split("__").last().unwrap_or(&class_name))
                             });
                                 return Type::Error;
@@ -1422,7 +1422,7 @@ impl TypeChecker {
                 {
                     self.errors.push(TypeError::Generic {
                         src: self.get_source(),
-                        span: self.current_span,
+                        span: self.current_span.into(),
                         message: format!(
                             "Property '{}' not found on type '{}'",
                             property, &class_name
@@ -1439,7 +1439,7 @@ impl TypeChecker {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: "Cannot await a non-promise type".to_string(),
                         });
                         Type::Error
@@ -1454,7 +1454,7 @@ impl TypeChecker {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: "Cannot unwrap a non-nullable type".to_string(),
                         });
                         Type::Error
@@ -1469,13 +1469,13 @@ impl TypeChecker {
                             if let Some(Type::Enum(ret_name)) = &self.current_return_type {
                                 if !ret_name.starts_with("Result_") {
                                     {
-                                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Cannot use ? on a Result in a function that does not return Result".to_string() });
+                                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on a Result in a function that does not return Result".to_string() });
                                         return Type::Error;
                                     };
                                 }
                             } else {
                                 {
-                                    self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Cannot use ? on a Result in a function that does not return Result".to_string() });
+                                    self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on a Result in a function that does not return Result".to_string() });
                                     return Type::Error;
                                 };
                             }
@@ -1489,13 +1489,13 @@ impl TypeChecker {
                             if let Some(Type::Enum(ret_name)) = &self.current_return_type {
                                 if !ret_name.starts_with("Option_") {
                                     {
-                                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Cannot use ? on an Option in a function that does not return Option".to_string() });
+                                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on an Option in a function that does not return Option".to_string() });
                                         return Type::Error;
                                     };
                                 }
                             } else {
                                 {
-                                    self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: "Cannot use ? on an Option in a function that does not return Option".to_string() });
+                                    self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on an Option in a function that does not return Option".to_string() });
                                     return Type::Error;
                                 };
                             }
@@ -1511,7 +1511,7 @@ impl TypeChecker {
                 {
                     self.errors.push(TypeError::Generic {
                         src: self.get_source(),
-                        span: self.current_span,
+                        span: self.current_span.into(),
                         message: "The ? operator can only be applied to Result or Option types"
                             .to_string(),
                     });
@@ -1530,7 +1530,7 @@ impl TypeChecker {
                         {
                             self.errors.push(TypeError::Generic {
                                 src: self.get_source(),
-                                span: self.current_span,
+                                span: self.current_span.into(),
                                 message: format!(
                                     "Null coalesce type mismatch: {:?} and {:?}",
                                     *inner, right_ty
@@ -1543,7 +1543,7 @@ impl TypeChecker {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: "Left side of ?? must be nullable".to_string(),
                         });
                         Type::Error
@@ -1567,7 +1567,7 @@ impl TypeChecker {
                         _ => {
                             self.errors.push(TypeError::Generic {
                                 src: self.get_source(),
-                                span: self.current_span,
+                                span: self.current_span.into(),
                                 message: "Optional access on non-object".to_string(),
                             });
                             return Type::Error;
@@ -1583,7 +1583,7 @@ impl TypeChecker {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: format!(
                                 "Property '{}' not found on type '{}'",
                                 property, &class_name
@@ -1595,7 +1595,7 @@ impl TypeChecker {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: "Optional member access on non-nullable type".to_string(),
                         });
                         Type::Error
@@ -1688,7 +1688,7 @@ impl TypeChecker {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span,
+                            span: self.current_span.into(),
                             message: format!(
                                 "Pattern type mismatch: expected {:?}, got {:?}",
                                 expected_type, ty

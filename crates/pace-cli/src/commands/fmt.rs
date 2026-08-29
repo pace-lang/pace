@@ -148,7 +148,7 @@ impl<'a> Formatter<'a> {
                 is_static,
                 span,
             } => {
-                self.check_comments(span.0);
+                self.check_comments(span.start);
                 self.write_indent();
                 if *visibility == Visibility::Private {
                     self.output.push_str("private ");
@@ -171,7 +171,7 @@ impl<'a> Formatter<'a> {
                     self.format_expr(init)?;
                 }
                 self.output.push(';');
-                self.check_inline_comments(span.1);
+                self.check_inline_comments(span.start + span.len);
                 self.output.push('\n');
                 Ok(())
             }
@@ -198,7 +198,7 @@ impl<'a> Formatter<'a> {
                 doc_comment,
                 span,
             } => {
-                self.check_comments(span.0);
+                self.check_comments(span.start);
                 if let Some(doc) = doc_comment {
                     self.write_indent();
                     self.output.push_str("///");
@@ -288,7 +288,7 @@ impl<'a> Formatter<'a> {
             }
             Expr::BoolLiteral(b) => self.output.push_str(if *b { "true" } else { "false" }),
             Expr::Null => self.output.push_str("null"),
-            Expr::Identifier(name) => self.output.push_str(name),
+            Expr::Identifier(name, _) => self.output.push_str(name),
             Expr::Call { callee, args } => {
                 self.format_expr(callee)?;
                 self.output.push('(');

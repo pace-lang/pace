@@ -1,4 +1,5 @@
 use crate::expr::Expr;
+use crate::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeAnnotation {
@@ -24,7 +25,7 @@ pub enum Stmt {
         is_static: bool,
         visibility: Visibility,
         initializer: Option<Expr>,
-        span: (usize, usize),
+        span: Span,
     },
     /// A block of statements (e.g., { ... })
     Block(Vec<Stmt>),
@@ -47,7 +48,7 @@ pub enum Stmt {
         is_static: bool,
         visibility: Visibility,
         doc_comment: Option<String>,
-        span: (usize, usize),
+        span: Span,
     },
     ClassDecl {
         name: String,
@@ -141,7 +142,7 @@ pub enum Pattern {
     /// A literal match (e.g. `5`, `"hello"`)
     Literal(Expr),
     /// A variable binding (e.g. `x`) with a span
-    Variable(String, (usize, usize)),
+    Variable(String, Span),
     /// An enum variant pattern (e.g. `Some(x)`)
     Variant {
         enum_name: Option<String>,
