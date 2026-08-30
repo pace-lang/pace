@@ -151,24 +151,24 @@ impl JITCompiler {
             pace_runtime::__pace_get_last_error as *const u8,
         );
         builder.symbol(
-            "stringSplit",
+            "__pace_string_split",
             pace_runtime::__pace_string_split as *const u8,
         );
         builder.symbol(
-            "stringReplace",
+            "__pace_string_replace",
             pace_runtime::__pace_string_replace as *const u8,
         );
         builder.symbol(
-            "stringSubstring",
+            "__pace_string_substring",
             pace_runtime::__pace_string_substring as *const u8,
         );
-        builder.symbol("stringTrim", pace_runtime::__pace_string_trim as *const u8);
+        builder.symbol("__pace_string_trim", pace_runtime::__pace_string_trim as *const u8);
         builder.symbol(
-            "stringIndexOf",
+            "__pace_string_index_of",
             pace_runtime::__pace_string_index_of as *const u8,
         );
         builder.symbol(
-            "stringStartsWith",
+            "__pace_string_starts_with",
             pace_runtime::__pace_string_starts_with as *const u8,
         );
 
@@ -181,37 +181,36 @@ impl JITCompiler {
         }
     }
 
-    fn register_interfaces(&mut self, stmts: &[Stmt]) {
-        for stmt in stmts {
+    fn register_interfaces(&mut self, arena: &pace_ast::arena::AstArena, stmts: &[pace_ast::arena::StmtId]) {
+        for stmt_id in stmts {
+            let stmt = arena.get_stmt(*stmt_id).clone();
             if let Stmt::InterfaceDecl {
                 name: interface_name,
                 methods,
-                generic_params: _,
                 ..
             } = stmt
             {
                 let mut method_map = HashMap::new();
                 let mut m_offset = 16; // 0: drop, 8: size
 
-                for method_stmt in methods {
+                for method_stmt_id in methods {
+                    let method_stmt = arena.get_stmt(method_stmt_id).clone();
                     if let Stmt::FuncDecl {
                         name: method_name, ..
                     } = method_stmt
-                    {
-                        if method_name != "init" {
-                            method_map.insert(method_name.clone(), m_offset);
+                        && method_name != "init" {
+                            method_map.insert(method_name, m_offset);
                             m_offset += 8;
                         }
-                    }
                 }
 
                 let layout = InterfaceLayout {
-                    name: interface_name.clone(),
+                    name: interface_name,
                     methods: method_map.clone(),
                 };
                 self.context
                     .interface_layouts
-                    .insert(interface_name.clone(), layout);
+                    .insert(interface_name, layout);
 
                 // Insert a dummy ClassLayout for the interface so translate_expr can find its methods by type_name
                 let dummy_vtable_name = format!("__iface_vtable_{}", interface_name);
@@ -230,7 +229,7 @@ impl JITCompiler {
                     .unwrap();
 
                 let dummy_class_layout = ClassLayout {
-                    name: interface_name.clone(),
+                    name: interface_name,
                     fields: HashMap::new(),
                     static_fields: HashMap::new(),
                     methods: method_map,
@@ -238,21 +237,21 @@ impl JITCompiler {
                 };
                 self.context
                     .class_layouts
-                    .insert(interface_name.clone(), dummy_class_layout);
+                    .insert(interface_name, dummy_class_layout);
             }
         }
     }
 
-    fn register_classes(&mut self, stmts: &[Stmt]) -> Result<(), CodegenError> {
+    fn register_classes(&mut self, arena: &pace_ast::arena::AstArena, stmts: &[pace_ast::arena::StmtId]) -> Result<(), CodegenError> {
         let _ptr_ty = self.context.module.target_config().pointer_type();
 
-        for stmt in stmts {
+        for stmt_id in stmts {
+            let stmt = arena.get_stmt(*stmt_id).clone();
             if let Stmt::ClassDecl {
                 name: class_name,
                 fields,
                 methods,
                 implements,
-                generic_params: _,
                 ..
             }
             | Stmt::ActorDecl {
@@ -260,11 +259,10 @@ impl JITCompiler {
                 fields,
                 methods,
                 implements,
-                generic_params: _,
                 ..
             } = stmt
             {
-                let is_actor = matches!(stmt, Stmt::ActorDecl { .. });
+                let is_actor = matches!(arena.get_stmt(*stmt_id), Stmt::ActorDecl { .. });
                 let mut field_map = HashMap::new();
                 let mut offset = 16; // 8 bytes for ARC, 8 bytes for vtable pointer
 
@@ -274,7 +272,8 @@ impl JITCompiler {
                 }
 
                 let mut static_fields = HashMap::new();
-                for field in fields {
+                for field_id in &fields {
+                    let field = arena.get_stmt(*field_id).clone();
                     if let Stmt::VarDecl {
                         name: field_name,
                         type_annotation,
@@ -289,11 +288,11 @@ impl JITCompiler {
                             .unwrap_or("Unknown");
                         let field_ty = crate::translator::parse_vartype(
                             ty_str,
-                            Some(class_name),
+                            Some(class_name.as_str()),
                             Some(&self.context.struct_layouts),
                             Some(&self.context.enum_layouts),
                         );
-                        if *is_static {
+                        if is_static {
                             let global_name = format!("{}_{}", class_name, field_name);
                             let data_id = self
                                 .context
@@ -305,7 +304,7 @@ impl JITCompiler {
                             let mut init_bytes = vec![0u8; 8];
                             if let Some(init_expr) = initializer {
                                 use pace_ast::Expr;
-                                match init_expr {
+                                match arena.get_expr(init_expr) {
                                     Expr::IntLiteral(i) => {
                                         init_bytes.copy_from_slice(&i.to_ne_bytes());
                                     }
@@ -325,7 +324,7 @@ impl JITCompiler {
                                 .module
                                 .define_data(data_id, &data_ctx)
                                 .expect("Failed to define static field data");
-                            static_fields.insert(field_name.clone(), (data_id, field_ty));
+                            static_fields.insert(field_name, (data_id, field_ty));
                         } else {
                             field_map.insert(field_name.to_string().into(), (offset, field_ty));
                             offset += 8;
@@ -343,7 +342,7 @@ impl JITCompiler {
                         self.context.interface_layouts.get(&iface_annotation.name)
                 {
                     for (m_name, m_off) in &iface_layout.methods {
-                        method_map.insert(m_name.clone(), *m_off);
+                        method_map.insert(*m_name, *m_off);
                         if *m_off >= m_offset {
                             m_offset = *m_off + 8;
                         }
@@ -364,7 +363,8 @@ impl JITCompiler {
                     })?;
                 self.context.funcs.insert(drop_name.clone().into(), drop_id);
 
-                for method_stmt in methods {
+                for method_stmt_id in methods {
+                    let method_stmt = arena.get_stmt(method_stmt_id).clone();
                     if let Stmt::FuncDecl {
                         name: method_name,
                         params,
@@ -373,10 +373,10 @@ impl JITCompiler {
                     } = method_stmt
                     {
                         if !is_static
-                            && !method_map.contains_key(method_name)
+                            && !method_map.contains_key(&method_name)
                             && method_name != "init"
                         {
-                            method_map.insert(method_name.clone(), m_offset);
+                            method_map.insert(method_name, m_offset);
                             m_offset += 8;
                         }
 
@@ -413,9 +413,9 @@ impl JITCompiler {
                                         message: e.to_string(),
                                     })?;
                                 self.context.funcs.insert(async_name.clone().into(), async_id);
-                                vtable_funcs.insert(method_name.clone(), async_id);
+                                vtable_funcs.insert(method_name, async_id);
                             } else {
-                                vtable_funcs.insert(method_name.clone(), id);
+                                vtable_funcs.insert(method_name, id);
                             }
                         }
                     }
@@ -459,7 +459,7 @@ impl JITCompiler {
                     })?;
 
                 let layout = ClassLayout {
-                    name: class_name.clone(),
+                    name: class_name,
                     fields: field_map,
                     methods: method_map,
                     static_fields,
@@ -467,11 +467,10 @@ impl JITCompiler {
                 };
                 self.context
                     .class_layouts
-                    .insert(class_name.clone(), layout);
+                    .insert(class_name, layout);
             } else if let Stmt::EnumDecl {
                 name: enum_name,
                 variants,
-                generic_params: _,
                 ..
             } = stmt
             {
@@ -500,7 +499,7 @@ impl JITCompiler {
                         for field_ty in fields {
                             let field_var_type = crate::translator::parse_vartype(
                                 &field_ty.name,
-                                Some(enum_name),
+                                Some(enum_name.as_str()),
                                 Some(&self.context.struct_layouts),
                                 Some(&self.context.enum_layouts),
                             );
@@ -514,7 +513,7 @@ impl JITCompiler {
                     }
 
                     variant_map
-                        .insert(variant.name.clone(), (tag_id as u64, variant_types.clone()));
+                        .insert(variant.name, (tag_id as u64, variant_types.clone()));
 
                     // Generate Constructor Signature: e.g. Result_Ok(T) -> ResultPtr
                     let constructor_name = format!("{}_{}", enum_name, variant.name);
@@ -535,23 +534,23 @@ impl JITCompiler {
                 }
 
                 let layout = EnumLayout {
-                    name: enum_name.clone(),
+                    name: enum_name,
                     max_size,
                     variants: variant_map,
                     drop_func_id: drop_id,
                 };
-                self.context.enum_layouts.insert(enum_name.clone(), layout);
+                self.context.enum_layouts.insert(enum_name, layout);
             } else if let Stmt::StructDecl {
                 name: struct_name,
                 fields,
-                generic_params: _,
                 ..
             } = stmt
             {
                 let mut field_map = HashMap::new();
                 let mut offset = 0; // Structs have no header (0 bytes for ARC/VTable)
                 let mut static_fields = HashMap::new();
-                for field in fields {
+                for field_id in &fields {
+                    let field = arena.get_stmt(*field_id).clone();
                     if let Stmt::VarDecl {
                         name: field_name,
                         type_annotation,
@@ -566,11 +565,11 @@ impl JITCompiler {
                             .unwrap_or("Unknown");
                         let field_ty = crate::translator::parse_vartype(
                             ty_str,
-                            Some(struct_name),
+                            Some(struct_name.as_str()),
                             Some(&self.context.struct_layouts),
                             Some(&self.context.enum_layouts),
                         );
-                        if *is_static {
+                        if is_static {
                             let global_name = format!("{}_{}", struct_name, field_name);
                             let data_id = self
                                 .context
@@ -582,7 +581,7 @@ impl JITCompiler {
                             let mut init_bytes = vec![0u8; 8];
                             if let Some(init_expr) = initializer {
                                 use pace_ast::Expr;
-                                match init_expr {
+                                match arena.get_expr(init_expr) {
                                     Expr::IntLiteral(i) => {
                                         init_bytes.copy_from_slice(&i.to_ne_bytes());
                                     }
@@ -602,41 +601,42 @@ impl JITCompiler {
                                 .module
                                 .define_data(data_id, &data_ctx)
                                 .expect("Failed to define static field data");
-                            static_fields.insert(field_name.clone(), (data_id, field_ty));
+                            static_fields.insert(field_name, (data_id, field_ty));
                         } else {
-                            field_map.insert(field_name.clone(), (offset, field_ty));
+                            field_map.insert(field_name, (offset, field_ty));
                             offset += 8; // All fields are currently 8 bytes (i64/f64/ptr)
                         }
                     }
                 }
 
                 let layout = StructLayout {
-                    name: struct_name.clone(),
+                    name: struct_name,
                     fields: field_map,
                     static_fields,
                     size: offset,
                 };
                 self.context
                     .struct_layouts
-                    .insert(struct_name.clone(), layout);
+                    .insert(struct_name, layout);
             }
         }
         Ok(())
     }
 
-    pub fn compile_and_run(&mut self, stmts: &[Stmt]) -> Result<(), CodegenError> {
-        let flat_stmts = crate::flatten_ast(stmts);
+    pub fn compile_and_run(&mut self, arena: &mut pace_ast::arena::AstArena, stmts: &[pace_ast::arena::StmtId]) -> Result<(), CodegenError> {
+        let flat_stmts = crate::flatten_ast(arena, stmts);
 
         // Run Monomorphization Pass
-        let mut mono = crate::monomorphize::MonomorphizationPass::new();
+        let mut mono = crate::monomorphize::MonomorphizationPass::new(arena);
         mono.process(&flat_stmts);
         let final_stmts = &mono.final_stmts;
 
-        self.register_interfaces(final_stmts);
-        self.register_classes(final_stmts)?;
+        self.register_interfaces(arena, final_stmts);
+        self.register_classes(arena, final_stmts)?;
 
         // Pass 1: Declare all functions
-        for stmt in final_stmts {
+        for stmt_id in final_stmts {
+            let stmt = arena.get_stmt(*stmt_id).clone();
             if let Stmt::FuncDecl { name, params, .. } = stmt {
                 let mut sig = self.context.module.make_signature();
                 for _ in params {
@@ -647,25 +647,26 @@ impl JITCompiler {
                 let id = self
                     .context
                     .module
-                    .declare_function(name, Linkage::Local, &sig)
+                    .declare_function(name.as_str(), Linkage::Local, &sig)
                     .map_err(|e| CodegenError {
                         message: e.to_string(),
                     })?;
-                self.context.funcs.insert(name.clone(), id);
+                self.context.funcs.insert(name, id);
             }
         }
 
         // Pass 1.5: Declare global variables
-        for stmt in final_stmts {
+        for stmt_id in final_stmts {
+            let stmt = arena.get_stmt(*stmt_id).clone();
             if let Stmt::VarDecl { name, .. } = stmt {
                 let id = self
                     .context
                     .module
-                    .declare_data(name, Linkage::Export, true, false)
+                    .declare_data(name.as_str(), Linkage::Export, true, false)
                     .map_err(|e| CodegenError {
                         message: e.to_string(),
                     })?;
-                self.context.global_vars.insert(name.clone(), id);
+                self.context.global_vars.insert(name, id);
 
                 let mut data = DataDescription::new();
                 data.define_zeroinit(8); // Allocate 8 bytes for an I64/ptr
@@ -679,7 +680,8 @@ impl JITCompiler {
         }
 
         let mut func_returns = HashMap::new();
-        for stmt in final_stmts {
+        for stmt_id in final_stmts {
+            let stmt = arena.get_stmt(*stmt_id).clone();
             if let Stmt::FuncDecl {
                 name, return_type, ..
             } = stmt
@@ -689,7 +691,7 @@ impl JITCompiler {
                     .map(|t| t.name.as_str())
                     .unwrap_or("Int");
                 func_returns.insert(
-                    name.clone(),
+                    name,
                     crate::translator::parse_vartype(
                         ret,
                         None,
@@ -708,7 +710,8 @@ impl JITCompiler {
                 ..
             } = stmt
             {
-                for method_stmt in methods {
+                for method_stmt_id in methods {
+                    let method_stmt = arena.get_stmt(method_stmt_id).clone();
                     if let Stmt::FuncDecl {
                         name,
                         params: _,
@@ -725,7 +728,7 @@ impl JITCompiler {
                             full_name.into(),
                             crate::translator::parse_vartype(
                                 ret,
-                                Some(class_name),
+                                Some(class_name.as_str()),
                                 Some(&self.context.struct_layouts),
                                 Some(&self.context.enum_layouts),
                             ),
@@ -735,11 +738,11 @@ impl JITCompiler {
             } else if let Stmt::InterfaceDecl {
                 name: interface_name,
                 methods,
-                generic_params: _,
                 ..
             } = stmt
             {
-                for method_stmt in methods {
+                for method_stmt_id in methods {
+                    let method_stmt = arena.get_stmt(method_stmt_id).clone();
                     if let Stmt::FuncDecl {
                         name,
                         params: _,
@@ -756,7 +759,7 @@ impl JITCompiler {
                             full_name.into(),
                             crate::translator::parse_vartype(
                                 ret,
-                                Some(interface_name),
+                                Some(interface_name.as_str()),
                                 Some(&self.context.struct_layouts),
                                 Some(&self.context.enum_layouts),
                             ),
@@ -767,13 +770,14 @@ impl JITCompiler {
         }
 
         // Pass 2: Define all functions and class methods
-        for stmt in final_stmts {
+        for stmt_id in final_stmts {
+            let stmt = arena.get_stmt(*stmt_id).clone();
             if let Stmt::FuncDecl {
                 name, params, body, ..
             } = stmt
             {
-                let id = *self.context.funcs.get(&ustr::Ustr::from(name)).unwrap();
-                self.compile_function(name, params, body, id, &func_returns, None)?;
+                let id = *self.context.funcs.get(&name).unwrap();
+                self.compile_function(arena, name.as_str(), &params, &body, id, &func_returns, None)?;
             } else if let Stmt::ClassDecl {
                 name: class_name,
                 methods,
@@ -785,9 +789,10 @@ impl JITCompiler {
                 ..
             } = stmt
             {
-                let is_actor = matches!(stmt, Stmt::ActorDecl { .. });
-                self.generate_drop_function(class_name)?;
-                for method_stmt in methods {
+                let is_actor = matches!(arena.get_stmt(*stmt_id), Stmt::ActorDecl { .. });
+                self.generate_drop_function(class_name.as_str())?;
+                for method_stmt_id in methods {
+                    let method_stmt = arena.get_stmt(method_stmt_id).clone();
                     if let Stmt::FuncDecl {
                         name,
                         params,
@@ -805,7 +810,7 @@ impl JITCompiler {
                                 name: "self".to_string().into(),
                                 type_annotation: pace_ast::TypeAnnotation {
                                     module_prefix: None,
-                                    name: class_name.clone(),
+                                    name: class_name,
                                     args: vec![],
                                     is_nullable: false,
                                     is_function: false,
@@ -817,16 +822,17 @@ impl JITCompiler {
                         new_params.extend(params.clone());
 
                         self.compile_function(
-                            &full_name,
+                            arena,
+                            full_name.as_str(),
                             &new_params,
-                            body,
+                            &body,
                             id,
                             &func_returns,
-                            Some(class_name),
+                            Some(class_name.as_str()),
                         )?;
 
                         if !is_static && name != "init" && is_actor {
-                            self.generate_async_wrapper(class_name, name, params.len())?;
+                            self.generate_async_wrapper(class_name.as_str(), name.as_str(), params.len())?;
                         }
                     }
                 }
@@ -836,8 +842,8 @@ impl JITCompiler {
                 ..
             } = stmt
             {
-                self.generate_enum_drop_function(enum_name)?;
-                self.generate_enum_constructors(enum_name, variants)?;
+                self.generate_enum_drop_function(enum_name.as_str())?;
+                self.generate_enum_constructors(enum_name.as_str(), &variants)?;
             }
         }
 
@@ -859,7 +865,8 @@ impl JITCompiler {
         let mut last_val = None;
 
         let mut func_returns = HashMap::new();
-        for stmt in final_stmts {
+        for stmt_id in final_stmts {
+            let stmt = arena.get_stmt(*stmt_id).clone();
             if let Stmt::FuncDecl {
                 name, return_type, ..
             } = stmt
@@ -869,7 +876,7 @@ impl JITCompiler {
                     .map(|t| t.name.as_str())
                     .unwrap_or("Int");
                 func_returns.insert(
-                    name.clone(),
+                    name,
                     crate::translator::parse_vartype(
                         ret,
                         None,
@@ -886,6 +893,7 @@ impl JITCompiler {
             Vec<(ustr::Ustr, crate::translator::VarType)>,
         )> = Vec::new();
         let mut translator = Translator {
+            arena,
             context: &mut self.context,
             builder: &mut builder,
             variables: &mut variables,
@@ -894,7 +902,8 @@ impl JITCompiler {
             pending_closures: &mut pending_closures,
             is_global_context: true,
         };
-        for stmt in final_stmts {
+        for stmt_id in final_stmts {
+            let stmt = arena.get_stmt(*stmt_id).clone();
             match stmt {
                 Stmt::VarDecl { .. }
                 | Stmt::Expr(_)
@@ -902,7 +911,7 @@ impl JITCompiler {
                 | Stmt::While { .. }
                 | Stmt::Loop { .. }
                 | Stmt::Match { .. } => {
-                    let (val, _) = translator.translate_stmt(stmt)?;
+                    let (val, _) = translator.translate_stmt(*stmt_id)?;
                     last_val = Some(val);
                 }
                 _ => {}
@@ -942,7 +951,7 @@ impl JITCompiler {
         self.context.module.clear_context(&mut self.ctx);
 
         for (fn_name, expr, captured_vars) in pending_closures.into_iter() {
-            self.compile_closure(&fn_name, expr, captured_vars, &func_returns, None)?;
+            self.compile_closure(arena, &fn_name, expr, captured_vars, &func_returns, None)?;
         }
         self.context.module.finalize_definitions().unwrap();
 
@@ -1276,9 +1285,10 @@ impl JITCompiler {
 
     fn compile_function(
         &mut self,
+        arena: &mut pace_ast::arena::AstArena,
         _name: &str,
         params: &[pace_ast::Param],
-        body: &[Stmt],
+        body: &[pace_ast::arena::StmtId],
         func_id: FuncId,
         func_returns: &HashMap<ustr::Ustr, crate::translator::VarType>,
         current_class: Option<&str>,
@@ -1317,7 +1327,7 @@ impl JITCompiler {
                 Some(&self.context.struct_layouts),
                 Some(&self.context.enum_layouts),
             );
-            variables.insert(param.name.clone(), (var, param_ty));
+            variables.insert(param.name, (var, param_ty));
             var_index += 1;
         }
 
@@ -1329,16 +1339,17 @@ impl JITCompiler {
             Vec<(ustr::Ustr, crate::translator::VarType)>,
         )> = Vec::new();
         let mut translator = Translator {
+            arena,
             context: &mut self.context,
             builder: &mut builder,
             variables: &mut variables,
             var_index: &mut var_index,
-            func_returns: &func_returns,
+            func_returns,
             pending_closures: &mut pending_closures,
             is_global_context: false,
         };
-        for stmt in body {
-            let (val, term) = translator.translate_stmt(stmt)?;
+        for stmt_id in body {
+            let (val, term) = translator.translate_stmt(*stmt_id)?;
             last_val = Some(val);
             if term {
                 terminated = true;
@@ -1351,7 +1362,7 @@ impl JITCompiler {
             let ret = last_val.unwrap_or_else(|| builder.ins().iconst(types::I64, 0));
 
             // Release all active local object variables
-            for (_var_name, (var, ty)) in variables.iter() {
+            for (var, ty) in variables.values() {
                 if matches!(ty, crate::translator::VarType::Object(_)) {
                     let obj_val = builder.use_var(*var);
                     let release_id = *self
@@ -1386,7 +1397,7 @@ impl JITCompiler {
         self.context.module.clear_context(&mut self.ctx);
 
         for (fn_name, expr, captured_vars) in pending_closures.into_iter() {
-            self.compile_closure(&fn_name, expr, captured_vars, func_returns, current_class)?;
+            self.compile_closure(arena, &fn_name, expr, captured_vars, func_returns, current_class)?;
         }
 
         Ok(())
@@ -1394,14 +1405,15 @@ impl JITCompiler {
 
     fn compile_closure(
         &mut self,
+        arena: &mut pace_ast::arena::AstArena,
         fn_name: &str,
         expr: pace_ast::Expr,
         captured_vars: Vec<(ustr::Ustr, crate::translator::VarType)>,
         func_returns: &HashMap<ustr::Ustr, crate::translator::VarType>,
         current_class: Option<&str>,
     ) -> Result<(), CodegenError> {
-        let (params, body) = match expr {
-            pace_ast::Expr::Closure { params, body, .. } => (params, body),
+        let (params, body) = match &expr {
+            pace_ast::Expr::Closure { params, body, .. } => (params.clone(), *body),
             _ => {
                 return Err(CodegenError {
                     message: "Invalid closure expression".to_string(),
@@ -1448,7 +1460,7 @@ impl JITCompiler {
             );
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
-            variables.insert(name.clone().into(), (var, ty.clone()));
+            variables.insert(*name, (var, ty.clone()));
             var_index += 1;
         }
 
@@ -1473,20 +1485,20 @@ impl JITCompiler {
             pace_ast::Expr,
             Vec<(ustr::Ustr, crate::translator::VarType)>,
         )> = Vec::new();
+        let body_stmt_id = arena.alloc_stmt(pace_ast::Stmt::Expr(body));
+        
         let mut translator = Translator {
+            arena,
             context: &mut self.context,
             builder: &mut builder,
             variables: &mut variables,
             var_index: &mut var_index,
-            func_returns: &func_returns,
+            func_returns,
             pending_closures: &mut pending_closures,
             is_global_context: false,
         };
 
-        // Closure body is a single Expr, not Stmt! Wait, Expr::Closure has a `body: Box<Expr>`.
-        // We can synthesize a Stmt::Expr or Stmt::Return.
-        let body_stmt = pace_ast::Stmt::Expr(*body);
-        let (val, term) = translator.translate_stmt(&body_stmt)?;
+        let (val, term) = translator.translate_stmt(body_stmt_id)?;
         let last_val = Some(val);
         if term {
             terminated = true;
@@ -1509,6 +1521,7 @@ impl JITCompiler {
         // Recursively compile any nested closures
         for (nested_fn, nested_expr, nested_captured) in pending_closures {
             self.compile_closure(
+                arena,
                 &nested_fn,
                 nested_expr,
                 nested_captured,

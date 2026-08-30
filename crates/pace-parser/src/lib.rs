@@ -2,14 +2,15 @@ pub mod lexer;
 pub mod parser;
 
 pub use lexer::{Lexer, Token};
-use pace_ast::Stmt;
+use pace_ast::arena::StmtId;
 pub use parser::Parser;
 
 pub fn parse(
+    arena: &mut pace_ast::arena::AstArena,
     src: &str,
     file_name: &str,
-) -> Result<(Vec<Stmt>, Vec<(usize, usize, String)>), Vec<pace_errors::SyntaxError>> {
-    let mut parser = Parser::new(src, file_name);
+) -> Result<(Vec<StmtId>, Vec<(usize, usize, String)>), Vec<pace_errors::SyntaxError>> {
+    let mut parser = Parser::new_with_arena(src, file_name, arena);
     let stmts = parser.parse()?;
     Ok((stmts, parser.lexer.comments))
 }
@@ -22,7 +23,8 @@ mod tests {
     #[test]
     fn test_parse_let_decl() {
         let src = "let x: Int = 5;";
-        let (stmts, _) = crate::parse(src, "test").unwrap();
+        let mut arena = pace_ast::arena::AstArena::new();
+        let (stmts, _) = crate::parse(&mut arena, src, "test").unwrap();
         assert_eq!(stmts.len(), 1);
     }
 
@@ -33,19 +35,20 @@ mod tests {
             import "./models/user";
             import "http";
         "#;
-        let (stmts, _) = crate::parse(src, "test").unwrap();
+        let mut arena = pace_ast::arena::AstArena::new();
+        let (stmts, _) = crate::parse(&mut arena, src, "test").unwrap();
         assert_eq!(stmts.len(), 3);
 
-        match &stmts[0] {
-            Stmt::Import { path, .. } => assert_eq!(path, "std:string"),
+        match arena.get_stmt(stmts[0]) {
+            Stmt::Import { path, .. } => assert_eq!(path.as_str(), "std:string"),
             _ => panic!("Expected Import"),
         }
-        match &stmts[1] {
-            Stmt::Import { path, .. } => assert_eq!(path, "./models/user"),
+        match arena.get_stmt(stmts[1]) {
+            Stmt::Import { path, .. } => assert_eq!(path.as_str(), "./models/user"),
             _ => panic!("Expected Import"),
         }
-        match &stmts[2] {
-            Stmt::Import { path, .. } => assert_eq!(path, "http"),
+        match arena.get_stmt(stmts[2]) {
+            Stmt::Import { path, .. } => assert_eq!(path.as_str(), "http"),
             _ => panic!("Expected Import"),
         }
     }

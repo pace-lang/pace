@@ -5,6 +5,12 @@ pub struct TreeShaker {
     reachable: HashSet<ustr::Ustr>,
 }
 
+impl Default for TreeShaker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TreeShaker {
     pub fn new() -> Self {
         Self {
@@ -12,91 +18,91 @@ impl TreeShaker {
         }
     }
 
-    pub fn run(ast: Vec<Stmt>) -> Vec<Stmt> {
+    pub fn run(arena: &mut pace_ast::arena::AstArena, ast: Vec<pace_ast::arena::StmtId>) -> Vec<pace_ast::arena::StmtId> {
         let mut shaker = Self::new();
         // Start from main
         shaker.reachable.insert(ustr::Ustr::from("main"));
 
         // Build an index of all declarations
         let mut decls = std::collections::HashMap::new();
-        shaker.index_decls(&ast, &mut decls);
+        shaker.index_decls(arena, &ast, &mut decls);
 
         // Iteratively trace reachable symbols until fixed point
         let mut queue: Vec<ustr::Ustr> = vec![ustr::Ustr::from("main")];
 
         while let Some(current) = queue.pop() {
-            if let Some(decl) = decls.get(&ustr::Ustr::from(&current)) {
-                shaker.trace_stmt(decl, &mut queue);
+            if let Some(&stmt_id) = decls.get(&current) {
+                shaker.trace_stmt(arena, stmt_id, &mut queue);
             }
         }
 
         // Filter out unreachable declarations
-        shaker.filter_ast(ast)
+        shaker.filter_ast(arena, ast)
     }
 
-    fn index_decls(&self, ast: &[Stmt], decls: &mut std::collections::HashMap<ustr::Ustr, Stmt>) {
-        for stmt in ast {
+    fn index_decls(&self, arena: &pace_ast::arena::AstArena, ast: &[pace_ast::arena::StmtId], decls: &mut std::collections::HashMap<ustr::Ustr, pace_ast::arena::StmtId>) {
+        for stmt_id in ast {
+            let stmt = arena.get_stmt(*stmt_id);
             match stmt {
                 Stmt::FuncDecl { name, .. }
                 | Stmt::ClassDecl { name, .. }
                 | Stmt::ActorDecl { name, .. }
                 | Stmt::StructDecl { name, .. }
                 | Stmt::EnumDecl { name, .. }
-                | Stmt::InterfaceDecl { name, .. } => {
-                    decls.insert(name.clone(), stmt.clone());
+                | Stmt::InterfaceDecl { name, .. }
+                => {
+                    decls.insert(*name, *stmt_id);
                 }
                 Stmt::Module { body, .. } => {
-                    self.index_decls(body, decls);
+                    self.index_decls(arena, body, decls);
                 }
                 _ => {}
             }
         }
     }
 
-    fn filter_ast(&self, ast: Vec<Stmt>) -> Vec<Stmt> {
-        ast.into_iter()
-            .filter_map(|stmt| {
-                match stmt {
-                    Stmt::FuncDecl { ref name, .. }
-                    | Stmt::ClassDecl { ref name, .. }
-                    | Stmt::ActorDecl { ref name, .. }
-                    | Stmt::StructDecl { ref name, .. }
-                    | Stmt::EnumDecl { ref name, .. }
-                    | Stmt::InterfaceDecl { ref name, .. } => {
-                        if self.reachable.contains(name) {
-                            Some(stmt)
-                        } else {
-                            None
-                        }
-                    }
-                    Stmt::Module { name, body } => {
-                        let filtered_body = self.filter_ast(body);
-                        Some(Stmt::Module {
-                            name,
-                            body: filtered_body,
-                        })
-                    }
-                    _ => Some(stmt), // Keep expressions, variable declarations in top level, etc.
+    fn filter_ast(&self, arena: &mut pace_ast::arena::AstArena, ast: Vec<pace_ast::arena::StmtId>) -> Vec<pace_ast::arena::StmtId> {
+        let mut new_ast = Vec::new();
+        for stmt_id in ast {
+            let stmt = arena.get_stmt(stmt_id).clone();
+            match stmt {
+                Stmt::Module { name, body } => {
+                    let filtered_body = self.filter_ast(arena, body);
+                    let new_mod_id = arena.alloc_stmt(Stmt::Module { name, body: filtered_body });
+                    new_ast.push(new_mod_id);
                 }
-            })
-            .collect()
+                Stmt::FuncDecl { name, .. }
+                | Stmt::ClassDecl { name, .. }
+                | Stmt::ActorDecl { name, .. }
+                | Stmt::StructDecl { name, .. }
+                | Stmt::EnumDecl { name, .. }
+                | Stmt::InterfaceDecl { name, .. } => {
+                    if self.reachable.contains(&name) {
+                        new_ast.push(stmt_id);
+                    }
+                }
+                _ => new_ast.push(stmt_id),
+            }
+        }
+        new_ast
     }
 
-    fn trace_stmt(&mut self, stmt: &Stmt, queue: &mut Vec<ustr::Ustr>) {
+    fn trace_stmt(&mut self, arena: &pace_ast::arena::AstArena, stmt_id: pace_ast::arena::StmtId, queue: &mut Vec<ustr::Ustr>) {
+        let stmt = arena.get_stmt(stmt_id);
         match stmt {
             Stmt::Module { body, .. } => {
                 for s in body {
-                    self.trace_stmt(s, queue);
+                    self.trace_stmt(arena, *s, queue);
                 }
             }
-            Stmt::Expr(expr) => self.trace_expr(expr, queue),
+            Stmt::Expr(expr) => self.trace_expr(arena, *expr, queue),
             Stmt::VarDecl {
                 initializer,
                 type_annotation,
                 ..
             } => {
                 if let Some(expr) = initializer {
-                    self.trace_expr(expr, queue);
+                    self.trace_expr(arena, *expr, queue);
                 }
                 if let Some(ty) = type_annotation {
                     self.trace_type(ty, queue);
@@ -104,7 +110,7 @@ impl TreeShaker {
             }
             Stmt::Return(expr) => {
                 if let Some(e) = expr {
-                    self.trace_expr(e, queue);
+                    self.trace_expr(arena, *e, queue);
                 }
             }
             Stmt::FuncDecl {
@@ -120,7 +126,7 @@ impl TreeShaker {
                     self.trace_type(ty, queue);
                 }
                 for s in body {
-                    self.trace_stmt(s, queue);
+                    self.trace_stmt(arena, *s, queue);
                 }
             }
             Stmt::ClassDecl {
@@ -136,10 +142,10 @@ impl TreeShaker {
                 ..
             } => {
                 for f in fields {
-                    self.trace_stmt(f, queue);
+                    self.trace_stmt(arena, *f, queue);
                 }
                 for m in methods {
-                    self.trace_stmt(m, queue);
+                    self.trace_stmt(arena, *m, queue);
                 }
                 if let Some(imp) = implements {
                     self.trace_type(imp, queue);
@@ -150,43 +156,43 @@ impl TreeShaker {
                 then_branch,
                 else_branch,
             } => {
-                self.trace_expr(condition, queue);
-                self.trace_stmt(then_branch, queue);
+                self.trace_expr(arena, *condition, queue);
+                self.trace_stmt(arena, *then_branch, queue);
                 if let Some(eb) = else_branch {
-                    self.trace_stmt(eb, queue);
+                    self.trace_stmt(arena, *eb, queue);
                 }
             }
             Stmt::While { condition, body } => {
-                self.trace_expr(condition, queue);
-                self.trace_stmt(body, queue);
+                self.trace_expr(arena, *condition, queue);
+                self.trace_stmt(arena, *body, queue);
             }
             Stmt::Block(stmts) => {
                 for s in stmts {
-                    self.trace_stmt(s, queue);
+                    self.trace_stmt(arena, *s, queue);
                 }
             }
             Stmt::Match { expr, arms } => {
-                self.trace_expr(expr, queue);
+                self.trace_expr(arena, *expr, queue);
                 for (_, body) in arms {
-                    self.trace_stmt(body, queue);
+                    self.trace_stmt(arena, *body, queue);
                 }
             }
             _ => {}
         }
     }
 
-    fn trace_expr(&mut self, expr: &Expr, queue: &mut Vec<ustr::Ustr>) {
+    fn trace_expr(&mut self, arena: &pace_ast::arena::AstArena, expr_id: pace_ast::arena::ExprId, queue: &mut Vec<ustr::Ustr>) {
+        let expr = arena.get_expr(expr_id);
         match expr {
             Expr::Call { callee, args } => {
-                if let Expr::Identifier(name, _) = &**callee {
-                    if !self.reachable.contains(name) {
+                if let Expr::Identifier(name, _) = arena.get_expr(*callee)
+                    && !self.reachable.contains(name) {
                         self.reachable.insert(*name);
                         queue.push(*name);
                     }
-                }
-                self.trace_expr(callee, queue);
+                self.trace_expr(arena, *callee, queue);
                 for arg in args {
-                    self.trace_expr(arg, queue);
+                    self.trace_expr(arena, *arg, queue);
                 }
             }
             Expr::Identifier(name, _) => {
@@ -196,12 +202,12 @@ impl TreeShaker {
                 }
             }
             Expr::Binary { left, right, .. } => {
-                self.trace_expr(left, queue);
-                self.trace_expr(right, queue);
+                self.trace_expr(arena, *left, queue);
+                self.trace_expr(arena, *right, queue);
             }
             Expr::Assign { target, value } => {
-                self.trace_expr(target, queue);
-                self.trace_expr(value, queue);
+                self.trace_expr(arena, *target, queue);
+                self.trace_expr(arena, *value, queue);
             }
             Expr::MemberAccess {
                 object,
@@ -209,31 +215,31 @@ impl TreeShaker {
                 computed_class: _,
                 is_static_operator: _,
             } => {
-                self.trace_expr(object, queue);
+                self.trace_expr(arena, *object, queue);
             }
             Expr::OptionalMemberAccess { object, .. } => {
-                self.trace_expr(object, queue);
+                self.trace_expr(arena, *object, queue);
             }
             Expr::GenericInstantiation {
                 callee,
                 generic_args,
             } => {
-                self.trace_expr(callee, queue);
+                self.trace_expr(arena, *callee, queue);
                 for arg in generic_args {
                     self.trace_type(arg, queue);
                 }
             }
             Expr::Try(expr) | Expr::Unwrap(expr) | Expr::Await(expr) => {
-                self.trace_expr(expr, queue)
+                self.trace_expr(arena, *expr, queue)
             }
             Expr::InterpolatedString(args) => {
                 for arg in args {
-                    self.trace_expr(arg, queue);
+                    self.trace_expr(arena, *arg, queue);
                 }
             }
             Expr::NullCoalesce { left, right } => {
-                self.trace_expr(left, queue);
-                self.trace_expr(right, queue);
+                self.trace_expr(arena, *left, queue);
+                self.trace_expr(arena, *right, queue);
             }
             _ => {}
         }

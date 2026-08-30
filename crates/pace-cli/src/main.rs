@@ -108,6 +108,7 @@ fn main() -> Result<()> {
     }
 
     let session = CompilerSession::new();
+    let mut arena = pace_ast::arena::AstArena::new();
 
     match cli.command {
         Commands::New { name, pkg } => commands::new::execute(name, pkg)?,
@@ -124,12 +125,12 @@ fn main() -> Result<()> {
         Commands::Fmt => commands::fmt::execute()?,
         Commands::Upgrade => commands::upgrade::execute()?,
         Commands::Outdated => commands::outdated::execute()?,
-        Commands::Publish { dry_run } => commands::publish::execute(&session, dry_run)?,
+        Commands::Publish { dry_run } => commands::publish::execute(&session, &mut arena, dry_run)?,
         Commands::Login { token } => commands::login::login(token)?,
         Commands::Check {
             file,
             output_format,
-        } => commands::check::execute(&session, file, output_format)?,
+        } => commands::check::execute(&session, &mut arena, file, output_format)?,
         Commands::Build { file, release } => commands::build::execute(&session, file, release)?,
         Commands::Run { file, release } => commands::run::execute(&session, file, release)?,
         Commands::Lsp => pace_lsp::run_server(),

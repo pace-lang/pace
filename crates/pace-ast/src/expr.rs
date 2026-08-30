@@ -1,4 +1,5 @@
 use crate::Span;
+use crate::arena::{ExprId, StmtId};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -9,7 +10,7 @@ pub enum Expr {
     /// A literal string (e.g., "hello")
     StringLiteral(ustr::Ustr),
     /// An interpolated string (e.g., "hello ${name}")
-    InterpolatedString(Vec<Expr>),
+    InterpolatedString(Vec<ExprId>),
     /// A boolean literal (true / false)
     BoolLiteral(bool),
     /// A null literal
@@ -18,56 +19,56 @@ pub enum Expr {
     Identifier(ustr::Ustr, Span),
     /// A generic instantiation (e.g., Box<Int> or first<String>)
     GenericInstantiation {
-        callee: Box<Expr>,
+        callee: ExprId,
         generic_args: Vec<crate::stmt::TypeAnnotation>,
     },
     /// A binary operation (e.g., a + b)
     Binary {
-        left: Box<Expr>,
+        left: ExprId,
         op: BinaryOp,
-        right: Box<Expr>,
+        right: ExprId,
     },
     Call {
-        callee: Box<Expr>,
-        args: Vec<Expr>,
+        callee: ExprId,
+        args: Vec<ExprId>,
     },
     /// An assignment operation (e.g., x = 5 or foo.bar = 10)
     Assign {
-        target: Box<Expr>,
-        value: Box<Expr>,
+        target: ExprId,
+        value: ExprId,
     },
     /// A member access (e.g., foo.bar or Class::static_method)
     MemberAccess {
-        object: Box<Expr>,
+        object: ExprId,
         property: ustr::Ustr,
         computed_class: Option<ustr::Ustr>,
         is_static_operator: bool,
     },
     /// A forced unwrap (e.g., foo!)
-    Unwrap(Box<Expr>),
+    Unwrap(ExprId),
     /// An optional member access (e.g., foo?.bar)
     OptionalMemberAccess {
-        object: Box<Expr>,
+        object: ExprId,
         property: ustr::Ustr,
     },
     /// A null coalesce operation (e.g., a ?? b)
     NullCoalesce {
-        left: Box<Expr>,
-        right: Box<Expr>,
+        left: ExprId,
+        right: ExprId,
     },
     /// A try operator (e.g., foo?)
-    Try(Box<Expr>),
+    Try(ExprId),
     /// An await expression (e.g., await foo)
-    Await(Box<Expr>),
+    Await(ExprId),
     /// A closure (anonymous function)
     Closure {
         params: Vec<(ustr::Ustr, crate::stmt::TypeAnnotation)>,
         return_type: Option<crate::stmt::TypeAnnotation>,
-        body: Box<Expr>, // Using Expr for both implicit return expressions and blocks (Expr::Block)
+        body: ExprId, // Using Expr for both implicit return expressions and blocks (Expr::Block)
     },
 
     /// A block expression
-    Block(Vec<crate::stmt::Stmt>),
+    Block(Vec<StmtId>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

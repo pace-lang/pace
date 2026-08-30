@@ -10,13 +10,14 @@ pub use compiler::JITCompiler;
 pub use layouts::CodegenError;
 pub mod runtime;
 
-pub fn flatten_ast(ast: &[pace_ast::Stmt]) -> Vec<pace_ast::Stmt> {
-    let mut flattened = Vec::new();
-    for stmt in ast {
+pub fn flatten_ast(arena: &pace_ast::arena::AstArena, ast: &[pace_ast::arena::StmtId]) -> Vec<pace_ast::arena::StmtId> {
+    let mut flattened: Vec<pace_ast::arena::StmtId> = Vec::new();
+    for stmt_id in ast {
+        let stmt = arena.get_stmt(*stmt_id);
         if let pace_ast::Stmt::Module { body, .. } = stmt {
-            flattened.extend(flatten_ast(body));
+            flattened.extend(flatten_ast(arena, body));
         } else {
-            flattened.push(stmt.clone());
+            flattened.push(*stmt_id);
         }
     }
     flattened

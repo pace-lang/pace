@@ -77,8 +77,8 @@ class List<T> implement Iterable<T> {
         if idx >= self.len {
             return;
         }
-        let oldVal = ptrLoad(self.ptr, idx * 8);
-        __pace_release_generic<T>(oldVal);
+        let _oldVal = ptrLoad(self.ptr, idx * 8);
+        __pace_release_generic<T>(_oldVal);
         var i = idx;
         while i < self.len - 1 {
             let next = ptrLoad(self.ptr, (i + 1) * 8);

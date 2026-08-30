@@ -236,7 +236,7 @@ pub extern "C" fn __pace_sb_free(ptr: *mut String) {
 }
 
 thread_local! {
-    static LAST_ERROR_MESSAGE: std::cell::RefCell<String> = std::cell::RefCell::new(String::new());
+    static LAST_ERROR_MESSAGE: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
 }
 
 fn set_last_error(msg: &str) {
@@ -770,12 +770,11 @@ pub extern "C" fn __pace_init_runtime(num_threads: usize) {
                                         mailbox.is_scheduled.store(false, Ordering::SeqCst);
                                         // Double-check queue to avoid race condition
                                         let q = mailbox.queue.lock().unwrap();
-                                        if !q.is_empty() {
-                                            if !mailbox.is_scheduled.swap(true, Ordering::SeqCst) {
+                                        if !q.is_empty()
+                                            && !mailbox.is_scheduled.swap(true, Ordering::SeqCst) {
                                                 // Keep processing since a message arrived right after we stored false
                                                 continue;
                                             }
-                                        }
                                         break;
                                     }
                                 }

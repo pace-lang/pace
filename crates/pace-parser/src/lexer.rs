@@ -1,11 +1,11 @@
 #[derive(Clone, Debug, PartialEq)]
-pub enum Token {
-    Ident(String),
+pub enum Token<'a> {
+    Ident(&'a str),
     Int(i64),
     Float(f64),
     String(String),
     Bool(bool),
-    DocComment(String),
+    DocComment(&'a str),
     Let,
     Var,
     Const,
@@ -140,7 +140,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn next_token(&mut self) -> (Token, (usize, usize)) {
+    pub fn next_token(&mut self) -> (Token<'a>, (usize, usize)) {
         self.skip_whitespace();
         let start = self.byte_pos;
         let token = self.next_token_inner();
@@ -148,7 +148,7 @@ impl<'a> Lexer<'a> {
         (token, (start, end - start))
     }
 
-    fn next_token_inner(&mut self) -> Token {
+    fn next_token_inner(&mut self) -> Token<'a> {
         let tail = &self.src[self.byte_pos..];
         if tail.is_empty() {
             return Token::Eof;
@@ -156,14 +156,15 @@ impl<'a> Lexer<'a> {
 
         if tail.starts_with("///") {
             self.byte_pos += 3; // consume '///'
-            let mut comment = String::new();
-            while let Some(c) = self.advance() {
+            let start = self.byte_pos;
+            while let Some(c) = self.peek() {
                 if c == '\n' {
                     break;
                 }
-                comment.push(c);
+                self.advance();
             }
-            return Token::DocComment(comment.trim().to_string());
+            let s = &self.src[start..self.byte_pos];
+            return Token::DocComment(s.trim());
         }
 
         let c = self.peek().unwrap();
@@ -233,8 +234,8 @@ impl<'a> Lexer<'a> {
             '-' => Token::Minus,
             '<' => Token::Less,
             '>' => Token::Greater,
-            '&' => Token::Ident("&".to_string()),
-            '|' => Token::Ident("|".to_string()),
+            '&' => Token::Ident("&"),
+            '|' => Token::Ident("|"),
             '*' => Token::Star,
             '/' => Token::Slash,
             '%' => Token::Mod,
@@ -244,11 +245,14 @@ impl<'a> Lexer<'a> {
             '}' => Token::RBrace,
             ',' => Token::Comma,
             '"' => self.string_inner(),
-            _ => Token::Ident(c.to_string()),
+            _ => {
+                let s = &self.src[self.byte_pos - c.len_utf8()..self.byte_pos];
+                Token::Ident(s)
+            }
         }
     }
 
-    fn ident(&mut self) -> Token {
+    fn ident(&mut self) -> Token<'a> {
         let start = self.byte_pos;
         while let Some(c) = self.peek() {
             if c.is_alphanumeric() || c == '_' {
@@ -290,11 +294,11 @@ impl<'a> Lexer<'a> {
             "while" => Token::While,
             "loop" => Token::Loop,
             "match" => Token::Match,
-            _ => Token::Ident(s.to_string()),
+            _ => Token::Ident(s),
         }
     }
 
-    fn number(&mut self) -> Token {
+    fn number(&mut self) -> Token<'a> {
         let start = self.byte_pos;
         let mut is_float = false;
         while let Some(c) = self.peek() {
@@ -315,7 +319,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn string_inner(&mut self) -> Token {
+    fn string_inner(&mut self) -> Token<'a> {
         // the opening quote has already been consumed
         let mut s = String::new();
         while let Some(c) = self.advance() {

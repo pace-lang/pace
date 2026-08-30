@@ -27,8 +27,6 @@ func runClassTest() {
     print("--- Testing Classes ---");
     let p = Person("Alice", 30);
     p.greet();
-    let p2 = Person::createDefault();
     print("Total persons created: ${Person::count}");
-    let unused_snake_case_var = 42; // Triggers both unused and naming convention warnings
 }
 

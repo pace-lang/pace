@@ -352,7 +352,7 @@ pub fn declare_runtime_functions<M: Module>(
     sig_string_split.params.push(AbiParam::new(ptr_ty));
     sig_string_split.returns.push(AbiParam::new(types::I64));
     let string_split_id = module
-        .declare_function("stringSplit", Linkage::Import, &sig_string_split)
+        .declare_function("__pace_string_split", Linkage::Import, &sig_string_split)
         .unwrap();
     funcs.insert(ustr::Ustr::from("stringSplit"), string_split_id);
 
@@ -362,7 +362,7 @@ pub fn declare_runtime_functions<M: Module>(
     sig_string_replace.params.push(AbiParam::new(ptr_ty));
     sig_string_replace.returns.push(AbiParam::new(ptr_ty));
     let string_replace_id = module
-        .declare_function("stringReplace", Linkage::Import, &sig_string_replace)
+        .declare_function("__pace_string_replace", Linkage::Import, &sig_string_replace)
         .unwrap();
     funcs.insert(ustr::Ustr::from("stringReplace"), string_replace_id);
 
@@ -372,7 +372,7 @@ pub fn declare_runtime_functions<M: Module>(
     sig_string_substring.params.push(AbiParam::new(types::I64));
     sig_string_substring.returns.push(AbiParam::new(ptr_ty));
     let string_substring_id = module
-        .declare_function("stringSubstring", Linkage::Import, &sig_string_substring)
+        .declare_function("__pace_string_substring", Linkage::Import, &sig_string_substring)
         .unwrap();
     funcs.insert(ustr::Ustr::from("stringSubstring"), string_substring_id);
 
@@ -380,7 +380,7 @@ pub fn declare_runtime_functions<M: Module>(
     sig_string_trim.params.push(AbiParam::new(ptr_ty));
     sig_string_trim.returns.push(AbiParam::new(ptr_ty));
     let string_trim_id = module
-        .declare_function("stringTrim", Linkage::Import, &sig_string_trim)
+        .declare_function("__pace_string_trim", Linkage::Import, &sig_string_trim)
         .unwrap();
     funcs.insert(ustr::Ustr::from("stringTrim"), string_trim_id);
 
@@ -389,7 +389,7 @@ pub fn declare_runtime_functions<M: Module>(
     sig_string_index_of.params.push(AbiParam::new(ptr_ty));
     sig_string_index_of.returns.push(AbiParam::new(types::I64));
     let string_index_of_id = module
-        .declare_function("stringIndexOf", Linkage::Import, &sig_string_index_of)
+        .declare_function("__pace_string_index_of", Linkage::Import, &sig_string_index_of)
         .unwrap();
     funcs.insert(ustr::Ustr::from("stringIndexOf"), string_index_of_id);
 
@@ -400,7 +400,7 @@ pub fn declare_runtime_functions<M: Module>(
         .returns
         .push(AbiParam::new(types::I64));
     let string_starts_with_id = module
-        .declare_function("stringStartsWith", Linkage::Import, &sig_string_starts_with)
+        .declare_function("__pace_string_starts_with", Linkage::Import, &sig_string_starts_with)
         .unwrap();
     funcs.insert(ustr::Ustr::from("stringStartsWith"), string_starts_with_id);
     funcs

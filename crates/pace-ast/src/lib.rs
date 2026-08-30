@@ -1,10 +1,13 @@
 pub mod expr;
 pub mod stmt;
 pub mod span;
+pub mod arena;
+pub mod clone;
 
 pub use expr::*;
 pub use stmt::*;
 pub use span::*;
+pub use arena::*;
 
 #[cfg(test)]
 mod tests {

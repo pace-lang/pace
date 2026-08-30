@@ -1,20 +1,35 @@
 use pace_ast::{Expr, Param, Stmt, TypeAnnotation};
 use std::collections::{HashMap, HashSet};
 
-pub struct Monomorphizer {
+pub struct Monomorphizer<'a> {
+    pub arena: &'a mut pace_ast::arena::AstArena,
     pub type_replacements: HashMap<ustr::Ustr, TypeAnnotation>,
 }
 
-impl Monomorphizer {
-    pub fn new(replacements: HashMap<ustr::Ustr, TypeAnnotation>) -> Self {
+impl<'a> Monomorphizer<'a> {
+    pub fn new(arena: &'a mut pace_ast::arena::AstArena, replacements: HashMap<ustr::Ustr, TypeAnnotation>) -> Self {
         Self {
+            arena,
             type_replacements: replacements,
         }
     }
 
-    pub fn instantiate_stmt(&self, stmt: &Stmt) -> Stmt {
+    
+    pub fn instantiate_stmt(&mut self, stmt_id: pace_ast::arena::StmtId) -> pace_ast::arena::StmtId {
+        let stmt = self.arena.get_stmt(stmt_id).clone();
+        let new_stmt = self.instantiate_stmt_inner(&stmt);
+        self.arena.alloc_stmt(new_stmt)
+    }
+
+    pub fn instantiate_expr(&mut self, expr_id: pace_ast::arena::ExprId) -> pace_ast::arena::ExprId {
+        let expr = self.arena.get_expr(expr_id).clone();
+        let new_expr = self.instantiate_expr_inner(&expr);
+        self.arena.alloc_expr(new_expr)
+    }
+
+    pub fn instantiate_stmt_inner(&mut self, stmt: &Stmt) -> Stmt {
         match stmt {
-            Stmt::Expr(expr) => Stmt::Expr(self.instantiate_expr(expr)),
+            Stmt::Expr(expr) => Stmt::Expr(self.instantiate_expr(*expr)),
             Stmt::VarDecl {
                 name,
                 is_mutable,
@@ -24,37 +39,37 @@ impl Monomorphizer {
                 initializer,
                 span,
             } => Stmt::VarDecl {
-                name: name.clone(),
+                name: *name,
                 is_mutable: *is_mutable,
                 type_annotation: type_annotation
                     .as_ref()
                     .map(|t| self.instantiate_type_annotation(t)),
                 is_static: *is_static,
                 visibility: visibility.clone(),
-                initializer: initializer.as_ref().map(|e| self.instantiate_expr(e)),
+                initializer: initializer.map(|e| self.instantiate_expr(e)),
                 span: *span,
             },
             Stmt::Block(stmts) => {
-                Stmt::Block(stmts.iter().map(|s| self.instantiate_stmt(s)).collect())
+                Stmt::Block(stmts.iter().map(|s| self.instantiate_stmt(*s)).collect())
             }
-            Stmt::Return(expr) => Stmt::Return(expr.as_ref().map(|e| self.instantiate_expr(e))),
+            Stmt::Return(expr) => Stmt::Return(expr.map(|e| self.instantiate_expr(e))),
             Stmt::If {
                 condition,
                 then_branch,
                 else_branch,
             } => Stmt::If {
-                condition: self.instantiate_expr(condition),
-                then_branch: Box::new(self.instantiate_stmt(then_branch)),
+                condition: self.instantiate_expr(*condition),
+                then_branch: self.instantiate_stmt(*then_branch),
                 else_branch: else_branch
                     .as_ref()
-                    .map(|b| Box::new(self.instantiate_stmt(b))),
+                    .map(|b| self.instantiate_stmt(*b)),
             },
             Stmt::While { condition, body } => Stmt::While {
-                condition: self.instantiate_expr(condition),
-                body: Box::new(self.instantiate_stmt(body)),
+                condition: self.instantiate_expr(*condition),
+                body: self.instantiate_stmt(*body),
             },
             Stmt::Loop { body } => Stmt::Loop {
-                body: Box::new(self.instantiate_stmt(body)),
+                body: self.instantiate_stmt(*body),
             },
             Stmt::FuncDecl {
                 name,
@@ -69,23 +84,23 @@ impl Monomorphizer {
                 span,
             } => {
                 Stmt::FuncDecl {
-                    name: name.clone(),
+                    name: *name,
                     generic_params: None, // Monomorphized functions are no longer generic
                     params: params
                         .iter()
                         .map(|p| Param {
-                            name: p.name.clone(),
+                            name: p.name,
                             type_annotation: self.instantiate_type_annotation(&p.type_annotation),
                         })
                         .collect(),
                     return_type: return_type
                         .as_ref()
                         .map(|t| self.instantiate_type_annotation(t)),
-                    body: body.iter().map(|s| self.instantiate_stmt(s)).collect(),
+                    body: body.iter().map(|s| self.instantiate_stmt(*s)).collect(),
                     is_async: *is_async,
                     is_static: *is_static,
                     visibility: visibility.clone(),
-                    doc_comment: doc_comment.clone(),
+                    doc_comment: *doc_comment,
                     span: *span,
                 }
             }
@@ -97,14 +112,14 @@ impl Monomorphizer {
                 implements,
                 doc_comment,
             } => Stmt::ClassDecl {
-                name: name.clone(),
+                name: *name,
                 generic_params: None,
-                fields: fields.iter().map(|f| self.instantiate_stmt(f)).collect(),
-                methods: methods.iter().map(|m| self.instantiate_stmt(m)).collect(),
+                fields: fields.iter().map(|f| self.instantiate_stmt(*f)).collect(),
+                methods: methods.iter().map(|m| self.instantiate_stmt(*m)).collect(),
                 implements: implements
                     .as_ref()
                     .map(|t| self.instantiate_type_annotation(t)),
-                doc_comment: doc_comment.clone(),
+                doc_comment: *doc_comment,
             },
             Stmt::StructDecl {
                 name,
@@ -112,10 +127,10 @@ impl Monomorphizer {
                 fields,
                 doc_comment,
             } => Stmt::StructDecl {
-                name: name.clone(),
+                name: *name,
                 generic_params: None,
-                fields: fields.iter().map(|f| self.instantiate_stmt(f)).collect(),
-                doc_comment: doc_comment.clone(),
+                fields: fields.iter().map(|f| self.instantiate_stmt(*f)).collect(),
+                doc_comment: *doc_comment,
             },
             Stmt::InterfaceDecl {
                 name,
@@ -123,29 +138,29 @@ impl Monomorphizer {
                 methods,
                 doc_comment,
             } => Stmt::InterfaceDecl {
-                name: name.clone(),
+                name: *name,
                 generic_params: None,
-                methods: methods.iter().map(|m| self.instantiate_stmt(m)).collect(),
-                doc_comment: doc_comment.clone(),
+                methods: methods.iter().map(|m| self.instantiate_stmt(*m)).collect(),
+                doc_comment: *doc_comment,
             },
             _ => stmt.clone(),
         }
     }
 
-    pub fn instantiate_expr(&self, expr: &Expr) -> Expr {
+    pub fn instantiate_expr_inner(&mut self, expr: &Expr) -> Expr {
         match expr {
             Expr::Binary { left, op, right } => Expr::Binary {
-                left: Box::new(self.instantiate_expr(left)),
+                left: self.instantiate_expr(*left),
                 op: op.clone(),
-                right: Box::new(self.instantiate_expr(right)),
+                right: self.instantiate_expr(*right),
             },
             Expr::Call { callee, args } => Expr::Call {
-                callee: Box::new(self.instantiate_expr(callee)),
-                args: args.iter().map(|a| self.instantiate_expr(a)).collect(),
+                callee: self.instantiate_expr(*callee),
+                args: args.iter().map(|a| self.instantiate_expr(*a)).collect(),
             },
             Expr::Assign { target, value } => Expr::Assign {
-                target: Box::new(self.instantiate_expr(target)),
-                value: Box::new(self.instantiate_expr(value)),
+                target: self.instantiate_expr(*target),
+                value: self.instantiate_expr(*value),
             },
             Expr::MemberAccess {
                 object,
@@ -153,16 +168,16 @@ impl Monomorphizer {
                 computed_class,
                 is_static_operator,
             } => Expr::MemberAccess {
-                object: Box::new(self.instantiate_expr(object)),
-                property: property.clone(),
-                computed_class: computed_class.clone(),
+                object: self.instantiate_expr(*object),
+                property: *property,
+                computed_class: *computed_class,
                 is_static_operator: *is_static_operator,
             },
             Expr::GenericInstantiation {
                 callee,
                 generic_args,
             } => Expr::GenericInstantiation {
-                callee: Box::new(self.instantiate_expr(callee)),
+                callee: self.instantiate_expr(*callee),
                 generic_args: generic_args
                     .iter()
                     .map(|a| self.instantiate_type_annotation(a))
@@ -179,8 +194,8 @@ impl Monomorphizer {
             new_ann
         } else {
             TypeAnnotation {
-                module_prefix: type_ann.module_prefix.clone(),
-                name: type_ann.name.clone(),
+                module_prefix: type_ann.module_prefix,
+                name: type_ann.name,
                 args: type_ann
                     .args
                     .iter()
@@ -195,22 +210,21 @@ impl Monomorphizer {
     }
 }
 
-pub struct MonomorphizationPass {
-    templates: HashMap<ustr::Ustr, Stmt>, // Name -> AST Node
-    pub final_stmts: Vec<Stmt>,
+pub struct MonomorphizationPass<'a> {
+    pub arena: &'a mut pace_ast::arena::AstArena,
+    templates: HashMap<ustr::Ustr, pace_ast::arena::StmtId>, // Name -> AST Node
+    pub final_stmts: Vec<pace_ast::arena::StmtId>,
     queue: Vec<(String, Vec<TypeAnnotation>)>, // template_name, args
     instantiated: HashSet<String>,             // specialized names like "Box_Int"
 }
 
-impl Default for MonomorphizationPass {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// removed default
 
-impl MonomorphizationPass {
-    pub fn new() -> Self {
+
+impl<'a> MonomorphizationPass<'a> {
+    pub fn new(arena: &'a mut pace_ast::arena::AstArena) -> Self {
         Self {
+            arena,
             templates: HashMap::new(),
             final_stmts: Vec::new(),
             queue: Vec::new(),
@@ -218,11 +232,12 @@ impl MonomorphizationPass {
         }
     }
 
-    pub fn process(&mut self, stmts: &[Stmt]) {
+    pub fn process(&mut self, stmts: &[pace_ast::arena::StmtId]) {
         let mut non_generics = Vec::new();
 
         // Pass 1: Extract templates
-        for stmt in stmts {
+        for stmt_id in stmts {
+            let stmt = self.arena.get_stmt(*stmt_id);
             let (is_generic, name) = match stmt {
                 Stmt::ClassDecl {
                     name,
@@ -249,16 +264,17 @@ impl MonomorphizationPass {
 
             if is_generic {
                 if let Some(n) = name {
-                    self.templates.insert(n.clone(), stmt.clone());
+                    self.templates.insert(*n, *stmt_id);
                 }
             } else {
-                non_generics.push(stmt.clone());
+                non_generics.push(*stmt_id);
             }
         }
 
         // Pass 2: Monomorphize non-generics and scan for generics
         for stmt in non_generics {
-            self.scan_stmt(&stmt);
+            let stmt_ref = self.arena.get_stmt(stmt).clone();
+            self.scan_stmt(&stmt_ref);
             self.final_stmts.push(stmt);
         }
 
@@ -280,7 +296,7 @@ impl MonomorphizationPass {
 
             if let Some(template) = self.templates.get(&ustr::Ustr::from(&template_name)).cloned() {
                 let mut replacements = HashMap::new();
-                let generic_params = match &template {
+                let generic_params = match self.arena.get_stmt(template) {
                     Stmt::ClassDecl { generic_params, .. } => generic_params.clone(),
                     Stmt::StructDecl { generic_params, .. } => generic_params.clone(),
                     Stmt::InterfaceDecl { generic_params, .. } => generic_params.clone(),
@@ -291,15 +307,15 @@ impl MonomorphizationPass {
 
                 for (i, param_name) in generic_params.iter().enumerate() {
                     if i < args.len() {
-                        replacements.insert(param_name.clone(), args[i].clone());
+                        replacements.insert(*param_name, args[i].clone());
                     }
                 }
 
-                let mono = Monomorphizer::new(replacements);
-                let mut instantiated_stmt = mono.instantiate_stmt(&template);
+                let mut mono = Monomorphizer::new(self.arena, replacements);
+                let instantiated_stmt = mono.instantiate_stmt(template);
 
                 // Set the specialized name
-                match &mut instantiated_stmt {
+                match self.arena.get_stmt_mut(instantiated_stmt) {
                     Stmt::ClassDecl { name, .. } => *name = specialized_name.clone().into(),
                     Stmt::StructDecl { name, .. } => *name = specialized_name.clone().into(),
                     Stmt::InterfaceDecl { name, .. } => *name = specialized_name.clone().into(),
@@ -308,18 +324,19 @@ impl MonomorphizationPass {
                 }
 
                 // Scan the newly instantiated statement for more generics
-                self.scan_stmt(&instantiated_stmt);
+                let stmt_ref = self.arena.get_stmt(instantiated_stmt).clone();
+                self.scan_stmt(&stmt_ref);
 
                 self.final_stmts.push(instantiated_stmt);
             }
         }
 
         // Pass 4: Flatten all type annotations in final_stmts
-        let flattener = TypeFlattener {};
+        let mut flattener = TypeFlattener { arena: self.arena };
         self.final_stmts = self
             .final_stmts
             .iter()
-            .map(|s| flattener.flatten_stmt(s))
+            .map(|s| flattener.flatten_stmt(*s))
             .collect();
     }
 
@@ -354,7 +371,7 @@ impl MonomorphizationPass {
                     self.scan_type_annotation(rt);
                 }
                 for s in body {
-                    self.scan_stmt(s);
+                    { let __stmt = self.arena.get_stmt(*s).clone(); self.scan_stmt(&__stmt); }
                 }
             }
             Stmt::ClassDecl {
@@ -364,10 +381,10 @@ impl MonomorphizationPass {
                 ..
             } => {
                 for f in fields {
-                    self.scan_stmt(f);
+                    { let __stmt = self.arena.get_stmt(*f).clone(); self.scan_stmt(&__stmt); }
                 }
                 for m in methods {
-                    self.scan_stmt(m);
+                    { let __stmt = self.arena.get_stmt(*m).clone(); self.scan_stmt(&__stmt); }
                 }
                 if let Some(imp) = implements {
                     self.scan_type_annotation(imp);
@@ -375,17 +392,17 @@ impl MonomorphizationPass {
             }
             Stmt::StructDecl { fields, .. } => {
                 for f in fields {
-                    self.scan_stmt(f);
+                    { let __stmt = self.arena.get_stmt(*f).clone(); self.scan_stmt(&__stmt); }
                 }
             }
             Stmt::InterfaceDecl { methods, .. } => {
                 for m in methods {
-                    self.scan_stmt(m);
+                    { let __stmt = self.arena.get_stmt(*m).clone(); self.scan_stmt(&__stmt); }
                 }
             }
             Stmt::Block(stmts) => {
                 for s in stmts {
-                    self.scan_stmt(s);
+                    { let __stmt = self.arena.get_stmt(*s).clone(); self.scan_stmt(&__stmt); }
                 }
             }
             _ => {} // Expressions could contain GenericInstantiation
@@ -403,16 +420,26 @@ impl MonomorphizationPass {
     }
 }
 
-pub struct TypeFlattener {}
+pub struct TypeFlattener<'a> {
+    pub arena: &'a mut pace_ast::arena::AstArena,
+}
 
-impl TypeFlattener {
-    pub fn flatten_stmt(&self, stmt: &Stmt) -> Stmt {
-        self.do_flatten_stmt(stmt)
+impl<'a> TypeFlattener<'a> {
+    pub fn flatten_stmt(&mut self, stmt_id: pace_ast::arena::StmtId) -> pace_ast::arena::StmtId {
+        let stmt = self.arena.get_stmt(stmt_id).clone();
+        let new_stmt = self.flatten_stmt_inner(&stmt);
+        self.arena.alloc_stmt(new_stmt)
     }
 
-    fn do_flatten_stmt(&self, stmt: &Stmt) -> Stmt {
+    pub fn flatten_expr(&mut self, expr_id: pace_ast::arena::ExprId) -> pace_ast::arena::ExprId {
+        let expr = self.arena.get_expr(expr_id).clone();
+        let new_expr = self.flatten_expr_inner(&expr);
+        self.arena.alloc_expr(new_expr)
+    }
+
+    fn flatten_stmt_inner(&mut self, stmt: &Stmt) -> Stmt {
         match stmt {
-            Stmt::Expr(expr) => Stmt::Expr(self.flatten_expr(expr)),
+            Stmt::Expr(expr) => Stmt::Expr(self.flatten_expr(*expr)),
             Stmt::VarDecl {
                 name,
                 is_mutable,
@@ -422,37 +449,37 @@ impl TypeFlattener {
                 initializer,
                 span,
             } => Stmt::VarDecl {
-                name: name.clone(),
+                name: *name,
                 is_mutable: *is_mutable,
                 type_annotation: type_annotation
                     .as_ref()
                     .map(|t| self.flatten_type_annotation(t)),
                 is_static: *is_static,
                 visibility: visibility.clone(),
-                initializer: initializer.as_ref().map(|e| self.flatten_expr(e)),
+                initializer: initializer.as_ref().map(|e| self.flatten_expr(*e)),
                 span: *span,
             },
             Stmt::Block(stmts) => {
-                Stmt::Block(stmts.iter().map(|s| self.do_flatten_stmt(s)).collect())
+                Stmt::Block(stmts.iter().map(|s| self.flatten_stmt(*s)).collect())
             }
-            Stmt::Return(expr) => Stmt::Return(expr.as_ref().map(|e| self.flatten_expr(e))),
+            Stmt::Return(expr) => Stmt::Return(expr.as_ref().map(|e| self.flatten_expr(*e))),
             Stmt::If {
                 condition,
                 then_branch,
                 else_branch,
             } => Stmt::If {
-                condition: self.flatten_expr(condition),
-                then_branch: Box::new(self.do_flatten_stmt(then_branch)),
+                condition: self.flatten_expr(*condition),
+                then_branch: self.flatten_stmt(*then_branch),
                 else_branch: else_branch
                     .as_ref()
-                    .map(|b| Box::new(self.do_flatten_stmt(b))),
+                    .map(|b| self.flatten_stmt(*b)),
             },
             Stmt::While { condition, body } => Stmt::While {
-                condition: self.flatten_expr(condition),
-                body: Box::new(self.do_flatten_stmt(body)),
+                condition: self.flatten_expr(*condition),
+                body: self.flatten_stmt(*body),
             },
             Stmt::Loop { body } => Stmt::Loop {
-                body: Box::new(self.do_flatten_stmt(body)),
+                body: self.flatten_stmt(*body),
             },
             Stmt::FuncDecl {
                 name,
@@ -466,23 +493,23 @@ impl TypeFlattener {
                 doc_comment,
                 span,
             } => Stmt::FuncDecl {
-                name: name.clone(),
+                name: *name,
                 generic_params: generic_params.clone(),
                 params: params
                     .iter()
                     .map(|p| Param {
-                        name: p.name.clone(),
+                        name: p.name,
                         type_annotation: self.flatten_type_annotation(&p.type_annotation),
                     })
                     .collect(),
                 return_type: return_type
                     .as_ref()
                     .map(|t| self.flatten_type_annotation(t)),
-                body: body.iter().map(|s| self.do_flatten_stmt(s)).collect(),
+                body: body.iter().map(|s| self.flatten_stmt(*s)).collect(),
                 is_async: *is_async,
                 is_static: *is_static,
                 visibility: visibility.clone(),
-                doc_comment: doc_comment.clone(),
+                doc_comment: *doc_comment,
                 span: *span,
             },
             Stmt::ClassDecl {
@@ -493,12 +520,12 @@ impl TypeFlattener {
                 implements,
                 doc_comment,
             } => Stmt::ClassDecl {
-                name: name.clone(),
+                name: *name,
                 generic_params: generic_params.clone(),
-                fields: fields.iter().map(|f| self.do_flatten_stmt(f)).collect(),
-                methods: methods.iter().map(|m| self.do_flatten_stmt(m)).collect(),
+                fields: fields.iter().map(|f| self.flatten_stmt(*f)).collect(),
+                methods: methods.iter().map(|m| self.flatten_stmt(*m)).collect(),
                 implements: implements.as_ref().map(|t| self.flatten_type_annotation(t)),
-                doc_comment: doc_comment.clone(),
+                doc_comment: *doc_comment,
             },
             Stmt::StructDecl {
                 name,
@@ -506,10 +533,10 @@ impl TypeFlattener {
                 fields,
                 doc_comment,
             } => Stmt::StructDecl {
-                name: name.clone(),
+                name: *name,
                 generic_params: generic_params.clone(),
-                fields: fields.iter().map(|f| self.do_flatten_stmt(f)).collect(),
-                doc_comment: doc_comment.clone(),
+                fields: fields.iter().map(|f| self.flatten_stmt(*f)).collect(),
+                doc_comment: *doc_comment,
             },
             Stmt::InterfaceDecl {
                 name,
@@ -517,29 +544,29 @@ impl TypeFlattener {
                 methods,
                 doc_comment,
             } => Stmt::InterfaceDecl {
-                name: name.clone(),
+                name: *name,
                 generic_params: generic_params.clone(),
-                methods: methods.iter().map(|m| self.do_flatten_stmt(m)).collect(),
-                doc_comment: doc_comment.clone(),
+                methods: methods.iter().map(|m| self.flatten_stmt(*m)).collect(),
+                doc_comment: *doc_comment,
             },
             _ => stmt.clone(),
         }
     }
 
-    fn flatten_expr(&self, expr: &Expr) -> Expr {
+    fn flatten_expr_inner(&mut self, expr: &Expr) -> Expr {
         match expr {
             Expr::Binary { left, op, right } => Expr::Binary {
-                left: Box::new(self.flatten_expr(left)),
+                left: self.flatten_expr(*left),
                 op: op.clone(),
-                right: Box::new(self.flatten_expr(right)),
+                right: self.flatten_expr(*right),
             },
             Expr::Call { callee, args } => Expr::Call {
-                callee: Box::new(self.flatten_expr(callee)),
-                args: args.iter().map(|a| self.flatten_expr(a)).collect(),
+                callee: self.flatten_expr(*callee),
+                args: args.iter().map(|a| self.flatten_expr(*a)).collect(),
             },
             Expr::Assign { target, value } => Expr::Assign {
-                target: Box::new(self.flatten_expr(target)),
-                value: Box::new(self.flatten_expr(value)),
+                target: self.flatten_expr(*target),
+                value: self.flatten_expr(*value),
             },
             Expr::MemberAccess {
                 object,
@@ -547,16 +574,16 @@ impl TypeFlattener {
                 computed_class,
                 is_static_operator,
             } => Expr::MemberAccess {
-                object: Box::new(self.flatten_expr(object)),
-                property: property.clone(),
-                computed_class: computed_class.clone(),
+                object: self.flatten_expr(*object),
+                property: *property,
+                computed_class: *computed_class,
                 is_static_operator: *is_static_operator,
             },
             Expr::GenericInstantiation {
                 callee,
                 generic_args,
             } => Expr::GenericInstantiation {
-                callee: Box::new(self.flatten_expr(callee)),
+                callee: self.flatten_expr(*callee),
                 generic_args: generic_args
                     .iter()
                     .map(|a| self.flatten_type_annotation(a))
@@ -572,7 +599,7 @@ impl TypeFlattener {
         } else {
             let name = MonomorphizationPass::flatten_type_name(ta);
             TypeAnnotation {
-                module_prefix: ta.module_prefix.clone(),
+                module_prefix: ta.module_prefix,
                 name: name.into(),
                 args: vec![],
                 is_nullable: ta.is_nullable,

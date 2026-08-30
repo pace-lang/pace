@@ -3,7 +3,6 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
-use pace_ast::Stmt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -11,7 +10,8 @@ use tokio::sync::RwLock;
 pub struct PaceLanguageServer {
     pub client: Client,
     pub session: CompilerSession,
-    pub ast_cache: Arc<RwLock<HashMap<Url, Vec<Stmt>>>>,
+    pub ast_cache: Arc<RwLock<HashMap<Url, Vec<pace_ast::arena::StmtId>>>>,
+    pub arena: Arc<RwLock<pace_ast::arena::AstArena>>,
     pub src_cache: Arc<RwLock<HashMap<Url, String>>>,
     pub env_cache: Arc<RwLock<HashMap<Url, pace_ty::Environment>>>,
     pub root_uri: Arc<RwLock<Option<Url>>>,
@@ -23,6 +23,7 @@ impl PaceLanguageServer {
             client,
             session: CompilerSession::new(),
             ast_cache: Arc::new(RwLock::new(HashMap::new())),
+            arena: Arc::new(RwLock::new(pace_ast::arena::AstArena::new())),
             src_cache: Arc::new(RwLock::new(HashMap::new())),
             env_cache: Arc::new(RwLock::new(HashMap::new())),
             root_uri: Arc::new(RwLock::new(None)),
@@ -37,7 +38,8 @@ impl PaceLanguageServer {
         } else {
             return;
         };
-        let ast_result = self.session.check_file_with_source(&path, src);
+        let mut arena = self.arena.write().await;
+        let ast_result = self.session.check_file_with_source(&mut arena, &path, src);
 
         self.src_cache
             .write()
@@ -406,8 +408,8 @@ impl LanguageServer for PaceLanguageServer {
 
         let root_uri = self.root_uri.read().await.clone();
 
-        if let Some(uri) = root_uri {
-            if let Ok(path) = uri.to_file_path() {
+        if let Some(uri) = root_uri
+            && let Ok(path) = uri.to_file_path() {
                 self.client
                     .log_message(
                         MessageType::INFO,
@@ -420,20 +422,17 @@ impl LanguageServer for PaceLanguageServer {
                     .filter_map(|e| e.ok())
                 {
                     let p = entry.path();
-                    if p.is_file() && p.extension().map_or(false, |ext| ext == "pace") {
-                        if let Ok(src) = std::fs::read_to_string(p) {
-                            if let Ok(file_uri) = Url::from_file_path(p) {
+                    if p.is_file() && p.extension().is_some_and(|ext| ext == "pace")
+                        && let Ok(src) = std::fs::read_to_string(p)
+                            && let Ok(file_uri) = Url::from_file_path(p) {
                                 self.check_and_publish_diagnostics(file_uri, &src).await;
                             }
-                        }
-                    }
                 }
 
                 self.client
                     .log_message(MessageType::INFO, "Workspace scanning complete")
                     .await;
             }
-        }
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -457,8 +456,8 @@ impl LanguageServer for PaceLanguageServer {
         let pos = params.text_document_position_params.position;
 
         let src_cache = self.src_cache.read().await;
-        if let Some(src) = src_cache.get(&uri) {
-            if let Some(word) = get_word_at_position(src, pos) {
+        if let Some(src) = src_cache.get(&uri)
+            && let Some(word) = get_word_at_position(src, pos) {
                 let mut hover_text = format!("Symbol: `{}`", word);
 
                 let env_cache = self.env_cache.read().await;
@@ -492,7 +491,6 @@ impl LanguageServer for PaceLanguageServer {
                     range: None,
                 }));
             }
-        }
 
         Ok(None)
     }
@@ -509,20 +507,19 @@ impl LanguageServer for PaceLanguageServer {
 
         if let Some(src) = src_cache.get(&uri) {
             // First check if we're hovering over a string (likely an import path)
-            if let Some(string_content) = get_string_at_position(src, pos) {
-                if string_content.starts_with("pace:")
+            if let Some(string_content) = get_string_at_position(src, pos)
+                && (string_content.starts_with("pace:")
                     || string_content.starts_with("package:")
                     || string_content.starts_with("self:")
                     || string_content.starts_with("./")
-                    || string_content.starts_with("../")
-                {
-                    if let Ok(path_buf) = uri.to_file_path() {
-                        if let Ok(resolved_path) = pace_driver::CompilerSession::resolve_import_path(
+                    || string_content.starts_with("../"))
+                    && let Ok(path_buf) = uri.to_file_path()
+                        && let Ok(resolved_path) = pace_driver::CompilerSession::resolve_import_path(
                             &string_content,
                             &path_buf,
-                        ) {
-                            if resolved_path.exists() {
-                                if let Ok(resolved_uri) = Url::from_file_path(resolved_path) {
+                        )
+                            && resolved_path.exists()
+                                && let Ok(resolved_uri) = Url::from_file_path(resolved_path) {
                                     return Ok(Some(GotoDefinitionResponse::Scalar(Location {
                                         uri: resolved_uri,
                                         range: Range {
@@ -537,16 +534,13 @@ impl LanguageServer for PaceLanguageServer {
                                         },
                                     })));
                                 }
-                            }
-                        }
-                    }
-                }
-            }
 
-            if let Some(word) = get_word_at_position(src, pos) {
-                if let Some(ast) = ast_cache.get(&uri) {
+            if let Some(word) = get_word_at_position(src, pos)
+                && let Some(ast) = ast_cache.get(&uri) {
                     // Try to find the symbol declaration in the AST
-                    for stmt in ast {
+                    let arena = self.arena.read().await;
+                    for stmt_id in ast {
+                        let stmt = arena.get_stmt(*stmt_id);
                         match stmt {
                             pace_ast::Stmt::FuncDecl { name, .. }
                             | pace_ast::Stmt::VarDecl { name, .. }
@@ -557,8 +551,8 @@ impl LanguageServer for PaceLanguageServer {
                             | pace_ast::Stmt::InterfaceDecl { name, .. } => {
                                 // Basic matching. `pace_ast::Stmt::ClassDecl` etc don't have span yet,
                                 // but we can use the ones that do.
-                                if name == &word || name.ends_with(&format!("__{}", word)) {
-                                    if let pace_ast::Stmt::FuncDecl { span, .. }
+                                if (name == &word || name.ends_with(&format!("__{}", word)))
+                                    && let pace_ast::Stmt::FuncDecl { span, .. }
                                     | pace_ast::Stmt::VarDecl { span, .. } = stmt
                                     {
                                         let start = get_position(src, span.start);
@@ -570,13 +564,11 @@ impl LanguageServer for PaceLanguageServer {
                                             },
                                         )));
                                     }
-                                }
                             }
                             _ => {}
                         }
                     }
                 }
-            }
         }
 
         Ok(None)
@@ -607,13 +599,13 @@ impl LanguageServer for PaceLanguageServer {
                     }
 
                     let mut import_path = None;
-                    if let Some(target) = target_uri {
-                        if let (Ok(current_path), Ok(target_path)) = (
+                    if let Some(target) = target_uri
+                        && let (Ok(current_path), Ok(target_path)) = (
                             params.text_document.uri.to_file_path(),
                             target.to_file_path(),
-                        ) {
-                            if let Some(parent) = current_path.parent() {
-                                if let Some(mut rel_path) =
+                        )
+                            && let Some(parent) = current_path.parent()
+                                && let Some(mut rel_path) =
                                     pathdiff::diff_paths(&target_path, parent)
                                 {
                                     rel_path.set_extension(""); // Remove .pace
@@ -623,9 +615,6 @@ impl LanguageServer for PaceLanguageServer {
                                     }
                                     import_path = Some(path_str);
                                 }
-                            }
-                        }
-                    }
 
                     if let Some(path) = import_path {
                         let mut changes = std::collections::HashMap::new();
@@ -746,7 +735,7 @@ pub fn run_server() {
         let stdout = tokio::io::stdout();
 
         let (service, socket) =
-            tower_lsp::LspService::new(|client| PaceLanguageServer::new(client));
+            tower_lsp::LspService::new(PaceLanguageServer::new);
         tower_lsp::Server::new(stdin, stdout, socket)
             .serve(service)
             .await;

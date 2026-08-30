@@ -40,6 +40,12 @@ pub struct SymbolResolver {
     pub exports: HashMap<ustr::Ustr, HashMap<ustr::Ustr, ModuleExport>>,
 }
 
+impl Default for SymbolResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbolResolver {
     pub fn new() -> Self {
         Self {
@@ -47,17 +53,20 @@ impl SymbolResolver {
         }
     }
 
-    pub fn run(ast: Vec<Stmt>) -> Result<Vec<Stmt>> {
+    pub fn run(arena: &mut pace_ast::arena::AstArena, ast: Vec<pace_ast::arena::StmtId>) -> Result<Vec<pace_ast::arena::StmtId>> {
         let mut resolver = Self::new();
-        resolver.resolve(ast)
+        resolver.resolve(arena, ast)
     }
 
-    pub fn resolve(&mut self, mut ast: Vec<Stmt>) -> Result<Vec<Stmt>> {
+    pub fn resolve(&mut self, arena: &mut pace_ast::arena::AstArena, ast: Vec<pace_ast::arena::StmtId>) -> Result<Vec<pace_ast::arena::StmtId>> {
         // Pass 1: Collect exports for all modules and mangle their definitions
-        for stmt in &mut ast {
-            if let Stmt::Module { name, body } = stmt {
+        for &stmt_id in &ast {
+            let stmt = arena.get_stmt(stmt_id).clone();
+            if let Stmt::Module { name, ref body } = stmt {
                 let mut module_exports = HashMap::new();
-                for item in body.iter_mut() {
+                for &item_id in body.iter() {
+                    let mut item_stmt = arena.get_stmt(item_id).clone();
+                    let item = &mut item_stmt;
                     let mut is_export = false;
                     let mut vis = Visibility::Public;
                     let mut original_name = String::new();
@@ -118,26 +127,30 @@ impl SymbolResolver {
                             _ => unreachable!(),
                         }
                     }
+                    *arena.get_stmt_mut(item_id) = item_stmt;
                 }
-                self.exports.insert(name.clone(), module_exports);
+                self.exports.insert(name, module_exports);
             }
+            *arena.get_stmt_mut(stmt_id) = stmt;
         }
 
         // Pass 2: Resolve references within each module
-        for stmt in &mut ast {
-            if let Stmt::Module { name, body } = stmt {
+        for &stmt_id in &ast {
+            let stmt = arena.get_stmt(stmt_id).clone();
+            if let Stmt::Module { name, ref body } = stmt {
                 let mut local_scope: HashMap<ustr::Ustr, ModuleExport> = HashMap::new();
                 let mut mod_aliases: HashMap<ustr::Ustr, String> = HashMap::new();
 
                 let mut local_declarations: HashMap<ustr::Ustr, ModuleExport> = HashMap::new();
-                if let Some(exports) = self.exports.get(name) {
+                if let Some(exports) = self.exports.get(&name) {
                     for (k, v) in exports {
-                        local_declarations.insert(k.clone(), v.clone());
-                        local_scope.insert(k.clone(), v.clone());
+                        local_declarations.insert(*k, v.clone());
+                        local_scope.insert(*k, v.clone());
                     }
                 }
 
-                for item in body.iter() {
+                for &item_id in body.iter() {
+                    let item = arena.get_stmt(item_id);
                     if let Stmt::Import {
                         path,
                         alias,
@@ -145,25 +158,23 @@ impl SymbolResolver {
                         hide,
                     } = item
                     {
-                        let imported_mod_name = path.clone();
+                        let imported_mod_name = *path;
                         if let Some(imported_exports) = self.exports.get(&imported_mod_name) {
                             if let Some(alias_name) = alias {
-                                mod_aliases.insert(alias_name.clone(), imported_mod_name.to_string());
+                                mod_aliases.insert(*alias_name, imported_mod_name.to_string());
                             } else {
                                 for (sym, export) in imported_exports {
                                     if export.visibility == Visibility::Private {
                                         continue;
                                     }
-                                    if let Some(hide_list) = hide {
-                                        if hide_list.contains(sym) {
+                                    if let Some(hide_list) = hide
+                                        && hide_list.contains(sym) {
                                             continue;
                                         }
-                                    }
-                                    if let Some(show_list) = show {
-                                        if !show_list.contains(sym) {
+                                    if let Some(show_list) = show
+                                        && !show_list.contains(sym) {
                                             continue;
                                         }
-                                    }
 
                                     if local_declarations.contains_key(sym) {
                                         continue; // Local declarations shadow imports implicitly
@@ -172,22 +183,22 @@ impl SymbolResolver {
                                     if let Some(existing) = local_scope.get(sym) {
                                         if existing.mangled_name != export.mangled_name {
                                             local_scope.insert(
-                                                sym.clone(),
+                                                *sym,
                                                 ModuleExport {
-                                                    name: sym.clone(),
+                                                    name: *sym,
                                                     visibility: Visibility::Public,
                                                     mangled_name: "COLLISION".to_string(),
                                                 },
                                             );
                                         }
                                     } else {
-                                        local_scope.insert(sym.clone(), export.clone());
+                                        local_scope.insert(*sym, export.clone());
                                     }
                                 }
                             }
                         }
                     } else if let Stmt::Export { path } = item {
-                        let imported_mod_name = path.clone();
+                        let imported_mod_name = *path;
                         let mut to_reexport = Vec::new();
                         if let Some(imported_exports) = self.exports.get(&imported_mod_name) {
                             for (sym, export) in imported_exports {
@@ -196,13 +207,13 @@ impl SymbolResolver {
                                 }
 
                                 if !local_declarations.contains_key(sym) {
-                                    local_scope.insert(sym.clone(), export.clone());
-                                    to_reexport.push((sym.clone(), export.clone()));
+                                    local_scope.insert(*sym, export.clone());
+                                    to_reexport.push((*sym, export.clone()));
                                 }
                             }
                         }
                         // Apply re-exports
-                        if let Some(mod_exports) = self.exports.get_mut(name) {
+                        if let Some(mod_exports) = self.exports.get_mut(&name) {
                             for (sym, export) in to_reexport {
                                 mod_exports.insert(sym, export);
                             }
@@ -210,10 +221,11 @@ impl SymbolResolver {
                     }
                 }
 
-                for item in body.iter_mut() {
-                    self.resolve_stmt(item, &local_scope, &mod_aliases)?;
+                for &item_id in body.iter() {
+                    self.resolve_stmt(arena, item_id, &local_scope, &mod_aliases)?;
                 }
             }
+            *arena.get_stmt_mut(stmt_id) = stmt;
         }
 
         Ok(ast)
@@ -221,19 +233,21 @@ impl SymbolResolver {
 
     fn resolve_stmt(
         &self,
-        stmt: &mut Stmt,
+        arena: &mut pace_ast::arena::AstArena,
+        stmt_id: pace_ast::arena::StmtId,
         scope: &HashMap<ustr::Ustr, ModuleExport>,
         aliases: &HashMap<ustr::Ustr, String>,
     ) -> Result<()> {
-        match stmt {
-            Stmt::Expr(expr) => self.resolve_expr(expr, scope, aliases)?,
+        let mut stmt = arena.get_stmt(stmt_id).clone();
+        match &mut stmt {
+            Stmt::Expr(expr) => self.resolve_expr(arena, *expr, scope, aliases)?,
             Stmt::VarDecl {
                 initializer,
                 type_annotation,
                 ..
             } => {
                 if let Some(expr) = initializer {
-                    self.resolve_expr(expr, scope, aliases)?;
+                    self.resolve_expr(arena, *expr, scope, aliases)?;
                 }
                 if let Some(ty) = type_annotation {
                     self.resolve_type(ty, scope, aliases)?;
@@ -241,7 +255,7 @@ impl SymbolResolver {
             }
             Stmt::Return(expr) => {
                 if let Some(e) = expr {
-                    self.resolve_expr(e, scope, aliases)?;
+                    self.resolve_expr(arena, *e, scope, aliases)?;
                 }
             }
             Stmt::FuncDecl {
@@ -257,7 +271,7 @@ impl SymbolResolver {
                     self.resolve_type(ty, scope, aliases)?;
                 }
                 for s in body {
-                    self.resolve_stmt(s, scope, aliases)?;
+                    self.resolve_stmt(arena, *s, scope, aliases)?;
                 }
             }
             Stmt::ClassDecl {
@@ -273,10 +287,10 @@ impl SymbolResolver {
                 ..
             } => {
                 for f in fields {
-                    self.resolve_stmt(f, scope, aliases)?;
+                    self.resolve_stmt(arena, *f, scope, aliases)?;
                 }
                 for m in methods {
-                    self.resolve_stmt(m, scope, aliases)?;
+                    self.resolve_stmt(arena, *m, scope, aliases)?;
                 }
                 if let Some(imp) = implements {
                     self.resolve_type(imp, scope, aliases)?;
@@ -287,85 +301,81 @@ impl SymbolResolver {
                 then_branch,
                 else_branch,
             } => {
-                self.resolve_expr(condition, scope, aliases)?;
-                self.resolve_stmt(then_branch, scope, aliases)?;
+                self.resolve_expr(arena, *condition, scope, aliases)?;
+                self.resolve_stmt(arena, *then_branch, scope, aliases)?;
                 if let Some(eb) = else_branch {
-                    self.resolve_stmt(eb, scope, aliases)?;
+                    self.resolve_stmt(arena, *eb, scope, aliases)?;
                 }
             }
             Stmt::While { condition, body } => {
-                self.resolve_expr(condition, scope, aliases)?;
-                self.resolve_stmt(body, scope, aliases)?;
+                self.resolve_expr(arena, *condition, scope, aliases)?;
+                self.resolve_stmt(arena, *body, scope, aliases)?;
             }
             Stmt::Block(stmts) => {
                 for s in stmts {
-                    self.resolve_stmt(s, scope, aliases)?;
+                    self.resolve_stmt(arena, *s, scope, aliases)?;
                 }
             }
             Stmt::Match { expr, arms } => {
-                self.resolve_expr(expr, scope, aliases)?;
+                self.resolve_expr(arena, *expr, scope, aliases)?;
                 for (pattern, body) in arms {
-                    self.resolve_pattern(pattern, scope, aliases)?;
-                    self.resolve_stmt(body, scope, aliases)?;
+                    self.resolve_pattern(arena, pattern, scope, aliases)?;
+                    self.resolve_stmt(arena, *body, scope, aliases)?;
                 }
             }
             _ => {}
         }
+        *arena.get_stmt_mut(stmt_id) = stmt;
         Ok(())
     }
 
     fn resolve_expr(
         &self,
-        expr: &mut Expr,
+        arena: &mut pace_ast::arena::AstArena,
+        expr_id: pace_ast::arena::ExprId,
         scope: &HashMap<ustr::Ustr, ModuleExport>,
         aliases: &HashMap<ustr::Ustr, String>,
     ) -> Result<()> {
-        match expr {
+        let mut expr = arena.get_expr(expr_id).clone();
+        match &mut expr {
             Expr::Call { callee, args } => {
                 // If callee is MemberAccess(alias, symbol), resolve it here
                 if let Expr::MemberAccess {
                     object, property, ..
-                } = &**callee
-                {
-                    if let Expr::Identifier(obj_name, _) = &**object {
-                        if let Some(mod_name) = aliases.get(obj_name) {
-                            if let Some(mod_exports) = self.exports.get(&ustr::Ustr::from(mod_name)) {
-                                if let Some(export) = mod_exports.get(property) {
+                } = arena.get_expr(*callee)
+                    && let Expr::Identifier(obj_name, _) = arena.get_expr(*object)
+                        && let Some(mod_name) = aliases.get(obj_name)
+                            && let Some(mod_exports) = self.exports.get(&ustr::Ustr::from(mod_name.as_str()))
+                                && let Some(export) = mod_exports.get(property) {
                                     if export.visibility == Visibility::Private {
                                         return Err(Report::new(ResolutionError::PrivateSymbol {
                                             name: property.to_string(),
                                             span: (0, 0),
                                         }));
                                     }
-                                    *callee =
-                                        Box::new(Expr::Identifier(export.mangled_name.clone().into(), pace_ast::Span::default()));
+                                    *callee = arena.alloc_expr(Expr::Identifier(export.mangled_name.clone().into(), pace_ast::Span::default()));
                                 }
-                            }
-                        }
-                    }
-                }
 
                 // If callee is just an Identifier, look it up in scope
-                if let Expr::Identifier(name, _) = &**callee {
-                    if let Some(export) = scope.get(&ustr::Ustr::from(name)) {
+                if let Expr::Identifier(name, _) = arena.get_expr(*callee)
+                    && let Some(export) = scope.get(&ustr::Ustr::from(name.as_str())) {
                         if export.mangled_name == "COLLISION" {
                             return Err(Report::new(ResolutionError::Collision {
                                 name: name.to_string(),
                                 span: (0, 0),
                             }));
                         }
-                        *callee = Box::new(Expr::Identifier(export.mangled_name.clone().into(), pace_ast::Span::default()));
+                        *callee = arena.alloc_expr(Expr::Identifier(export.mangled_name.clone().into(), pace_ast::Span::default()));
                     }
-                }
 
-                self.resolve_expr(callee, scope, aliases)?;
+                self.resolve_expr(arena, *callee, scope, aliases)?;
                 for arg in args {
-                    self.resolve_expr(arg, scope, aliases)?;
+                    self.resolve_expr(arena, *arg, scope, aliases)?;
                 }
             }
             Expr::Identifier(name, _) => {
-                if name == "StringUtil" {}
-                if let Some(export) = scope.get(&ustr::Ustr::from(name)) {
+                
+                if let Some(export) = scope.get(&ustr::Ustr::from(name.as_str())) {
                     if export.mangled_name == "COLLISION" {
                         return Err(Report::new(ResolutionError::Collision {
                             name: name.to_string(),
@@ -376,58 +386,59 @@ impl SymbolResolver {
                 }
             }
             Expr::Binary { left, right, .. } => {
-                self.resolve_expr(left, scope, aliases)?;
-                self.resolve_expr(right, scope, aliases)?;
+                self.resolve_expr(arena, *left, scope, aliases)?;
+                self.resolve_expr(arena, *right, scope, aliases)?;
             }
             Expr::Assign { target, value } => {
-                self.resolve_expr(target, scope, aliases)?;
-                self.resolve_expr(value, scope, aliases)?;
+                self.resolve_expr(arena, *target, scope, aliases)?;
+                self.resolve_expr(arena, *value, scope, aliases)?;
             }
             Expr::MemberAccess { object, .. } => {
-                self.resolve_expr(object, scope, aliases)?;
+                self.resolve_expr(arena, *object, scope, aliases)?;
             }
             Expr::OptionalMemberAccess { object, .. } => {
-                self.resolve_expr(object, scope, aliases)?;
+                self.resolve_expr(arena, *object, scope, aliases)?;
             }
             Expr::GenericInstantiation { callee, .. } => {
-                self.resolve_expr(callee, scope, aliases)?;
+                self.resolve_expr(arena, *callee, scope, aliases)?;
             }
             Expr::InterpolatedString(exprs) => {
                 for e in exprs {
-                    self.resolve_expr(e, scope, aliases)?;
+                    self.resolve_expr(arena, *e, scope, aliases)?;
                 }
             }
             Expr::Unwrap(inner) | Expr::Try(inner) | Expr::Await(inner) => {
-                self.resolve_expr(inner, scope, aliases)?;
+                self.resolve_expr(arena, *inner, scope, aliases)?;
             }
             Expr::NullCoalesce { left, right } => {
-                self.resolve_expr(left, scope, aliases)?;
-                self.resolve_expr(right, scope, aliases)?;
+                self.resolve_expr(arena, *left, scope, aliases)?;
+                self.resolve_expr(arena, *right, scope, aliases)?;
             }
             _ => {}
         }
+        *arena.get_expr_mut(expr_id) = expr;
         Ok(())
     }
 
     fn resolve_pattern(
         &self,
+        arena: &mut pace_ast::arena::AstArena,
         pat: &mut pace_ast::Pattern,
         scope: &HashMap<ustr::Ustr, ModuleExport>,
         aliases: &HashMap<ustr::Ustr, String>,
     ) -> Result<()> {
         match pat {
-            pace_ast::Pattern::Literal(expr) => self.resolve_expr(expr, scope, aliases)?,
+            pace_ast::Pattern::Literal(expr) => self.resolve_expr(arena, *expr, scope, aliases)?,
             pace_ast::Pattern::Variant {
                 enum_name, fields, ..
             } => {
-                if let Some(name) = enum_name {
-                    if let Some(export) = scope.get(&ustr::Ustr::from(name)) {
+                if let Some(name) = enum_name
+                    && let Some(export) = scope.get(&ustr::Ustr::from(name.as_str())) {
                         *name = export.mangled_name.clone().into();
                     }
-                }
                 if let Some(flds) = fields {
                     for f in flds {
-                        self.resolve_pattern(f, scope, aliases)?;
+                        self.resolve_pattern(arena, f, scope, aliases)?;
                     }
                 }
             }
@@ -444,7 +455,7 @@ impl SymbolResolver {
     ) -> Result<()> {
         if let Some(prefix) = &ty.module_prefix {
             if let Some(mod_name) = aliases.get(prefix) {
-                if let Some(mod_exports) = self.exports.get(&ustr::Ustr::from(mod_name)) {
+                if let Some(mod_exports) = self.exports.get(&ustr::Ustr::from(mod_name.as_str())) {
                     if let Some(export) = mod_exports.get(&ty.name) {
                         if export.visibility == Visibility::Private {
                             return Err(Report::new(ResolutionError::PrivateSymbol {
@@ -462,7 +473,7 @@ impl SymbolResolver {
                 }
             } else {
                 return Err(Report::new(ResolutionError::UnresolvedSymbol {
-                    name: ustr::Ustr::from(&prefix).to_string(),
+                    name: ustr::Ustr::from(prefix).to_string(),
                     span: (0, 0),
                 }));
             }

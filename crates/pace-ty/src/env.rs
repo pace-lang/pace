@@ -641,7 +641,7 @@ impl Environment {
                 return Err(existing.span);
             }
             scope.insert(
-                name.clone(),
+                name,
                 VarInfo {
                     ty: ty.clone(),
                     span,

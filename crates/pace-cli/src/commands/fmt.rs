@@ -36,7 +36,8 @@ fn format_file(path: &Path) -> Result<bool> {
     let src = fs::read_to_string(path)
         .map_err(|e| miette::miette!("Failed to read {}: {}", path.display(), e))?;
 
-    let (ast, comments) = match pace_parser::parse(&src, &path.to_string_lossy()) {
+    let mut arena = pace_ast::arena::AstArena::new();
+    let (ast, comments) = match pace_parser::parse(&mut arena, &src, &path.to_string_lossy()) {
         Ok(res) => res,
         Err(_) => {
             // Silently skip files with syntax errors during fmt
@@ -44,9 +45,9 @@ fn format_file(path: &Path) -> Result<bool> {
         }
     };
 
-    let mut formatter = Formatter::new(&src, comments);
-    for stmt in &ast {
-        if formatter.format_stmt(stmt).is_err() {
+    let mut formatter = Formatter::new(&src, comments, &arena);
+    for &stmt_id in &ast {
+        if formatter.format_stmt(stmt_id).is_err() {
             // Unimplemented AST variant, skip formatting this file to avoid dataloss
             return Ok(false);
         }
@@ -64,6 +65,7 @@ fn format_file(path: &Path) -> Result<bool> {
 }
 
 struct Formatter<'a> {
+    arena: &'a pace_ast::arena::AstArena,
     _src: &'a str,
     comments: Vec<(usize, usize, String)>,
     comment_idx: usize,
@@ -72,7 +74,7 @@ struct Formatter<'a> {
 }
 
 impl<'a> Formatter<'a> {
-    fn new(src: &'a str, mut comments: Vec<(usize, usize, String)>) -> Self {
+    fn new(src: &'a str, mut comments: Vec<(usize, usize, String)>, arena: &'a pace_ast::arena::AstArena) -> Self {
         comments.sort_by_key(|c| c.0);
         Self {
             _src: src,
@@ -80,6 +82,7 @@ impl<'a> Formatter<'a> {
             comment_idx: 0,
             output: String::new(),
             indent: 0,
+            arena,
         }
     }
 
@@ -129,12 +132,13 @@ impl<'a> Formatter<'a> {
         }
     }
 
-    fn format_stmt(&mut self, stmt: &Stmt) -> Result<(), ()> {
+    fn format_stmt(&mut self, stmt_id: pace_ast::arena::StmtId) -> Result<(), ()> {
+        let stmt = self.arena.get_stmt(stmt_id);
         match stmt {
             Stmt::Expr(e) => {
                 // span is not available for Expr in Stmt::Expr, so just format it.
                 self.write_indent();
-                self.format_expr(e)?;
+                self.format_expr(*e)?;
                 self.output.push(';');
                 self.output.push('\n');
                 Ok(())
@@ -168,7 +172,7 @@ impl<'a> Formatter<'a> {
                 }
                 if let Some(init) = initializer {
                     self.output.push_str(" = ");
-                    self.format_expr(init)?;
+                    self.format_expr(*init)?;
                 }
                 self.output.push(';');
                 self.check_inline_comments(span.start + span.len);
@@ -180,7 +184,7 @@ impl<'a> Formatter<'a> {
                 self.output.push_str("return");
                 if let Some(e) = e {
                     self.output.push(' ');
-                    self.format_expr(e)?;
+                    self.format_expr(*e)?;
                 }
                 self.output.push(';');
                 self.output.push('\n');
@@ -239,7 +243,7 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(" {\n");
                 self.indent += 1;
                 for s in body {
-                    self.format_stmt(s)?;
+                    self.format_stmt(*s)?;
                 }
                 self.indent -= 1;
                 self.write_indent();
@@ -277,7 +281,7 @@ impl<'a> Formatter<'a> {
                 self.output.push_str("{\n");
                 self.indent += 1;
                 for s in stmts {
-                    self.format_stmt(s)?;
+                    self.format_stmt(*s)?;
                 }
                 self.indent -= 1;
                 self.write_indent();
@@ -286,19 +290,19 @@ impl<'a> Formatter<'a> {
             }
             Stmt::If { .. } => {
                 self.write_indent();
-                self.format_if_inline(stmt)?;
+                self.format_if_inline(stmt_id)?;
                 Ok(())
             }
             Stmt::While { condition, body } => {
                 self.write_indent();
                 self.output.push_str("while ");
-                self.format_expr(condition)?;
+                self.format_expr(*condition)?;
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                if let Stmt::Block(stmts) = &**body {
-                    for s in stmts { self.format_stmt(s)?; }
+                if let Stmt::Block(stmts) = self.arena.get_stmt(*body) {
+                    for s in stmts { self.format_stmt(*s)?; }
                 } else {
-                    self.format_stmt(body)?;
+                    self.format_stmt(*body)?;
                 }
                 self.indent -= 1;
                 self.write_indent();
@@ -309,10 +313,10 @@ impl<'a> Formatter<'a> {
                 self.write_indent();
                 self.output.push_str("loop {\n");
                 self.indent += 1;
-                if let Stmt::Block(stmts) = &**body {
-                    for s in stmts { self.format_stmt(s)?; }
+                if let Stmt::Block(stmts) = self.arena.get_stmt(*body) {
+                    for s in stmts { self.format_stmt(*s)?; }
                 } else {
-                    self.format_stmt(body)?;
+                    self.format_stmt(*body)?;
                 }
                 self.indent -= 1;
                 self.write_indent();
@@ -324,13 +328,13 @@ impl<'a> Formatter<'a> {
                 self.output.push_str("for ");
                 self.output.push_str(item);
                 self.output.push_str(" in ");
-                self.format_expr(iterable)?;
+                self.format_expr(*iterable)?;
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                if let Stmt::Block(stmts) = &**body {
-                    for s in stmts { self.format_stmt(s)?; }
+                if let Stmt::Block(stmts) = self.arena.get_stmt(*body) {
+                    for s in stmts { self.format_stmt(*s)?; }
                 } else {
-                    self.format_stmt(body)?;
+                    self.format_stmt(*body)?;
                 }
                 self.indent -= 1;
                 self.write_indent();
@@ -358,9 +362,9 @@ impl<'a> Formatter<'a> {
                 }
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                for f in fields { self.format_stmt(f)?; }
+                for f in fields { self.format_stmt(*f)?; }
                 if !fields.is_empty() && !methods.is_empty() { self.output.push('\n'); }
-                for m in methods { self.format_stmt(m)?; }
+                for m in methods { self.format_stmt(*m)?; }
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n\n");
@@ -387,9 +391,9 @@ impl<'a> Formatter<'a> {
                 }
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                for f in fields { self.format_stmt(f)?; }
+                for f in fields { self.format_stmt(*f)?; }
                 if !fields.is_empty() && !methods.is_empty() { self.output.push('\n'); }
-                for m in methods { self.format_stmt(m)?; }
+                for m in methods { self.format_stmt(*m)?; }
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n\n");
@@ -412,7 +416,7 @@ impl<'a> Formatter<'a> {
                 }
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                for m in methods { self.format_stmt(m)?; }
+                for m in methods { self.format_stmt(*m)?; }
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n\n");
@@ -435,7 +439,7 @@ impl<'a> Formatter<'a> {
                 }
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                for f in fields { self.format_stmt(f)?; }
+                for f in fields { self.format_stmt(*f)?; }
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n\n");
@@ -483,24 +487,24 @@ impl<'a> Formatter<'a> {
             Stmt::Match { expr: match_expr, arms } => {
                 self.write_indent();
                 self.output.push_str("match ");
-                self.format_expr(match_expr)?;
+                self.format_expr(*match_expr)?;
                 self.output.push_str(" {\n");
                 self.indent += 1;
                 for (pat, arm_body) in arms {
                     self.write_indent();
                     self.format_pattern(pat)?;
                     self.output.push_str(" => ");
-                    if let Stmt::Block(stmts) = &**arm_body {
+                    if let Stmt::Block(stmts) = self.arena.get_stmt(*arm_body) {
                         self.output.push_str("{\n");
                         self.indent += 1;
-                        for s in stmts { self.format_stmt(s)?; }
+                        for s in stmts { self.format_stmt(*s)?; }
                         self.indent -= 1;
                         self.write_indent();
                         self.output.push_str("}\n");
                     } else {
                         self.output.push_str("{\n");
                         self.indent += 1;
-                        self.format_stmt(arm_body)?;
+                        self.format_stmt(*arm_body)?;
                         self.indent -= 1;
                         self.write_indent();
                         self.output.push_str("}\n");
@@ -524,7 +528,7 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                for s in body { self.format_stmt(s)?; }
+                for s in body { self.format_stmt(*s)?; }
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n\n");
@@ -533,7 +537,8 @@ impl<'a> Formatter<'a> {
         }
     }
 
-    fn format_expr(&mut self, expr: &Expr) -> Result<(), ()> {
+    fn format_expr(&mut self, expr_id: pace_ast::arena::ExprId) -> Result<(), ()> {
+        let expr = self.arena.get_expr(expr_id);
         match expr {
             Expr::IntLiteral(n) => self.output.push_str(&n.to_string()),
             Expr::FloatLiteral(f) => self.output.push_str(&f.to_string()),
@@ -547,19 +552,19 @@ impl<'a> Formatter<'a> {
             Expr::Null => self.output.push_str("null"),
             Expr::Identifier(name, _) => self.output.push_str(name),
             Expr::Call { callee, args } => {
-                self.format_expr(callee)?;
+                self.format_expr(*callee)?;
                 self.output.push('(');
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");
                     }
-                    self.format_expr(arg)?;
+                    self.format_expr(*arg)?;
                 }
                 self.output.push(')');
             }
             Expr::Binary { left, op, right } => {
                 let p = Self::binary_precedence(op);
-                self.format_sub_expr(left, p, false)?;
+                self.format_sub_expr(*left, p, false)?;
                 self.output.push(' ');
                 let op_str = match op {
                     BinaryOp::Add => "+",
@@ -578,24 +583,24 @@ impl<'a> Formatter<'a> {
                 };
                 self.output.push_str(op_str);
                 self.output.push(' ');
-                self.format_sub_expr(right, p, true)?;
+                self.format_sub_expr(*right, p, true)?;
             }
             Expr::InterpolatedString(parts) => {
-                self.output.push_str("\"");
+                self.output.push('"');
                 for part in parts {
-                    if let Expr::StringLiteral(s) = part {
+                    if let Expr::StringLiteral(s) = self.arena.get_expr(*part) {
                         let escaped = s.replace('\\', "\\\\").replace('\"', "\\\"").replace('\n', "\\n").replace('\r', "\\r").replace('\t', "\\t");
                         self.output.push_str(&escaped);
                     } else {
                         self.output.push_str("${");
-                        self.format_expr(part)?;
+                        self.format_expr(*part)?;
                         self.output.push('}');
                     }
                 }
-                self.output.push_str("\"");
+                self.output.push('"');
             }
             Expr::GenericInstantiation { callee, generic_args } => {
-                self.format_expr(callee)?;
+                self.format_expr(*callee)?;
                 self.output.push('<');
                 for (i, arg) in generic_args.iter().enumerate() {
                     if i > 0 { self.output.push_str(", "); }
@@ -604,12 +609,12 @@ impl<'a> Formatter<'a> {
                 self.output.push('>');
             }
             Expr::Assign { target, value } => {
-                self.format_expr(target)?;
+                self.format_expr(*target)?;
                 self.output.push_str(" = ");
-                self.format_expr(value)?;
+                self.format_expr(*value)?;
             }
             Expr::MemberAccess { object, property, is_static_operator, .. } => {
-                self.format_expr(object)?;
+                self.format_expr(*object)?;
                 if *is_static_operator {
                     self.output.push_str("::");
                 } else {
@@ -618,26 +623,26 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(property);
             }
             Expr::OptionalMemberAccess { object, property } => {
-                self.format_expr(object)?;
+                self.format_expr(*object)?;
                 self.output.push_str("?.");
                 self.output.push_str(property);
             }
             Expr::Unwrap(inner) => {
-                self.format_expr(inner)?;
+                self.format_expr(*inner)?;
                 self.output.push('!');
             }
             Expr::Try(inner) => {
-                self.format_expr(inner)?;
+                self.format_expr(*inner)?;
                 self.output.push('?');
             }
             Expr::NullCoalesce { left, right } => {
-                self.format_expr(left)?;
+                self.format_expr(*left)?;
                 self.output.push_str(" ?? ");
-                self.format_expr(right)?;
+                self.format_expr(*right)?;
             }
             Expr::Await(inner) => {
                 self.output.push_str("await ");
-                self.format_expr(inner)?;
+                self.format_expr(*inner)?;
             }
             Expr::Closure { params, return_type, body } => {
                 self.output.push('(');
@@ -653,13 +658,13 @@ impl<'a> Formatter<'a> {
                     self.format_type(rt);
                 }
                 self.output.push_str(" => ");
-                self.format_expr(body)?;
+                self.format_expr(*body)?;
             }
             Expr::Block(stmts) => {
                 self.output.push_str("{\n");
                 self.indent += 1;
                 for s in stmts {
-                    self.format_stmt(s)?;
+                    self.format_stmt(*s)?;
                 }
                 self.indent -= 1;
                 self.write_indent();
@@ -690,31 +695,32 @@ impl<'a> Formatter<'a> {
         }
     }
 
-    fn format_if_inline(&mut self, stmt: &Stmt) -> Result<(), ()> {
+    fn format_if_inline(&mut self, stmt_id: pace_ast::arena::StmtId) -> Result<(), ()> {
+        let stmt = self.arena.get_stmt(stmt_id);
         if let Stmt::If { condition, then_branch, else_branch } = stmt {
             self.output.push_str("if ");
-            self.format_expr(condition)?;
+            self.format_expr(*condition)?;
             self.output.push_str(" {\n");
             self.indent += 1;
-            if let Stmt::Block(stmts) = &**then_branch {
-                for s in stmts { self.format_stmt(s)?; }
+            if let Stmt::Block(stmts) = self.arena.get_stmt(*then_branch) {
+                for s in stmts { self.format_stmt(*s)?; }
             } else {
-                self.format_stmt(then_branch)?;
+                self.format_stmt(*then_branch)?;
             }
             self.indent -= 1;
             self.write_indent();
             self.output.push('}');
             if let Some(els) = else_branch {
-                if let Stmt::If { .. } = &**els {
+                if let Stmt::If { .. } = self.arena.get_stmt(*els) {
                     self.output.push_str(" else ");
-                    self.format_if_inline(els)?;
+                    self.format_if_inline(*els)?;
                 } else {
                     self.output.push_str(" else {\n");
                     self.indent += 1;
-                    if let Stmt::Block(stmts) = &**els {
-                        for s in stmts { self.format_stmt(s)?; }
+                    if let Stmt::Block(stmts) = self.arena.get_stmt(*els) {
+                        for s in stmts { self.format_stmt(*s)?; }
                     } else {
-                        self.format_stmt(els)?;
+                        self.format_stmt(*els)?;
                     }
                     self.indent -= 1;
                     self.write_indent();
@@ -732,7 +738,7 @@ impl<'a> Formatter<'a> {
     fn format_pattern(&mut self, pat: &pace_ast::Pattern) -> Result<(), ()> {
         match pat {
             pace_ast::Pattern::Wildcard => self.output.push('_'),
-            pace_ast::Pattern::Literal(expr) => self.format_expr(expr)?,
+            pace_ast::Pattern::Literal(expr) => self.format_expr(*expr)?,
             pace_ast::Pattern::Variable(name, _) => self.output.push_str(name),
             pace_ast::Pattern::Variant { enum_name, variant_name, fields, generic_args } => {
                 if let Some(e) = enum_name {
@@ -774,7 +780,8 @@ impl<'a> Formatter<'a> {
         }
     }
 
-    fn format_sub_expr(&mut self, sub: &Expr, parent_prec: u8, is_right: bool) -> Result<(), ()> {
+    fn format_sub_expr(&mut self, sub_id: pace_ast::arena::ExprId, parent_prec: u8, is_right: bool) -> Result<(), ()> {
+        let sub = self.arena.get_expr(sub_id);
         let prec = match sub {
             Expr::Binary { op, .. } => Self::binary_precedence(op),
             Expr::NullCoalesce { .. } => 0,
@@ -789,7 +796,7 @@ impl<'a> Formatter<'a> {
         if needs_parens {
             self.output.push('(');
         }
-        self.format_expr(sub)?;
+        self.format_expr(sub_id)?;
         if needs_parens {
             self.output.push(')');
         }

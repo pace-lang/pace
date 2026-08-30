@@ -6,14 +6,14 @@ use std::fs::File;
 use std::io::Write;
 use walkdir::WalkDir;
 
-pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
+pub fn execute(session: &CompilerSession, arena: &mut pace_ast::arena::AstArena, dry_run: bool) -> Result<()> {
     let current_dir =
         std::env::current_dir().map_err(|e| miette::miette!("Failed to get current dir: {}", e))?;
 
     // Run compiler check before packaging
     let resolved_file = resolve_file(None)?;
     println!("🧪 Checking {} before publishing...", resolved_file);
-    session.check_file(&resolved_file)?;
+    session.check_file(arena, &resolved_file)?;
     println!("✅ Check passed for main entry point.");
 
     // Check tests/ and examples/
@@ -26,7 +26,7 @@ pub fn execute(session: &CompilerSession, dry_run: bool) -> Result<()> {
                     let relative_str = path.strip_prefix(&current_dir).unwrap().to_string_lossy();
                     println!("🧪 Checking {} before publishing...", relative_str);
                     let path_str = path.to_string_lossy();
-                    session.check_file(&path_str)?;
+                    session.check_file(arena, &path_str)?;
                 }
             }
         }

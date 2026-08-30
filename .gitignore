@@ -30,3 +30,5 @@ editors/vscode/out/
 # examples/
 build/
 test_output_dir/
+benchmarks/**/bench
+benchmarks/**/build/bench

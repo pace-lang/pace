@@ -95,8 +95,8 @@ class Map<K, V> implement Iterable<K> {
                 let k = ptrLoad(self.keysPtr, index * 8);
                 if k == key {
                     // Overwrite existing
-                    let oldVal = ptrLoad(self.valsPtr, index * 8);
-                    __pace_release_generic<V>(oldVal);
+                    let _oldVal = ptrLoad(self.valsPtr, index * 8);
+                    __pace_release_generic<V>(_oldVal);
                     __pace_retain_generic<V>(val);
                     ptrStore(self.valsPtr, index * 8, val);
                     return;
@@ -164,8 +164,8 @@ class Map<K, V> implement Iterable<K> {
                 return ptrLoad(self.valsPtr, 0); // Null/default fallback
             }
             if state == 1 {
-                let current_k = ptrLoad(self.keysPtr, index * 8);
-                if current_k == k {
+                let currentK = ptrLoad(self.keysPtr, index * 8);
+                if currentK == k {
                     return ptrLoad(self.valsPtr, index * 8);
                 }
             }
@@ -187,8 +187,8 @@ class Map<K, V> implement Iterable<K> {
                 return false;
             }
             if state == 1 {
-                let current_k = ptrLoad(self.keysPtr, index * 8);
-                if current_k == k {
+                let currentK = ptrLoad(self.keysPtr, index * 8);
+                if currentK == k {
                     return true;
                 }
             }
