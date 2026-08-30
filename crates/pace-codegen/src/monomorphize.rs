@@ -2,11 +2,11 @@ use pace_ast::{Expr, Param, Stmt, TypeAnnotation};
 use std::collections::{HashMap, HashSet};
 
 pub struct Monomorphizer {
-    pub type_replacements: HashMap<String, TypeAnnotation>,
+    pub type_replacements: HashMap<ustr::Ustr, TypeAnnotation>,
 }
 
 impl Monomorphizer {
-    pub fn new(replacements: HashMap<String, TypeAnnotation>) -> Self {
+    pub fn new(replacements: HashMap<ustr::Ustr, TypeAnnotation>) -> Self {
         Self {
             type_replacements: replacements,
         }
@@ -196,7 +196,7 @@ impl Monomorphizer {
 }
 
 pub struct MonomorphizationPass {
-    templates: HashMap<String, Stmt>, // Name -> AST Node
+    templates: HashMap<ustr::Ustr, Stmt>, // Name -> AST Node
     pub final_stmts: Vec<Stmt>,
     queue: Vec<(String, Vec<TypeAnnotation>)>, // template_name, args
     instantiated: HashSet<String>,             // specialized names like "Box_Int"
@@ -278,7 +278,7 @@ impl MonomorphizationPass {
             }
             self.instantiated.insert(specialized_name.clone());
 
-            if let Some(template) = self.templates.get(&template_name).cloned() {
+            if let Some(template) = self.templates.get(&ustr::Ustr::from(&template_name)).cloned() {
                 let mut replacements = HashMap::new();
                 let generic_params = match &template {
                     Stmt::ClassDecl { generic_params, .. } => generic_params.clone(),
@@ -300,10 +300,10 @@ impl MonomorphizationPass {
 
                 // Set the specialized name
                 match &mut instantiated_stmt {
-                    Stmt::ClassDecl { name, .. } => *name = specialized_name.clone(),
-                    Stmt::StructDecl { name, .. } => *name = specialized_name.clone(),
-                    Stmt::InterfaceDecl { name, .. } => *name = specialized_name.clone(),
-                    Stmt::FuncDecl { name, .. } => *name = specialized_name.clone(),
+                    Stmt::ClassDecl { name, .. } => *name = specialized_name.clone().into(),
+                    Stmt::StructDecl { name, .. } => *name = specialized_name.clone().into(),
+                    Stmt::InterfaceDecl { name, .. } => *name = specialized_name.clone().into(),
+                    Stmt::FuncDecl { name, .. } => *name = specialized_name.clone().into(),
                     _ => {}
                 }
 
@@ -325,7 +325,7 @@ impl MonomorphizationPass {
 
     pub fn flatten_type_name(ta: &TypeAnnotation) -> String {
         if ta.args.is_empty() {
-            ta.name.clone()
+            ta.name.to_string()
         } else {
             let args_str: Vec<String> = ta.args.iter().map(Self::flatten_type_name).collect();
             format!("{}_{}", ta.name, args_str.join("_"))
@@ -395,7 +395,7 @@ impl MonomorphizationPass {
     fn scan_type_annotation(&mut self, ta: &TypeAnnotation) {
         if !ta.args.is_empty() {
             // Found a generic usage!
-            self.queue.push((ta.name.clone(), ta.args.clone()));
+            self.queue.push((ustr::Ustr::from(&ta.name).to_string(), ta.args.clone()));
             for arg in &ta.args {
                 self.scan_type_annotation(arg);
             }
@@ -573,7 +573,7 @@ impl TypeFlattener {
             let name = MonomorphizationPass::flatten_type_name(ta);
             TypeAnnotation {
                 module_prefix: ta.module_prefix.clone(),
-                name,
+                name: name.into(),
                 args: vec![],
                 is_nullable: ta.is_nullable,
                 is_function: ta.is_function,

@@ -16,3 +16,4 @@ pace-pkg = { workspace = true }
 miette = { workspace = true }
 thiserror = "2"
 pace-runtime = { version = "0.1.0", path = "../pace-runtime" }
+ustr = "1.1.0"

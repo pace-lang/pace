@@ -14,13 +14,13 @@ mod tests {
     fn test_ast_snapshot() {
         // let x: Int = 42;
         let ast = Stmt::VarDecl {
-            name: "x".to_string(),
+            name: ustr::Ustr::from("x"),
             is_mutable: false,
             is_static: false,
             visibility: crate::stmt::Visibility::Public,
             type_annotation: Some(crate::stmt::TypeAnnotation {
                 module_prefix: None,
-                name: "Int".to_string(),
+                name: ustr::Ustr::from("Int"),
                 args: vec![],
                 is_nullable: false,
                 is_function: false,

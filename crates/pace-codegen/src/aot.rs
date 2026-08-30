@@ -140,7 +140,7 @@ impl AotCompiler {
 
                 if is_actor {
                     field_map.insert(
-                        "__mailbox".to_string(),
+                        "__mailbox".to_string().into(),
                         (offset, crate::translator::VarType::Unknown),
                     ); // Internal pointer
                     offset += 8;
@@ -200,7 +200,7 @@ impl AotCompiler {
                                 .expect("Failed to define static field data");
                             static_fields.insert(field_name.clone(), (data_id, field_ty));
                         } else {
-                            field_map.insert(field_name.clone(), (offset, field_ty));
+                            field_map.insert(field_name.to_string().into(), (offset, field_ty));
                             offset += 8;
                         }
                     }
@@ -235,7 +235,7 @@ impl AotCompiler {
                     .map_err(|e| CodegenError {
                         message: e.to_string(),
                     })?;
-                self.context.funcs.insert(drop_name.clone(), drop_id);
+                self.context.funcs.insert(drop_name.clone().into(), drop_id);
 
                 for method_stmt in methods {
                     if let Stmt::FuncDecl {
@@ -270,7 +270,7 @@ impl AotCompiler {
                             .map_err(|e| CodegenError {
                                 message: e.to_string(),
                             })?;
-                        self.context.funcs.insert(full_name.clone(), id);
+                        self.context.funcs.insert(full_name.clone().into(), id);
 
                         if !is_static && method_name != "init" {
                             if is_actor {
@@ -285,7 +285,7 @@ impl AotCompiler {
                                     .map_err(|e| CodegenError {
                                         message: e.to_string(),
                                     })?;
-                                self.context.funcs.insert(async_name.clone(), async_id);
+                                self.context.funcs.insert(async_name.clone().into(), async_id);
                                 vtable_funcs.insert(method_name.clone(), async_id);
                             } else {
                                 vtable_funcs.insert(method_name.clone(), id);
@@ -363,7 +363,7 @@ impl AotCompiler {
                     .map_err(|e| CodegenError {
                         message: e.to_string(),
                     })?;
-                self.context.funcs.insert(drop_name.clone(), drop_id);
+                self.context.funcs.insert(drop_name.clone().into(), drop_id);
 
                 for (tag_idx, variant) in variants.iter().enumerate() {
                     let mut variant_types = Vec::new();
@@ -405,7 +405,7 @@ impl AotCompiler {
                         .map_err(|e| CodegenError {
                             message: e.to_string(),
                         })?;
-                    self.context.funcs.insert(constructor_name, constructor_id);
+                    self.context.funcs.insert(constructor_name.into(), constructor_id);
                 }
 
                 let layout = EnumLayout {
@@ -560,7 +560,7 @@ impl AotCompiler {
                             .unwrap_or("Int");
                         let full_name = format!("{}_{}", class_name, method_name);
                         func_returns.insert(
-                            full_name,
+                            full_name.into(),
                             crate::translator::parse_vartype(
                                 ret,
                                 Some(class_name),
@@ -591,7 +591,7 @@ impl AotCompiler {
                             .unwrap_or("Int");
                         let full_name = format!("{}_{}", interface_name, method_name);
                         func_returns.insert(
-                            full_name,
+                            full_name.into(),
                             crate::translator::parse_vartype(
                                 ret,
                                 Some(interface_name),
@@ -614,7 +614,7 @@ impl AotCompiler {
                 ..
             } = stmt
             {
-                let id = *self.context.funcs.get(name).unwrap();
+                let id = *self.context.funcs.get(&ustr::Ustr::from(name)).unwrap();
                 let ret = return_type
                     .as_ref()
                     .map(|t| t.name.as_str())
@@ -644,12 +644,12 @@ impl AotCompiler {
                     } = method_stmt
                     {
                         let full_name = format!("{}_{}", class_name, method_name);
-                        let id = *self.context.funcs.get(&full_name).unwrap();
+                        let id = *self.context.funcs.get(&ustr::Ustr::from(&full_name)).unwrap();
 
                         let mut all_params = vec![];
                         if !is_static {
                             all_params.push(pace_ast::Param {
-                                name: "self".to_string(),
+                                name: "self".to_string().into(),
                                 type_annotation: pace_ast::TypeAnnotation {
                                     module_prefix: None,
                                     name: class_name.clone(),
@@ -709,14 +709,14 @@ impl AotCompiler {
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
-        let mut variables = HashMap::new();
+        let mut variables: std::collections::HashMap<ustr::Ustr, (cranelift::prelude::Variable, crate::translator::VarType)> = std::collections::HashMap::new();
         let mut var_index = 0;
         let mut last_val = None;
 
         let mut pending_closures: Vec<(
-            String,
+            ustr::Ustr,
             pace_ast::Expr,
-            Vec<(String, crate::translator::VarType)>,
+            Vec<(ustr::Ustr, crate::translator::VarType)>,
         )> = Vec::new();
         let mut translator = crate::translator::Translator {
             context: &mut self.context,
@@ -745,7 +745,7 @@ impl AotCompiler {
         drop(translator);
 
         // Call main if it exists
-        if let Some(&main_id) = self.context.funcs.get("main") {
+        if let Some(&main_id) = self.context.funcs.get(&ustr::Ustr::from("main")) {
             let local_func = self
                 .context
                 .module
@@ -796,11 +796,11 @@ impl AotCompiler {
         num_args: usize,
     ) -> Result<(), CodegenError> {
         let async_name = format!("__async_{}_{}", class_name, method_name);
-        let id = *self.context.funcs.get(&async_name).unwrap();
+        let id = *self.context.funcs.get(&ustr::Ustr::from(&async_name)).unwrap();
         let target_id = *self
             .context
             .funcs
-            .get(&format!("{}_{}", class_name, method_name))
+            .get(&ustr::Ustr::from(&format!("{}_{}", class_name, method_name)))
             .unwrap();
 
         self.ctx
@@ -849,7 +849,7 @@ impl AotCompiler {
         };
 
         // Free the tuple allocated by the caller
-        let free_id = *self.context.funcs.get("free").unwrap();
+        let free_id = *self.context.funcs.get(&ustr::Ustr::from("free")).unwrap();
         let local_free = self
             .context
             .module
@@ -873,9 +873,9 @@ impl AotCompiler {
     }
 
     fn generate_drop_function(&mut self, class_name: &str) -> Result<(), CodegenError> {
-        let layout = self.context.class_layouts.get(class_name).unwrap().clone();
+        let layout = self.context.class_layouts.get(&ustr::Ustr::from(class_name)).unwrap().clone();
         let drop_name = format!("__drop_{}", class_name);
-        let func_id = *self.context.funcs.get(&drop_name).unwrap();
+        let func_id = *self.context.funcs.get(&ustr::Ustr::from(&drop_name)).unwrap();
 
         self.ctx.func.signature.params.push(AbiParam::new(
             self.context.module.target_config().pointer_type(),
@@ -897,7 +897,7 @@ impl AotCompiler {
                     obj_ptr,
                     offset as i32,
                 );
-                let destroy_id = *self.context.funcs.get("__pace_mailbox_destroy").unwrap();
+                let destroy_id = *self.context.funcs.get(&ustr::Ustr::from("__pace_mailbox_destroy")).unwrap();
                 let local_destroy = self
                     .context
                     .module
@@ -910,7 +910,7 @@ impl AotCompiler {
                     obj_ptr,
                     offset as i32,
                 );
-                let release_id = *self.context.funcs.get("release").unwrap();
+                let release_id = *self.context.funcs.get(&ustr::Ustr::from("release")).unwrap();
                 let local_release = self
                     .context
                     .module
@@ -934,7 +934,7 @@ impl AotCompiler {
     }
 
     fn generate_enum_drop_function(&mut self, enum_name: &str) -> Result<(), CodegenError> {
-        let layout = self.context.enum_layouts.get(enum_name).unwrap().clone();
+        let layout = self.context.enum_layouts.get(&ustr::Ustr::from(enum_name)).unwrap().clone();
         let func_id = layout.drop_func_id;
 
         self.ctx.func.signature.params.push(AbiParam::new(
@@ -992,7 +992,7 @@ impl AotCompiler {
                         obj_ptr,
                         offset,
                     );
-                    let release_id = *self.context.funcs.get("release").unwrap();
+                    let release_id = *self.context.funcs.get(&ustr::Ustr::from("release")).unwrap();
                     let local_release = self
                         .context
                         .module
@@ -1029,11 +1029,11 @@ impl AotCompiler {
         enum_name: &str,
         variants: &[pace_ast::EnumVariant],
     ) -> Result<(), CodegenError> {
-        let layout = self.context.enum_layouts.get(enum_name).unwrap().clone();
+        let layout = self.context.enum_layouts.get(&ustr::Ustr::from(enum_name)).unwrap().clone();
 
         for variant in variants {
             let constructor_name = format!("{}_{}", enum_name, variant.name);
-            let func_id = *self.context.funcs.get(&constructor_name).unwrap();
+            let func_id = *self.context.funcs.get(&ustr::Ustr::from(&constructor_name)).unwrap();
             let (tag_id, fields) = layout.variants.get(&variant.name).unwrap();
 
             for _ in 0..fields.len() {
@@ -1055,7 +1055,7 @@ impl AotCompiler {
             builder.switch_to_block(entry_block);
             builder.seal_block(entry_block);
 
-            let malloc_id = *self.context.funcs.get("malloc").unwrap();
+            let malloc_id = *self.context.funcs.get(&ustr::Ustr::from("malloc")).unwrap();
             let local_malloc = self
                 .context
                 .module
@@ -1088,7 +1088,7 @@ impl AotCompiler {
                 );
 
                 if matches!(field_ty, VarType::Object(_)) {
-                    let retain_id = *self.context.funcs.get("retain").unwrap();
+                    let retain_id = *self.context.funcs.get(&ustr::Ustr::from("retain")).unwrap();
                     let local_retain = self
                         .context
                         .module
@@ -1120,7 +1120,7 @@ impl AotCompiler {
         params: &[pace_ast::Param],
         body: &[Stmt],
         func_id: FuncId,
-        func_returns: &HashMap<String, crate::translator::VarType>,
+        func_returns: &HashMap<ustr::Ustr, crate::translator::VarType>,
         ret_type_str: &str,
         current_class: Option<&str>,
     ) -> Result<(), CodegenError> {
@@ -1155,7 +1155,7 @@ impl AotCompiler {
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
-        let mut variables = HashMap::new();
+        let mut variables: std::collections::HashMap<ustr::Ustr, (cranelift::prelude::Variable, crate::translator::VarType)> = std::collections::HashMap::new();
         let mut var_index = 0;
 
         for (i, param) in params.iter().enumerate() {
@@ -1176,9 +1176,9 @@ impl AotCompiler {
         let mut last_val = None;
         let mut terminated = false;
         let mut pending_closures: Vec<(
-            String,
+            ustr::Ustr,
             pace_ast::Expr,
-            Vec<(String, crate::translator::VarType)>,
+            Vec<(ustr::Ustr, crate::translator::VarType)>,
         )> = Vec::new();
         let mut translator = Translator {
             context: &mut self.context,
@@ -1228,8 +1228,8 @@ impl AotCompiler {
         &mut self,
         fn_name: &str,
         expr: pace_ast::Expr,
-        captured_vars: Vec<(String, crate::translator::VarType)>,
-        func_returns: &HashMap<String, crate::translator::VarType>,
+        captured_vars: Vec<(ustr::Ustr, crate::translator::VarType)>,
+        func_returns: &HashMap<ustr::Ustr, crate::translator::VarType>,
         current_class: Option<&str>,
     ) -> Result<(), CodegenError> {
         let (params, body) = match expr {
@@ -1266,7 +1266,7 @@ impl AotCompiler {
 
         let env_ptr = builder.block_params(entry_block)[0];
 
-        let mut variables = HashMap::new();
+        let mut variables: std::collections::HashMap<ustr::Ustr, (cranelift::prelude::Variable, crate::translator::VarType)> = std::collections::HashMap::new();
         let mut var_index = 0;
 
         // Load captured variables from environment
@@ -1280,7 +1280,7 @@ impl AotCompiler {
             );
             let var = builder.declare_var(types::I64);
             builder.def_var(var, val);
-            variables.insert(name.clone(), (var, ty.clone()));
+            variables.insert(name.clone().into(), (var, ty.clone()));
             var_index += 1;
         }
 
@@ -1295,15 +1295,15 @@ impl AotCompiler {
                 Some(&self.context.struct_layouts),
                 Some(&self.context.enum_layouts),
             );
-            variables.insert(param.0.clone(), (var, param_ty));
+            variables.insert(ustr::Ustr::from(&param.0), (var, param_ty));
             var_index += 1;
         }
 
         let mut terminated = false;
         let mut pending_closures: Vec<(
-            String,
+            ustr::Ustr,
             pace_ast::Expr,
-            Vec<(String, crate::translator::VarType)>,
+            Vec<(ustr::Ustr, crate::translator::VarType)>,
         )> = Vec::new();
         let mut translator = Translator {
             context: &mut self.context,

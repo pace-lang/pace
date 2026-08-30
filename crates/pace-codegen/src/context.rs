@@ -4,14 +4,14 @@ use std::collections::HashMap;
 
 pub struct CodegenContext<M: Module> {
     pub module: M,
-    pub funcs: HashMap<String, FuncId>,
-    pub class_layouts: HashMap<String, ClassLayout>,
-    pub struct_layouts: HashMap<String, StructLayout>,
-    pub interface_layouts: HashMap<String, InterfaceLayout>,
-    pub enum_layouts: HashMap<String, EnumLayout>,
-    pub string_cache: HashMap<String, String>,
+    pub funcs: HashMap<ustr::Ustr, FuncId>,
+    pub class_layouts: HashMap<ustr::Ustr, ClassLayout>,
+    pub struct_layouts: HashMap<ustr::Ustr, StructLayout>,
+    pub interface_layouts: HashMap<ustr::Ustr, InterfaceLayout>,
+    pub enum_layouts: HashMap<ustr::Ustr, EnumLayout>,
+    pub string_cache: HashMap<ustr::Ustr, String>,
     pub string_id: usize,
-    pub global_vars: HashMap<String, cranelift_module::DataId>,
+    pub global_vars: HashMap<ustr::Ustr, cranelift_module::DataId>,
 }
 
 impl<M: Module> CodegenContext<M> {

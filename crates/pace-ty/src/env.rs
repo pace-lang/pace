@@ -13,13 +13,13 @@ pub enum Type {
     /// A nullable wrapper around a type (e.g. `Int?`)
     Nullable(Box<Type>),
     /// A reference type (heap-allocated, ARC)
-    Class(String),
+    Class(ustr::Ustr),
     /// An actor type (isolated state, async messages)
-    Actor(String),
+    Actor(ustr::Ustr),
     /// A value type (stack-allocated)
-    Struct(String),
+    Struct(ustr::Ustr),
     /// An enum type
-    Enum(String),
+    Enum(ustr::Ustr),
     /// A function type
     Function {
         params: Vec<Type>,
@@ -28,7 +28,7 @@ pub enum Type {
     Unknown, // Used for auto-inference before resolution or error state
     Void,    // Used for functions that don't return anything
     Any,     // Used for built-ins like print that take multiple types
-    GenericParameter(String),
+    GenericParameter(ustr::Ustr),
     GenericInstance {
         base: Box<Type>,
         args: Vec<Type>,
@@ -39,8 +39,8 @@ pub enum Type {
 
 #[derive(Debug, Clone)]
 pub struct EnumSignature {
-    pub generic_params: Option<Vec<String>>,
-    pub variants: HashMap<String, Option<Vec<Type>>>,
+    pub generic_params: Option<Vec<ustr::Ustr>>,
+    pub variants: HashMap<ustr::Ustr, Option<Vec<Type>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,7 @@ pub struct GlobalVariableSignature {
     pub ty: Type,
     pub is_mutable: bool,
     pub visibility: Visibility,
-    pub module: String,
+    pub module: ustr::Ustr,
     pub span: pace_ast::Span,
 }
 
@@ -59,25 +59,25 @@ pub struct FunctionSignature {
     pub span: pace_ast::Span,
     pub is_used: bool,
     pub visibility: Visibility,
-    pub module: String,
-    pub generic_params: Option<Vec<String>>,
+    pub module: ustr::Ustr,
+    pub generic_params: Option<Vec<ustr::Ustr>>,
     pub is_static: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct ActorSignature {
-    pub generic_params: Option<Vec<String>>,
-    pub fields: HashMap<String, Type>,
-    pub static_fields: HashMap<String, Type>,
-    pub methods: HashMap<String, FunctionSignature>,
+    pub generic_params: Option<Vec<ustr::Ustr>>,
+    pub fields: HashMap<ustr::Ustr, Type>,
+    pub static_fields: HashMap<ustr::Ustr, Type>,
+    pub methods: HashMap<ustr::Ustr, FunctionSignature>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ClassSignature {
-    pub generic_params: Option<Vec<String>>,
-    pub fields: HashMap<String, Type>,
-    pub static_fields: HashMap<String, Type>,
-    pub methods: HashMap<String, FunctionSignature>,
+    pub generic_params: Option<Vec<ustr::Ustr>>,
+    pub fields: HashMap<ustr::Ustr, Type>,
+    pub static_fields: HashMap<ustr::Ustr, Type>,
+    pub methods: HashMap<ustr::Ustr, FunctionSignature>,
 }
 
 #[derive(Debug, Clone)]
@@ -90,14 +90,14 @@ pub struct VarInfo {
 
 #[derive(Clone, Default)]
 pub struct Environment {
-    scopes: Vec<HashMap<String, VarInfo>>,
-    pub functions: HashMap<String, FunctionSignature>,
-    pub classes: HashMap<String, ClassSignature>,
-    pub structs: HashMap<String, ClassSignature>,
-    pub enums: HashMap<String, EnumSignature>,
-    pub actors: HashMap<String, ActorSignature>,
-    pub symbol_types: HashMap<String, Type>,
-    pub global_vars: HashMap<String, GlobalVariableSignature>,
+    scopes: Vec<HashMap<ustr::Ustr, VarInfo>>,
+    pub functions: HashMap<ustr::Ustr, FunctionSignature>,
+    pub classes: HashMap<ustr::Ustr, ClassSignature>,
+    pub structs: HashMap<ustr::Ustr, ClassSignature>,
+    pub enums: HashMap<ustr::Ustr, EnumSignature>,
+    pub actors: HashMap<ustr::Ustr, ActorSignature>,
+    pub symbol_types: HashMap<ustr::Ustr, Type>,
+    pub global_vars: HashMap<ustr::Ustr, GlobalVariableSignature>,
 }
 
 impl Environment {
@@ -119,432 +119,432 @@ impl Environment {
     fn inject_prelude(&mut self) {
         // Inject built-in print function
         self.register_function(
-            "print".to_string(),
+            "print".into(),
             FunctionSignature {
                 params: vec![Type::Any], // Accept any type
                 return_type: Type::Void,
                 span: pace_ast::Span::default(),
                 is_used: true, // Always consider built-ins used
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         // Inject built-in hash function
         self.register_function(
-            "hash".to_string(),
+            "hash".into(),
             FunctionSignature {
                 params: vec![Type::Any], // Accept any type
                 return_type: Type::Int,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "malloc".to_string(),
+            "malloc".into(),
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "free".to_string(),
+            "free".into(),
             FunctionSignature {
                 params: vec![Type::Int, Type::Int],
                 return_type: Type::Void,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "ptrStore".to_string(),
+            "ptrStore".into(),
             FunctionSignature {
                 params: vec![Type::Int, Type::Int, Type::Any],
                 return_type: Type::Void,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "ptrLoad".to_string(),
+            "ptrLoad".into(),
             FunctionSignature {
                 params: vec![Type::Int, Type::Int],
                 return_type: Type::Any,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "time".to_string(),
+            "time".into(),
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "sbNew".to_string(),
+            "sbNew".into(),
             FunctionSignature {
                 params: vec![],
                 return_type: Type::Int,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "sbAppend".to_string(),
+            "sbAppend".into(),
             FunctionSignature {
                 params: vec![Type::Int, Type::String],
                 return_type: Type::Void,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "sbBuild".to_string(),
+            "sbBuild".into(),
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::String,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "sbFree".to_string(),
+            "sbFree".into(),
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Void,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         // FS and HTTP FFI functions
         self.register_function(
-            "fsWriteText".to_string(),
+            "fsWriteText".into(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int, // Returns 1 on success, 0 on failure
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "fsExists".to_string(),
+            "fsExists".into(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "fsReadText".to_string(),
+            "fsReadText".into(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "fsDeleteFile".to_string(),
+            "fsDeleteFile".into(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "fsMakeDir".to_string(),
+            "fsMakeDir".into(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "fsDirExists".to_string(),
+            "fsDirExists".into(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Int,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "osGetEnv".to_string(),
+            "osGetEnv".into(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "osName".to_string(),
+            "osName".into(),
             FunctionSignature {
                 params: vec![],
                 return_type: Type::String,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "processRun".to_string(),
+            "processRun".into(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "processExit".to_string(),
+            "processExit".into(),
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Void,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "httpGet".to_string(),
+            "httpGet".into(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "httpPost".to_string(),
+            "httpPost".into(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "httpPut".to_string(),
+            "httpPut".into(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "httpDelete".to_string(),
+            "httpDelete".into(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::Nullable(Box::new(Type::String)),
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "stringSplit".to_string(),
+            "stringSplit".into(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int, // Actually it returns Int pointer
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "stringReplace".to_string(),
+            "stringReplace".into(),
             FunctionSignature {
                 params: vec![Type::String, Type::String, Type::String],
                 return_type: Type::String,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "stringSubstring".to_string(),
+            "stringSubstring".into(),
             FunctionSignature {
                 params: vec![Type::String, Type::Int, Type::Int],
                 return_type: Type::String,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "stringTrim".to_string(),
+            "stringTrim".into(),
             FunctionSignature {
                 params: vec![Type::String],
                 return_type: Type::String,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "stringIndexOf".to_string(),
+            "stringIndexOf".into(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "stringStartsWith".to_string(),
+            "stringStartsWith".into(),
             FunctionSignature {
                 params: vec![Type::String, Type::String],
                 return_type: Type::Int,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "getLastError".to_string(),
+            "getLastError".into(),
             FunctionSignature {
                 params: vec![],
                 return_type: Type::String,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
         );
         self.register_function(
-            "getYear".to_string(),
+            "getYear".into(),
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
                 span: pace_ast::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
-                module: "std".to_string(),
+                module: "std".into(),
                 generic_params: None,
                 is_static: false,
             },
@@ -555,7 +555,7 @@ impl Environment {
         self.scopes.push(HashMap::new());
     }
 
-    pub fn pop_scope(&mut self) -> Vec<(String, VarInfo)> {
+    pub fn pop_scope(&mut self) -> Vec<(ustr::Ustr, VarInfo)> {
         if self.scopes.len() > 1 {
             let scope = self.scopes.pop().unwrap();
             scope.into_iter().collect()
@@ -566,7 +566,7 @@ impl Environment {
 
     pub fn define(
         &mut self,
-        name: String,
+        name: ustr::Ustr,
         ty: Type,
         span: pace_ast::Span,
         is_mutable: bool,
@@ -589,98 +589,98 @@ impl Environment {
         Ok(())
     }
 
-    pub fn get_mut(&mut self, name: &str) -> Option<&mut VarInfo> {
+    pub fn get_mut(&mut self, name: ustr::Ustr) -> Option<&mut VarInfo> {
         for scope in self.scopes.iter_mut().rev() {
-            if let Some(var_info) = scope.get_mut(name) {
+            if let Some(var_info) = scope.get_mut(&name) {
                 return Some(var_info);
             }
         }
         None
     }
 
-    pub fn get(&self, name: &str) -> Option<&Type> {
+    pub fn get(&self, name: ustr::Ustr) -> Option<&Type> {
         for scope in self.scopes.iter().rev() {
-            if let Some(var_info) = scope.get(name) {
+            if let Some(var_info) = scope.get(&name) {
                 return Some(&var_info.ty);
             }
         }
         None
     }
 
-    pub fn get_var_info(&self, name: &str) -> Option<&VarInfo> {
+    pub fn get_var_info(&self, name: ustr::Ustr) -> Option<&VarInfo> {
         for scope in self.scopes.iter().rev() {
-            if let Some(var_info) = scope.get(name) {
+            if let Some(var_info) = scope.get(&name) {
                 return Some(var_info);
             }
         }
         None
     }
 
-    pub fn find_closest_variable(&self, name: &str) -> Option<String> {
+    pub fn find_closest_variable(&self, name: ustr::Ustr) -> Option<ustr::Ustr> {
         let mut closest = None;
         let mut min_distance = usize::MAX;
 
         for scope in self.scopes.iter().rev() {
             for var_name in scope.keys() {
-                let dist = levenshtein(name, var_name);
+                let dist = levenshtein(name.as_str(), var_name.as_str());
                 if dist <= 2 && dist < min_distance {
                     min_distance = dist;
-                    closest = Some(var_name.clone());
+                    closest = Some(*var_name);
                 }
             }
         }
         closest
     }
 
-    pub fn has(&self, name: &str) -> bool {
+    pub fn has(&self, name: ustr::Ustr) -> bool {
         for scope in self.scopes.iter().rev() {
-            if scope.contains_key(name) {
+            if scope.contains_key(&name) {
                 return true;
             }
         }
         false
     }
 
-    pub fn is_local(&self, name: &str) -> bool {
+    pub fn is_local(&self, name: ustr::Ustr) -> bool {
         for scope in self.scopes.iter().skip(1).rev() {
-            if scope.contains_key(name) {
+            if scope.contains_key(&name) {
                 return true;
             }
         }
         false
     }
 
-    pub fn register_actor(&mut self, name: String, sig: ActorSignature) {
+    pub fn register_actor(&mut self, name: ustr::Ustr, sig: ActorSignature) {
         self.actors.insert(name, sig);
     }
 
-    pub fn register_global_var(&mut self, name: String, sig: GlobalVariableSignature) {
+    pub fn register_global_var(&mut self, name: ustr::Ustr, sig: GlobalVariableSignature) {
         self.global_vars.insert(name, sig);
     }
 
-    pub fn register_function(&mut self, name: String, sig: FunctionSignature) {
+    pub fn register_function(&mut self, name: ustr::Ustr, sig: FunctionSignature) {
         let span = sig.span;
         let fn_type = Type::Function {
             params: sig.params.clone(),
             return_type: Box::new(sig.return_type.clone()),
         };
-        self.functions.insert(name.clone(), sig);
+        self.functions.insert(name, sig);
         let _ = self.define(name, fn_type, span, false);
     }
 
-    pub fn register_class(&mut self, name: String, sig: ClassSignature) {
-        self.classes.insert(name.clone(), sig);
-        let _ = self.define(name.clone(), Type::Class(name), pace_ast::Span::default(), false);
+    pub fn register_class(&mut self, name: ustr::Ustr, sig: ClassSignature) {
+        self.classes.insert(name, sig);
+        let _ = self.define(name, Type::Class(name), pace_ast::Span::default(), false);
     }
 
-    pub fn register_struct(&mut self, name: String, sig: ClassSignature) {
-        self.structs.insert(name.clone(), sig);
-        let _ = self.define(name.clone(), Type::Struct(name), pace_ast::Span::default(), false);
+    pub fn register_struct(&mut self, name: ustr::Ustr, sig: ClassSignature) {
+        self.structs.insert(name, sig);
+        let _ = self.define(name, Type::Struct(name), pace_ast::Span::default(), false);
     }
 
-    pub fn register_enum(&mut self, name: String, sig: EnumSignature) {
-        self.enums.insert(name.clone(), sig);
-        let _ = self.define(name.clone(), Type::Enum(name), pace_ast::Span::default(), false);
+    pub fn register_enum(&mut self, name: ustr::Ustr, sig: EnumSignature) {
+        self.enums.insert(name, sig);
+        let _ = self.define(name, Type::Enum(name), pace_ast::Span::default(), false);
     }
 }
 

@@ -56,7 +56,7 @@ impl CompilerSession {
         visited: &mut std::collections::HashSet<std::path::PathBuf>,
         override_path: Option<&std::path::Path>,
         override_src: Option<&str>,
-        sources: &mut std::collections::HashMap<String, String>,
+        sources: &mut std::collections::HashMap<ustr::Ustr, String>,
     ) -> Result<Vec<Stmt>> {
         let path_buf = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         if visited.contains(&path_buf) {
@@ -74,7 +74,7 @@ impl CompilerSession {
             std::fs::read_to_string(&path_buf).into_diagnostic()?
         };
 
-        sources.insert(module_name.to_string(), src.clone());
+        sources.insert(ustr::Ustr::from(&module_name), src.clone());
 
         let (mut ast, _comments) = match pace_parser::parse(&src, &path.display().to_string()) {
             Ok(res) => res,
@@ -90,7 +90,7 @@ impl CompilerSession {
             ast.insert(
                 0,
                 Stmt::Import {
-                    path: "pace:core".to_string(),
+                    path: ustr::Ustr::from("pace:core"),
                     alias: None,
                     show: None,
                     hide: None,
@@ -121,7 +121,7 @@ impl CompilerSession {
                         };
 
                     // Inject the exact resolved mod_name back into the AST so resolve.rs doesn't have to guess relative paths
-                    *import_path = mod_name.clone();
+                    *import_path = ustr::Ustr::from(&mod_name);
 
                     let mut imported_ast = self.load_file(
                         &resolved_path,
@@ -144,7 +144,7 @@ impl CompilerSession {
 
         // Append current file's AST after its dependencies
         final_ast.push(Stmt::Module {
-            name: module_name.to_string(),
+            name: ustr::Ustr::from(module_name),
             body: ast,
         });
 
@@ -154,7 +154,7 @@ impl CompilerSession {
     fn process_ast_pipeline(
         &self,
         ast: Vec<Stmt>,
-        sources: std::collections::HashMap<String, String>,
+        sources: std::collections::HashMap<ustr::Ustr, String>,
         module_path: &str,
     ) -> Result<(
         Vec<Stmt>,
@@ -514,7 +514,7 @@ impl CompilerSession {
     pub fn check_source(&self, src: &str) -> Result<Vec<Stmt>> {
         let ast = match pace_parser::parse(src, "source") {
             Ok((ast, _)) => vec![Stmt::Module {
-                name: "source".to_string(),
+                name: ustr::Ustr::from("source"),
                 body: ast,
             }],
             Err(parse_errors) => {
@@ -525,7 +525,7 @@ impl CompilerSession {
         };
 
         let mut sources = std::collections::HashMap::new();
-        sources.insert("source".to_string(), src.to_string());
+        sources.insert(ustr::Ustr::from("source"), src.to_string());
 
         let (mono_ast, warnings, type_errors, _env) =
             self.process_ast_pipeline(ast, sources, "source")?;

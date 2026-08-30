@@ -10,6 +10,7 @@ license.workspace = true
 miette = { workspace = true }
 pace-errors = { workspace = true }
 pace-ast = { workspace = true }
+ustr = "1.1.0"
 
 [dev-dependencies]
 insta = { workspace = true }

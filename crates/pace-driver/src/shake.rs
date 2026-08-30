@@ -2,7 +2,7 @@ use pace_ast::{Expr, Stmt, TypeAnnotation};
 use std::collections::HashSet;
 
 pub struct TreeShaker {
-    reachable: HashSet<String>,
+    reachable: HashSet<ustr::Ustr>,
 }
 
 impl TreeShaker {
@@ -15,17 +15,17 @@ impl TreeShaker {
     pub fn run(ast: Vec<Stmt>) -> Vec<Stmt> {
         let mut shaker = Self::new();
         // Start from main
-        shaker.reachable.insert("main".to_string());
+        shaker.reachable.insert(ustr::Ustr::from("main"));
 
         // Build an index of all declarations
         let mut decls = std::collections::HashMap::new();
         shaker.index_decls(&ast, &mut decls);
 
         // Iteratively trace reachable symbols until fixed point
-        let mut queue = vec!["main".to_string()];
+        let mut queue: Vec<ustr::Ustr> = vec![ustr::Ustr::from("main")];
 
         while let Some(current) = queue.pop() {
-            if let Some(decl) = decls.get(&current) {
+            if let Some(decl) = decls.get(&ustr::Ustr::from(&current)) {
                 shaker.trace_stmt(decl, &mut queue);
             }
         }
@@ -34,7 +34,7 @@ impl TreeShaker {
         shaker.filter_ast(ast)
     }
 
-    fn index_decls(&self, ast: &[Stmt], decls: &mut std::collections::HashMap<String, Stmt>) {
+    fn index_decls(&self, ast: &[Stmt], decls: &mut std::collections::HashMap<ustr::Ustr, Stmt>) {
         for stmt in ast {
             match stmt {
                 Stmt::FuncDecl { name, .. }
@@ -82,7 +82,7 @@ impl TreeShaker {
             .collect()
     }
 
-    fn trace_stmt(&mut self, stmt: &Stmt, queue: &mut Vec<String>) {
+    fn trace_stmt(&mut self, stmt: &Stmt, queue: &mut Vec<ustr::Ustr>) {
         match stmt {
             Stmt::Module { body, .. } => {
                 for s in body {
@@ -175,13 +175,13 @@ impl TreeShaker {
         }
     }
 
-    fn trace_expr(&mut self, expr: &Expr, queue: &mut Vec<String>) {
+    fn trace_expr(&mut self, expr: &Expr, queue: &mut Vec<ustr::Ustr>) {
         match expr {
             Expr::Call { callee, args } => {
                 if let Expr::Identifier(name, _) = &**callee {
                     if !self.reachable.contains(name) {
-                        self.reachable.insert(name.clone());
-                        queue.push(name.clone());
+                        self.reachable.insert(*name);
+                        queue.push(*name);
                     }
                 }
                 self.trace_expr(callee, queue);
@@ -191,8 +191,8 @@ impl TreeShaker {
             }
             Expr::Identifier(name, _) => {
                 if !self.reachable.contains(name) {
-                    self.reachable.insert(name.clone());
-                    queue.push(name.clone());
+                    self.reachable.insert(*name);
+                    queue.push(*name);
                 }
             }
             Expr::Binary { left, right, .. } => {
@@ -239,10 +239,10 @@ impl TreeShaker {
         }
     }
 
-    fn trace_type(&mut self, ty: &TypeAnnotation, queue: &mut Vec<String>) {
+    fn trace_type(&mut self, ty: &TypeAnnotation, queue: &mut Vec<ustr::Ustr>) {
         if !self.reachable.contains(&ty.name) {
-            self.reachable.insert(ty.name.clone());
-            queue.push(ty.name.clone());
+            self.reachable.insert(ty.name);
+            queue.push(ty.name);
         }
         for arg in &ty.args {
             self.trace_type(arg, queue);

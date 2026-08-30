@@ -105,12 +105,12 @@ impl<'a> Parser<'a> {
         match self.current_token {
             Token::Let => self.parse_var_decl(false, is_static, visibility), // doc_comments on vars omitted for now
             Token::Var => self.parse_var_decl(true, is_static, visibility),
-            Token::Func => self.parse_func_decl(is_async, visibility, is_static, doc_comment),
-            Token::Class => self.parse_class_decl(doc_comment),
-            Token::Actor => self.parse_actor_decl(doc_comment),
-            Token::Interface => self.parse_interface_decl(doc_comment),
-            Token::Struct => self.parse_struct_decl(doc_comment),
-            Token::Enum => self.parse_enum_decl(doc_comment),
+            Token::Func => self.parse_func_decl(is_async, visibility, is_static, doc_comment.as_deref().map(ustr::Ustr::from)),
+            Token::Class => self.parse_class_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
+            Token::Actor => self.parse_actor_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
+            Token::Interface => self.parse_interface_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
+            Token::Struct => self.parse_struct_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
+            Token::Enum => self.parse_enum_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
             Token::If => self.parse_if_stmt(),
             Token::While => self.parse_while_stmt(),
             Token::Loop => self.parse_loop_stmt(),
@@ -167,12 +167,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_generic_params(&mut self) -> Result<Option<Vec<String>>, pace_errors::SyntaxError> {
+    fn parse_generic_params(&mut self) -> Result<Option<Vec<ustr::Ustr>>, pace_errors::SyntaxError> {
         if self.match_token(Token::Less) {
             let mut params = Vec::new();
             while self.current_token != Token::Greater && self.current_token != Token::Eof {
                 if let Token::Ident(id) = &self.current_token {
-                    params.push(id.clone());
+                    params.push(id.clone().into());
                     self.advance();
                 } else {
                     return Err(pace_errors::SyntaxError {
@@ -226,7 +226,7 @@ impl<'a> Parser<'a> {
 
             return Ok(TypeAnnotation {
                 module_prefix: None,
-                name: "Function".to_string(),
+                name: "Function".to_string().into(),
                 args: vec![],
                 is_nullable: false,
                 is_function: true,
@@ -283,8 +283,8 @@ impl<'a> Parser<'a> {
         let is_nullable = self.match_token(Token::Question);
 
         Ok(TypeAnnotation {
-            module_prefix,
-            name: name,
+            module_prefix: module_prefix.as_deref().map(ustr::Ustr::from),
+            name: name.into(),
             args: args,
             is_nullable,
             is_function: false,
@@ -372,7 +372,7 @@ impl<'a> Parser<'a> {
         let body = Box::new(self.parse_stmt()?);
 
         Ok(Stmt::ForIn {
-            item,
+            item: item.into(),
             iterable,
             body,
         })
@@ -449,8 +449,8 @@ impl<'a> Parser<'a> {
                         });
                     }
                     Ok(pace_ast::Pattern::Variant {
-                        enum_name,
-                        variant_name,
+                        enum_name: enum_name.as_deref().map(ustr::Ustr::from),
+                        variant_name: variant_name.into(),
                         fields: Some(fields),
                         generic_args,
                     })
@@ -458,14 +458,14 @@ impl<'a> Parser<'a> {
                 {
                     // It's a variant without fields (like `None`)
                     Ok(pace_ast::Pattern::Variant {
-                        enum_name,
-                        variant_name,
+                        enum_name: enum_name.as_deref().map(ustr::Ustr::from),
+                        variant_name: variant_name.into(),
                         fields: None,
                         generic_args,
                     })
                 } else {
                     // Lowercase without parenthesis -> Variable binding
-                    Ok(pace_ast::Pattern::Variable(variant_name, self.current_span.into()))
+                    Ok(pace_ast::Pattern::Variable(variant_name.into(), self.current_span.into()))
                 }
             }
             Token::Int(_) | Token::Float(_) | Token::String(_) | Token::Bool(_) => {
@@ -613,10 +613,10 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Stmt::Import {
-            path,
-            alias,
-            show,
-            hide,
+            path: path.into(),
+            alias: alias.as_deref().map(ustr::Ustr::from),
+            show: show.map(|v| v.iter().map(|s| ustr::Ustr::from(s.as_str())).collect()),
+            hide: hide.map(|v| v.iter().map(|s| ustr::Ustr::from(s.as_str())).collect()),
         })
     }
 
@@ -646,7 +646,7 @@ impl<'a> Parser<'a> {
             });
         }
 
-        Ok(Stmt::Export { path })
+        Ok(Stmt::Export { path: path.into() })
     }
 
     fn parse_func_decl(
@@ -654,7 +654,7 @@ impl<'a> Parser<'a> {
         is_async: bool,
         visibility: Visibility,
         is_static: bool,
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
     ) -> Result<Stmt, pace_errors::SyntaxError> {
         let start_pos = self.current_span.0;
         self.advance(); // consume func
@@ -707,7 +707,7 @@ impl<'a> Parser<'a> {
                 let param_type = self.parse_type_annotation()?;
 
                 params.push(Param {
-                    name: param_name,
+                    name: param_name.into(),
                     type_annotation: param_type,
                 });
 
@@ -758,8 +758,8 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Stmt::FuncDecl {
-            name,
-            generic_params,
+            name: name.into(),
+            generic_params: generic_params.map(|v| v.iter().map(|s| ustr::Ustr::from(s.as_str())).collect()),
             params,
             return_type,
             body,
@@ -776,7 +776,7 @@ impl<'a> Parser<'a> {
 
     fn parse_class_decl(
         &mut self,
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
     ) -> Result<Stmt, pace_errors::SyntaxError> {
         // Assume current_token is Class or Actor
         self.advance();
@@ -855,8 +855,8 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Stmt::ClassDecl {
-            name,
-            generic_params,
+            name: name.into(),
+            generic_params: generic_params.map(|v| v.iter().map(|s| ustr::Ustr::from(s.as_str())).collect()),
             fields,
             methods,
             implements,
@@ -866,7 +866,7 @@ impl<'a> Parser<'a> {
 
     fn parse_actor_decl(
         &mut self,
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
     ) -> Result<Stmt, pace_errors::SyntaxError> {
         self.advance();
         let name = match &self.current_token {
@@ -944,8 +944,8 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Stmt::ActorDecl {
-            name,
-            generic_params,
+            name: name.into(),
+            generic_params: generic_params.map(|v| v.iter().map(|s| ustr::Ustr::from(s.as_str())).collect()),
             fields,
             methods,
             implements,
@@ -955,7 +955,7 @@ impl<'a> Parser<'a> {
 
     fn parse_interface_decl(
         &mut self,
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
     ) -> Result<Stmt, pace_errors::SyntaxError> {
         self.advance(); // consume interface
 
@@ -1043,7 +1043,7 @@ impl<'a> Parser<'a> {
                     let param_type = self.parse_type_annotation()?;
 
                     params.push(Param {
-                        name: param_name,
+                        name: param_name.into(),
                         type_annotation: param_type,
                     });
 
@@ -1084,7 +1084,7 @@ impl<'a> Parser<'a> {
             }
 
             methods.push(Stmt::FuncDecl {
-                name: method_name,
+                name: method_name.into(),
                 generic_params: None,
                 params,
                 return_type,
@@ -1106,8 +1106,8 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Stmt::InterfaceDecl {
-            name,
-            generic_params,
+            name: name.into(),
+            generic_params: generic_params.map(|v| v.iter().map(|s| ustr::Ustr::from(s.as_str())).collect()),
             methods,
             doc_comment,
         })
@@ -1115,7 +1115,7 @@ impl<'a> Parser<'a> {
 
     fn parse_enum_decl(
         &mut self,
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
     ) -> Result<Stmt, pace_errors::SyntaxError> {
         self.advance(); // consume enum
 
@@ -1205,7 +1205,7 @@ impl<'a> Parser<'a> {
 
             use pace_ast::EnumVariant;
             variants.push(EnumVariant {
-                name: variant_name,
+                name: variant_name.into(),
                 fields,
             });
 
@@ -1222,8 +1222,8 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Stmt::EnumDecl {
-            name,
-            generic_params,
+            name: name.into(),
+            generic_params: generic_params.map(|v| v.iter().map(|s| ustr::Ustr::from(s.as_str())).collect()),
             variants,
             doc_comment,
         })
@@ -1231,7 +1231,7 @@ impl<'a> Parser<'a> {
 
     fn parse_struct_decl(
         &mut self,
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
     ) -> Result<Stmt, pace_errors::SyntaxError> {
         self.advance(); // consume struct
 
@@ -1281,8 +1281,8 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Stmt::StructDecl {
-            name,
-            generic_params,
+            name: name.into(),
+            generic_params: generic_params.map(|v| v.iter().map(|s| ustr::Ustr::from(s.as_str())).collect()),
             fields,
             doc_comment,
         })
@@ -1327,7 +1327,7 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Stmt::VarDecl {
-            name,
+            name: name.into(),
             is_mutable,
             type_annotation,
             is_static,
@@ -1525,7 +1525,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 expr = Expr::MemberAccess {
                     object: Box::new(expr),
-                    property,
+                    property: property.into(),
                     computed_class: None,
                     is_static_operator: false,
                 };
@@ -1543,7 +1543,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 expr = Expr::MemberAccess {
                     object: Box::new(expr),
-                    property,
+                    property: property.into(),
                     computed_class: None,
                     is_static_operator: true,
                 };
@@ -1561,7 +1561,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 expr = Expr::OptionalMemberAccess {
                     object: Box::new(expr),
-                    property,
+                    property: property.into(),
                 };
             } else if self.current_token == Token::Less {
                 let backup_lexer = self.lexer.clone();
@@ -1665,7 +1665,7 @@ impl<'a> Parser<'a> {
                 let v = id.clone();
                 let span = self.current_span;
                 self.advance();
-                Ok(Expr::Identifier(v, span.into()))
+                Ok(Expr::Identifier(v.into(), span.into()))
             }
             Token::LParen => {
                 let _start_span = self.current_span;
@@ -1726,7 +1726,7 @@ impl<'a> Parser<'a> {
                             });
                         }
                         let param_ty = self.parse_type_annotation()?;
-                        params.push((param_name, param_ty));
+                        params.push((ustr::Ustr::from(&param_name), param_ty));
                         if !self.match_token(Token::Comma) {
                             break;
                         }
@@ -1800,7 +1800,7 @@ impl<'a> Parser<'a> {
             if c == '$' && chars.peek() == Some(&'{') {
                 chars.next(); // consume '{'
                 if !current_text.is_empty() {
-                    parts.push(Expr::StringLiteral(current_text.clone()));
+                    parts.push(Expr::StringLiteral(current_text.clone().into()));
                     current_text.clear();
                 }
 
@@ -1851,7 +1851,7 @@ impl<'a> Parser<'a> {
         }
 
         if !current_text.is_empty() {
-            parts.push(Expr::StringLiteral(current_text));
+            parts.push(Expr::StringLiteral(current_text.into()));
         }
 
         if parts.len() == 1 {
@@ -1859,7 +1859,7 @@ impl<'a> Parser<'a> {
                 return Ok(parts.pop().unwrap());
             }
         } else if parts.is_empty() {
-            return Ok(Expr::StringLiteral(String::new()));
+            return Ok(Expr::StringLiteral(String::new().into()));
         }
 
         Ok(Expr::InterpolatedString(parts))

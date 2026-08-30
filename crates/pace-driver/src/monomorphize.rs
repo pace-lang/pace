@@ -2,10 +2,10 @@ use pace_ast::{Expr, Stmt, TypeAnnotation};
 use std::collections::HashMap;
 
 pub struct Monomorphizer {
-    pub generic_classes: HashMap<String, Stmt>,
-    pub generic_class_modules: HashMap<String, String>,
-    pub generated_classes: HashMap<String, Stmt>,
-    pub all_interfaces: HashMap<String, Stmt>, // Stores all interfaces (generic and concrete)
+    pub generic_classes: HashMap<ustr::Ustr, Stmt>,
+    pub generic_class_modules: HashMap<ustr::Ustr, String>,
+    pub generated_classes: HashMap<ustr::Ustr, Stmt>,
+    pub all_interfaces: HashMap<ustr::Ustr, Stmt>, // Stores all interfaces (generic and concrete)
 }
 
 impl Default for Monomorphizer {
@@ -84,7 +84,7 @@ impl Monomorphizer {
                         mono.generic_classes
                             .insert(cname.clone(), inner_stmt.clone());
                         mono.generic_class_modules
-                            .insert(cname.clone(), name.clone());
+                            .insert(cname.clone(), name.to_string());
                         continue;
                     }
                     if let Stmt::InterfaceDecl {
@@ -99,7 +99,7 @@ impl Monomorphizer {
                             mono.generic_classes
                                 .insert(iname.clone(), inner_stmt.clone());
                             mono.generic_class_modules
-                                .insert(iname.clone(), name.clone());
+                                .insert(iname.clone(), name.to_string());
                             continue;
                         }
                     }
@@ -113,7 +113,7 @@ impl Monomorphizer {
                         mono.generic_classes
                             .insert(ename.clone(), inner_stmt.clone());
                         mono.generic_class_modules
-                            .insert(ename.clone(), name.clone());
+                            .insert(ename.clone(), name.to_string());
                         continue;
                     }
                     new_body.push(inner_stmt);
@@ -155,12 +155,12 @@ impl Monomorphizer {
                 .to_string();
             let original_module = mono
                 .generic_class_modules
-                .get(&base_name)
+                .get(&ustr::Ustr::from(&base_name))
                 .cloned()
                 .unwrap_or_else(|| "unknown_module".to_string());
 
             generated.push(Stmt::Module {
-                name: original_module,
+                name: original_module.into(),
                 body: vec![instantiated_stmt],
             });
         }
@@ -191,7 +191,7 @@ impl Monomorphizer {
 
             let concrete_name = Self::generate_name(&ty.name, &ty.args);
 
-            if !self.generated_classes.contains_key(&concrete_name) {
+            if !self.generated_classes.contains_key(&ustr::Ustr::from(&concrete_name)) {
                 if let Some(generic_decl) = self.generic_classes.get(&ty.name).cloned() {
                     self.instantiate_class(generic_decl, concrete_name.clone(), &ty.args)?;
                 } else {
@@ -199,7 +199,7 @@ impl Monomorphizer {
                 }
             }
 
-            ty.name = concrete_name;
+            ty.name = concrete_name.into();
             ty.args.clear();
         }
         Ok(())
@@ -213,7 +213,7 @@ impl Monomorphizer {
     ) -> Result<(), miette::Report> {
         // Prevent infinite recursion by inserting a dummy first
         self.generated_classes
-            .insert(concrete_name.clone(), Stmt::Expr(Expr::Null));
+            .insert(concrete_name.clone().into(), Stmt::Expr(Expr::Null));
 
         let is_actor = matches!(generic_decl, Stmt::ActorDecl { .. });
         match generic_decl {
@@ -295,7 +295,7 @@ impl Monomorphizer {
 
                 let instantiated = if is_actor {
                     Stmt::ActorDecl {
-                        name: concrete_name.clone(),
+                        name: concrete_name.clone().into(),
                         generic_params: None, // It's concrete now!
                         fields: new_fields,
                         methods: new_methods,
@@ -304,7 +304,7 @@ impl Monomorphizer {
                     }
                 } else {
                     Stmt::ClassDecl {
-                        name: concrete_name.clone(),
+                        name: concrete_name.clone().into(),
                         generic_params: None, // It's concrete now!
                         fields: new_fields,
                         methods: new_methods,
@@ -312,7 +312,7 @@ impl Monomorphizer {
                         doc_comment: None,
                     }
                 };
-                self.generated_classes.insert(concrete_name, instantiated);
+                self.generated_classes.insert(concrete_name.into(), instantiated);
             }
             Stmt::InterfaceDecl {
                 name: _,
@@ -334,12 +334,12 @@ impl Monomorphizer {
                 }
 
                 let instantiated = Stmt::InterfaceDecl {
-                    name: concrete_name.clone(),
+                    name: concrete_name.clone().into(),
                     generic_params: None, // It's concrete now!
                     methods: new_methods,
                     doc_comment: None,
                 };
-                self.generated_classes.insert(concrete_name, instantiated);
+                self.generated_classes.insert(concrete_name.into(), instantiated);
             }
             Stmt::EnumDecl {
                 name: _,
@@ -368,12 +368,12 @@ impl Monomorphizer {
                 }
 
                 let instantiated = Stmt::EnumDecl {
-                    name: concrete_name.clone(),
+                    name: concrete_name.clone().into(),
                     generic_params: None, // It's concrete now!
                     variants: new_variants,
                     doc_comment: None,
                 };
-                self.generated_classes.insert(concrete_name, instantiated);
+                self.generated_classes.insert(concrete_name.into(), instantiated);
             }
             _ => {}
         }
@@ -383,7 +383,7 @@ impl Monomorphizer {
     fn replace_types(
         &mut self,
         ty: &mut TypeAnnotation,
-        mapping: &HashMap<String, TypeAnnotation>,
+        mapping: &HashMap<ustr::Ustr, TypeAnnotation>,
     ) -> Result<(), miette::Report> {
         if let Some(mapped) = mapping.get(&ty.name) {
             *ty = mapped.clone();
@@ -397,7 +397,7 @@ impl Monomorphizer {
     fn rewrite_stmt_with_mapping(
         &mut self,
         mut stmt: Stmt,
-        mapping: &HashMap<String, TypeAnnotation>,
+        mapping: &HashMap<ustr::Ustr, TypeAnnotation>,
     ) -> Result<Stmt, miette::Report> {
         // First substitute types
         self.substitute_stmt_types(&mut stmt, mapping)?;
@@ -408,7 +408,7 @@ impl Monomorphizer {
     fn substitute_stmt_types(
         &mut self,
         stmt: &mut Stmt,
-        mapping: &HashMap<String, TypeAnnotation>,
+        mapping: &HashMap<ustr::Ustr, TypeAnnotation>,
     ) -> Result<(), miette::Report> {
         match stmt {
             Stmt::VarDecl {
@@ -500,7 +500,7 @@ impl Monomorphizer {
     fn substitute_expr_types(
         &mut self,
         expr: &mut Expr,
-        mapping: &HashMap<String, TypeAnnotation>,
+        mapping: &HashMap<ustr::Ustr, TypeAnnotation>,
     ) -> Result<(), miette::Report> {
         match expr {
             Expr::GenericInstantiation {
@@ -696,7 +696,7 @@ impl Monomorphizer {
                 // Convert to a simple identifier and instantiate the class
                 if let Expr::Identifier(name, _) = &**callee {
                     let concrete_name = Self::generate_name(name, generic_args);
-                    if !self.generated_classes.contains_key(&concrete_name)
+                    if !self.generated_classes.contains_key(&ustr::Ustr::from(&concrete_name))
                         && let Some(generic_decl) = self.generic_classes.get(name).cloned()
                     {
                         let _ = self.instantiate_class(
@@ -705,7 +705,7 @@ impl Monomorphizer {
                             generic_args,
                         );
                     }
-                    *expr = Expr::Identifier(concrete_name, pace_ast::Span::default());
+                    *expr = Expr::Identifier(concrete_name.into(), pace_ast::Span::default());
                 }
             }
             Expr::Call { callee, args } => {
@@ -749,7 +749,7 @@ impl Monomorphizer {
                 }
                 if let Some(name) = enum_name {
                     let concrete_name = Self::generate_name(name, args);
-                    *name = concrete_name;
+                    *name = concrete_name.into();
                 }
                 *generic_args = None;
             }

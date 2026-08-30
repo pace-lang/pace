@@ -22,12 +22,12 @@ impl TypeChecker {
 }
 pub struct TypeChecker {
     pub file_name: String,
-    pub sources: HashMap<String, String>,
+    pub sources: HashMap<ustr::Ustr, String>,
     pub env: Environment,
     current_return_type: Option<Type>,
-    current_class: Option<String>,
-    current_module: String,
-    generic_params_in_scope: Vec<String>,
+    current_class: Option<ustr::Ustr>,
+    current_module: ustr::Ustr,
+    generic_params_in_scope: Vec<ustr::Ustr>,
     pub warnings: Vec<pace_errors::SemanticWarning>,
     pub errors: Vec<TypeError>,
     pub current_span: pace_ast::Span,
@@ -35,7 +35,7 @@ pub struct TypeChecker {
 
 pub fn check(
     ast: &[Stmt],
-    sources: HashMap<String, String>,
+    sources: HashMap<ustr::Ustr, String>,
     entry_module: &str,
 ) -> (
     Vec<pace_errors::SemanticWarning>,
@@ -45,7 +45,7 @@ pub fn check(
     let mut checker = TypeChecker::new(sources, entry_module);
 
     // We set the initial current_module to the entry module
-    checker.current_module = entry_module.to_string();
+    checker.current_module = entry_module.to_string().into();
     checker.check(ast);
     (checker.warnings, checker.errors, checker.env)
 }
@@ -57,14 +57,14 @@ impl Default for TypeChecker {
 }
 
 impl TypeChecker {
-    pub fn new(sources: HashMap<String, String>, file_name: &str) -> Self {
+    pub fn new(sources: HashMap<ustr::Ustr, String>, file_name: &str) -> Self {
         Self {
             file_name: file_name.to_string(),
             sources,
             env: Environment::new(),
             current_return_type: None,
             current_class: None,
-            current_module: "main".to_string(),
+            current_module: "main".into(),
             generic_params_in_scope: Vec::new(),
             warnings: Vec::new(),
             errors: Vec::new(),
@@ -72,10 +72,10 @@ impl TypeChecker {
         }
     }
 
-    fn define_var(&mut self, name: String, ty: Type, span: pace_ast::Span, is_mutable: bool) {
+    fn define_var(&mut self, name: ustr::Ustr, ty: Type, span: pace_ast::Span, is_mutable: bool) {
         if let Err(original_span) = self.env.define(name.clone(), ty, span.into(), is_mutable) {
             self.errors.push(TypeError::DuplicateDeclaration {
-                name,
+                name: name.to_string(),
                 src: self.get_source(),
                 span: span.into(),
                 original_span: original_span.into(),
@@ -114,7 +114,7 @@ impl TypeChecker {
                 self.warnings
                     .push(pace_errors::SemanticWarning::UnusedItem {
                         kind: kind.to_string(),
-                        name,
+                        name: name.to_string(),
                         src: self.get_source(),
                         span: var_info.span.into(),
                     });
@@ -127,13 +127,13 @@ impl TypeChecker {
             match stmt {
                 Stmt::Module { name, body } => {
                     let old_module = self.current_module.clone();
-                    self.current_module = name.clone();
+                    self.current_module = name.clone().into();
                     self.register_types(body);
                     self.current_module = old_module;
                 }
                 Stmt::ClassDecl { name, .. } | Stmt::InterfaceDecl { name, .. } => {
                     self.env.register_class(
-                        name.clone(),
+                        name.clone().into(),
                         ClassSignature {
                             generic_params: None,
                             fields: HashMap::new(),
@@ -144,7 +144,7 @@ impl TypeChecker {
                 }
                 Stmt::ActorDecl { name, .. } => {
                     self.env.register_actor(
-                        name.clone(),
+                        name.clone().into(),
                         crate::env::ActorSignature {
                             generic_params: None,
                             fields: HashMap::new(),
@@ -155,7 +155,7 @@ impl TypeChecker {
                 }
                 Stmt::StructDecl { name, .. } => {
                     self.env.register_struct(
-                        name.clone(),
+                        name.clone().into(),
                         ClassSignature {
                             generic_params: None,
                             fields: HashMap::new(),
@@ -166,7 +166,7 @@ impl TypeChecker {
                 }
                 Stmt::EnumDecl { name, .. } => {
                     self.env.register_enum(
-                        name.clone(),
+                        name.clone().into(),
                         EnumSignature {
                             generic_params: None,
                             variants: HashMap::new(),
@@ -183,7 +183,7 @@ impl TypeChecker {
             match stmt {
                 Stmt::Module { name, body } => {
                     let old_module = self.current_module.clone();
-                    self.current_module = name.clone();
+                    self.current_module = name.clone().into();
                     self.resolve_signatures(body);
                     self.current_module = old_module;
                 }
@@ -199,7 +199,7 @@ impl TypeChecker {
                     };
                     if !is_camel_case(name) && name != "main" && !name.contains("__") {
                         self.warnings.push(pace_errors::SemanticWarning::NamingConvention {
-                            name: name.clone(),
+                            name: name.to_string(),
                             src: self.get_source(),
                             span: (*span).into(),
                         });
@@ -214,10 +214,10 @@ impl TypeChecker {
                         generic_params: generic_params.clone(),
                         is_static: *is_static,
                     };
-                    self.env.register_function(name.clone(), sig);
+                    self.env.register_function(name.clone().into(), sig);
                 }
                 Stmt::ClassDecl { name, fields, methods, generic_params, .. } => {
-                    self.current_class = Some(name.clone());
+                    self.current_class = Some(ustr::Ustr::from(name));
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
                     for f in fields {
@@ -228,9 +228,9 @@ impl TypeChecker {
                                 Type::Unknown
                             };
                             if *is_static {
-                                static_field_map.insert(f_name.clone(), f_ty);
+                                static_field_map.insert(f_name.clone().into(), f_ty);
                             } else {
-                                field_map.insert(f_name.clone(), f_ty);
+                                field_map.insert(f_name.clone().into(), f_ty);
                             }
                         }
                     }
@@ -257,7 +257,7 @@ impl TypeChecker {
                                 generic_params: generic_params.clone(),
                                 is_static: *is_static,
                             };
-                            method_map.insert(m_name.clone(), sig);
+                            method_map.insert(m_name.clone().into(), sig);
                         }
                     }
 
@@ -267,11 +267,11 @@ impl TypeChecker {
                         static_fields: static_field_map,
                         methods: method_map,
                     };
-                    self.env.register_class(name.clone(), sig);
+                    self.env.register_class(name.clone().into(), sig);
                     self.current_class = None;
                 }
                 Stmt::ActorDecl { name, fields, methods, generic_params, .. } => {
-                    self.current_class = Some(name.clone());
+                    self.current_class = Some(ustr::Ustr::from(name));
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
                     for f in fields {
@@ -282,9 +282,9 @@ impl TypeChecker {
                                 Type::Unknown
                             };
                             if *is_static {
-                                static_field_map.insert(f_name.clone(), f_ty);
+                                static_field_map.insert(f_name.clone().into(), f_ty);
                             } else {
-                                field_map.insert(f_name.clone(), f_ty);
+                                field_map.insert(f_name.clone().into(), f_ty);
                             }
                         }
                     }
@@ -311,7 +311,7 @@ impl TypeChecker {
                                 generic_params: generic_params.clone(),
                                 is_static: *is_static,
                             };
-                            method_map.insert(m_name.clone(), sig);
+                            method_map.insert(m_name.clone().into(), sig);
                         }
                     }
 
@@ -321,7 +321,7 @@ impl TypeChecker {
                         static_fields: static_field_map,
                         methods: method_map,
                     };
-                    self.env.register_actor(name.clone(), sig);
+                    self.env.register_actor(name.clone().into(), sig);
                     self.current_class = None;
                 }
                 Stmt::StructDecl { name, fields, generic_params, .. } => {
@@ -335,9 +335,9 @@ impl TypeChecker {
                                 Type::Unknown
                             };
                             if *is_static {
-                                static_field_map.insert(f_name.clone(), f_ty);
+                                static_field_map.insert(f_name.clone().into(), f_ty);
                             } else {
-                                field_map.insert(f_name.clone(), f_ty);
+                                field_map.insert(f_name.clone().into(), f_ty);
                             }
                         }
                     }
@@ -347,16 +347,16 @@ impl TypeChecker {
                         static_fields: static_field_map,
                         methods: HashMap::new(),
                     };
-                    self.env.register_struct(name.clone(), sig);
+                    self.env.register_struct(name.clone().into(), sig);
                 }
                 Stmt::EnumDecl { name, variants, generic_params, .. } => {
                     let mut variant_map = HashMap::new();
-                    self.current_class = Some(name.clone());
+                    self.current_class = Some(ustr::Ustr::from(name));
 
                     if let Some(params) = generic_params {
                         self.env.push_scope();
                         for param in params {
-                            self.define_var(param.clone(), Type::GenericParameter(param.clone()), pace_ast::Span::default(), false);
+                            self.define_var(param.clone().into(), Type::GenericParameter(param.clone().into()), pace_ast::Span::default(), false);
                         }
                     }
 
@@ -370,7 +370,7 @@ impl TypeChecker {
                         } else {
                             None
                         };
-                        variant_map.insert(v.name.clone(), fields);
+                        variant_map.insert(v.name.clone().into(), fields);
                     }
 
                     if generic_params.is_some() {
@@ -383,10 +383,10 @@ impl TypeChecker {
                         generic_params: generic_params.clone(),
                         variants: variant_map,
                     };
-                    self.env.register_enum(name.clone(), sig);
+                    self.env.register_enum(name.clone().into(), sig);
                 }
                 Stmt::InterfaceDecl { name, methods, generic_params, .. } => {
-                    self.current_class = Some(name.clone());
+                    self.current_class = Some(ustr::Ustr::from(name));
                     let mut method_map = HashMap::new();
                     for m in methods {
                         if let Stmt::FuncDecl { name: m_name, params, return_type, visibility, is_static, .. } = m {
@@ -409,7 +409,7 @@ impl TypeChecker {
                                 generic_params: None,
                                 is_static: *is_static,
                             };
-                            method_map.insert(m_name.clone(), sig);
+                            method_map.insert(m_name.clone().into(), sig);
                         }
                     }
                     let sig = ClassSignature {
@@ -417,20 +417,20 @@ impl TypeChecker {
                         fields: HashMap::new(), static_fields: HashMap::new(),
                         methods: method_map,
                     };
-                    self.env.register_class(name.clone(), sig);
+                    self.env.register_class(name.clone().into(), sig);
                     self.current_class = None;
                 }
                 Stmt::Import { path, .. }
                     // Basic placeholder for module resolution.
                     // For now, if we import "std/collection", we mock registering `List` and `Set`
                     if path == "std/collection" => {
-                        self.env.register_class("List".to_string(), ClassSignature {
-                            generic_params: Some(vec!["T".to_string()]),
+                        self.env.register_class("List".into(), ClassSignature {
+                            generic_params: Some(vec!["T".into()]),
                             fields: HashMap::new(), static_fields: HashMap::new(),
                             methods: HashMap::new(),
                         });
-                        self.env.register_class("Set".to_string(), ClassSignature {
-                            generic_params: Some(vec!["T".to_string()]),
+                        self.env.register_class("Set".into(), ClassSignature {
+                            generic_params: Some(vec!["T".into()]),
                             fields: HashMap::new(), static_fields: HashMap::new(),
                             methods: HashMap::new(),
                         });
@@ -441,7 +441,7 @@ impl TypeChecker {
                     } else {
                         Type::Unknown
                     };
-                    self.env.register_global_var(name.clone(), crate::env::GlobalVariableSignature {
+                    self.env.register_global_var(name.clone().into(), crate::env::GlobalVariableSignature {
                         ty,
                         is_mutable: *is_mutable,
                         visibility: visibility.clone(),
@@ -459,7 +459,7 @@ impl TypeChecker {
         match stmt {
             Stmt::Module { name, body } => {
                 let old = self.current_module.clone();
-                self.current_module = name.clone();
+                self.current_module = name.clone().into();
                 for s in body {
                     self.check_stmt(s);
                 }
@@ -526,7 +526,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
                             span: self.current_span.into(),
-                            message: "Return statement outside of function".to_string(),
+                            message: "Return statement outside of function".into(),
                         });
                         return ();
                     };
@@ -543,7 +543,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
                             span: self.current_span.into(),
-                            message: "If condition must be a boolean".to_string(),
+                            message: "If condition must be a boolean".into(),
                         });
                         return ();
                     };
@@ -560,7 +560,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
                             span: self.current_span.into(),
-                            message: "While condition must be a boolean".to_string(),
+                            message: "While condition must be a boolean".into(),
                         });
                         return ();
                     };
@@ -588,7 +588,7 @@ impl TypeChecker {
                 }
 
                 self.env.push_scope();
-                self.define_var(item.clone(), item_ty, pace_ast::Span::default(), false);
+                self.define_var(item.clone().into(), item_ty, pace_ast::Span::default(), false);
                 self.check_stmt(body);
                 self.pop_scope_and_check_unused();
             }
@@ -668,7 +668,7 @@ impl TypeChecker {
             }
 
             if !is_match {
-                self.define_var(name.to_string(), expected_type.clone(), span, is_mutable);
+                self.define_var(ustr::Ustr::from(name), expected_type.clone(), span, is_mutable);
                 self.errors.push(TypeError::Generic {
                     src: self.get_source(),
                     span: self.current_span.into(),
@@ -699,7 +699,7 @@ impl TypeChecker {
                     span: span.into(),
                 });
         }
-        self.define_var(name.to_string(), inferred_type, span, is_mutable);
+        self.define_var(ustr::Ustr::from(name), inferred_type, span, is_mutable);
     }
 
     fn check_stmt_func_decl(
@@ -707,7 +707,7 @@ impl TypeChecker {
         params: &[pace_ast::Param],
         body: &[Stmt],
         return_type: Option<&pace_ast::TypeAnnotation>,
-        generic_params: Option<&[String]>,
+        generic_params: Option<&[ustr::Ustr]>,
         is_static: bool,
         span: pace_ast::Span,
     ) {
@@ -738,14 +738,14 @@ impl TypeChecker {
                 } else {
                     Type::Class(class_name.clone())
                 };
-                self.define_var("self".to_string(), self_ty, pace_ast::Span::default(), false);
+                self.define_var("self".into(), self_ty, pace_ast::Span::default(), false);
             }
         }
 
         // Add parameters to scope
         for param in params {
             let param_type = self.resolve_type_name(&param.type_annotation);
-            self.define_var(param.name.clone(), param_type, pace_ast::Span::default(), false);
+            self.define_var(param.name.clone().into(), param_type, pace_ast::Span::default(), false);
         }
 
         // Check body
@@ -763,12 +763,12 @@ impl TypeChecker {
         name: &str,
         methods: &[Stmt],
         implements: Option<&pace_ast::TypeAnnotation>,
-        generic_params: Option<&[String]>,
+        generic_params: Option<&[ustr::Ustr]>,
     ) {
         let prev_class = self.current_class.clone();
         let prev_generics = self.generic_params_in_scope.clone();
 
-        self.current_class = Some(name.to_string());
+        self.current_class = Some(ustr::Ustr::from(name));
 
         if let Some(gps) = generic_params {
             self.generic_params_in_scope.extend(gps.to_vec());
@@ -778,7 +778,7 @@ impl TypeChecker {
             let iface_name = &iface_annotation.name;
             // Check if class actually implements the interface
             if let Some(iface_sig) = self.env.classes.get(iface_name) {
-                let class_sig = self.env.classes.get(name).unwrap().clone();
+                let class_sig = self.env.classes.get(&ustr::Ustr::from(name)).unwrap().clone();
                 for m_name in iface_sig.methods.keys() {
                     if class_sig.methods.get(m_name).is_some() {
                         // For simplicity, we just check if it exists right now
@@ -814,7 +814,7 @@ impl TypeChecker {
 
     fn check_expr_closure(
         &mut self,
-        params: &[(String, pace_ast::TypeAnnotation)],
+        params: &[(ustr::Ustr, pace_ast::TypeAnnotation)],
         return_type: Option<&pace_ast::TypeAnnotation>,
         body: &Expr,
     ) -> Type {
@@ -824,7 +824,7 @@ impl TypeChecker {
         for (param_name, param_ty_ann) in params {
             let param_ty = self.resolve_type_name(param_ty_ann);
             param_types.push(param_ty.clone());
-            let _ = self.env.define(param_name.clone(), param_ty, pace_ast::Span::default(), true);
+            let _ = self.env.define(param_name.clone().into(), param_ty, pace_ast::Span::default(), true);
         }
 
         let ret_ty = if let Some(rt) = return_type {
@@ -854,30 +854,30 @@ impl TypeChecker {
     }
 
     fn check_expr_identifier(&mut self, name: &str) -> Type {
-        if let Some(var_info) = self.env.get_mut(name) {
+        if let Some(var_info) = self.env.get_mut(name.into()) {
             var_info.is_used = true;
         }
-        match self.env.get(name) {
+        match self.env.get(ustr::Ustr::from(name)) {
             Some(ty) => ty.clone(),
             None => {
                 // Check if it's a class/struct for instantiation
                 // Check if it's a module item
-                if self.env.classes.contains_key(name) {
-                    Type::Class(name.to_string())
-                } else if self.env.actors.contains_key(name) {
-                    Type::Actor(name.to_string())
-                } else if self.env.structs.contains_key(name) {
-                    Type::Struct(name.to_string())
-                } else if self.env.enums.contains_key(name) {
-                    Type::Enum(name.to_string())
-                } else if let Some(global) = self.env.global_vars.get(name) {
+                if self.env.classes.contains_key(&ustr::Ustr::from(name)) {
+                    Type::Class(name.into())
+                } else if self.env.actors.contains_key(&ustr::Ustr::from(name)) {
+                    Type::Actor(name.into())
+                } else if self.env.structs.contains_key(&ustr::Ustr::from(name)) {
+                    Type::Struct(name.into())
+                } else if self.env.enums.contains_key(&ustr::Ustr::from(name)) {
+                    Type::Enum(name.into())
+                } else if let Some(global) = self.env.global_vars.get(&ustr::Ustr::from(name)) {
                     global.ty.clone()
                 } else {
-                    let suggestion = self.env.find_closest_variable(name);
+                    let suggestion = self.env.find_closest_variable(name.into());
                     let help_text = if let Some(sug) = suggestion {
                         format!("Did you mean '{}'?", sug)
                     } else {
-                        "Variable does not exist.".to_string()
+                        "Variable does not exist.".into()
                     };
                     self.errors.push(TypeError::UnknownIdentifier {
                         name: name.to_string(),
@@ -1014,7 +1014,7 @@ impl TypeChecker {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
                                     span: self.current_span.into(),
-                                    message: "Logical operations require boolean types".to_string(),
+                                    message: "Logical operations require boolean types".into(),
                                 });
                                 Type::Error
                             }
@@ -1030,7 +1030,7 @@ impl TypeChecker {
                     let mut err_msg = String::new();
                     let mut var_span = pace_ast::Span::default();
 
-                    if let Some(var_info) = self.env.get_mut(name) {
+                    if let Some(var_info) = self.env.get_mut(*name) {
                         if !var_info.is_mutable {
                             is_err = true;
                             err_msg = format!("Cannot assign to immutable variable '{}'", name);
@@ -1050,7 +1050,7 @@ impl TypeChecker {
                         } else {
                             var_info.is_used = true;
                         }
-                    } else if let Some(global) = self.env.global_vars.get(name) {
+                    } else if let Some(global) = self.env.global_vars.get(&ustr::Ustr::from(name)) {
                         if !global.is_mutable {
                             is_err = true;
                             err_msg =
@@ -1070,14 +1070,14 @@ impl TypeChecker {
                             var_span = global.span;
                         }
                     } else {
-                        let suggestion = self.env.find_closest_variable(&name);
+                        let suggestion = self.env.find_closest_variable(ustr::Ustr::from(&name));
                         let help_text = if let Some(sug) = suggestion {
                             format!("Did you mean '{}'?", sug)
                         } else {
-                            "Variable does not exist.".to_string()
+                            "Variable does not exist.".into()
                         };
                         self.errors.push(TypeError::UnknownIdentifier {
-                            name: name.clone(),
+                            name: name.to_string(),
                             help_text,
                             src: self.get_source(),
                             span: self.get_span_for(&name).into(),
@@ -1109,7 +1109,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
                             span: self.current_span.into(),
-                            message: "Invalid assignment target".to_string(),
+                            message: "Invalid assignment target".into(),
                         });
                         Type::Error
                     }
@@ -1125,21 +1125,21 @@ impl TypeChecker {
 
                 // If callee is a known class/struct, it's a constructor call
                 if let Type::Class(name) = &callee_ty {
-                    if let Some(_sig) = self.env.classes.get(name) {
-                        return Type::Class(name.clone());
+                    if let Some(_sig) = self.env.classes.get(&ustr::Ustr::from(name)) {
+                        return Type::Class(*name);
                     }
                 } else if let Type::Actor(name) = &callee_ty
-                    && let Some(_sig) = self.env.actors.get(name)
+                    && let Some(_sig) = self.env.actors.get(&ustr::Ustr::from(name))
                 {
                     return Type::Actor(name.clone());
                 } else if let Type::Struct(name) = &callee_ty
-                    && let Some(_sig) = self.env.structs.get(name)
+                    && let Some(_sig) = self.env.structs.get(&ustr::Ustr::from(name))
                 {
-                    return Type::Struct(name.clone());
+                    return Type::Struct(*name);
                 } else if let Type::Enum(name) = &callee_ty
-                    && let Some(_sig) = self.env.enums.get(name)
+                    && let Some(_sig) = self.env.enums.get(&ustr::Ustr::from(name))
                 {
-                    return Type::Enum(name.clone());
+                    return Type::Enum(*name);
                 }
 
                 // If it's a function or method, we need its signature
@@ -1193,7 +1193,7 @@ impl TypeChecker {
 
                 // For direct global function calls
                 if let Expr::Identifier(func_name, _) = &**callee
-                    && let Some(sig) = self.env.functions.get(func_name)
+                    && let Some(sig) = self.env.functions.get(&ustr::Ustr::from(func_name))
                 {
                     if sig.visibility == Visibility::Private && sig.module != self.current_module {
                         {
@@ -1260,12 +1260,12 @@ impl TypeChecker {
                     }
                 }
                 if let Some(ref name) = base_ident {
-                    if self.env.classes.contains_key(name)
-                        || self.env.structs.contains_key(name)
-                        || self.env.enums.contains_key(name)
-                        || self.env.actors.contains_key(name)
+                    if self.env.classes.contains_key(&ustr::Ustr::from(name))
+                        || self.env.structs.contains_key(&ustr::Ustr::from(name))
+                        || self.env.enums.contains_key(&ustr::Ustr::from(name))
+                        || self.env.actors.contains_key(&ustr::Ustr::from(name))
                     {
-                        is_namespace_access = !self.env.is_local(name);
+                        is_namespace_access = !self.env.is_local(*name);
                     }
                 }
 
@@ -1282,7 +1282,7 @@ impl TypeChecker {
                 if !*is_static_operator && is_namespace_access {
                     {
                         self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(),
-                        message: "The '.' operator can only be used for instance access. Use '::' for static/namespace access.".to_string()
+                        message: "The '.' operator can only be used for instance access. Use '::' for static/namespace access.".into()
                     });
                         return Type::Error;
                     };
@@ -1292,7 +1292,7 @@ impl TypeChecker {
 
                 let (class_name, fields, static_fields, methods) = match obj_ty {
                     Type::Class(ref name) => {
-                        let sig = match self.env.classes.get(name) {
+                        let sig = match self.env.classes.get(&ustr::Ustr::from(name)) {
                             Some(s) => s,
                             None => {
                                 self.errors.push(TypeError::Generic {
@@ -1311,7 +1311,7 @@ impl TypeChecker {
                         )
                     }
                     Type::Actor(ref name) => {
-                        let sig = match self.env.actors.get(name) {
+                        let sig = match self.env.actors.get(&ustr::Ustr::from(name)) {
                             Some(s) => s,
                             None => {
                                 self.errors.push(TypeError::Generic {
@@ -1330,7 +1330,7 @@ impl TypeChecker {
                         )
                     }
                     Type::Struct(ref name) => {
-                        let sig = match self.env.structs.get(name) {
+                        let sig = match self.env.structs.get(&ustr::Ustr::from(name)) {
                             Some(s) => s,
                             None => {
                                 self.errors.push(TypeError::Generic {
@@ -1349,7 +1349,7 @@ impl TypeChecker {
                         )
                     }
                     Type::Enum(ref name) => {
-                        let sig = match self.env.enums.get(name) {
+                        let sig = match self.env.enums.get(&ustr::Ustr::from(name)) {
                             Some(s) => s,
                             None => {
                                 self.errors.push(TypeError::Generic {
@@ -1361,7 +1361,7 @@ impl TypeChecker {
                             }
                         };
                         if sig.variants.contains_key(property) {
-                            return Type::Enum(name.clone());
+                            return Type::Enum(*name);
                         }
                         {
                             self.errors.push(TypeError::Generic {
@@ -1387,10 +1387,10 @@ impl TypeChecker {
                     }
                 };
 
-                if let Some(ty) = static_fields.get(property) {
+                if let Some(ty) = static_fields.get(&ustr::Ustr::from(property)) {
                     return ty.clone();
                 }
-                if let Some(ty) = fields.get(property) {
+                if let Some(ty) = fields.get(&ustr::Ustr::from(property)) {
                     if let Type::Actor(ref a_name) = obj_ty {
                         if Some(a_name.clone()) != self.current_class {
                             {
@@ -1403,7 +1403,7 @@ impl TypeChecker {
                     }
                     return ty.clone();
                 }
-                if let Some(m_sig) = methods.get(property) {
+                if let Some(m_sig) = methods.get(&ustr::Ustr::from(property)) {
                     if m_sig.visibility == Visibility::Private {
                         if self.current_class.as_deref() != Some(&*class_name) {
                             {
@@ -1440,7 +1440,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
                             span: self.current_span.into(),
-                            message: "Cannot await a non-promise type".to_string(),
+                            message: "Cannot await a non-promise type".into(),
                         });
                         Type::Error
                     }
@@ -1455,7 +1455,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
                             span: self.current_span.into(),
-                            message: "Cannot unwrap a non-nullable type".to_string(),
+                            message: "Cannot unwrap a non-nullable type".into(),
                         });
                         Type::Error
                     }
@@ -1464,22 +1464,22 @@ impl TypeChecker {
             Expr::Try(inner) => {
                 let inner_ty = self.check_expr(inner);
                 if let Type::Enum(name) = &inner_ty {
-                    if let Some(sig) = self.env.enums.get(name) {
+                    if let Some(sig) = self.env.enums.get(&ustr::Ustr::from(name)) {
                         if name.starts_with("Result_") {
                             if let Some(Type::Enum(ret_name)) = &self.current_return_type {
                                 if !ret_name.starts_with("Result_") {
                                     {
-                                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on a Result in a function that does not return Result".to_string() });
+                                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on a Result in a function that does not return Result".into() });
                                         return Type::Error;
                                     };
                                 }
                             } else {
                                 {
-                                    self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on a Result in a function that does not return Result".to_string() });
+                                    self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on a Result in a function that does not return Result".into() });
                                     return Type::Error;
                                 };
                             }
-                            if let Some(Some(fields)) = sig.variants.get("Ok") {
+                            if let Some(Some(fields)) = sig.variants.get(&ustr::Ustr::from("Ok")) {
                                 if let Some(t) = fields.first() {
                                     return t.clone();
                                 }
@@ -1489,17 +1489,17 @@ impl TypeChecker {
                             if let Some(Type::Enum(ret_name)) = &self.current_return_type {
                                 if !ret_name.starts_with("Option_") {
                                     {
-                                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on an Option in a function that does not return Option".to_string() });
+                                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on an Option in a function that does not return Option".into() });
                                         return Type::Error;
                                     };
                                 }
                             } else {
                                 {
-                                    self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on an Option in a function that does not return Option".to_string() });
+                                    self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span.into(), message: "Cannot use ? on an Option in a function that does not return Option".into() });
                                     return Type::Error;
                                 };
                             }
-                            if let Some(Some(fields)) = sig.variants.get("Some") {
+                            if let Some(Some(fields)) = sig.variants.get(&ustr::Ustr::from("Some")) {
                                 if let Some(t) = fields.first() {
                                     return t.clone();
                                 }
@@ -1544,7 +1544,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
                             span: self.current_span.into(),
-                            message: "Left side of ?? must be nullable".to_string(),
+                            message: "Left side of ?? must be nullable".into(),
                         });
                         Type::Error
                     }
@@ -1562,22 +1562,22 @@ impl TypeChecker {
                     };
                     // Instead of full check, we can manually check if it's Class or Struct
                     let (class_name, sig) = match &*inner {
-                        Type::Class(name) => (name, self.env.classes.get(name).unwrap()),
-                        Type::Struct(name) => (name, self.env.structs.get(name).unwrap()),
+                        Type::Class(name) => (name, self.env.classes.get(&ustr::Ustr::from(name)).unwrap()),
+                        Type::Struct(name) => (name, self.env.structs.get(&ustr::Ustr::from(name)).unwrap()),
                         _ => {
                             self.errors.push(TypeError::Generic {
                                 src: self.get_source(),
                                 span: self.current_span.into(),
-                                message: "Optional access on non-object".to_string(),
+                                message: "Optional access on non-object".into(),
                             });
                             return Type::Error;
                         }
                     };
 
-                    if let Some(f_ty) = sig.fields.get(property) {
+                    if let Some(f_ty) = sig.fields.get(&ustr::Ustr::from(property)) {
                         return Type::Nullable(Box::new(f_ty.clone()));
                     }
-                    if let Some(m_sig) = sig.methods.get(property) {
+                    if let Some(m_sig) = sig.methods.get(&ustr::Ustr::from(property)) {
                         return Type::Nullable(Box::new(m_sig.return_type.clone()));
                     }
                     {
@@ -1596,7 +1596,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
                             span: self.current_span.into(),
-                            message: "Optional member access on non-nullable type".to_string(),
+                            message: "Optional member access on non-nullable type".into(),
                         });
                         Type::Error
                     }
@@ -1616,30 +1616,30 @@ impl TypeChecker {
             "Void" => Type::Void,
             "Self" => {
                 if let Some(current) = &self.current_class {
-                    if self.env.structs.contains_key(current) {
-                        Type::Struct(current.clone())
-                    } else if self.env.enums.contains_key(current) {
-                        Type::Enum(current.clone())
-                    } else if self.env.actors.contains_key(current) {
-                        Type::Actor(current.clone())
+                    if self.env.structs.contains_key(&ustr::Ustr::from(current)) {
+                        Type::Struct(ustr::Ustr::from(current))
+                    } else if self.env.enums.contains_key(&ustr::Ustr::from(current)) {
+                        Type::Enum(ustr::Ustr::from(current))
+                    } else if self.env.actors.contains_key(&ustr::Ustr::from(current)) {
+                        Type::Actor(ustr::Ustr::from(current))
                     } else {
-                        Type::Class(current.clone())
+                        Type::Class(ustr::Ustr::from(current))
                     }
                 } else {
                     Type::Unknown // Self used outside a class/struct/enum context
                 }
             }
             _ => {
-                if self.generic_params_in_scope.contains(base_name) {
-                    Type::GenericParameter(base_name.to_string())
-                } else if self.env.structs.contains_key(base_name) {
-                    Type::Struct(base_name.to_string())
-                } else if self.env.enums.contains_key(base_name) {
-                    Type::Enum(base_name.to_string())
-                } else if self.env.actors.contains_key(base_name) {
-                    Type::Actor(base_name.to_string())
+                if self.generic_params_in_scope.contains(&ustr::Ustr::from(base_name)) {
+                    Type::GenericParameter(ustr::Ustr::from(base_name))
+                } else if self.env.structs.contains_key(&ustr::Ustr::from(base_name)) {
+                    Type::Struct(ustr::Ustr::from(base_name))
+                } else if self.env.enums.contains_key(&ustr::Ustr::from(base_name)) {
+                    Type::Enum(ustr::Ustr::from(base_name))
+                } else if self.env.actors.contains_key(&ustr::Ustr::from(base_name)) {
+                    Type::Actor(ustr::Ustr::from(base_name))
                 } else {
-                    Type::Class(base_name.to_string())
+                    Type::Class(ustr::Ustr::from(base_name))
                 }
             }
         };
@@ -1700,7 +1700,7 @@ impl TypeChecker {
                 ()
             }
             pace_ast::Pattern::Variable(name, span) => {
-                self.define_var(name.clone(), expected_type.clone(), *span, false);
+                self.define_var(ustr::Ustr::from(name), expected_type.clone(), *span, false);
                 ()
             }
             pace_ast::Pattern::Variant {
@@ -1711,7 +1711,7 @@ impl TypeChecker {
             } => {
                 let mut field_types = vec![Type::Unknown; fields.as_ref().map_or(0, |f| f.len())];
                 if let Some(ename) = enum_name {
-                    if let Some(sig) = self.env.enums.get(ename) {
+                    if let Some(sig) = self.env.enums.get(&ustr::Ustr::from(ename)) {
                         if let Some((_, v_fields_opt)) = sig
                             .variants
                             .iter()

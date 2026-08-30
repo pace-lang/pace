@@ -3,8 +3,8 @@ use crate::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeAnnotation {
-    pub module_prefix: Option<String>,
-    pub name: String,
+    pub module_prefix: Option<ustr::Ustr>,
+    pub name: ustr::Ustr,
     pub args: Vec<TypeAnnotation>,
     pub is_nullable: bool,
     // Function type support
@@ -19,7 +19,7 @@ pub enum Stmt {
     Expr(Expr),
     /// A variable declaration (e.g., let x: Int = 5;)
     VarDecl {
-        name: String,
+        name: ustr::Ustr,
         is_mutable: bool,
         type_annotation: Option<TypeAnnotation>,
         is_static: bool,
@@ -39,54 +39,54 @@ pub enum Stmt {
     },
     /// A function declaration
     FuncDecl {
-        name: String,
-        generic_params: Option<Vec<String>>,
+        name: ustr::Ustr,
+        generic_params: Option<Vec<ustr::Ustr>>,
         params: Vec<Param>,
         return_type: Option<TypeAnnotation>,
         body: Vec<Stmt>,
         is_async: bool,
         is_static: bool,
         visibility: Visibility,
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
         span: Span,
     },
     ClassDecl {
-        name: String,
-        generic_params: Option<Vec<String>>,
+        name: ustr::Ustr,
+        generic_params: Option<Vec<ustr::Ustr>>,
         fields: Vec<Stmt>,  // VarDecl
         methods: Vec<Stmt>, // FuncDecl
         implements: Option<TypeAnnotation>,
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
     },
     /// An actor declaration
     ActorDecl {
-        name: String,
-        generic_params: Option<Vec<String>>,
+        name: ustr::Ustr,
+        generic_params: Option<Vec<ustr::Ustr>>,
         fields: Vec<Stmt>,  // VarDecl
         methods: Vec<Stmt>, // FuncDecl
         implements: Option<TypeAnnotation>,
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
     },
     /// An interface declaration
     InterfaceDecl {
-        name: String,
-        generic_params: Option<Vec<String>>,
+        name: ustr::Ustr,
+        generic_params: Option<Vec<ustr::Ustr>>,
         methods: Vec<Stmt>, // FuncDecl without body
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
     },
     /// A struct declaration
     StructDecl {
-        name: String,
-        generic_params: Option<Vec<String>>,
+        name: ustr::Ustr,
+        generic_params: Option<Vec<ustr::Ustr>>,
         fields: Vec<Stmt>, // VarDecl
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
     },
     /// An enum declaration
     EnumDecl {
-        name: String,
-        generic_params: Option<Vec<String>>,
+        name: ustr::Ustr,
+        generic_params: Option<Vec<ustr::Ustr>>,
         variants: Vec<EnumVariant>,
-        doc_comment: Option<String>,
+        doc_comment: Option<ustr::Ustr>,
     },
     /// A while loop
     While { condition: Expr, body: Box<Stmt> },
@@ -94,7 +94,7 @@ pub enum Stmt {
     Loop { body: Box<Stmt> },
     /// A for-in loop
     ForIn {
-        item: String,
+        item: ustr::Ustr,
         iterable: Expr,
         body: Box<Stmt>,
     },
@@ -105,20 +105,20 @@ pub enum Stmt {
     },
     /// An import statement
     Import {
-        path: String,
-        alias: Option<String>,
-        show: Option<Vec<String>>,
-        hide: Option<Vec<String>>,
+        path: ustr::Ustr,
+        alias: Option<ustr::Ustr>,
+        show: Option<Vec<ustr::Ustr>>,
+        hide: Option<Vec<ustr::Ustr>>,
     },
     /// An export statement
-    Export { path: String },
+    Export { path: ustr::Ustr },
     /// A module containing statements
-    Module { name: String, body: Vec<Stmt> },
+    Module { name: ustr::Ustr, body: Vec<Stmt> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
-    pub name: String,
+    pub name: ustr::Ustr,
     pub type_annotation: TypeAnnotation,
 }
 
@@ -131,7 +131,7 @@ pub enum Visibility {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumVariant {
-    pub name: String,
+    pub name: ustr::Ustr,
     pub fields: Option<Vec<TypeAnnotation>>,
 }
 
@@ -142,11 +142,11 @@ pub enum Pattern {
     /// A literal match (e.g. `5`, `"hello"`)
     Literal(Expr),
     /// A variable binding (e.g. `x`) with a span
-    Variable(String, Span),
+    Variable(ustr::Ustr, Span),
     /// An enum variant pattern (e.g. `Some(x)`)
     Variant {
-        enum_name: Option<String>,
-        variant_name: String,
+        enum_name: Option<ustr::Ustr>,
+        variant_name: ustr::Ustr,
         fields: Option<Vec<Pattern>>,
         generic_args: Option<Vec<TypeAnnotation>>,
     },

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 pub struct EscapeAnalysis {
     /// Variables that are captured by closures
-    pub escaped_vars: HashSet<String>,
+    pub escaped_vars: HashSet<ustr::Ustr>,
 
     /// Stack of scopes. Each scope contains (var_name, closure_depth)
     scope_stack: Vec<Vec<(String, usize)>>,
@@ -20,7 +20,7 @@ impl EscapeAnalysis {
         }
     }
 
-    pub fn analyze_function(stmts: &[Stmt]) -> HashSet<String> {
+    pub fn analyze_function(stmts: &[Stmt]) -> HashSet<ustr::Ustr> {
         let mut analyzer = Self::new();
         for stmt in stmts {
             analyzer.visit_stmt(stmt);
@@ -49,7 +49,7 @@ impl EscapeAnalysis {
                 if var_name == name {
                     // If it was declared at a lower closure depth, it is captured!
                     if *depth < self.current_closure_depth {
-                        self.escaped_vars.insert(name.to_string());
+                        self.escaped_vars.insert(ustr::Ustr::from(name));
                     }
                     return;
                 }

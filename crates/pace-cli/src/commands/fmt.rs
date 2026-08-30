@@ -219,7 +219,7 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.join(", "));
+                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
                     self.output.push('>');
                 }
                 self.output.push('(');
@@ -263,11 +263,11 @@ impl<'a> Formatter<'a> {
                 }
                 if let Some(show) = show {
                     self.output.push_str(" show ");
-                    self.output.push_str(&show.join(", "));
+                    self.output.push_str(&show.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
                 }
                 if let Some(hide) = hide {
                     self.output.push_str(" hide ");
-                    self.output.push_str(&hide.join(", "));
+                    self.output.push_str(&hide.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
                 }
                 self.output.push_str(";\n");
                 Ok(())
@@ -349,7 +349,7 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.join(", "));
+                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
                     self.output.push('>');
                 }
                 if let Some(impls) = implements {
@@ -378,7 +378,7 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.join(", "));
+                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
                     self.output.push('>');
                 }
                 if let Some(impls) = implements {
@@ -407,7 +407,7 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.join(", "));
+                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
                     self.output.push('>');
                 }
                 self.output.push_str(" {\n");
@@ -430,7 +430,7 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.join(", "));
+                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
                     self.output.push('>');
                 }
                 self.output.push_str(" {\n");
@@ -453,7 +453,7 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.join(", "));
+                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
                     self.output.push('>');
                 }
                 self.output.push_str(" {\n");
@@ -530,7 +530,6 @@ impl<'a> Formatter<'a> {
                 self.output.push_str("}\n\n");
                 Ok(())
             }
-            _ => Err(()),
         }
     }
 
@@ -666,7 +665,6 @@ impl<'a> Formatter<'a> {
                 self.write_indent();
                 self.output.push('}');
             }
-            _ => { return Err(()); }
         }
         Ok(())
     }

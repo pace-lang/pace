@@ -6,25 +6,25 @@ use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub struct StructLayout {
-    pub name: String,
-    pub fields: HashMap<String, (usize, VarType)>,
-    pub static_fields: HashMap<String, (DataId, VarType)>,
+    pub name: ustr::Ustr,
+    pub fields: HashMap<ustr::Ustr, (usize, VarType)>,
+    pub static_fields: HashMap<ustr::Ustr, (DataId, VarType)>,
     pub size: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct ClassLayout {
-    pub name: String,
-    pub fields: HashMap<String, (usize, VarType)>,
-    pub methods: HashMap<String, usize>,
-    pub static_fields: HashMap<String, (DataId, VarType)>,
+    pub name: ustr::Ustr,
+    pub fields: HashMap<ustr::Ustr, (usize, VarType)>,
+    pub methods: HashMap<ustr::Ustr, usize>,
+    pub static_fields: HashMap<ustr::Ustr, (DataId, VarType)>,
     pub vtable_id: DataId,
 }
 
 #[derive(Debug, Clone)]
 pub struct InterfaceLayout {
-    pub name: String,
-    pub methods: HashMap<String, usize>,
+    pub name: ustr::Ustr,
+    pub methods: HashMap<ustr::Ustr, usize>,
 }
 
 #[derive(Error, Diagnostic, Debug)]
@@ -36,8 +36,8 @@ pub struct CodegenError {
 
 #[derive(Clone)]
 pub struct EnumLayout {
-    pub name: String,
+    pub name: ustr::Ustr,
     pub max_size: u64,
-    pub variants: HashMap<String, (u64, Vec<VarType>)>,
+    pub variants: HashMap<ustr::Ustr, (u64, Vec<VarType>)>,
     pub drop_func_id: FuncId,
 }

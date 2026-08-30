@@ -463,9 +463,9 @@ impl LanguageServer for PaceLanguageServer {
 
                 let env_cache = self.env_cache.read().await;
                 if let Some(env) = env_cache.get(&uri) {
-                    if let Some(ty) = env.symbol_types.get(&word) {
+                    if let Some(ty) = env.symbol_types.get(&ustr::Ustr::from(&word)) {
                         hover_text = format!("```pace\nlet {}: {:?}\n```", word, ty);
-                    } else if let Some(func) = env.functions.get(&word) {
+                    } else if let Some(func) = env.functions.get(&ustr::Ustr::from(&word)) {
                         let params_str = func
                             .params
                             .iter()
@@ -476,13 +476,13 @@ impl LanguageServer for PaceLanguageServer {
                             "```pace\nfunc {}({}) -> {:?}\n```",
                             word, params_str, func.return_type
                         );
-                    } else if let Some(_cls) = env.classes.get(&word) {
+                    } else if let Some(_cls) = env.classes.get(&ustr::Ustr::from(&word)) {
                         hover_text = format!("```pace\nclass {}\n```", word);
-                    } else if let Some(_strct) = env.structs.get(&word) {
+                    } else if let Some(_strct) = env.structs.get(&ustr::Ustr::from(&word)) {
                         hover_text = format!("```pace\nstruct {}\n```", word);
-                    } else if let Some(_enm) = env.enums.get(&word) {
+                    } else if let Some(_enm) = env.enums.get(&ustr::Ustr::from(&word)) {
                         hover_text = format!("```pace\nenum {}\n```", word);
-                    } else if let Some(_act) = env.actors.get(&word) {
+                    } else if let Some(_act) = env.actors.get(&ustr::Ustr::from(&word)) {
                         hover_text = format!("```pace\nactor {}\n```", word);
                     }
                 }
@@ -594,12 +594,12 @@ impl LanguageServer for PaceLanguageServer {
                     let env_cache = self.env_cache.read().await;
                     for (uri, env) in env_cache.iter() {
                         if uri != &params.text_document.uri
-                            && (env.functions.contains_key(ident)
-                                || env.classes.contains_key(ident)
-                                || env.symbol_types.contains_key(ident)
-                                || env.structs.contains_key(ident)
-                                || env.actors.contains_key(ident)
-                                || env.enums.contains_key(ident))
+                            && (env.functions.contains_key(&ustr::Ustr::from(ident))
+                                || env.classes.contains_key(&ustr::Ustr::from(ident))
+                                || env.symbol_types.contains_key(&ustr::Ustr::from(ident))
+                                || env.structs.contains_key(&ustr::Ustr::from(ident))
+                                || env.actors.contains_key(&ustr::Ustr::from(ident))
+                                || env.enums.contains_key(&ustr::Ustr::from(ident)))
                         {
                             target_uri = Some(uri.clone());
                             break;
@@ -677,7 +677,7 @@ impl LanguageServer for PaceLanguageServer {
             // Suggest variables
             for (name, ty) in &env.symbol_types {
                 items.push(CompletionItem {
-                    label: name.clone(),
+                    label: name.to_string(),
                     kind: Some(CompletionItemKind::VARIABLE),
                     detail: Some(format!("{:?}", ty)),
                     ..Default::default()
@@ -693,7 +693,7 @@ impl LanguageServer for PaceLanguageServer {
                     .collect::<Vec<_>>()
                     .join(", ");
                 items.push(CompletionItem {
-                    label: name.clone(),
+                    label: name.to_string(),
                     kind: Some(CompletionItemKind::FUNCTION),
                     detail: Some(format!(
                         "func {}({}) -> {:?}",
@@ -706,7 +706,7 @@ impl LanguageServer for PaceLanguageServer {
             // Suggest classes
             for name in env.classes.keys() {
                 items.push(CompletionItem {
-                    label: name.clone(),
+                    label: name.to_string(),
                     kind: Some(CompletionItemKind::CLASS),
                     ..Default::default()
                 });

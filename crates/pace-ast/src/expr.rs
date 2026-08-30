@@ -7,7 +7,7 @@ pub enum Expr {
     /// A literal float (e.g., 3.14)
     FloatLiteral(f64),
     /// A literal string (e.g., "hello")
-    StringLiteral(String),
+    StringLiteral(ustr::Ustr),
     /// An interpolated string (e.g., "hello ${name}")
     InterpolatedString(Vec<Expr>),
     /// A boolean literal (true / false)
@@ -15,7 +15,7 @@ pub enum Expr {
     /// A null literal
     Null,
     /// An identifier (e.g., my_var)
-    Identifier(String, Span),
+    Identifier(ustr::Ustr, Span),
     /// A generic instantiation (e.g., Box<Int> or first<String>)
     GenericInstantiation {
         callee: Box<Expr>,
@@ -39,8 +39,8 @@ pub enum Expr {
     /// A member access (e.g., foo.bar or Class::static_method)
     MemberAccess {
         object: Box<Expr>,
-        property: String,
-        computed_class: Option<String>,
+        property: ustr::Ustr,
+        computed_class: Option<ustr::Ustr>,
         is_static_operator: bool,
     },
     /// A forced unwrap (e.g., foo!)
@@ -48,7 +48,7 @@ pub enum Expr {
     /// An optional member access (e.g., foo?.bar)
     OptionalMemberAccess {
         object: Box<Expr>,
-        property: String,
+        property: ustr::Ustr,
     },
     /// A null coalesce operation (e.g., a ?? b)
     NullCoalesce {
@@ -61,7 +61,7 @@ pub enum Expr {
     Await(Box<Expr>),
     /// A closure (anonymous function)
     Closure {
-        params: Vec<(String, crate::stmt::TypeAnnotation)>,
+        params: Vec<(ustr::Ustr, crate::stmt::TypeAnnotation)>,
         return_type: Option<crate::stmt::TypeAnnotation>,
         body: Box<Expr>, // Using Expr for both implicit return expressions and blocks (Expr::Block)
     },
