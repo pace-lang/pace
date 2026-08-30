@@ -4,6 +4,7 @@ use pace_ast::Stmt;
 use miette::Diagnostic;
 use thiserror::Error;
 
+pub mod inline;
 pub mod monomorphize;
 pub mod resolve;
 pub mod shake;
@@ -168,6 +169,9 @@ impl CompilerSession {
         // Monomorphization without flattening
         let mono_ast = monomorphize::Monomorphizer::run(resolved_ast.clone())
             .unwrap_or_else(|_| resolved_ast.clone());
+
+        // Apply AST Inlining
+        let mono_ast = inline::Inliner::run(mono_ast);
 
         // Apply Dead Code Elimination (Tree Shaking)
         let mono_ast = shake::TreeShaker::run(mono_ast);

@@ -185,6 +185,71 @@ impl Environment {
             },
         );
         self.register_function(
+            "__pace_retain_generic".into(),
+            FunctionSignature {
+                params: vec![Type::Any],
+                return_type: Type::Void,
+                span: pace_ast::Span::default(),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".into(),
+                generic_params: Some(vec!["T".into()]),
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "__pace_release_generic".into(),
+            FunctionSignature {
+                params: vec![Type::Any],
+                return_type: Type::Void,
+                span: pace_ast::Span::default(),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".into(),
+                generic_params: Some(vec!["T".into()]),
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "__pace_noop".into(),
+            FunctionSignature {
+                params: vec![Type::Any],
+                return_type: Type::Void,
+                span: pace_ast::Span::default(),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".into(),
+                generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "retain".into(),
+            FunctionSignature {
+                params: vec![Type::Any],
+                return_type: Type::Void,
+                span: pace_ast::Span::default(),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".into(),
+                generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
+            "release".into(),
+            FunctionSignature {
+                params: vec![Type::Any],
+                return_type: Type::Void,
+                span: pace_ast::Span::default(),
+                is_used: true,
+                visibility: Visibility::Public,
+                module: "std".into(),
+                generic_params: None,
+                is_static: false,
+            },
+        );
+        self.register_function(
             "ptrLoad".into(),
             FunctionSignature {
                 params: vec![Type::Int, Type::Int],

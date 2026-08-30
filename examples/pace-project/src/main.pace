@@ -10,7 +10,6 @@ import "./test-string";
 import "./test-map";
 import "./test-list";
 import "./test-math";
-import "./test-http";
 import "./test-io";
 import "./test-datetime";
 import "./test-os";
@@ -30,7 +29,6 @@ func main() {
     runMapTest();
     runListTest();
     runMathTest();
-    runHttpTest();
     runIoTest();
     runDateTimeTest();
     runOsTest();

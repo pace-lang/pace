@@ -8,30 +8,30 @@ cd benchmarks/fibonacci
 
 echo "> Running Pace..."
 ../../target/release/pace build bench.pace > /dev/null 2>&1
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./build/bench
+python3 ../../time_it.py ./build/bench
 
 echo "> Running Rust..."
 rustc -O bench.rs
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+python3 ../../time_it.py ./bench
 
 echo "> Running Zig..."
 zig build-exe -O ReleaseFast bench.zig
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+python3 ../../time_it.py ./bench
 
 echo "> Running Go..."
 go build bench.go
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+python3 ../../time_it.py ./bench
 
 echo "> Running Java..."
 javac --release 17 Bench.java
-/usr/bin/time -f "%e s | %M KB | %P CPU" java Bench
+python3 ../../time_it.py java Bench
 
 echo "> Running Dart..."
 dart compile exe bench.dart -o bench_dart > /dev/null 2>&1
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench_dart
+python3 ../../time_it.py ./bench_dart
 
 echo "> Running Python..."
-/usr/bin/time -f "%e s | %M KB | %P CPU" python3 bench.py
+python3 ../../time_it.py python3 bench.py
 
 cd ..
 
@@ -40,30 +40,30 @@ cd loops
 
 echo "> Running Pace..."
 ../../target/release/pace build bench.pace > /dev/null 2>&1
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./build/bench
+python3 ../../time_it.py ./build/bench
 
 echo "> Running Rust..."
 rustc -O bench.rs
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+python3 ../../time_it.py ./bench
 
 echo "> Running Zig..."
 zig build-exe -O ReleaseFast bench.zig
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+python3 ../../time_it.py ./bench
 
 echo "> Running Go..."
 go build bench.go
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+python3 ../../time_it.py ./bench
 
 echo "> Running Java..."
 javac --release 17 Bench.java
-/usr/bin/time -f "%e s | %M KB | %P CPU" java Bench
+python3 ../../time_it.py java Bench
 
 echo "> Running Dart..."
 dart compile exe bench.dart -o bench_dart > /dev/null 2>&1
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench_dart
+python3 ../../time_it.py ./bench_dart
 
 echo "> Running Python..."
-/usr/bin/time -f "%e s | %M KB | %P CPU" python3 bench.py
+python3 ../../time_it.py python3 bench.py
 
 cd ..
 
@@ -72,30 +72,30 @@ echo "--- STRING CONCAT BENCHMARK (N=10K) ---"
 cd string_concat
 echo "> Running Pace..."
 ../../target/release/pace build bench.pace > /dev/null 2>&1
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./build/bench
+python3 ../../time_it.py ./build/bench
 
 echo "> Running Rust..."
 rustc -O bench.rs
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+python3 ../../time_it.py ./bench
 
 # echo "> Running Zig..."
 # zig build-exe -O ReleaseFast bench.zig
-# /usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+# python3 ../../time_it.py ./bench
 
 echo "> Running Go..."
 go build bench.go
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+python3 ../../time_it.py ./bench
 
 echo "> Running Java..."
 javac --release 17 Bench.java
-/usr/bin/time -f "%e s | %M KB | %P CPU" java Bench
+python3 ../../time_it.py java Bench
 
 echo "> Running Dart..."
 dart compile exe bench.dart -o bench_dart > /dev/null 2>&1
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench_dart
+python3 ../../time_it.py ./bench_dart
 
 echo "> Running Python..."
-/usr/bin/time -f "%e s | %M KB | %P CPU" python3 bench.py
+python3 ../../time_it.py python3 bench.py
 
 cd ..
 
@@ -104,29 +104,29 @@ echo "--- MAPS BENCHMARK (N=10K) ---"
 cd maps
 echo "> Running Pace..."
 ../../target/release/pace build bench.pace > /dev/null 2>&1
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./build/bench
+python3 ../../time_it.py ./build/bench
 
 echo "> Running Rust..."
 rustc -O bench.rs
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+python3 ../../time_it.py ./bench
 
 echo "> Running Zig..."
 zig build-exe -O ReleaseFast bench.zig
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+python3 ../../time_it.py ./bench
 
 echo "> Running Go..."
 go build bench.go
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench
+python3 ../../time_it.py ./bench
 
 echo "> Running Java..."
 javac --release 17 Bench.java
-/usr/bin/time -f "%e s | %M KB | %P CPU" java Bench
+python3 ../../time_it.py java Bench
 
 echo "> Running Dart..."
 dart compile exe bench.dart -o bench_dart > /dev/null 2>&1
-/usr/bin/time -f "%e s | %M KB | %P CPU" ./bench_dart
+python3 ../../time_it.py ./bench_dart
 
 echo "> Running Python..."
-/usr/bin/time -f "%e s | %M KB | %P CPU" python3 bench.py
+python3 ../../time_it.py python3 bench.py
 
 cd ../..

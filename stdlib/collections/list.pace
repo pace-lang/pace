@@ -29,18 +29,14 @@ class List<T> implement Iterable<T> {
             self.ptr = newPtr;
             self.cap = newCap;
         }
+        __pace_retain_generic<T>(val);
         ptrStore(self.ptr, self.len * 8, val);
         self.len = self.len + 1;
     }
 
-    func addAll(other: Iterable<T>) {
-    }
-
-    // We expect `other` to provide a way to iterate. Since Iterable doesn't have an iterator yet,
-    // we'll assume we can't easily iterate over Iterable without an iterator.
-    // Wait, Pace doesn't have a standardized `get` or iterator on Iterable yet.
-    // Let's take a List<T> instead for now, or just use `get` if it's there.
-    // We don't have traits with `get` inside `Iterable`. We can take `List<T>` for `other`.
+    // Adds all elements from another List to this List.
+    // Note: We currently take a `List<T>` rather than an `Iterable<T>`
+    // because `Iterable` does not yet define an `iterator()` or `get()` method.
     func addAllList(other: List<T>) {
         var i = 0;
         let l = other.length();
@@ -73,6 +69,7 @@ class List<T> implement Iterable<T> {
             ptrStore(self.ptr, i * 8, prev);
             i = i - 1;
         }
+        __pace_retain_generic<T>(val);
         ptrStore(self.ptr, idx * 8, val);
     }
 
@@ -80,6 +77,8 @@ class List<T> implement Iterable<T> {
         if idx >= self.len {
             return;
         }
+        let oldVal = ptrLoad(self.ptr, idx * 8);
+        __pace_release_generic<T>(oldVal);
         var i = idx;
         while i < self.len - 1 {
             let next = ptrLoad(self.ptr, (i + 1) * 8);
@@ -90,6 +89,11 @@ class List<T> implement Iterable<T> {
     }
 
     func clear() {
+        var i = 0;
+        while i < self.len {
+            __pace_release_generic<T>(ptrLoad(self.ptr, i * 8));
+            i = i + 1;
+        }
         self.len = 0;
     }
 
@@ -114,6 +118,7 @@ class List<T> implement Iterable<T> {
 
     func drop() {
         if self.ptr != 0 {
+            self.clear();
             free(self.ptr, self.cap * 8);
             self.ptr = 0;
         }

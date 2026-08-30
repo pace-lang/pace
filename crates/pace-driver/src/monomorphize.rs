@@ -692,9 +692,23 @@ impl Monomorphizer {
                 for arg in generic_args.iter_mut() {
                     self.rewrite_type_annotation(arg)?;
                 }
-                // Convert to a simple identifier
-                // Convert to a simple identifier and instantiate the class
+                
                 if let Expr::Identifier(name, _) = &**callee {
+                    if name.as_str() == "__pace_retain_generic" || name.as_str() == "__pace_release_generic" {
+                        let type_name = generic_args[0].name.as_str();
+                        let is_primitive = matches!(type_name, "Int" | "Float" | "Bool" | "Char" | "Byte" | "Void" | "String");
+                        if is_primitive {
+                            // We shouldn't hit this normally because Expr::Call intercepts it,
+                            // but just in case, we leave it as a dummy identifier
+                            *expr = Expr::Identifier(ustr::Ustr::from("__pace_noop"), pace_ast::Span::default());
+                        } else {
+                            let target_func = if name.as_str() == "__pace_retain_generic" { "retain" } else { "release" };
+                            *expr = Expr::Identifier(ustr::Ustr::from(target_func), pace_ast::Span::default());
+                        }
+                        return Ok(());
+                    }
+
+                    // Convert to a simple identifier and instantiate the class
                     let concrete_name = Self::generate_name(name, generic_args);
                     if !self.generated_classes.contains_key(&ustr::Ustr::from(&concrete_name))
                         && let Some(generic_decl) = self.generic_classes.get(name).cloned()
@@ -709,6 +723,19 @@ impl Monomorphizer {
                 }
             }
             Expr::Call { callee, args } => {
+                if let Expr::GenericInstantiation { callee: inner_callee, generic_args } = &**callee {
+                    if let Expr::Identifier(name, _) = &**inner_callee {
+                        if name.as_str() == "__pace_retain_generic" || name.as_str() == "__pace_release_generic" {
+                            let type_name = generic_args[0].name.as_str();
+                            let is_primitive = matches!(type_name, "Int" | "Float" | "Bool" | "Char" | "Byte" | "Void" | "String");
+                            if is_primitive {
+                                *expr = Expr::IntLiteral(0);
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+
                 self.rewrite_expr(callee)?;
                 for arg in args {
                     self.rewrite_expr(arg)?;

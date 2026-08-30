@@ -168,7 +168,7 @@ impl<'a> Lexer<'a> {
 
         let c = self.peek().unwrap();
 
-        if c.is_alphabetic() {
+        if c.is_alphabetic() || c == '_' {
             return self.ident();
         }
         if c.is_ascii_digit() {

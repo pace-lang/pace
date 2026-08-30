@@ -1,0 +1,32 @@
+{
+  "name": "Fibonacci (N=35)",
+  "targets": {
+    "pace": {
+      "build": "../../target/release/pace build bench.pace --release",
+      "run": "./build/bench"
+    },
+    "rust": {
+      "build": "rustc -O bench.rs -o build/bench_rs",
+      "run": "./build/bench_rs"
+    },
+    "zig": {
+      "build": "zig build-exe -O ReleaseFast bench.zig -femit-bin=build/bench_zig",
+      "run": "./build/bench_zig"
+    },
+    "go": {
+      "build": "go build -o build/bench_go bench.go",
+      "run": "./build/bench_go"
+    },
+    "java": {
+      "build": "javac --release 17 -d build Bench.java",
+      "run": "java -cp build Bench"
+    },
+    "dart": {
+      "build": "dart compile exe bench.dart -o build/bench_dart > /dev/null 2>&1",
+      "run": "./build/bench_dart"
+    },
+    "python": {
+      "run": "python3 bench.py"
+    }
+  }
+}

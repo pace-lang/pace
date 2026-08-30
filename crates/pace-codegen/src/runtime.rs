@@ -31,6 +31,12 @@ pub fn declare_runtime_functions<M: Module>(
         .declare_function("__pace_malloc", Linkage::Import, &sig_malloc)
         .unwrap();
 
+    let mut sig_noop = module.make_signature();
+    sig_noop.params.push(AbiParam::new(ptr_ty));
+    let noop_id = module
+        .declare_function("__pace_noop", Linkage::Import, &sig_noop)
+        .unwrap();
+
     let mut sig_retain = module.make_signature();
     sig_retain.params.push(AbiParam::new(ptr_ty));
     let retain_id = module
@@ -199,6 +205,7 @@ pub fn declare_runtime_functions<M: Module>(
     funcs.insert(ustr::Ustr::from("malloc"), malloc_id);
     funcs.insert(ustr::Ustr::from("retain"), retain_id);
     funcs.insert(ustr::Ustr::from("release"), release_id);
+    funcs.insert(ustr::Ustr::from("__pace_noop"), noop_id);
     funcs.insert(ustr::Ustr::from("concat_strings"), concat_id);
     funcs.insert(ustr::Ustr::from("int_to_string"), int_to_str_id);
     funcs.insert(ustr::Ustr::from("float_to_string"), float_to_str_id);

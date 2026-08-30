@@ -24,6 +24,7 @@ impl AotCompiler {
     pub fn new(opt_level: String) -> Self {
         let mut flag_builder = settings::builder();
         flag_builder.set("use_colocated_libcalls", "false").unwrap();
+        flag_builder.set("preserve_frame_pointers", "false").unwrap();
         flag_builder.set("opt_level", &opt_level).unwrap();
         flag_builder.set("is_pic", "true").unwrap(); // Need PIC for AOT compilation
 

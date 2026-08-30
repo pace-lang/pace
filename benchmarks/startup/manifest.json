@@ -1,0 +1,32 @@
+{
+  "name": "Startup Time",
+  "targets": {
+    "pace": {
+      "build": "../../target/release/pace build bench.pace --release",
+      "run": "./bench"
+    },
+    "rust": {
+      "build": "rustc -O bench.rs",
+      "run": "./bench"
+    },
+    "zig": {
+      "build": "zig build-exe -O ReleaseFast bench.zig",
+      "run": "./bench"
+    },
+    "go": {
+      "build": "go build bench.go",
+      "run": "./bench"
+    },
+    "java": {
+      "build": "javac --release 17 Bench.java",
+      "run": "java Bench"
+    },
+    "dart": {
+      "build": "dart compile exe bench.dart -o bench_dart > /dev/null 2>&1",
+      "run": "./bench_dart"
+    },
+    "python": {
+      "run": "python3 bench.py"
+    }
+  }
+}

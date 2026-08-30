@@ -102,6 +102,12 @@ pub extern "C" fn __pace_hash(val: i64) -> i64 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn __pace_noop(_obj: *mut u8) {
+    // No-op for primitive retain/release
+    std::hint::black_box(_obj);
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn __pace_retain(obj: *mut u8) {
     if obj.is_null() {
         return;
