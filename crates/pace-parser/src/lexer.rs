@@ -343,3 +343,50 @@ impl<'a> Lexer<'a> {
         Token::String(s)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_keywords() {
+        let mut lexer = Lexer::new("func class interface enum let var const if else return");
+        assert_eq!(lexer.next_token().0, Token::Func);
+        assert_eq!(lexer.next_token().0, Token::Class);
+        assert_eq!(lexer.next_token().0, Token::Interface);
+        assert_eq!(lexer.next_token().0, Token::Enum);
+        assert_eq!(lexer.next_token().0, Token::Let);
+        assert_eq!(lexer.next_token().0, Token::Var);
+        assert_eq!(lexer.next_token().0, Token::Const);
+        assert_eq!(lexer.next_token().0, Token::If);
+        assert_eq!(lexer.next_token().0, Token::Else);
+        assert_eq!(lexer.next_token().0, Token::Return);
+        assert_eq!(lexer.next_token().0, Token::Eof);
+    }
+
+    #[test]
+    fn test_literals() {
+        let mut lexer = Lexer::new("42 3.14 \"hello\" true false null");
+        assert_eq!(lexer.next_token().0, Token::Int(42));
+        assert_eq!(lexer.next_token().0, Token::Float(3.14));
+        assert_eq!(lexer.next_token().0, Token::String("hello".to_string()));
+        assert_eq!(lexer.next_token().0, Token::Bool(true));
+        assert_eq!(lexer.next_token().0, Token::Bool(false));
+        assert_eq!(lexer.next_token().0, Token::Null);
+        assert_eq!(lexer.next_token().0, Token::Eof);
+    }
+
+    #[test]
+    fn test_identifiers_and_symbols() {
+        let mut lexer = Lexer::new("my_var = 10; my_var == 10 =>");
+        assert_eq!(lexer.next_token().0, Token::Ident("my_var"));
+        assert_eq!(lexer.next_token().0, Token::Eq);
+        assert_eq!(lexer.next_token().0, Token::Int(10));
+        assert_eq!(lexer.next_token().0, Token::Semi);
+        assert_eq!(lexer.next_token().0, Token::Ident("my_var"));
+        assert_eq!(lexer.next_token().0, Token::EqEq);
+        assert_eq!(lexer.next_token().0, Token::Int(10));
+        assert_eq!(lexer.next_token().0, Token::FatArrow);
+        assert_eq!(lexer.next_token().0, Token::Eof);
+    }
+}

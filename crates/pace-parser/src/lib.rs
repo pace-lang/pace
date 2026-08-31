@@ -52,4 +52,62 @@ mod tests {
             _ => panic!("Expected Import"),
         }
     }
+
+    #[test]
+    fn test_parse_func_decl() {
+        let src = "
+            func add(a: Int, b: Int) -> Int {
+                return a + b;
+            }
+        ";
+        let mut arena = pace_ast::arena::AstArena::new();
+        let (stmts, _) = crate::parse(&mut arena, src, "test").unwrap();
+        assert_eq!(stmts.len(), 1);
+        if let Stmt::FuncDecl { name, params, return_type, .. } = arena.get_stmt(stmts[0]) {
+            assert_eq!(name.as_str(), "add");
+            assert_eq!(params.len(), 2);
+            assert!(return_type.is_some());
+        } else {
+            panic!("Expected FuncDecl");
+        }
+    }
+
+    #[test]
+    fn test_parse_class_decl() {
+        let src = "
+            class User {
+                let name: String;
+                func init(name: String) {
+                    self.name = name;
+                }
+            }
+        ";
+        let mut arena = pace_ast::arena::AstArena::new();
+        let (stmts, _) = crate::parse(&mut arena, src, "test").unwrap();
+        assert_eq!(stmts.len(), 1);
+        if let Stmt::ClassDecl { name, fields, methods, .. } = arena.get_stmt(stmts[0]) {
+            assert_eq!(name.as_str(), "User");
+            assert_eq!(fields.len(), 1);
+            assert_eq!(methods.len(), 1);
+        } else {
+            panic!("Expected ClassDecl");
+        }
+    }
+
+    #[test]
+    fn test_parse_control_flow() {
+        let src = "
+            func process(x: Int) {
+                if x > 10 {
+                    return x;
+                } else {
+                    while x < 10 {
+                    }
+                }
+            }
+        ";
+        let mut arena = pace_ast::arena::AstArena::new();
+        let (stmts, _) = crate::parse(&mut arena, src, "test").unwrap();
+        assert_eq!(stmts.len(), 1);
+    }
 }

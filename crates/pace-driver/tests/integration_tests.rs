@@ -65,3 +65,42 @@ fn test_run_examples_suite() {
         result.err()
     );
 }
+
+#[test]
+fn test_run_logical_operations() {
+    let session = CompilerSession::new();
+    let src = "
+    func main() {
+        let a: Bool = true;
+        let b: Bool = false;
+        let c: Bool = a && b;
+        let d: Bool = a || b;
+        let e: Bool = c == false;
+        if c == false && d == true && e == true {
+            let x: Int = 1;
+            if x == 1 {}
+        }
+    }";
+    if let Err(e) = session.run_source(src, false) {
+        panic!("Failed to JIT run logical operations program: {:?}", e);
+    }
+}
+
+#[test]
+fn test_run_string_manipulation() {
+    let session = CompilerSession::new();
+    let src = "
+    import \"std:string\";
+    func main() {
+        let s: String = \"hello world\";
+        // Just declare string and test std:string import
+        let x: Int = 1;
+        if x == 1 {
+            let y: String = s;
+        }
+    }";
+    if let Err(e) = session.run_source(src, false) {
+        panic!("Failed to JIT run string manipulation program: {:?}", e);
+    }
+}
+

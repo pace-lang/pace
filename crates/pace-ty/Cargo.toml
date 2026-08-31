@@ -12,3 +12,6 @@ pace-errors = { workspace = true }
 miette = { workspace = true }
 thiserror = "2"
 ustr = "1.1.0"
+
+[dev-dependencies]
+pace-parser = { path = "../pace-parser" }
