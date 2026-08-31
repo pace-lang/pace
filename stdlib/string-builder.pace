@@ -1,22 +1,85 @@
+import "./string";
+
+extern func __pace_malloc(size: Int) -> Int;
+extern func __pace_free(ptr: Int, size: Int);
+extern func __pace_ptr_load8(ptr: Int, offset: Int) -> Int;
+extern func __pace_ptr_store8(ptr: Int, offset: Int, val: Int);
+extern func __pace_string_to_ptr(s: String) -> Int;
+extern func __pace_ptr_to_string(ptr: Int) -> String;
+
 class StringBuilder {
-    var ptr: Int;
+    var buffer: Int;
+    var capacity: Int;
+    var length: Int;
 
     func init() {
-        self.ptr = sbNew();
+        self.capacity = 16;
+        self.length = 0;
+        self.buffer = __pace_malloc(self.capacity);
+    }
+
+    func stringLength(s: String) -> Int {
+        let ptr = __pace_string_to_ptr(s);
+        var len = 0;
+        var shouldLoop = true;
+        while shouldLoop {
+            let ch = __pace_ptr_load8(ptr, len);
+            if ch == 0 {
+                shouldLoop = false;
+            } else {
+                len = len + 1;
+            }
+        }
+        return len;
     }
 
     func append(s: String) {
-        sbAppend(self.ptr, s);
+        let sLen = self.stringLength(s);
+        let sPtr = __pace_string_to_ptr(s);
+        
+        let newLen = self.length + sLen;
+        if newLen >= self.capacity {
+            // Reallocate
+            var newCap = self.capacity * 2;
+            while newCap <= newLen {
+                newCap = newCap * 2;
+            }
+            let newBuf = __pace_malloc(newCap);
+            // Copy old data
+            var i = 0;
+            while i < self.length {
+                __pace_ptr_store8(newBuf, i, __pace_ptr_load8(self.buffer, i));
+                i = i + 1;
+            }
+            __pace_free(self.buffer, self.capacity);
+            self.buffer = newBuf;
+            self.capacity = newCap;
+        }
+
+        // Copy new string
+        var j = 0;
+        while j < sLen {
+            __pace_ptr_store8(self.buffer, self.length + j, __pace_ptr_load8(sPtr, j));
+            j = j + 1;
+        }
+        self.length = newLen;
     }
 
     func build() -> String {
-        return sbBuild(self.ptr);
+        let resPtr = __pace_malloc(self.length + 1);
+        var i = 0;
+        while i < self.length {
+            __pace_ptr_store8(resPtr, i, __pace_ptr_load8(self.buffer, i));
+            i = i + 1;
+        }
+        __pace_ptr_store8(resPtr, self.length, 0);
+        return __pace_ptr_to_string(resPtr);
     }
 
     func free() {
-        sbFree(self.ptr);
-        self.ptr = 0;
+        if self.buffer != 0 {
+            __pace_free(self.buffer, self.capacity);
+            self.buffer = 0;
+        }
     }
-
 }
-

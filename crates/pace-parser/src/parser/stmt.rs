@@ -24,6 +24,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let is_async = self.match_token(Token::Async);
         let is_static = self.match_token(Token::Static);
+        let is_extern = self.match_token(Token::Extern);
 
         match self.current_token {
             Token::Let => self.parse_var_decl(false, is_static, visibility), // doc_comments on vars omitted for now
@@ -32,6 +33,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 is_async,
                 visibility,
                 is_static,
+                is_extern,
                 doc_comment.as_deref().map(ustr::Ustr::from),
             ),
             Token::Class => self.parse_class_decl(doc_comment.as_deref().map(ustr::Ustr::from)),

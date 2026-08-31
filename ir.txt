@@ -1,0 +1,51 @@
+function u0:0(i64, i64) -> i64 system_v {
+    sig0 = (i64) -> i64 system_v
+    sig1 = (i64, i64) -> i8 system_v
+    sig2 = (i64) system_v
+    fn0 = u0:170 sig0
+    fn1 = u0:15 sig1
+    fn2 = u0:6 sig2
+
+block0(v0: i64, v1: i64):
+    v25 -> v0
+    v26 -> v25
+    v2 = call fn0(v1)
+    v19 -> v2
+    v6 -> v19
+    v22 -> v19
+    v3 = iconst.i64 0
+    v4 = iconst.i64 1
+    jump block2(v4, v3)  ; v4 = 1, v3 = 0
+
+block1:
+    v5 = iconst.i64 0
+    v8 = call fn1(v6, v7)
+    v9 = iconst.i64 0
+    v10 = icmp eq v8, v9  ; v9 = 0
+    v11 = uextend.i64 v10
+    brif v11, block4, block5
+
+block4:
+    v12 = iconst.i64 0
+    v13 = iconst.i64 0
+    jump block6(v13, v7)  ; v13 = 0
+
+block5:
+    v14 = iconst.i64 0
+    v15 = iconst.i64 1
+    v16 = iadd.i64 v7, v15  ; v15 = 1
+    jump block6(v18, v16)
+
+block6(v21: i64, v23: i64):
+    v17 = iconst.i64 0
+    jump block2(v21, v23)
+
+block2(v18: i64, v20: i64):
+    v7 -> v20
+    brif v18, block1, block3
+
+block3:
+    v24 = iconst.i64 0
+    call fn2(v0)
+    return v20
+}

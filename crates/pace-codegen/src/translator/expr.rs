@@ -630,6 +630,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         let arg_val = self.translate_expr(*arg_expr)?;
                         let ty = self.builder.func.dfg.value_type(arg_val);
 
+                        let mut final_arg_val = arg_val;
                         let target_name = if ty == types::F64 {
                             "print_float"
                         } else if arg_ty == VarType::String
@@ -637,6 +638,9 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         {
                             "print_string"
                         } else {
+                            if ty == cranelift::prelude::types::I8 {
+                                final_arg_val = self.builder.ins().uextend(cranelift::prelude::types::I64, arg_val);
+                            }
                             "print_int" // Fallback to int
                         };
 
@@ -649,7 +653,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             .context
                             .module
                             .declare_func_in_func(func_id, self.builder.func);
-                        let call = self.builder.ins().call(local_func, &[arg_val]);
+                        let call = self.builder.ins().call(local_func, &[final_arg_val]);
 
                         let results = self.builder.inst_results(call);
                         if results.is_empty() {
@@ -662,7 +666,22 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             .context
                             .module
                             .declare_func_in_func(func_id, self.builder.func);
-                        let arg_vals = self.translate_args(args)?;
+                        let mut arg_vals = self.translate_args(args)?;
+                        
+                        let sig_ref = self.builder.func.dfg.ext_funcs[local_func].signature;
+                        let signature = self.builder.func.dfg.signatures[sig_ref].clone();
+                        for (i, param) in signature.params.iter().enumerate() {
+                            if i < arg_vals.len() {
+                                let arg_val = arg_vals[i];
+                                let arg_ty = self.builder.func.dfg.value_type(arg_val);
+                                if arg_ty == cranelift::prelude::types::I64 && param.value_type == cranelift::prelude::types::I8 {
+                                    arg_vals[i] = self.builder.ins().ireduce(cranelift::prelude::types::I8, arg_val);
+                                } else if arg_ty == cranelift::prelude::types::I8 && param.value_type == cranelift::prelude::types::I64 {
+                                    arg_vals[i] = self.builder.ins().uextend(cranelift::prelude::types::I64, arg_val);
+                                }
+                            }
+                        }
+
                         let call = self.builder.ins().call(local_func, &arg_vals);
 
                         let results = self.builder.inst_results(call);

@@ -1,3 +1,6 @@
+extern func osGetEnv(key: String) -> String?;
+extern func osName() -> String;
+
 class OS {
     // OS module for interacting with the operating system
     static func getEnv(key: String) -> Option<String> {

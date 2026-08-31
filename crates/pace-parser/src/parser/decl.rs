@@ -8,6 +8,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         is_async: bool,
         visibility: Visibility,
         is_static: bool,
+        is_extern: bool,
         doc_comment: Option<ustr::Ustr>,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         let start_pos = self.current_span.start;
@@ -87,33 +88,44 @@ impl<'a, 'b> Parser<'a, 'b> {
             return_type = Some(self.parse_type_annotation()?);
         }
 
-        if !self.match_token(Token::LBrace) {
-            return Err(pace_errors::SyntaxError::Generic {
-                message: "Expected '{' before function body".to_string(),
-                src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
-                span: self.current_span,
-            });
-        }
-
         let mut body = Vec::new();
-        while self.current_token != Token::RBrace && self.current_token != Token::Eof {
-            match self.parse_stmt() {
-                Ok(stmt) => body.push(stmt),
-                Err(e) => {
-                    self.errors.push(e);
-                    self.synchronize();
+        if is_extern {
+            if !self.match_token(Token::Semi) {
+                return Err(pace_errors::SyntaxError::Generic {
+                    message: "Expected ';' after extern function declaration".to_string(),
+                    src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                    span: self.current_span,
+                });
+            }
+        } else {
+            if !self.match_token(Token::LBrace) {
+                return Err(pace_errors::SyntaxError::Generic {
+                    message: "Expected '{' before function body".to_string(),
+                    src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                    span: self.current_span,
+                });
+            }
+
+            while self.current_token != Token::RBrace && self.current_token != Token::Eof {
+                match self.parse_stmt() {
+                    Ok(stmt) => body.push(stmt),
+                    Err(e) => {
+                        self.errors.push(e);
+                        self.synchronize();
+                    }
                 }
+            }
+
+            if !self.match_token(Token::RBrace) {
+                return Err(pace_errors::SyntaxError::Generic {
+                    message: "Expected '}' after function body".to_string(),
+                    src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                    span: self.current_span,
+                });
             }
         }
 
-        if !self.match_token(Token::RBrace) {
-            return Err(pace_errors::SyntaxError::Generic {
-                message: "Expected '}' after function body".to_string(),
-                src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
-                span: self.current_span,
-            });
-        }
-
+        let end_pos = self.current_span.start + self.current_span.len;
         Ok(self.alloc_stmt(Stmt::FuncDecl {
             name: name.into(),
             generic_params,
@@ -122,11 +134,12 @@ impl<'a, 'b> Parser<'a, 'b> {
             body,
             is_async,
             is_static,
+            is_extern,
             visibility,
             doc_comment,
             span: pace_ast::Span::new(
                 start_pos,
-                (self.current_span.start + self.current_span.len).saturating_sub(start_pos),
+                end_pos.saturating_sub(start_pos),
             ),
         }))
     }
@@ -466,7 +479,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 return_type,
                 body,
                 is_async,
-                is_static: false, // Interfaces methods are inherently non-static for now
+                is_static: false,
+                is_extern: false,
                 visibility: Visibility::Public,
                 doc_comment: None,
                 span: pace_ast::Span::default(),

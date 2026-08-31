@@ -202,6 +202,7 @@ impl<'a> Formatter<'a> {
                 body,
                 is_async,
                 is_static,
+                is_extern: _,
                 visibility,
                 doc_comment,
                 span,

@@ -1,3 +1,9 @@
+extern func httpGet(url: String) -> String?;
+extern func httpPost(url: String, body: String) -> String?;
+extern func httpPut(url: String, body: String) -> String?;
+extern func httpDelete(url: String) -> String?;
+extern func getLastError() -> String;
+
 class Http {
     // HTTP stdlib using native FFI
     static func get(url: String) -> Result<String, String> {

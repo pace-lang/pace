@@ -1,3 +1,7 @@
+extern func processRun(command: String) -> String?;
+extern func processExit(code: Int);
+extern func getLastError() -> String;
+
 class Process {
     // Process module for managing OS processes
     static func run(command: String) -> Result<String, String> {

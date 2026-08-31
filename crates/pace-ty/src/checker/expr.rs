@@ -286,6 +286,7 @@ impl<'a> TypeChecker<'a> {
                             err_msg = format!("Cannot assign to immutable variable '{}'", name);
                             var_span = var_info.span;
                         } else if var_info.ty != val_ty
+
                             && var_info.ty != Type::Unknown
                             && val_ty != Type::Unknown
                             && var_info.ty != Type::Any
@@ -307,6 +308,7 @@ impl<'a> TypeChecker<'a> {
                                 format!("Cannot assign to immutable global variable '{}'", name);
                             var_span = global.span;
                         } else if global.ty != val_ty
+
                             && global.ty != Type::Unknown
                             && val_ty != Type::Unknown
                             && global.ty != Type::Any
@@ -458,11 +460,7 @@ impl<'a> TypeChecker<'a> {
 
                     for (i, arg_ty) in arg_types.iter().enumerate() {
                         let expected_ty = &params[i];
-                        if expected_ty != &Type::Any
-                            && expected_ty != arg_ty
-                            && arg_ty != &Type::Unknown
-                        {
-                            {
+                        if expected_ty != &Type::Any && expected_ty != arg_ty && arg_ty != &Type::Unknown {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
                                     span: self.current_span,
@@ -474,8 +472,7 @@ impl<'a> TypeChecker<'a> {
                                     ),
                                 });
                                 return Type::Error;
-                            };
-                        }
+                            }
                     }
                     return (**return_type).clone();
                 }

@@ -46,6 +46,22 @@ impl RuntimeBindings {
             "__pace_ptr_load",
             pace_runtime::__pace_ptr_load as *const u8,
         );
+        builder.symbol(
+            "__pace_ptr_store8",
+            pace_runtime::__pace_ptr_store8 as *const u8,
+        );
+        builder.symbol(
+            "__pace_ptr_load8",
+            pace_runtime::__pace_ptr_load8 as *const u8,
+        );
+        builder.symbol(
+            "__pace_ptr_to_string",
+            pace_runtime::__pace_ptr_to_string as *const u8,
+        );
+        builder.symbol(
+            "__pace_string_to_ptr",
+            pace_runtime::__pace_string_to_ptr as *const u8,
+        );
         builder.symbol("__pace_time", pace_runtime::__pace_time as *const u8);
         builder.symbol(
             "__pace_get_year",

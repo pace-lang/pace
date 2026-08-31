@@ -169,6 +169,13 @@ pub extern "C" fn __pace_ptr_store(ptr: *mut u8, offset: i64, val: i64) {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn __pace_ptr_store8(ptr: *mut u8, offset: i64, val: i64) {
+    unsafe {
+        *ptr.offset(offset as isize) = val as u8;
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn __pace_ptr_load(ptr: *const u8, offset: i64) -> i64 {
     if ptr.is_null() {
         panic!("null pointer dereference occurred");
@@ -177,6 +184,21 @@ pub extern "C" fn __pace_ptr_load(ptr: *const u8, offset: i64) -> i64 {
         let target = ptr.offset(offset as isize) as *const i64;
         *target
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_ptr_load8(ptr: *const u8, offset: i64) -> i64 {
+    unsafe { *ptr.offset(offset as isize) as i64 }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_ptr_to_string(ptr: i64) -> i64 {
+    ptr
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_string_to_ptr(ptr: i64) -> i64 {
+    ptr
 }
 
 #[unsafe(no_mangle)]

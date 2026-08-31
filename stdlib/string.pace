@@ -1,40 +1,171 @@
 import "./collections/list";
 export "./string-builder";
+
+extern func __pace_malloc(size: Int) -> Int;
+extern func __pace_free(ptr: Int, size: Int);
+extern func __pace_ptr_load8(ptr: Int, offset: Int) -> Int;
+extern func __pace_ptr_store8(ptr: Int, offset: Int, val: Int);
+extern func __pace_string_to_ptr(s: String) -> Int;
+extern func __pace_ptr_to_string(ptr: Int) -> String;
+
 class StringUtil {
-    // String utilities
-    static func split(s: String, delim: String) -> List<String> {
-        let ptr = stringSplit(s, delim);
-        let len: Int = ptrLoad(ptr, 0);
-        let list = List<String>();
+    static func length(s: String) -> Int {
+        let ptr = __pace_string_to_ptr(s);
+        var len = 0;
+        var shouldLoop = true;
+        while shouldLoop {
+            let ch = __pace_ptr_load8(ptr, len);
+            if ch == 0 {
+                shouldLoop = false;
+            } else {
+                len = len + 1;
+            }
+        }
+        return len;
+    }
+
+    static func substring(s: String, start: Int, end: Int) -> String {
+        let srcPtr = __pace_string_to_ptr(s);
+        let len = end - start;
+        if len <= 0 {
+            let emptyPtr = __pace_malloc(1);
+            __pace_ptr_store8(emptyPtr, 0, 0);
+            return __pace_ptr_to_string(emptyPtr);
+        }
+
+        let dstPtr = __pace_malloc(len + 1);
         var i = 0;
         while i < len {
-            let offset = (i + 1) * 8;
-            let str: String = ptrLoad(ptr, offset);
-            list.add(str);
+            let ch = __pace_ptr_load8(srcPtr, start + i);
+            __pace_ptr_store8(dstPtr, i, ch);
             i = i + 1;
         }
-        free(ptr, (len + 1) * 8);
+        __pace_ptr_store8(dstPtr, len, 0);
+        return __pace_ptr_to_string(dstPtr);
+    }
+
+    static func indexOf(s: String, search: String) -> Int {
+        let lenS = StringUtil::length(s);
+        let lenSearch = StringUtil::length(search);
+        if lenSearch == 0 { return 0; }
+        if lenS < lenSearch { return -1; }
+
+        let ptrS = __pace_string_to_ptr(s);
+        let ptrSearch = __pace_string_to_ptr(search);
+
+        var i = 0;
+        let limit = lenS - lenSearch;
+        while i <= limit {
+            var j = 0;
+            var matchFound = true;
+            while j < lenSearch {
+                let ch1 = __pace_ptr_load8(ptrS, i + j);
+                let ch2 = __pace_ptr_load8(ptrSearch, j);
+                if ch1 != ch2 {
+                    matchFound = false;
+                    j = lenSearch; // break
+                } else {
+                    j = j + 1;
+                }
+            }
+            if matchFound {
+                return i;
+            }
+            i = i + 1;
+        }
+        return -1;
+    }
+
+    static func split(s: String, delim: String) -> List<String> {
+        let list = List<String>();
+        let lenS = StringUtil::length(s);
+        let lenDelim = StringUtil::length(delim);
+        if lenDelim == 0 {
+            // Can't split by empty string, just return original
+            list.add(s);
+            return list;
+        }
+
+        var start = 0;
+        var i = 0;
+        let limit = lenS - lenDelim;
+        
+        let ptrS = __pace_string_to_ptr(s);
+        let ptrDelim = __pace_string_to_ptr(delim);
+
+        while i <= limit {
+            var j = 0;
+            var matchFound = true;
+            while j < lenDelim {
+                if __pace_ptr_load8(ptrS, i + j) != __pace_ptr_load8(ptrDelim, j) {
+                    matchFound = false;
+                    // Note: no break yet, but we will break by jumping out in a better language...
+                    // Just set j high to break
+                    j = lenDelim;
+                } else {
+                    j = j + 1;
+                }
+            }
+            if matchFound {
+                list.add(StringUtil::substring(s, start, i));
+                i = i + lenDelim;
+                start = i;
+            } else {
+                i = i + 1;
+            }
+        }
+        if start <= lenS {
+            list.add(StringUtil::substring(s, start, lenS));
+        }
         return list;
     }
 
     static func replace(s: String, old: String, newStr: String) -> String {
-        return stringReplace(s, old, newStr);
-    }
-
-    static func substring(s: String, start: Int, end: Int) -> String {
-        return stringSubstring(s, start, end);
+        let parts = StringUtil::split(s, old);
+        return StringUtil::join(parts, newStr);
     }
 
     static func trim(s: String) -> String {
-        return stringTrim(s);
-    }
+        let ptr = __pace_string_to_ptr(s);
+        let len = StringUtil::length(s);
+        var start = 0;
+        var end = len - 1;
 
-    static func indexOf(s: String, search: String) -> Int {
-        return stringIndexOf(s, search);
-    }
+        while start < len {
+            let ch = __pace_ptr_load8(ptr, start);
+            if ch == 32 || ch == 9 || ch == 10 || ch == 13 {
+                start = start + 1;
+            } else {
+                // Break
+                start = len + 10;
+            }
+        }
+        if start >= len + 10 {
+            start = start - (len + 10);
+        } else {
+            // entirely spaces
+            return ""; 
+        }
 
-    static func startsWith(s: String, search: String) -> Bool {
-        return stringStartsWith(s, search) != 0;
+        while end >= start {
+            let ch = __pace_ptr_load8(ptr, end);
+            if ch == 32 || ch == 9 || ch == 10 || ch == 13 {
+                end = end - 1;
+            } else {
+                // Break
+                end = end - (len + 10);
+            }
+        }
+        if end < 0 {
+            end = end + (len + 10);
+        }
+
+        if start > end {
+            let emptyPtr = __pace_malloc(1);
+            __pace_ptr_store8(emptyPtr, 0, 0);
+            return __pace_ptr_to_string(emptyPtr);
+        }
+        return StringUtil::substring(s, start, end + 1);
     }
 
     static func join(list: List<String>, delim: String) -> String {
@@ -53,5 +184,7 @@ class StringUtil {
         return res;
     }
 
+    static func startsWith(s: String, search: String) -> Bool {
+        return StringUtil::indexOf(s, search) == 0;
+    }
 }
-

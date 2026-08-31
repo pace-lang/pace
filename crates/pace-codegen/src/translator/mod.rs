@@ -10,6 +10,7 @@ pub mod stmt;
 pub enum VarType {
     Int,
     Float,
+    Byte,
     String,
     Bool,
     Object(ustr::Ustr),
@@ -25,6 +26,7 @@ impl VarType {
     pub fn to_cranelift_type(&self) -> cranelift::prelude::Type {
         match self {
             VarType::Float => cranelift::prelude::types::F64,
+            VarType::Byte => cranelift::prelude::types::I8,
             _ => cranelift::prelude::types::I64, // Pointers and integers are I64
         }
     }
@@ -80,6 +82,7 @@ pub fn parse_vartype(
     let base_ty = match base_name {
         "Int" => VarType::Int,
         "Float" => VarType::Float,
+        "Byte" => VarType::Byte,
         "String" => VarType::String,
         "Bool" => VarType::Bool,
         "Self" => VarType::Object(current_class.unwrap_or(&ustr::Ustr::from("Self")).into()),

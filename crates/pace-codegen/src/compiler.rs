@@ -525,18 +525,42 @@ impl JITCompiler {
         // Pass 1: Declare all functions
         for stmt_id in final_stmts {
             let stmt = arena.get_stmt(*stmt_id).clone();
-            if let Stmt::FuncDecl { name, params, .. } = stmt {
+            if let Stmt::FuncDecl { name, params, return_type, is_extern, .. } = stmt {
                 let mut sig = self.context.module.make_signature();
-                sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
-                for _ in params {
-                    sig.params.push(AbiParam::new(types::I64)); // Assume I64 for now
+                sig.call_conv = if is_extern {
+                    cranelift::prelude::isa::CallConv::SystemV
+                } else {
+                    cranelift::prelude::isa::CallConv::Fast
+                };
+                for param in params {
+                    let var_ty = crate::translator::parse_type_annotation(
+                        &param.type_annotation,
+                        None,
+                        Some(&self.context.struct_layouts),
+                        Some(&self.context.enum_layouts),
+                    );
+                    sig.params.push(AbiParam::new(var_ty.to_cranelift_type()));
                 }
-                sig.returns.push(AbiParam::new(types::I64)); // Assume I64 return
+                if let Some(ret) = return_type {
+                    let var_ty = crate::translator::parse_type_annotation(
+                        &ret,
+                        None,
+                        Some(&self.context.struct_layouts),
+                        Some(&self.context.enum_layouts),
+                    );
+                    sig.returns.push(AbiParam::new(var_ty.to_cranelift_type()));
+                }
+
+                let linkage = if is_extern {
+                    Linkage::Import
+                } else {
+                    Linkage::Local
+                };
 
                 let id = self
                     .context
                     .module
-                    .declare_function(name.as_str(), Linkage::Local, &sig)
+                    .declare_function(name.as_str(), linkage, &sig)
                     .map_err(|e| CodegenError {
                         message: e.to_string(),
                     })?;
@@ -662,19 +686,21 @@ impl JITCompiler {
         for stmt_id in final_stmts {
             let stmt = arena.get_stmt(*stmt_id).clone();
             if let Stmt::FuncDecl {
-                name, params, body, ..
+                name, params, body, is_extern, ..
             } = stmt
             {
-                let id = *self.context.funcs.get(&name).unwrap();
-                self.compile_function(
-                    arena,
-                    name.as_str(),
-                    &params,
-                    &body,
-                    id,
-                    &func_returns,
-                    None,
-                )?;
+                if !is_extern {
+                    let id = *self.context.funcs.get(&name).unwrap();
+                    self.compile_function(
+                        arena,
+                        name.as_str(),
+                        &params,
+                        &body,
+                        id,
+                        &func_returns,
+                        None,
+                    )?;
+                }
             } else if let Stmt::ClassDecl {
                 name: class_name,
                 methods,
@@ -833,8 +859,10 @@ impl JITCompiler {
                 .module
                 .declare_func_in_func(main_id, builder.func);
             let call = builder.ins().call(local_func, &[]);
-            let res = builder.inst_results(call)[0];
-            last_val = Some(res);
+            let results = builder.inst_results(call);
+            if results.len() > 0 {
+                last_val = Some(results[0]);
+            }
         }
 
         let ret_val = last_val.unwrap_or_else(|| builder.ins().iconst(types::I64, 0));

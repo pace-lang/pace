@@ -1,0 +1,13 @@
+extern func __pace_ptr_store8(ptr: Int, offset: Int, val: Byte);
+extern func __pace_ptr_load8(ptr: Int, offset: Int) -> Byte;
+extern func __pace_malloc(size: Int) -> Int;
+
+func main() -> Int {
+    let mem = __pace_malloc(16);
+    // Note: Since we don't have byte literal syntax yet, we pass Int 42
+    // Wait, the parser might require the type. But we can just see if it parses and runs.
+    __pace_ptr_store8(mem, 0, 42); 
+    let val = __pace_ptr_load8(mem, 0);
+    print(val); // will print 42
+    return 0;
+}

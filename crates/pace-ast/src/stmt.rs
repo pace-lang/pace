@@ -34,6 +34,7 @@ pub enum Stmt {
         body: Vec<StmtId>,
         is_async: bool,
         is_static: bool,
+        is_extern: bool,
         visibility: Visibility,
         doc_comment: Option<ustr::Ustr>,
         span: Span,

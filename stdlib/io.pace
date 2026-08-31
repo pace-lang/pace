@@ -1,3 +1,11 @@
+extern func fsWriteText(path: String, content: String) -> Int;
+extern func fsExists(path: String) -> Int;
+extern func fsReadText(path: String) -> String?;
+extern func fsDeleteFile(path: String) -> Int;
+extern func fsMakeDir(path: String) -> Int;
+extern func fsDirExists(path: String) -> Int;
+extern func getLastError() -> String;
+
 class File {
     // IO module for File and Directory operations
     static func writeText(path: String, content: String) -> Result<Bool, String> {

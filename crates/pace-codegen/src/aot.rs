@@ -486,23 +486,42 @@ impl AotCompiler {
         // Pass 1: Declare all functions
         for stmt_id in final_stmts {
             let stmt = arena.get_stmt(*stmt_id).clone();
-            if let Stmt::FuncDecl { name, params, .. } = stmt {
+            if let Stmt::FuncDecl { name, params, return_type, is_extern, .. } = stmt {
                 let mut sig = self.context.module.make_signature();
-                for _ in params {
-                    sig.params.push(AbiParam::new(types::I64));
-                }
-                sig.returns.push(AbiParam::new(types::I64));
-
-                let internal_name = if name == "main" {
-                    "__user_main"
+                sig.call_conv = if is_extern {
+                    cranelift::prelude::isa::CallConv::SystemV
                 } else {
-                    name.as_str()
+                    cranelift::prelude::isa::CallConv::Fast
+                };
+                for param in params {
+                    let var_ty = crate::translator::parse_type_annotation(
+                        &param.type_annotation,
+                        None,
+                        Some(&self.context.struct_layouts),
+                        Some(&self.context.enum_layouts),
+                    );
+                    sig.params.push(AbiParam::new(var_ty.to_cranelift_type()));
+                }
+                if let Some(ret) = return_type {
+                    let var_ty = crate::translator::parse_type_annotation(
+                        &ret,
+                        None,
+                        Some(&self.context.struct_layouts),
+                        Some(&self.context.enum_layouts),
+                    );
+                    sig.returns.push(AbiParam::new(var_ty.to_cranelift_type()));
+                }
+
+                let linkage = if is_extern {
+                    Linkage::Import
+                } else {
+                    Linkage::Local
                 };
 
                 let id = self
                     .context
                     .module
-                    .declare_function(internal_name, cranelift_module::Linkage::Local, &sig)
+                    .declare_function(name.as_str(), linkage, &sig)
                     .map_err(|e| CodegenError {
                         message: e.to_string(),
                     })?;
@@ -637,24 +656,27 @@ impl AotCompiler {
                 params,
                 body,
                 return_type,
+                is_extern,
                 ..
             } = stmt
             {
-                let id = *self.context.funcs.get(&name).unwrap();
-                let ret = return_type
-                    .as_ref()
-                    .map(|t| t.name.as_str())
-                    .unwrap_or("Int");
-                self.compile_function(
-                    arena,
-                    name.as_str(),
-                    &params,
-                    &body,
-                    id,
-                    &func_returns,
-                    ret,
-                    None,
-                )?;
+                if !is_extern {
+                    let id = *self.context.funcs.get(&name).unwrap();
+                    let ret = return_type
+                        .as_ref()
+                        .map(|t| t.name.as_str())
+                        .unwrap_or("Int");
+                    self.compile_function(
+                        arena,
+                        name.as_str(),
+                        &params,
+                        &body,
+                        id,
+                        &func_returns,
+                        ret,
+                        None,
+                    )?;
+                }
             } else if let Stmt::ClassDecl {
                 name: class_name,
                 methods,

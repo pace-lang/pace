@@ -77,16 +77,19 @@ impl SymbolResolver {
                     let mut is_export = false;
                     let mut vis = Visibility::Public;
                     let mut original_name = String::new();
+                    let mut item_is_extern = false;
 
                     match item {
                         Stmt::FuncDecl {
                             name: n,
                             visibility,
+                            is_extern,
                             ..
                         } => {
                             is_export = true;
                             vis = visibility.clone();
                             original_name = n.to_string();
+                            item_is_extern = *is_extern;
                         }
                         Stmt::ClassDecl { name: n, .. }
                         | Stmt::ActorDecl { name: n, .. }
@@ -108,7 +111,7 @@ impl SymbolResolver {
                             .replace(":", "_");
                         let mangled_name = if clean_name == "pace_core" {
                             original_name.clone()
-                        } else if original_name == "main" {
+                        } else if original_name == "main" || item_is_extern {
                             original_name.clone()
                         } else {
                             format!("{}__{}", clean_name, original_name)
