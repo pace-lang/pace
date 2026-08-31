@@ -353,6 +353,7 @@ impl JITCompiler {
 
                 let drop_name = format!("__drop_{}", class_name);
                 let mut drop_sig = self.context.module.make_signature();
+                drop_sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
                 drop_sig.params.push(AbiParam::new(ptr_ty)); // obj ptr
                 let drop_id = self
                     .context
@@ -382,6 +383,7 @@ impl JITCompiler {
 
                         let full_name = format!("{}_{}", class_name, method_name);
                         let mut sig = self.context.module.make_signature();
+                        sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
                         if !is_static {
                             sig.params.push(AbiParam::new(ptr_ty)); // self
                         }
@@ -403,6 +405,7 @@ impl JITCompiler {
                             if is_actor {
                                 let async_name = format!("__async_{}_{}", class_name, method_name);
                                 let mut async_sig = self.context.module.make_signature();
+                                async_sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
                                 async_sig.params.push(AbiParam::new(types::I64));
                                 async_sig.returns.push(AbiParam::new(types::I64));
                                 let async_id = self
@@ -481,6 +484,7 @@ impl JITCompiler {
 
                 let drop_name = format!("__drop_{}", enum_name);
                 let mut drop_sig = self.context.module.make_signature();
+                drop_sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
                 drop_sig.params.push(AbiParam::new(ptr_ty)); // obj ptr
                 let drop_id = self
                     .context
@@ -518,6 +522,7 @@ impl JITCompiler {
                     // Generate Constructor Signature: e.g. Result_Ok(T) -> ResultPtr
                     let constructor_name = format!("{}_{}", enum_name, variant.name);
                     let mut sig = self.context.module.make_signature();
+                    sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
                     for _ in 0..variant_types.len() {
                         sig.params.push(AbiParam::new(types::I64));
                     }
@@ -639,6 +644,7 @@ impl JITCompiler {
             let stmt = arena.get_stmt(*stmt_id).clone();
             if let Stmt::FuncDecl { name, params, .. } = stmt {
                 let mut sig = self.context.module.make_signature();
+                sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
                 for _ in params {
                     sig.params.push(AbiParam::new(types::I64)); // Assume I64 for now
                 }
@@ -1422,6 +1428,7 @@ impl JITCompiler {
         };
 
         let mut sig = self.context.module.make_signature();
+        sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
         sig.params.push(AbiParam::new(
             self.context.module.target_config().pointer_type(),
         )); // env pointer

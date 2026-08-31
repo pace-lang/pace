@@ -227,28 +227,32 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 Ok((res, is_terminated))
             }
             Stmt::While { condition, body } => {
-                let cond_block = self.builder.create_block();
                 let body_block = self.builder.create_block();
+                let check_block = self.builder.create_block();
                 let exit_block = self.builder.create_block();
 
-                self.builder.ins().jump(cond_block, &[]);
-                self.builder.switch_to_block(cond_block);
+                // 1. Jump directly to check block first time
+                self.builder.ins().jump(check_block, &[]);
 
+                // 2. Body Block
+                self.builder.switch_to_block(body_block);
+                let (_, body_term) = self.translate_stmt(*body)?;
+                if !body_term {
+                    self.builder.ins().jump(check_block, &[]);
+                }
+
+                // 3. Check Block
+                self.builder.switch_to_block(check_block);
                 let cond_val = self.translate_expr(*condition)?;
                 self.builder
                     .ins()
                     .brif(cond_val, body_block, &[], exit_block, &[]);
-
+                
+                // Now that all branches to body_block and check_block have been generated:
                 self.builder.seal_block(body_block);
-                self.builder.switch_to_block(body_block);
+                self.builder.seal_block(check_block);
 
-                let (_, body_term) = self.translate_stmt(*body)?;
-                if !body_term {
-                    self.builder.ins().jump(cond_block, &[]);
-                }
-
-                self.builder.seal_block(cond_block);
-
+                // 4. Exit Block
                 self.builder.switch_to_block(exit_block);
                 self.builder.seal_block(exit_block);
 
@@ -1345,6 +1349,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     }
 
                     let mut sig = self.context.module.make_signature();
+                    sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
                     sig.params.push(AbiParam::new(ptr_ty)); // env
                     for _ in args {
                         sig.params.push(AbiParam::new(types::I64));
@@ -1699,6 +1704,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         return Ok(promise_ptr);
                     } else {
                         let mut sig = self.context.module.make_signature();
+                        sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
                         sig.params.push(AbiParam::new(ptr_ty)); // self
                         for _ in args {
                             sig.params.push(AbiParam::new(types::I64));
@@ -1865,6 +1871,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     .push((fn_name.clone().into(), expr.clone(), captured_vars));
 
                 let mut sig = self.context.module.make_signature();
+                sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
                 sig.params.push(AbiParam::new(
                     self.context.module.target_config().pointer_type(),
                 )); // env

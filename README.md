@@ -62,64 +62,60 @@ Pace is built for speed, generating highly optimized native code via Cranelift. 
 
 | Language | Execution Time (Median) | Peak Memory | CPU Usage | Compile Time |
 | :--- | :--- | :--- | :--- | :--- |
-| Rust | $\color{#16a34a}{\text{21.289 ms}}$ | 14.11 MB | 99% | 70.155 ms |
-| Zig | $\color{#16a34a}{\text{23.200 ms}}$ | 14.11 MB | 99% | 12389.774 ms |
-| Go | $\color{#ca8a04}{\text{44.919 ms}}$ | 14.11 MB | 101% | 214.776 ms |
-| Java | $\color{#ca8a04}{\text{57.605 ms}}$ | 39.74 MB | 108% | 427.142 ms |
-| Dart | $\color{#ca8a04}{\text{60.905 ms}}$ | 14.11 MB | 100% | 1499.485 ms |
-| **Pace** | $\color{#dc2626}{\mathbf{61.751 ms}}$ | 14.11 MB | 100% | 461.938 ms |
-| Python | $\color{#dc2626}{\text{884.569 ms}}$ | 14.11 MB | 100% | N/A |
-
+| Rust | $\color{#16a34a}{\text{21.191 ms}}$ | 14.15 MB | 99% | 69.463 ms |
+| Zig | $\color{#16a34a}{\text{22.994 ms}}$ | 14.15 MB | 100% | 13013.531 ms |
+| Go | $\color{#ca8a04}{\text{45.180 ms}}$ | 14.28 MB | 101% | 34.039 ms |
+| Java | $\color{#ca8a04}{\text{61.165 ms}}$ | 39.77 MB | 108% | 417.007 ms |
+| Dart | $\color{#ca8a04}{\text{61.230 ms}}$ | 14.28 MB | 100% | 6218.144 ms |
+| **Pace** | $\color{#dc2626}{\mathbf{63.292 ms}}$ | 14.15 MB | 100% | 394.202 ms |
+| Python | $\color{#dc2626}{\text{934.565 ms}}$ | 14.28 MB | 100% | N/A |
 
 ### LOOPS (N=10M)
 
 | Language | Execution Time (Median) | Peak Memory | CPU Usage | Compile Time |
 | :--- | :--- | :--- | :--- | :--- |
-| Zig | $\color{#16a34a}{\text{1.062 ms}}$ | 14.11 MB | 94% | 11955.699 ms |
-| Rust | $\color{#16a34a}{\text{1.384 ms}}$ | 14.11 MB | 95% | 65.204 ms |
-| Go | $\color{#ca8a04}{\text{4.385 ms}}$ | 14.11 MB | 105% | 42.581 ms |
-| Dart | $\color{#ca8a04}{\text{8.415 ms}}$ | 14.11 MB | 100% | 1369.021 ms |
-| **Pace** | $\color{#ca8a04}{\mathbf{8.535 ms}}$ | 14.11 MB | 99% | 346.159 ms |
-| Java | $\color{#dc2626}{\text{29.717 ms}}$ | 39.98 MB | 116% | 412.139 ms |
-| Python | $\color{#dc2626}{\text{358.882 ms}}$ | 14.11 MB | 100% | N/A |
-
+| Zig | $\color{#16a34a}{\text{0.993 ms}}$ | 14.28 MB | 94% | 12647.437 ms |
+| Rust | $\color{#16a34a}{\text{1.456 ms}}$ | 14.28 MB | 96% | 61.000 ms |
+| Go | $\color{#ca8a04}{\text{4.563 ms}}$ | 14.28 MB | 106% | 36.212 ms |
+| Dart | $\color{#ca8a04}{\text{8.613 ms}}$ | 14.28 MB | 100% | 1438.086 ms |
+| **Pace** | $\color{#ca8a04}{\mathbf{8.989 ms}}$ | 14.28 MB | 99% | 369.810 ms |
+| Java | $\color{#dc2626}{\text{31.044 ms}}$ | 40.07 MB | 116% | 420.229 ms |
+| Python | $\color{#dc2626}{\text{375.042 ms}}$ | 14.28 MB | 100% | N/A |
 
 ### MAPS (N=10K)
 
 | Language | Execution Time (Median) | Peak Memory | CPU Usage | Compile Time |
 | :--- | :--- | :--- | :--- | :--- |
-| Zig | $\color{#16a34a}{\text{1.724 ms}}$ | 14.11 MB | 96% | 12144.088 ms |
-| Rust | $\color{#16a34a}{\text{2.047 ms}}$ | 14.11 MB | 96% | 182.485 ms |
-| Go | $\color{#ca8a04}{\text{2.902 ms}}$ | 14.11 MB | 106% | 39.513 ms |
-| **Pace** | $\color{#ca8a04}{\mathbf{3.526 ms}}$ | 14.11 MB | 97% | 358.558 ms |
-| Dart | $\color{#ca8a04}{\text{4.155 ms}}$ | 14.11 MB | 99% | 1363.333 ms |
-| Python | $\color{#dc2626}{\text{12.075 ms}}$ | 14.11 MB | 99% | N/A |
-| Java | $\color{#dc2626}{\text{39.477 ms}}$ | 42.28 MB | 105% | 415.082 ms |
-
+| Zig | $\color{#16a34a}{\text{1.844 ms}}$ | 14.28 MB | 96% | 13072.036 ms |
+| Rust | $\color{#16a34a}{\text{2.046 ms}}$ | 14.28 MB | 96% | 183.582 ms |
+| **Pace** | $\color{#ca8a04}{\mathbf{3.370 ms}}$ | 14.28 MB | 98% | 439.561 ms |
+| Go | $\color{#ca8a04}{\text{3.382 ms}}$ | 14.28 MB | 107% | 46.336 ms |
+| Dart | $\color{#ca8a04}{\text{4.286 ms}}$ | 14.28 MB | 99% | 1448.079 ms |
+| Python | $\color{#dc2626}{\text{13.208 ms}}$ | 14.28 MB | 99% | N/A |
+| Java | $\color{#dc2626}{\text{41.746 ms}}$ | 42.11 MB | 108% | 431.997 ms |
 
 ### STARTUP TIME
 
 | Language | Execution Time (Median) | Peak Memory | CPU Usage | Compile Time |
 | :--- | :--- | :--- | :--- | :--- |
-| Zig | $\color{#16a34a}{\text{0.997 ms}}$ | 14.11 MB | 94% | 140.749 ms |
-| **Pace** | $\color{#16a34a}{\mathbf{1.371 ms}}$ | 14.11 MB | 94% | 355.450 ms |
-| Rust | $\color{#ca8a04}{\text{1.379 ms}}$ | 14.11 MB | 96% | 62.759 ms |
-| Go | $\color{#ca8a04}{\text{1.827 ms}}$ | 14.11 MB | 104% | 33.314 ms |
-| Dart | $\color{#ca8a04}{\text{2.983 ms}}$ | 14.11 MB | 100% | 1364.982 ms |
-| Python | $\color{#dc2626}{\text{10.960 ms}}$ | 14.11 MB | 99% | N/A |
-| Java | $\color{#dc2626}{\text{25.004 ms}}$ | 39.36 MB | 117% | 377.268 ms |
-
+| Zig | $\color{#16a34a}{\text{0.987 ms}}$ | 14.28 MB | 94% | 150.302 ms |
+| Rust | $\color{#16a34a}{\text{1.387 ms}}$ | 14.28 MB | 96% | 59.745 ms |
+| **Pace** | $\color{#ca8a04}{\mathbf{1.420 ms}}$ | 14.28 MB | 96% | 379.617 ms |
+| Go | $\color{#ca8a04}{\text{1.742 ms}}$ | 14.28 MB | 105% | 35.091 ms |
+| Dart | $\color{#ca8a04}{\text{2.933 ms}}$ | 14.28 MB | 100% | 1408.807 ms |
+| Python | $\color{#dc2626}{\text{11.267 ms}}$ | 14.28 MB | 99% | N/A |
+| Java | $\color{#dc2626}{\text{28.604 ms}}$ | 39.34 MB | 116% | 404.226 ms |
 
 ### STRING CONCAT (N=10K)
 
 | Language | Execution Time (Median) | Peak Memory | CPU Usage | Compile Time |
 | :--- | :--- | :--- | :--- | :--- |
-| Rust | $\color{#16a34a}{\text{1.380 ms}}$ | 14.11 MB | 95% | 81.607 ms |
-| **Pace** | $\color{#16a34a}{\mathbf{1.569 ms}}$ | 14.11 MB | 96% | 354.351 ms |
-| Go | $\color{#ca8a04}{\text{2.388 ms}}$ | 14.11 MB | 104% | 35.765 ms |
-| Dart | $\color{#ca8a04}{\text{3.337 ms}}$ | 14.11 MB | 100% | 1354.485 ms |
-| Python | $\color{#dc2626}{\text{11.200 ms}}$ | 14.11 MB | 99% | N/A |
-| Java | $\color{#dc2626}{\text{27.387 ms}}$ | 40.08 MB | 121% | 426.635 ms |
+| Rust | $\color{#16a34a}{\text{1.410 ms}}$ | 14.28 MB | 95% | 77.426 ms |
+| **Pace** | $\color{#16a34a}{\mathbf{1.538 ms}}$ | 14.28 MB | 96% | 383.820 ms |
+| Go | $\color{#ca8a04}{\text{1.926 ms}}$ | 14.28 MB | 106% | 41.563 ms |
+| Dart | $\color{#ca8a04}{\text{3.448 ms}}$ | 14.28 MB | 100% | 1426.701 ms |
+| Python | $\color{#dc2626}{\text{11.405 ms}}$ | 14.28 MB | 99% | N/A |
+| Java | $\color{#dc2626}{\text{29.142 ms}}$ | 39.92 MB | 121% | 447.297 ms |
 
 
 *Legend: $\color{#16a34a}{\text{Top Tier}}$ | $\color{#ca8a04}{\text{Average}}$ | $\color{#dc2626}{\text{Slowest}}$*
