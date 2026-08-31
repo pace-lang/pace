@@ -74,7 +74,11 @@ struct Formatter<'a> {
 }
 
 impl<'a> Formatter<'a> {
-    fn new(src: &'a str, mut comments: Vec<(usize, usize, String)>, arena: &'a pace_ast::arena::AstArena) -> Self {
+    fn new(
+        src: &'a str,
+        mut comments: Vec<(usize, usize, String)>,
+        arena: &'a pace_ast::arena::AstArena,
+    ) -> Self {
         comments.sort_by_key(|c| c.0);
         Self {
             _src: src,
@@ -223,7 +227,12 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+                    self.output.push_str(
+                        &gps.iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    );
                     self.output.push('>');
                 }
                 self.output.push('(');
@@ -267,11 +276,23 @@ impl<'a> Formatter<'a> {
                 }
                 if let Some(show) = show {
                     self.output.push_str(" show ");
-                    self.output.push_str(&show.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+                    self.output.push_str(
+                        &show
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    );
                 }
                 if let Some(hide) = hide {
                     self.output.push_str(" hide ");
-                    self.output.push_str(&hide.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+                    self.output.push_str(
+                        &hide
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    );
                 }
                 self.output.push_str(";\n");
                 Ok(())
@@ -300,7 +321,9 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(" {\n");
                 self.indent += 1;
                 if let Stmt::Block(stmts) = self.arena.get_stmt(*body) {
-                    for s in stmts { self.format_stmt(*s)?; }
+                    for s in stmts {
+                        self.format_stmt(*s)?;
+                    }
                 } else {
                     self.format_stmt(*body)?;
                 }
@@ -314,7 +337,9 @@ impl<'a> Formatter<'a> {
                 self.output.push_str("loop {\n");
                 self.indent += 1;
                 if let Stmt::Block(stmts) = self.arena.get_stmt(*body) {
-                    for s in stmts { self.format_stmt(*s)?; }
+                    for s in stmts {
+                        self.format_stmt(*s)?;
+                    }
                 } else {
                     self.format_stmt(*body)?;
                 }
@@ -323,7 +348,11 @@ impl<'a> Formatter<'a> {
                 self.output.push_str("}\n");
                 Ok(())
             }
-            Stmt::ForIn { item, iterable, body } => {
+            Stmt::ForIn {
+                item,
+                iterable,
+                body,
+            } => {
                 self.write_indent();
                 self.output.push_str("for ");
                 self.output.push_str(item);
@@ -332,7 +361,9 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(" {\n");
                 self.indent += 1;
                 if let Stmt::Block(stmts) = self.arena.get_stmt(*body) {
-                    for s in stmts { self.format_stmt(*s)?; }
+                    for s in stmts {
+                        self.format_stmt(*s)?;
+                    }
                 } else {
                     self.format_stmt(*body)?;
                 }
@@ -341,7 +372,14 @@ impl<'a> Formatter<'a> {
                 self.output.push_str("}\n");
                 Ok(())
             }
-            Stmt::ClassDecl { name, generic_params, fields, methods, implements, doc_comment } => {
+            Stmt::ClassDecl {
+                name,
+                generic_params,
+                fields,
+                methods,
+                implements,
+                doc_comment,
+            } => {
                 if let Some(doc) = doc_comment {
                     self.write_indent();
                     self.output.push_str("///");
@@ -353,7 +391,12 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+                    self.output.push_str(
+                        &gps.iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    );
                     self.output.push('>');
                 }
                 if let Some(impls) = implements {
@@ -362,15 +405,28 @@ impl<'a> Formatter<'a> {
                 }
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                for f in fields { self.format_stmt(*f)?; }
-                if !fields.is_empty() && !methods.is_empty() { self.output.push('\n'); }
-                for m in methods { self.format_stmt(*m)?; }
+                for f in fields {
+                    self.format_stmt(*f)?;
+                }
+                if !fields.is_empty() && !methods.is_empty() {
+                    self.output.push('\n');
+                }
+                for m in methods {
+                    self.format_stmt(*m)?;
+                }
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n\n");
                 Ok(())
             }
-            Stmt::ActorDecl { name, generic_params, fields, methods, implements, doc_comment } => {
+            Stmt::ActorDecl {
+                name,
+                generic_params,
+                fields,
+                methods,
+                implements,
+                doc_comment,
+            } => {
                 if let Some(doc) = doc_comment {
                     self.write_indent();
                     self.output.push_str("///");
@@ -382,7 +438,12 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+                    self.output.push_str(
+                        &gps.iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    );
                     self.output.push('>');
                 }
                 if let Some(impls) = implements {
@@ -391,15 +452,26 @@ impl<'a> Formatter<'a> {
                 }
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                for f in fields { self.format_stmt(*f)?; }
-                if !fields.is_empty() && !methods.is_empty() { self.output.push('\n'); }
-                for m in methods { self.format_stmt(*m)?; }
+                for f in fields {
+                    self.format_stmt(*f)?;
+                }
+                if !fields.is_empty() && !methods.is_empty() {
+                    self.output.push('\n');
+                }
+                for m in methods {
+                    self.format_stmt(*m)?;
+                }
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n\n");
                 Ok(())
             }
-            Stmt::InterfaceDecl { name, generic_params, methods, doc_comment } => {
+            Stmt::InterfaceDecl {
+                name,
+                generic_params,
+                methods,
+                doc_comment,
+            } => {
                 if let Some(doc) = doc_comment {
                     self.write_indent();
                     self.output.push_str("///");
@@ -411,18 +483,30 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+                    self.output.push_str(
+                        &gps.iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    );
                     self.output.push('>');
                 }
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                for m in methods { self.format_stmt(*m)?; }
+                for m in methods {
+                    self.format_stmt(*m)?;
+                }
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n\n");
                 Ok(())
             }
-            Stmt::StructDecl { name, generic_params, fields, doc_comment } => {
+            Stmt::StructDecl {
+                name,
+                generic_params,
+                fields,
+                doc_comment,
+            } => {
                 if let Some(doc) = doc_comment {
                     self.write_indent();
                     self.output.push_str("///");
@@ -434,18 +518,30 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+                    self.output.push_str(
+                        &gps.iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    );
                     self.output.push('>');
                 }
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                for f in fields { self.format_stmt(*f)?; }
+                for f in fields {
+                    self.format_stmt(*f)?;
+                }
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n\n");
                 Ok(())
             }
-            Stmt::EnumDecl { name, generic_params, variants, doc_comment } => {
+            Stmt::EnumDecl {
+                name,
+                generic_params,
+                variants,
+                doc_comment,
+            } => {
                 if let Some(doc) = doc_comment {
                     self.write_indent();
                     self.output.push_str("///");
@@ -457,7 +553,12 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 if let Some(gps) = generic_params {
                     self.output.push('<');
-                    self.output.push_str(&gps.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+                    self.output.push_str(
+                        &gps.iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    );
                     self.output.push('>');
                 }
                 self.output.push_str(" {\n");
@@ -468,7 +569,9 @@ impl<'a> Formatter<'a> {
                     if let Some(fields) = &v.fields {
                         self.output.push('(');
                         for (fi, fty) in fields.iter().enumerate() {
-                            if fi > 0 { self.output.push_str(", "); }
+                            if fi > 0 {
+                                self.output.push_str(", ");
+                            }
                             self.format_type(fty);
                         }
                         self.output.push(')');
@@ -484,7 +587,10 @@ impl<'a> Formatter<'a> {
                 self.output.push_str("}\n\n");
                 Ok(())
             }
-            Stmt::Match { expr: match_expr, arms } => {
+            Stmt::Match {
+                expr: match_expr,
+                arms,
+            } => {
                 self.write_indent();
                 self.output.push_str("match ");
                 self.format_expr(*match_expr)?;
@@ -497,7 +603,9 @@ impl<'a> Formatter<'a> {
                     if let Stmt::Block(stmts) = self.arena.get_stmt(*arm_body) {
                         self.output.push_str("{\n");
                         self.indent += 1;
-                        for s in stmts { self.format_stmt(*s)?; }
+                        for s in stmts {
+                            self.format_stmt(*s)?;
+                        }
                         self.indent -= 1;
                         self.write_indent();
                         self.output.push_str("}\n");
@@ -528,7 +636,9 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(name);
                 self.output.push_str(" {\n");
                 self.indent += 1;
-                for s in body { self.format_stmt(*s)?; }
+                for s in body {
+                    self.format_stmt(*s)?;
+                }
                 self.indent -= 1;
                 self.write_indent();
                 self.output.push_str("}\n\n");
@@ -544,7 +654,12 @@ impl<'a> Formatter<'a> {
             Expr::FloatLiteral(f) => self.output.push_str(&f.to_string()),
             Expr::StringLiteral(s) => {
                 self.output.push('"');
-                let escaped = s.replace('\\', "\\\\").replace('\"', "\\\"").replace('\n', "\\n").replace('\r', "\\r").replace('\t', "\\t");
+                let escaped = s
+                    .replace('\\', "\\\\")
+                    .replace('\"', "\\\"")
+                    .replace('\n', "\\n")
+                    .replace('\r', "\\r")
+                    .replace('\t', "\\t");
                 self.output.push_str(&escaped);
                 self.output.push('"');
             }
@@ -598,7 +713,12 @@ impl<'a> Formatter<'a> {
                 self.output.push('"');
                 for part in parts {
                     if let Expr::StringLiteral(s) = self.arena.get_expr(*part) {
-                        let escaped = s.replace('\\', "\\\\").replace('\"', "\\\"").replace('\n', "\\n").replace('\r', "\\r").replace('\t', "\\t");
+                        let escaped = s
+                            .replace('\\', "\\\\")
+                            .replace('\"', "\\\"")
+                            .replace('\n', "\\n")
+                            .replace('\r', "\\r")
+                            .replace('\t', "\\t");
                         self.output.push_str(&escaped);
                     } else {
                         self.output.push_str("${");
@@ -608,11 +728,16 @@ impl<'a> Formatter<'a> {
                 }
                 self.output.push('"');
             }
-            Expr::GenericInstantiation { callee, generic_args } => {
+            Expr::GenericInstantiation {
+                callee,
+                generic_args,
+            } => {
                 self.format_expr(*callee)?;
                 self.output.push('<');
                 for (i, arg) in generic_args.iter().enumerate() {
-                    if i > 0 { self.output.push_str(", "); }
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
                     self.format_type(arg);
                 }
                 self.output.push('>');
@@ -622,7 +747,12 @@ impl<'a> Formatter<'a> {
                 self.output.push_str(" = ");
                 self.format_expr(*value)?;
             }
-            Expr::MemberAccess { object, property, is_static_operator, .. } => {
+            Expr::MemberAccess {
+                object,
+                property,
+                is_static_operator,
+                ..
+            } => {
                 self.format_expr(*object)?;
                 if *is_static_operator {
                     self.output.push_str("::");
@@ -653,10 +783,16 @@ impl<'a> Formatter<'a> {
                 self.output.push_str("await ");
                 self.format_expr(*inner)?;
             }
-            Expr::Closure { params, return_type, body } => {
+            Expr::Closure {
+                params,
+                return_type,
+                body,
+            } => {
                 self.output.push('(');
                 for (i, (name, ty)) in params.iter().enumerate() {
-                    if i > 0 { self.output.push_str(", "); }
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
                     self.output.push_str(name);
                     self.output.push_str(": ");
                     self.format_type(ty);
@@ -706,13 +842,20 @@ impl<'a> Formatter<'a> {
 
     fn format_if_inline(&mut self, stmt_id: pace_ast::arena::StmtId) -> Result<(), ()> {
         let stmt = self.arena.get_stmt(stmt_id);
-        if let Stmt::If { condition, then_branch, else_branch } = stmt {
+        if let Stmt::If {
+            condition,
+            then_branch,
+            else_branch,
+        } = stmt
+        {
             self.output.push_str("if ");
             self.format_expr(*condition)?;
             self.output.push_str(" {\n");
             self.indent += 1;
             if let Stmt::Block(stmts) = self.arena.get_stmt(*then_branch) {
-                for s in stmts { self.format_stmt(*s)?; }
+                for s in stmts {
+                    self.format_stmt(*s)?;
+                }
             } else {
                 self.format_stmt(*then_branch)?;
             }
@@ -727,7 +870,9 @@ impl<'a> Formatter<'a> {
                     self.output.push_str(" else {\n");
                     self.indent += 1;
                     if let Stmt::Block(stmts) = self.arena.get_stmt(*els) {
-                        for s in stmts { self.format_stmt(*s)?; }
+                        for s in stmts {
+                            self.format_stmt(*s)?;
+                        }
                     } else {
                         self.format_stmt(*els)?;
                     }
@@ -749,7 +894,12 @@ impl<'a> Formatter<'a> {
             pace_ast::Pattern::Wildcard => self.output.push('_'),
             pace_ast::Pattern::Literal(expr) => self.format_expr(*expr)?,
             pace_ast::Pattern::Variable(name, _) => self.output.push_str(name),
-            pace_ast::Pattern::Variant { enum_name, variant_name, fields, generic_args } => {
+            pace_ast::Pattern::Variant {
+                enum_name,
+                variant_name,
+                fields,
+                generic_args,
+            } => {
                 if let Some(e) = enum_name {
                     self.output.push_str(e);
                     self.output.push_str("::");
@@ -758,7 +908,9 @@ impl<'a> Formatter<'a> {
                 if let Some(g) = generic_args {
                     self.output.push('<');
                     for (i, arg) in g.iter().enumerate() {
-                        if i > 0 { self.output.push_str(", "); }
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
                         self.format_type(arg);
                     }
                     self.output.push('>');
@@ -766,7 +918,9 @@ impl<'a> Formatter<'a> {
                 if let Some(f) = fields {
                     self.output.push('(');
                     for (i, p) in f.iter().enumerate() {
-                        if i > 0 { self.output.push_str(", "); }
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
                         self.format_pattern(p)?;
                     }
                     self.output.push(')');
@@ -775,7 +929,6 @@ impl<'a> Formatter<'a> {
         }
         Ok(())
     }
-
 
     fn binary_precedence(op: &pace_ast::BinaryOp) -> u8 {
         use pace_ast::BinaryOp::*;
@@ -789,7 +942,12 @@ impl<'a> Formatter<'a> {
         }
     }
 
-    fn format_sub_expr(&mut self, sub_id: pace_ast::arena::ExprId, parent_prec: u8, is_right: bool) -> Result<(), ()> {
+    fn format_sub_expr(
+        &mut self,
+        sub_id: pace_ast::arena::ExprId,
+        parent_prec: u8,
+        is_right: bool,
+    ) -> Result<(), ()> {
         let sub = self.arena.get_expr(sub_id);
         let prec = match sub {
             Expr::Binary { op, .. } => Self::binary_precedence(op),
@@ -811,5 +969,4 @@ impl<'a> Formatter<'a> {
         }
         Ok(())
     }
-
 }

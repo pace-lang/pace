@@ -4,11 +4,11 @@ use pace_ast::Stmt;
 use miette::Diagnostic;
 use thiserror::Error;
 
+pub mod fold;
 pub mod inline;
 pub mod monomorphize;
 pub mod resolve;
 pub mod shake;
-pub mod fold;
 
 #[derive(Error, Diagnostic, Debug)]
 #[error("Found multiple type errors")]
@@ -79,17 +79,20 @@ impl CompilerSession {
 
         sources.insert(ustr::Ustr::from(module_name), src.clone());
 
-        let (mut ast, _comments) = match pace_parser::parse(arena, &src, &path.display().to_string()) {
-            Ok(res) => res,
-            Err(parse_errors) => {
-                return Err(Report::new(pace_errors::MultipleSyntaxErrors {
-                    errors: parse_errors,
-                }));
-            }
-        };
+        let (mut ast, _comments) =
+            match pace_parser::parse(arena, &src, &path.display().to_string()) {
+                Ok(res) => res,
+                Err(parse_errors) => {
+                    return Err(Report::new(pace_errors::MultipleSyntaxErrors {
+                        errors: parse_errors,
+                    }));
+                }
+            };
 
         // Auto-inject pace:prelude if not the core or prelude library itself
-        if path_buf.file_stem().unwrap_or_default() != "core" && path_buf.file_stem().unwrap_or_default() != "prelude" {
+        if path_buf.file_stem().unwrap_or_default() != "core"
+            && path_buf.file_stem().unwrap_or_default() != "prelude"
+        {
             let import_stmt_id = arena.alloc_stmt(Stmt::Import {
                 path: ustr::Ustr::from("pace:prelude"),
                 alias: None,
@@ -100,13 +103,17 @@ impl CompilerSession {
         }
 
         // Resolve imports recursively
-                let mut final_ast = Vec::new();
+        let mut final_ast = Vec::new();
         for i in 0..ast.len() {
             let stmt_id = ast[i];
             let mut resolved = None;
-            if let Stmt::Import { path: import_path, .. } | Stmt::Export { path: import_path } = arena.get_stmt(stmt_id) {
+            if let Stmt::Import {
+                path: import_path, ..
+            }
+            | Stmt::Export { path: import_path } = arena.get_stmt(stmt_id)
+            {
                 let resolved_path = Self::resolve_import_path(import_path.as_str(), &path_buf)?;
-                
+
                 if resolved_path.exists() {
                     let mod_name =
                         if import_path.starts_with("./") || import_path.starts_with("../") {
@@ -130,7 +137,9 @@ impl CompilerSession {
 
             if let Some((mod_name, resolved_path)) = resolved {
                 // Mutate the statement in the arena
-                if let Stmt::Import { path, .. } | Stmt::Export { path } = arena.get_stmt_mut(stmt_id) {
+                if let Stmt::Import { path, .. } | Stmt::Export { path } =
+                    arena.get_stmt_mut(stmt_id)
+                {
                     *path = ustr::Ustr::from(&mod_name);
                 }
 
@@ -148,7 +157,7 @@ impl CompilerSession {
         }
 
         // Append current file's AST after its dependencies
-                let module_stmt_id = arena.alloc_stmt(Stmt::Module {
+        let module_stmt_id = arena.alloc_stmt(Stmt::Module {
             name: ustr::Ustr::from(module_name),
             body: ast,
         });
@@ -238,7 +247,10 @@ impl CompilerSession {
         }
     }
 
-    fn resolve_self_path(import_path: &str, path_buf: &std::path::Path) -> Result<std::path::PathBuf> {
+    fn resolve_self_path(
+        import_path: &str,
+        path_buf: &std::path::Path,
+    ) -> Result<std::path::PathBuf> {
         let path_without_self = import_path.strip_prefix("self:").unwrap();
         let mut current_dir = path_buf
             .parent()
@@ -252,7 +264,10 @@ impl CompilerSession {
             .join(format!("{}.pace", path_without_self)))
     }
 
-    fn resolve_relative_path(import_path: &str, path_buf: &std::path::Path) -> Result<std::path::PathBuf> {
+    fn resolve_relative_path(
+        import_path: &str,
+        path_buf: &std::path::Path,
+    ) -> Result<std::path::PathBuf> {
         let parent_dir = path_buf.parent().unwrap_or(std::path::Path::new(""));
         Ok(parent_dir.join(format!("{}.pace", import_path)))
     }
@@ -277,8 +292,7 @@ impl CompilerSession {
         while !current_dir.join("pace.toml").exists() && current_dir.parent().is_some() {
             current_dir = current_dir.parent().unwrap().to_path_buf();
         }
-        let lock_opt =
-            pace_pkg::lockfile::PaceLock::load_from_dir(&current_dir).unwrap_or(None);
+        let lock_opt = pace_pkg::lockfile::PaceLock::load_from_dir(&current_dir).unwrap_or(None);
 
         let resolved_path = if let Some(lock) = lock_opt {
             if let Some(pkg) = lock.packages.get(pkg_name) {
@@ -288,15 +302,16 @@ impl CompilerSession {
                     // Platform validation
                     if let Ok(manifest) = pace_pkg::manifest::PaceToml::load_from_dir(&pkg_path)
                         && let Some(platforms) = manifest.package.platforms
-                            && !platforms.contains(&target_platform.to_string()) {
-                                return Err(miette::miette!(
-                                    "Error: package '{}' is not compatible with target '{}'.\n\nSupported targets:\n  {}\n\nCurrent target:\n  {}",
-                                    pkg_name,
-                                    target_platform,
-                                    platforms.join("\n  "),
-                                    target_platform
-                                ));
-                            }
+                        && !platforms.contains(&target_platform.to_string())
+                    {
+                        return Err(miette::miette!(
+                            "Error: package '{}' is not compatible with target '{}'.\n\nSupported targets:\n  {}\n\nCurrent target:\n  {}",
+                            pkg_name,
+                            target_platform,
+                            platforms.join("\n  "),
+                            target_platform
+                        ));
+                    }
 
                     pkg_path.join("src").join(format!("{}.pace", sub_path))
                 } else {
@@ -320,12 +335,13 @@ impl CompilerSession {
                 .join(format!("{}.pace", sub_path));
             if let Ok(manifest) = pace_pkg::manifest::PaceToml::load_from_dir(&current_dir)
                 && let Some(dep) = manifest.dependencies.get(pkg_name)
-                    && let pace_pkg::manifest::Dependency::Path { path } = dep {
-                        fallback_path = current_dir
-                            .join(path)
-                            .join("src")
-                            .join(format!("{}.pace", sub_path));
-                    }
+                && let pace_pkg::manifest::Dependency::Path { path } = dep
+            {
+                fallback_path = current_dir
+                    .join(path)
+                    .join("src")
+                    .join(format!("{}.pace", sub_path));
+            }
             fallback_path
         };
 
@@ -340,7 +356,11 @@ impl CompilerSession {
         }
     }
 
-    pub fn check_file(&self, arena: &mut pace_ast::arena::AstArena, path: &str) -> Result<Vec<pace_ast::arena::StmtId>> {
+    pub fn check_file(
+        &self,
+        arena: &mut pace_ast::arena::AstArena,
+        path: &str,
+    ) -> Result<Vec<pace_ast::arena::StmtId>> {
         let mut visited = std::collections::HashSet::new();
         let path_buf = std::path::Path::new(path);
         let module_name = path_buf
@@ -418,7 +438,9 @@ impl CompilerSession {
             "none".to_string()
         });
 
-        compiler.compile_and_run(&mut arena, &ast).map_err(Report::new)?;
+        compiler
+            .compile_and_run(&mut arena, &ast)
+            .map_err(Report::new)?;
 
         Ok(())
     }
@@ -432,7 +454,9 @@ impl CompilerSession {
             "none".to_string()
         });
 
-        compiler.compile_and_run(&mut arena, &ast).map_err(Report::new)?;
+        compiler
+            .compile_and_run(&mut arena, &ast)
+            .map_err(Report::new)?;
 
         Ok(())
     }
@@ -449,7 +473,13 @@ impl CompilerSession {
         self.build_from_ast(&mut arena, &ast, output, release)
     }
 
-    fn build_from_ast(&self, arena: &mut pace_ast::arena::AstArena, ast: &[pace_ast::arena::StmtId], output: &str, release: bool) -> Result<()> {
+    fn build_from_ast(
+        &self,
+        arena: &mut pace_ast::arena::AstArena,
+        ast: &[pace_ast::arena::StmtId],
+        output: &str,
+        release: bool,
+    ) -> Result<()> {
         let compiler = pace_codegen::AotCompiler::new(if release {
             "speed_and_size".to_string()
         } else {
@@ -527,7 +557,11 @@ impl CompilerSession {
         Ok(())
     }
 
-    pub fn check_source(&self, arena: &mut pace_ast::arena::AstArena, src: &str) -> Result<Vec<pace_ast::arena::StmtId>> {
+    pub fn check_source(
+        &self,
+        arena: &mut pace_ast::arena::AstArena,
+        src: &str,
+    ) -> Result<Vec<pace_ast::arena::StmtId>> {
         let ast = match pace_parser::parse(arena, src, "source") {
             Ok((ast, _)) => {
                 let mod_id = arena.alloc_stmt(Stmt::Module {
@@ -535,7 +569,7 @@ impl CompilerSession {
                     body: ast,
                 });
                 vec![mod_id]
-            },
+            }
             Err(parse_errors) => {
                 return Err(Report::new(pace_errors::MultipleSyntaxErrors {
                     errors: parse_errors,

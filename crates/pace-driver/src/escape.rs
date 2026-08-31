@@ -22,7 +22,10 @@ impl<'a> EscapeAnalysis<'a> {
         }
     }
 
-    pub fn analyze_function(arena: &'a pace_ast::arena::AstArena, stmts: &[pace_ast::arena::StmtId]) -> HashSet<ustr::Ustr> {
+    pub fn analyze_function(
+        arena: &'a pace_ast::arena::AstArena,
+        stmts: &[pace_ast::arena::StmtId],
+    ) -> HashSet<ustr::Ustr> {
         let mut analyzer = Self::new(arena);
         for stmt_id in stmts {
             let stmt = arena.get_stmt(*stmt_id);

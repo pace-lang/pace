@@ -1,13 +1,13 @@
-pub mod expr;
-pub mod stmt;
 pub mod arena;
 pub mod clone;
+pub mod expr;
+pub mod stmt;
 
-pub use expr::*;
-pub use stmt::*;
 pub use arena::*;
-pub use pace_common::{BinaryOp, UnaryOp, TypeAnnotation};
+pub use expr::*;
+pub use pace_common::{BinaryOp, TypeAnnotation, UnaryOp};
 pub use pace_common::{Span, Visibility};
+pub use stmt::*;
 
 #[cfg(test)]
 mod tests {

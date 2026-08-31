@@ -63,7 +63,13 @@ mod tests {
         let mut arena = pace_ast::arena::AstArena::new();
         let (stmts, _) = crate::parse(&mut arena, src, "test").unwrap();
         assert_eq!(stmts.len(), 1);
-        if let Stmt::FuncDecl { name, params, return_type, .. } = arena.get_stmt(stmts[0]) {
+        if let Stmt::FuncDecl {
+            name,
+            params,
+            return_type,
+            ..
+        } = arena.get_stmt(stmts[0])
+        {
             assert_eq!(name.as_str(), "add");
             assert_eq!(params.len(), 2);
             assert!(return_type.is_some());
@@ -85,7 +91,13 @@ mod tests {
         let mut arena = pace_ast::arena::AstArena::new();
         let (stmts, _) = crate::parse(&mut arena, src, "test").unwrap();
         assert_eq!(stmts.len(), 1);
-        if let Stmt::ClassDecl { name, fields, methods, .. } = arena.get_stmt(stmts[0]) {
+        if let Stmt::ClassDecl {
+            name,
+            fields,
+            methods,
+            ..
+        } = arena.get_stmt(stmts[0])
+        {
             assert_eq!(name.as_str(), "User");
             assert_eq!(fields.len(), 1);
             assert_eq!(methods.len(), 1);

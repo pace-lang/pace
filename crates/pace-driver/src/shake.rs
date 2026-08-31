@@ -18,7 +18,10 @@ impl TreeShaker {
         }
     }
 
-    pub fn run(arena: &mut pace_ast::arena::AstArena, ast: Vec<pace_ast::arena::StmtId>) -> Vec<pace_ast::arena::StmtId> {
+    pub fn run(
+        arena: &mut pace_ast::arena::AstArena,
+        ast: Vec<pace_ast::arena::StmtId>,
+    ) -> Vec<pace_ast::arena::StmtId> {
         let mut shaker = Self::new();
         // Start from main
         shaker.reachable.insert(ustr::Ustr::from("main"));
@@ -40,7 +43,12 @@ impl TreeShaker {
         shaker.filter_ast(arena, ast)
     }
 
-    fn index_decls(&self, arena: &pace_ast::arena::AstArena, ast: &[pace_ast::arena::StmtId], decls: &mut std::collections::HashMap<ustr::Ustr, pace_ast::arena::StmtId>) {
+    fn index_decls(
+        &self,
+        arena: &pace_ast::arena::AstArena,
+        ast: &[pace_ast::arena::StmtId],
+        decls: &mut std::collections::HashMap<ustr::Ustr, pace_ast::arena::StmtId>,
+    ) {
         for stmt_id in ast {
             let stmt = arena.get_stmt(*stmt_id);
             match stmt {
@@ -49,8 +57,7 @@ impl TreeShaker {
                 | Stmt::ActorDecl { name, .. }
                 | Stmt::StructDecl { name, .. }
                 | Stmt::EnumDecl { name, .. }
-                | Stmt::InterfaceDecl { name, .. }
-                => {
+                | Stmt::InterfaceDecl { name, .. } => {
                     decls.insert(*name, *stmt_id);
                 }
                 Stmt::Module { body, .. } => {
@@ -61,14 +68,21 @@ impl TreeShaker {
         }
     }
 
-    fn filter_ast(&self, arena: &mut pace_ast::arena::AstArena, ast: Vec<pace_ast::arena::StmtId>) -> Vec<pace_ast::arena::StmtId> {
+    fn filter_ast(
+        &self,
+        arena: &mut pace_ast::arena::AstArena,
+        ast: Vec<pace_ast::arena::StmtId>,
+    ) -> Vec<pace_ast::arena::StmtId> {
         let mut new_ast = Vec::new();
         for stmt_id in ast {
             let stmt = arena.get_stmt(stmt_id).clone();
             match stmt {
                 Stmt::Module { name, body } => {
                     let filtered_body = self.filter_ast(arena, body);
-                    let new_mod_id = arena.alloc_stmt(Stmt::Module { name, body: filtered_body });
+                    let new_mod_id = arena.alloc_stmt(Stmt::Module {
+                        name,
+                        body: filtered_body,
+                    });
                     new_ast.push(new_mod_id);
                 }
                 Stmt::FuncDecl { name, .. }
@@ -87,7 +101,12 @@ impl TreeShaker {
         new_ast
     }
 
-    fn trace_stmt(&mut self, arena: &pace_ast::arena::AstArena, stmt_id: pace_ast::arena::StmtId, queue: &mut Vec<ustr::Ustr>) {
+    fn trace_stmt(
+        &mut self,
+        arena: &pace_ast::arena::AstArena,
+        stmt_id: pace_ast::arena::StmtId,
+        queue: &mut Vec<ustr::Ustr>,
+    ) {
         let stmt = arena.get_stmt(stmt_id);
         match stmt {
             Stmt::Module { body, .. } => {
@@ -181,15 +200,21 @@ impl TreeShaker {
         }
     }
 
-    fn trace_expr(&mut self, arena: &pace_ast::arena::AstArena, expr_id: pace_ast::arena::ExprId, queue: &mut Vec<ustr::Ustr>) {
+    fn trace_expr(
+        &mut self,
+        arena: &pace_ast::arena::AstArena,
+        expr_id: pace_ast::arena::ExprId,
+        queue: &mut Vec<ustr::Ustr>,
+    ) {
         let expr = arena.get_expr(expr_id);
         match expr {
             Expr::Call { callee, args } => {
                 if let Expr::Identifier(name, _) = arena.get_expr(*callee)
-                    && !self.reachable.contains(name) {
-                        self.reachable.insert(*name);
-                        queue.push(*name);
-                    }
+                    && !self.reachable.contains(name)
+                {
+                    self.reachable.insert(*name);
+                    queue.push(*name);
+                }
                 self.trace_expr(arena, *callee, queue);
                 for arg in args {
                     self.trace_expr(arena, *arg, queue);

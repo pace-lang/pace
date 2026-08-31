@@ -20,3 +20,6 @@ semver.workspace = true
 thiserror = "2"
 pubgrub = "0.4.0"
 sha2 = "0.11.0"
+
+[lints]
+workspace = true

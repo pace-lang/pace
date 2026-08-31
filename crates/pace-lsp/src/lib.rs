@@ -285,7 +285,9 @@ fn map_syntax_error(
     active_file: &str,
 ) -> Option<Diagnostic> {
     let (msg, err_src, span) = match err {
-        pace_errors::SyntaxError::Generic { message, src, span } => (message.clone(), src.name(), span),
+        pace_errors::SyntaxError::Generic { message, src, span } => {
+            (message.clone(), src.name(), span)
+        }
     };
 
     if err_src != active_file {
@@ -345,11 +347,19 @@ fn map_type_error(err: &pace_ty::TypeError, src: &str, active_file: &str) -> Opt
             span.start,
             span.len,
         ),
-        UnknownType { name, span, .. } => (format!("Unknown type '{}'", name), span.start, span.len),
-        InvalidWeakReference { span, .. } => ("Invalid weak reference".to_string(), span.start, span.len),
+        UnknownType { name, span, .. } => {
+            (format!("Unknown type '{}'", name), span.start, span.len)
+        }
+        InvalidWeakReference { span, .. } => {
+            ("Invalid weak reference".to_string(), span.start, span.len)
+        }
         OwnershipViolation {
             message: msg, span, ..
-        } => (format!("Ownership violation: {}", msg), span.start, span.len),
+        } => (
+            format!("Ownership violation: {}", msg),
+            span.start,
+            span.len,
+        ),
     };
 
     let start = get_position(src, start_offset);
@@ -414,30 +424,33 @@ impl LanguageServer for PaceLanguageServer {
         let root_uri = self.root_uri.read().await.clone();
 
         if let Some(uri) = root_uri
-            && let Ok(path) = uri.to_file_path() {
-                self.client
-                    .log_message(
-                        MessageType::INFO,
-                        format!("Scanning workspace: {}", path.display()),
-                    )
-                    .await;
+            && let Ok(path) = uri.to_file_path()
+        {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("Scanning workspace: {}", path.display()),
+                )
+                .await;
 
-                for entry in walkdir::WalkDir::new(path)
-                    .into_iter()
-                    .filter_map(|e| e.ok())
+            for entry in walkdir::WalkDir::new(path)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
+                let p = entry.path();
+                if p.is_file()
+                    && p.extension().is_some_and(|ext| ext == "pace")
+                    && let Ok(src) = std::fs::read_to_string(p)
+                    && let Ok(file_uri) = Url::from_file_path(p)
                 {
-                    let p = entry.path();
-                    if p.is_file() && p.extension().is_some_and(|ext| ext == "pace")
-                        && let Ok(src) = std::fs::read_to_string(p)
-                            && let Ok(file_uri) = Url::from_file_path(p) {
-                                self.check_and_publish_diagnostics(file_uri, &src).await;
-                            }
+                    self.check_and_publish_diagnostics(file_uri, &src).await;
                 }
-
-                self.client
-                    .log_message(MessageType::INFO, "Workspace scanning complete")
-                    .await;
             }
+
+            self.client
+                .log_message(MessageType::INFO, "Workspace scanning complete")
+                .await;
+        }
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -462,40 +475,41 @@ impl LanguageServer for PaceLanguageServer {
 
         let src_cache = self.src_cache.read().await;
         if let Some(src) = src_cache.get(&uri)
-            && let Some(word) = get_word_at_position(src, pos) {
-                let mut hover_text = format!("Symbol: `{}`", word);
+            && let Some(word) = get_word_at_position(src, pos)
+        {
+            let mut hover_text = format!("Symbol: `{}`", word);
 
-                let env_cache = self.env_cache.read().await;
-                if let Some(env) = env_cache.get(&uri) {
-                    if let Some(ty) = env.symbol_types.get(&ustr::Ustr::from(&word)) {
-                        hover_text = format!("```pace\nlet {}: {:?}\n```", word, ty);
-                    } else if let Some(func) = env.functions.get(&ustr::Ustr::from(&word)) {
-                        let params_str = func
-                            .params
-                            .iter()
-                            .map(|p| format!("{:?}", p))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        hover_text = format!(
-                            "```pace\nfunc {}({}) -> {:?}\n```",
-                            word, params_str, func.return_type
-                        );
-                    } else if let Some(_cls) = env.classes.get(&ustr::Ustr::from(&word)) {
-                        hover_text = format!("```pace\nclass {}\n```", word);
-                    } else if let Some(_strct) = env.structs.get(&ustr::Ustr::from(&word)) {
-                        hover_text = format!("```pace\nstruct {}\n```", word);
-                    } else if let Some(_enm) = env.enums.get(&ustr::Ustr::from(&word)) {
-                        hover_text = format!("```pace\nenum {}\n```", word);
-                    } else if let Some(_act) = env.actors.get(&ustr::Ustr::from(&word)) {
-                        hover_text = format!("```pace\nactor {}\n```", word);
-                    }
+            let env_cache = self.env_cache.read().await;
+            if let Some(env) = env_cache.get(&uri) {
+                if let Some(ty) = env.symbol_types.get(&ustr::Ustr::from(&word)) {
+                    hover_text = format!("```pace\nlet {}: {:?}\n```", word, ty);
+                } else if let Some(func) = env.functions.get(&ustr::Ustr::from(&word)) {
+                    let params_str = func
+                        .params
+                        .iter()
+                        .map(|p| format!("{:?}", p))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    hover_text = format!(
+                        "```pace\nfunc {}({}) -> {:?}\n```",
+                        word, params_str, func.return_type
+                    );
+                } else if let Some(_cls) = env.classes.get(&ustr::Ustr::from(&word)) {
+                    hover_text = format!("```pace\nclass {}\n```", word);
+                } else if let Some(_strct) = env.structs.get(&ustr::Ustr::from(&word)) {
+                    hover_text = format!("```pace\nstruct {}\n```", word);
+                } else if let Some(_enm) = env.enums.get(&ustr::Ustr::from(&word)) {
+                    hover_text = format!("```pace\nenum {}\n```", word);
+                } else if let Some(_act) = env.actors.get(&ustr::Ustr::from(&word)) {
+                    hover_text = format!("```pace\nactor {}\n```", word);
                 }
-
-                return Ok(Some(Hover {
-                    contents: HoverContents::Scalar(MarkedString::String(hover_text)),
-                    range: None,
-                }));
             }
+
+            return Ok(Some(Hover {
+                contents: HoverContents::Scalar(MarkedString::String(hover_text)),
+                range: None,
+            }));
+        }
 
         Ok(None)
     }
@@ -518,62 +532,60 @@ impl LanguageServer for PaceLanguageServer {
                     || string_content.starts_with("self:")
                     || string_content.starts_with("./")
                     || string_content.starts_with("../"))
-                    && let Ok(path_buf) = uri.to_file_path()
-                        && let Ok(resolved_path) = pace_driver::CompilerSession::resolve_import_path(
-                            &string_content,
-                            &path_buf,
-                        )
-                            && resolved_path.exists()
-                                && let Ok(resolved_uri) = Url::from_file_path(resolved_path) {
-                                    return Ok(Some(GotoDefinitionResponse::Scalar(Location {
-                                        uri: resolved_uri,
-                                        range: Range {
-                                            start: Position {
-                                                line: 0,
-                                                character: 0,
-                                            },
-                                            end: Position {
-                                                line: 0,
-                                                character: 0,
-                                            },
-                                        },
-                                    })));
-                                }
+                && let Ok(path_buf) = uri.to_file_path()
+                && let Ok(resolved_path) =
+                    pace_driver::CompilerSession::resolve_import_path(&string_content, &path_buf)
+                && resolved_path.exists()
+                && let Ok(resolved_uri) = Url::from_file_path(resolved_path)
+            {
+                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                    uri: resolved_uri,
+                    range: Range {
+                        start: Position {
+                            line: 0,
+                            character: 0,
+                        },
+                        end: Position {
+                            line: 0,
+                            character: 0,
+                        },
+                    },
+                })));
+            }
 
             if let Some(word) = get_word_at_position(src, pos)
-                && let Some(ast) = ast_cache.get(&uri) {
-                    // Try to find the symbol declaration in the AST
-                    let arena = self.arena.read().await;
-                    for stmt_id in ast {
-                        let stmt = arena.get_stmt(*stmt_id);
-                        match stmt {
-                            pace_ast::Stmt::FuncDecl { name, .. }
-                            | pace_ast::Stmt::VarDecl { name, .. }
-                            | pace_ast::Stmt::ClassDecl { name, .. }
-                            | pace_ast::Stmt::StructDecl { name, .. }
-                            | pace_ast::Stmt::EnumDecl { name, .. }
-                            | pace_ast::Stmt::ActorDecl { name, .. }
-                            | pace_ast::Stmt::InterfaceDecl { name, .. } => {
-                                // Basic matching. `pace_ast::Stmt::ClassDecl` etc don't have span yet,
-                                // but we can use the ones that do.
-                                if (name == &word || name.ends_with(&format!("__{}", word)))
-                                    && let pace_ast::Stmt::FuncDecl { span, .. }
-                                    | pace_ast::Stmt::VarDecl { span, .. } = stmt
-                                    {
-                                        let start = get_position(src, span.start);
-                                        let end = get_position(src, span.start + span.len);
-                                        return Ok(Some(GotoDefinitionResponse::Scalar(
-                                            Location {
-                                                uri: uri.clone(),
-                                                range: Range { start, end },
-                                            },
-                                        )));
-                                    }
+                && let Some(ast) = ast_cache.get(&uri)
+            {
+                // Try to find the symbol declaration in the AST
+                let arena = self.arena.read().await;
+                for stmt_id in ast {
+                    let stmt = arena.get_stmt(*stmt_id);
+                    match stmt {
+                        pace_ast::Stmt::FuncDecl { name, .. }
+                        | pace_ast::Stmt::VarDecl { name, .. }
+                        | pace_ast::Stmt::ClassDecl { name, .. }
+                        | pace_ast::Stmt::StructDecl { name, .. }
+                        | pace_ast::Stmt::EnumDecl { name, .. }
+                        | pace_ast::Stmt::ActorDecl { name, .. }
+                        | pace_ast::Stmt::InterfaceDecl { name, .. } => {
+                            // Basic matching. `pace_ast::Stmt::ClassDecl` etc don't have span yet,
+                            // but we can use the ones that do.
+                            if (name == &word || name.ends_with(&format!("__{}", word)))
+                                && let pace_ast::Stmt::FuncDecl { span, .. }
+                                | pace_ast::Stmt::VarDecl { span, .. } = stmt
+                            {
+                                let start = get_position(src, span.start);
+                                let end = get_position(src, span.start + span.len);
+                                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                                    uri: uri.clone(),
+                                    range: Range { start, end },
+                                })));
                             }
-                            _ => {}
                         }
+                        _ => {}
                     }
                 }
+            }
         }
 
         Ok(None)
@@ -609,17 +621,16 @@ impl LanguageServer for PaceLanguageServer {
                             params.text_document.uri.to_file_path(),
                             target.to_file_path(),
                         )
-                            && let Some(parent) = current_path.parent()
-                                && let Some(mut rel_path) =
-                                    pathdiff::diff_paths(&target_path, parent)
-                                {
-                                    rel_path.set_extension(""); // Remove .pace
-                                    let mut path_str = rel_path.to_string_lossy().into_owned();
-                                    if !path_str.starts_with(".") && !path_str.starts_with("/") {
-                                        path_str = format!("./{}", path_str);
-                                    }
-                                    import_path = Some(path_str);
-                                }
+                        && let Some(parent) = current_path.parent()
+                        && let Some(mut rel_path) = pathdiff::diff_paths(&target_path, parent)
+                    {
+                        rel_path.set_extension(""); // Remove .pace
+                        let mut path_str = rel_path.to_string_lossy().into_owned();
+                        if !path_str.starts_with(".") && !path_str.starts_with("/") {
+                            path_str = format!("./{}", path_str);
+                        }
+                        import_path = Some(path_str);
+                    }
 
                     if let Some(path) = import_path {
                         let mut changes = std::collections::HashMap::new();
@@ -739,8 +750,7 @@ pub fn run_server() {
         let stdin = tokio::io::stdin();
         let stdout = tokio::io::stdout();
 
-        let (service, socket) =
-            tower_lsp::LspService::new(PaceLanguageServer::new);
+        let (service, socket) = tower_lsp::LspService::new(PaceLanguageServer::new);
         tower_lsp::Server::new(stdin, stdout, socket)
             .serve(service)
             .await;

@@ -15,3 +15,6 @@ ustr = "1.1.0"
 
 [dev-dependencies]
 pace-parser = { path = "../pace-parser" }
+
+[lints]
+workspace = true

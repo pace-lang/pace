@@ -44,3 +44,16 @@ cranelift-jit = "0.135.0"
 cranelift-native = "0.135.0"
 cranelift-object = "0.135.0"
 object = { version = "0.40", default-features = false }
+
+[workspace.lints.clippy]
+type_complexity = "allow"
+too_many_arguments = "allow"
+drop_non_drop = "allow"
+unnecessary_literal_unwrap = "allow"
+collapsible_match = "allow"
+redundant_field_names = "allow"
+while_let_loop = "allow"
+unnecessary_get_then_check = "allow"
+needless_range_loop = "allow"
+unnecessary_unwrap = "allow"
+if_same_then_else = "allow"

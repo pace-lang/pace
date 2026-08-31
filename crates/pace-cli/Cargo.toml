@@ -31,3 +31,6 @@ cranelift-codegen = "0.135.1"
 [[bin]]
 name = "pace"
 path = "src/main.rs"
+
+[lints]
+workspace = true

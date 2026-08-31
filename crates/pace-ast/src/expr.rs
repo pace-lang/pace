@@ -1,5 +1,5 @@
-use pace_common::{Span, BinaryOp, UnaryOp};
 use crate::arena::{ExprId, StmtId};
+use pace_common::{BinaryOp, Span, UnaryOp};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -75,5 +75,3 @@ pub enum Expr {
     /// A block expression
     Block(Vec<StmtId>),
 }
-
-

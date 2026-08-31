@@ -7,21 +7,29 @@ pub struct Monomorphizer<'a> {
 }
 
 impl<'a> Monomorphizer<'a> {
-    pub fn new(arena: &'a mut pace_ast::arena::AstArena, replacements: HashMap<ustr::Ustr, TypeAnnotation>) -> Self {
+    pub fn new(
+        arena: &'a mut pace_ast::arena::AstArena,
+        replacements: HashMap<ustr::Ustr, TypeAnnotation>,
+    ) -> Self {
         Self {
             arena,
             type_replacements: replacements,
         }
     }
 
-    
-    pub fn instantiate_stmt(&mut self, stmt_id: pace_ast::arena::StmtId) -> pace_ast::arena::StmtId {
+    pub fn instantiate_stmt(
+        &mut self,
+        stmt_id: pace_ast::arena::StmtId,
+    ) -> pace_ast::arena::StmtId {
         let stmt = self.arena.get_stmt(stmt_id).clone();
         let new_stmt = self.instantiate_stmt_inner(&stmt);
         self.arena.alloc_stmt(new_stmt)
     }
 
-    pub fn instantiate_expr(&mut self, expr_id: pace_ast::arena::ExprId) -> pace_ast::arena::ExprId {
+    pub fn instantiate_expr(
+        &mut self,
+        expr_id: pace_ast::arena::ExprId,
+    ) -> pace_ast::arena::ExprId {
         let expr = self.arena.get_expr(expr_id).clone();
         let new_expr = self.instantiate_expr_inner(&expr);
         self.arena.alloc_expr(new_expr)
@@ -60,9 +68,7 @@ impl<'a> Monomorphizer<'a> {
             } => Stmt::If {
                 condition: self.instantiate_expr(*condition),
                 then_branch: self.instantiate_stmt(*then_branch),
-                else_branch: else_branch
-                    .as_ref()
-                    .map(|b| self.instantiate_stmt(*b)),
+                else_branch: else_branch.as_ref().map(|b| self.instantiate_stmt(*b)),
             },
             Stmt::While { condition, body } => Stmt::While {
                 condition: self.instantiate_expr(*condition),
@@ -220,7 +226,6 @@ pub struct MonomorphizationPass<'a> {
 
 // removed default
 
-
 impl<'a> MonomorphizationPass<'a> {
     pub fn new(arena: &'a mut pace_ast::arena::AstArena) -> Self {
         Self {
@@ -294,7 +299,11 @@ impl<'a> MonomorphizationPass<'a> {
             }
             self.instantiated.insert(specialized_name.clone());
 
-            if let Some(template) = self.templates.get(&ustr::Ustr::from(&template_name)).cloned() {
+            if let Some(template) = self
+                .templates
+                .get(&ustr::Ustr::from(&template_name))
+                .cloned()
+            {
                 let mut replacements = HashMap::new();
                 let generic_params = match self.arena.get_stmt(template) {
                     Stmt::ClassDecl { generic_params, .. } => generic_params.clone(),
@@ -371,7 +380,10 @@ impl<'a> MonomorphizationPass<'a> {
                     self.scan_type_annotation(rt);
                 }
                 for s in body {
-                    { let __stmt = self.arena.get_stmt(*s).clone(); self.scan_stmt(&__stmt); }
+                    {
+                        let __stmt = self.arena.get_stmt(*s).clone();
+                        self.scan_stmt(&__stmt);
+                    }
                 }
             }
             Stmt::ClassDecl {
@@ -381,10 +393,16 @@ impl<'a> MonomorphizationPass<'a> {
                 ..
             } => {
                 for f in fields {
-                    { let __stmt = self.arena.get_stmt(*f).clone(); self.scan_stmt(&__stmt); }
+                    {
+                        let __stmt = self.arena.get_stmt(*f).clone();
+                        self.scan_stmt(&__stmt);
+                    }
                 }
                 for m in methods {
-                    { let __stmt = self.arena.get_stmt(*m).clone(); self.scan_stmt(&__stmt); }
+                    {
+                        let __stmt = self.arena.get_stmt(*m).clone();
+                        self.scan_stmt(&__stmt);
+                    }
                 }
                 if let Some(imp) = implements {
                     self.scan_type_annotation(imp);
@@ -392,17 +410,26 @@ impl<'a> MonomorphizationPass<'a> {
             }
             Stmt::StructDecl { fields, .. } => {
                 for f in fields {
-                    { let __stmt = self.arena.get_stmt(*f).clone(); self.scan_stmt(&__stmt); }
+                    {
+                        let __stmt = self.arena.get_stmt(*f).clone();
+                        self.scan_stmt(&__stmt);
+                    }
                 }
             }
             Stmt::InterfaceDecl { methods, .. } => {
                 for m in methods {
-                    { let __stmt = self.arena.get_stmt(*m).clone(); self.scan_stmt(&__stmt); }
+                    {
+                        let __stmt = self.arena.get_stmt(*m).clone();
+                        self.scan_stmt(&__stmt);
+                    }
                 }
             }
             Stmt::Block(stmts) => {
                 for s in stmts {
-                    { let __stmt = self.arena.get_stmt(*s).clone(); self.scan_stmt(&__stmt); }
+                    {
+                        let __stmt = self.arena.get_stmt(*s).clone();
+                        self.scan_stmt(&__stmt);
+                    }
                 }
             }
             _ => {} // Expressions could contain GenericInstantiation
@@ -412,7 +439,8 @@ impl<'a> MonomorphizationPass<'a> {
     fn scan_type_annotation(&mut self, ta: &TypeAnnotation) {
         if !ta.args.is_empty() {
             // Found a generic usage!
-            self.queue.push((ustr::Ustr::from(&ta.name).to_string(), ta.args.clone()));
+            self.queue
+                .push((ustr::Ustr::from(&ta.name).to_string(), ta.args.clone()));
             for arg in &ta.args {
                 self.scan_type_annotation(arg);
             }
@@ -470,9 +498,7 @@ impl<'a> TypeFlattener<'a> {
             } => Stmt::If {
                 condition: self.flatten_expr(*condition),
                 then_branch: self.flatten_stmt(*then_branch),
-                else_branch: else_branch
-                    .as_ref()
-                    .map(|b| self.flatten_stmt(*b)),
+                else_branch: else_branch.as_ref().map(|b| self.flatten_stmt(*b)),
             },
             Stmt::While { condition, body } => Stmt::While {
                 condition: self.flatten_expr(*condition),

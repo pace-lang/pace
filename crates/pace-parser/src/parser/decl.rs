@@ -1,6 +1,6 @@
+use super::Parser;
 use crate::lexer::Token;
 use pace_ast::{Param, Stmt, Visibility};
-use super::Parser;
 
 impl<'a, 'b> Parser<'a, 'b> {
     pub(crate) fn parse_func_decl(
@@ -43,7 +43,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     _ => {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected parameter name".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -171,25 +174,31 @@ impl<'a, 'b> Parser<'a, 'b> {
                     Stmt::FuncDecl { .. } => methods.push(stmt),
                     Stmt::Expr(expr_id) => {
                         if let pace_ast::Expr::Call { callee, .. } = self.arena.get_expr(*expr_id) {
-                            if let pace_ast::Expr::Identifier(name, _) = self.arena.get_expr(*callee) {
+                            if let pace_ast::Expr::Identifier(name, _) =
+                                self.arena.get_expr(*callee)
+                            {
                                 self.errors.push(pace_errors::SyntaxError::Generic { message: format!("Methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()), span: self.current_span });
                             } else {
                                 self.errors.push(pace_errors::SyntaxError::Generic {
-                                    message: "Classes can only contain fields and methods".to_string(),
+                                    message: "Classes can only contain fields and methods"
+                                        .to_string(),
                                     src: miette::NamedSource::new(
                                         self.file_name.clone(),
                                         self.src.to_string(),
-                                ),
-                                span: self.current_span,
-                            });
-                        }
+                                    ),
+                                    span: self.current_span,
+                                });
+                            }
                         }
                         self.synchronize();
                     }
                     _ => {
                         self.errors.push(pace_errors::SyntaxError::Generic {
                             message: "Classes can only contain fields and methods".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                         self.synchronize();
@@ -262,25 +271,31 @@ impl<'a, 'b> Parser<'a, 'b> {
                     Stmt::FuncDecl { .. } => methods.push(stmt),
                     Stmt::Expr(expr_id) => {
                         if let pace_ast::Expr::Call { callee, .. } = self.arena.get_expr(*expr_id) {
-                            if let pace_ast::Expr::Identifier(name, _) = self.arena.get_expr(*callee) {
+                            if let pace_ast::Expr::Identifier(name, _) =
+                                self.arena.get_expr(*callee)
+                            {
                                 self.errors.push(pace_errors::SyntaxError::Generic { message: format!("Methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()), span: self.current_span });
                             } else {
                                 self.errors.push(pace_errors::SyntaxError::Generic {
-                                    message: "Actors can only contain fields and methods".to_string(),
+                                    message: "Actors can only contain fields and methods"
+                                        .to_string(),
                                     src: miette::NamedSource::new(
                                         self.file_name.clone(),
                                         self.src.to_string(),
-                                ),
-                                span: self.current_span,
-                            });
-                        }
+                                    ),
+                                    span: self.current_span,
+                                });
+                            }
                         }
                         self.synchronize();
                     }
                     _ => {
                         self.errors.push(pace_errors::SyntaxError::Generic {
                             message: "Actors can only contain fields and methods".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                         self.synchronize();
@@ -393,7 +408,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     if !self.match_token(Token::Colon) {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected ':' after parameter name".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -697,5 +715,4 @@ impl<'a, 'b> Parser<'a, 'b> {
             ),
         }))
     }
-
 }

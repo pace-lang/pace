@@ -1,10 +1,9 @@
 use crate::lexer::{Lexer, Token};
 use pace_ast::arena::AstArena;
 
+pub mod decl;
 pub mod expr;
 pub mod stmt;
-pub mod decl;
-
 
 pub struct Parser<'a, 'b> {
     pub lexer: Lexer<'a>,
@@ -17,8 +16,6 @@ pub struct Parser<'a, 'b> {
 }
 
 impl<'a, 'b> Parser<'a, 'b> {
-    
-
     pub fn new_with_arena(src: &'a str, file_name: &str, arena: &'b mut AstArena) -> Self {
         let mut lexer = Lexer::new(src);
         let (current_token, current_span) = lexer.next_token();
@@ -98,5 +95,4 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
     }
-
 }

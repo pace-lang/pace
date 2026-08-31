@@ -30,6 +30,12 @@ pub struct RegistryProvider {
     versions_cache: Arc<Mutex<HashMap<PackageName, Vec<SemanticVersion>>>>,
 }
 
+impl Default for RegistryProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RegistryProvider {
     pub fn new() -> Self {
         Self {
@@ -45,10 +51,10 @@ impl RegistryProvider {
         deps: HashMap<String, Ranges<SemanticVersion>>,
     ) {
         let mut v_cache = self.versions_cache.lock().unwrap();
-        v_cache.insert(root_name.clone(), vec![root_version.clone()]);
+        v_cache.insert(root_name.clone(), vec![root_version]);
 
         let mut c = self.cache.lock().unwrap();
-        let pkg_cache = c.entry(root_name).or_insert_with(HashMap::new);
+        let pkg_cache = c.entry(root_name).or_default();
 
         let mut pubgrub_deps = Vec::new();
         for (k, v) in deps {
@@ -89,18 +95,18 @@ impl RegistryProvider {
 
         let mut available_versions = Vec::new();
         let mut c = self.cache.lock().unwrap();
-        let pkg_cache = c.entry(package.clone()).or_insert_with(HashMap::new);
+        let pkg_cache = c.entry(package.clone()).or_default();
 
         if let Some(info_list) = parsed.version_info {
             for info in info_list {
                 // Parse x.y.z into pubgrub's SemanticVersion
                 let parts: Vec<&str> = info.version.split('.').collect();
-                if parts.len() >= 3 {
-                    if let (Ok(major), Ok(minor), Ok(patch)) =
+                if parts.len() >= 3
+                    && let (Ok(major), Ok(minor), Ok(patch)) =
                         (parts[0].parse(), parts[1].parse(), parts[2].parse())
                     {
                         let v = SemanticVersion::new(major, minor, patch);
-                        available_versions.push(v.clone());
+                        available_versions.push(v);
 
                         // Parse dependencies
                         let mut pubgrub_deps = Vec::new();
@@ -119,7 +125,6 @@ impl RegistryProvider {
                             Dependencies::Available(pubgrub_deps.into_iter().collect()),
                         );
                     }
-                }
             }
         } else {
             // Fallback for older registry responses that only have versions/latest_version
@@ -132,16 +137,15 @@ impl RegistryProvider {
 
             for version_str in fallback_versions {
                 let parts: Vec<&str> = version_str.split('.').collect();
-                if parts.len() >= 3 {
-                    if let (Ok(major), Ok(minor), Ok(patch)) =
+                if parts.len() >= 3
+                    && let (Ok(major), Ok(minor), Ok(patch)) =
                         (parts[0].parse(), parts[1].parse(), parts[2].parse())
                     {
                         let v = SemanticVersion::new(major, minor, patch);
-                        available_versions.push(v.clone());
+                        available_versions.push(v);
                         pkg_cache
                             .insert(v, Dependencies::Available(DependencyConstraints::default()));
                     }
-                }
             }
         }
 
@@ -181,7 +185,7 @@ impl DependencyProvider for RegistryProvider {
         if let Some(versions) = cache.get(package) {
             for v in versions {
                 if range.contains(v) {
-                    return Ok(Some(v.clone()));
+                    return Ok(Some(*v));
                 }
             }
         }
@@ -207,11 +211,10 @@ impl DependencyProvider for RegistryProvider {
         }
 
         let cache = self.cache.lock().unwrap();
-        if let Some(pkg_cache) = cache.get(package) {
-            if let Some(deps) = pkg_cache.get(version) {
+        if let Some(pkg_cache) = cache.get(package)
+            && let Some(deps) = pkg_cache.get(version) {
                 return Ok(deps.clone());
             }
-        }
 
         Ok(Dependencies::Unavailable(format!(
             "Not found: {}@{}",

@@ -1,8 +1,8 @@
-use crate::env::Type;
+use super::TypeChecker;
 use super::is_camel_case;
+use crate::env::Type;
 use pace_ast::Stmt;
 use pace_errors::TypeError;
-use super::TypeChecker;
 
 impl<'a> TypeChecker<'a> {
     pub(crate) fn check_stmt(&mut self, stmt_id: pace_ast::arena::StmtId) {
@@ -27,7 +27,13 @@ impl<'a> TypeChecker<'a> {
                 span,
                 ..
             } => {
-                self.check_stmt_var_decl(*name, *is_mutable, type_annotation.as_ref(), *initializer, *span);
+                self.check_stmt_var_decl(
+                    *name,
+                    *is_mutable,
+                    type_annotation.as_ref(),
+                    *initializer,
+                    *span,
+                );
             }
             Stmt::Block(stmts) => {
                 self.env.push_scope();
@@ -54,15 +60,16 @@ impl<'a> TypeChecker<'a> {
                     {
                         is_match = true;
                     } else if let Type::Nullable(inner) = expected
-                        && (ret_ty == Type::Null || ret_ty == **inner) {
-                            is_match = true;
-                        }
+                        && (ret_ty == Type::Null || ret_ty == **inner)
+                    {
+                        is_match = true;
+                    }
 
                     if !is_match {
                         {
                             self.errors.push(TypeError::Generic {
                                 src: self.get_source(),
-                                span: self.current_span.into(),
+                                span: self.current_span,
                                 message: format!(
                                     "Type mismatch: expected return type {:?}, found {:?}",
                                     expected, ret_ty
@@ -74,7 +81,7 @@ impl<'a> TypeChecker<'a> {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span.into(),
+                            span: self.current_span,
                             message: "Return statement outside of function".into(),
                         });
                     }
@@ -90,10 +97,10 @@ impl<'a> TypeChecker<'a> {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span.into(),
+                            span: self.current_span,
                             message: "If condition must be a boolean".into(),
                         });
-                        return ;
+                        return;
                     };
                 }
                 self.check_stmt(*then_branch);
@@ -107,10 +114,10 @@ impl<'a> TypeChecker<'a> {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span.into(),
+                            span: self.current_span,
                             message: "While condition must be a boolean".into(),
                         });
-                        return ;
+                        return;
                     };
                 }
                 self.check_stmt(*body);
@@ -158,7 +165,14 @@ impl<'a> TypeChecker<'a> {
                 span,
                 ..
             } => {
-                self.check_stmt_func_decl(params, body, return_type.as_ref(), generic_params.as_deref(), *is_static, *span);
+                self.check_stmt_func_decl(
+                    params,
+                    body,
+                    return_type.as_ref(),
+                    generic_params.as_deref(),
+                    *is_static,
+                    *span,
+                );
             }
             Stmt::ClassDecl {
                 name,
@@ -174,14 +188,18 @@ impl<'a> TypeChecker<'a> {
                 generic_params,
                 ..
             } => {
-                self.check_stmt_class_decl(*name, methods, implements.as_ref(), generic_params.as_deref());
+                self.check_stmt_class_decl(
+                    *name,
+                    methods,
+                    implements.as_ref(),
+                    generic_params.as_deref(),
+                );
             }
             Stmt::InterfaceDecl { .. } => {}
             Stmt::StructDecl { .. } => {}
             Stmt::EnumDecl { .. } => {}
             Stmt::Import { .. } | Stmt::Export { .. } => {}
         }
-        
     }
 
     pub(crate) fn check_stmt_var_decl(
@@ -210,15 +228,16 @@ impl<'a> TypeChecker<'a> {
             {
                 is_match = true;
             } else if let Type::Nullable(inner) = &expected_type
-                && (inferred_type == Type::Null || inferred_type == **inner) {
-                    is_match = true;
-                }
+                && (inferred_type == Type::Null || inferred_type == **inner)
+            {
+                is_match = true;
+            }
 
             if !is_match {
                 self.define_var(name, expected_type.clone(), span, is_mutable);
                 self.errors.push(TypeError::Generic {
                     src: self.get_source(),
-                    span: self.current_span.into(),
+                    span: self.current_span,
                     message: format!(
                         "Type mismatch: expected {:?}, found {:?}",
                         expected_type, inferred_type
@@ -232,7 +251,7 @@ impl<'a> TypeChecker<'a> {
         if inferred_type == Type::Unknown {
             self.errors.push(TypeError::Generic {
                 src: self.get_source(),
-                span: self.current_span.into(),
+                span: self.current_span,
                 message: format!("Cannot infer type for variable '{}'", name),
             });
             return;
@@ -243,7 +262,7 @@ impl<'a> TypeChecker<'a> {
                 .push(pace_errors::SemanticWarning::NamingConvention {
                     name: name.to_string(),
                     src: self.get_source(),
-                    span: span.into(),
+                    span: span,
                 });
         }
         self.define_var(name, inferred_type, span, is_mutable);
@@ -277,16 +296,17 @@ impl<'a> TypeChecker<'a> {
 
         // Add `self` if we are inside a class/struct AND the method is not static
         if let Some(class_name) = &self.current_class
-            && !is_static {
-                let self_ty = if self.env.structs.contains_key(class_name) {
-                    Type::Struct(*class_name)
-                } else if self.env.actors.contains_key(class_name) {
-                    Type::Actor(*class_name)
-                } else {
-                    Type::Class(*class_name)
-                };
-                self.define_var("self".into(), self_ty, pace_ast::Span::default(), false);
-            }
+            && !is_static
+        {
+            let self_ty = if self.env.structs.contains_key(class_name) {
+                Type::Struct(*class_name)
+            } else if self.env.actors.contains_key(class_name) {
+                Type::Actor(*class_name)
+            } else {
+                Type::Class(*class_name)
+            };
+            self.define_var("self".into(), self_ty, pace_ast::Span::default(), false);
+        }
 
         // Add parameters to scope
         for param in params {
@@ -332,8 +352,11 @@ impl<'a> TypeChecker<'a> {
                     } else {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span.into(),
-                            message: format!("Class '{}' does not implement method '{}' from interface '{}'", name, m_name, iface_name)
+                            span: self.current_span,
+                            message: format!(
+                                "Class '{}' does not implement method '{}' from interface '{}'",
+                                name, m_name, iface_name
+                            ),
                         });
                         return;
                     }
@@ -341,7 +364,7 @@ impl<'a> TypeChecker<'a> {
             } else {
                 self.errors.push(TypeError::Generic {
                     src: self.get_source(),
-                    span: self.current_span.into(),
+                    span: self.current_span,
                     message: format!("Interface '{}' not found", iface_name),
                 });
                 return;
@@ -357,5 +380,4 @@ impl<'a> TypeChecker<'a> {
         self.current_class = prev_class;
         self.generic_params_in_scope = prev_generics;
     }
-
 }

@@ -15,3 +15,6 @@ pace-common = { version = "0.1.0", path = "../pace-common" }
 
 [dev-dependencies]
 insta = { workspace = true }
+
+[lints]
+workspace = true

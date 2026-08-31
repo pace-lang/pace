@@ -24,7 +24,9 @@ impl JITCompiler {
     pub fn new(opt_level: String) -> Self {
         let mut flag_builder = settings::builder();
         flag_builder.set("use_colocated_libcalls", "false").unwrap();
-        flag_builder.set("preserve_frame_pointers", "false").unwrap();
+        flag_builder
+            .set("preserve_frame_pointers", "false")
+            .unwrap();
         flag_builder.set("opt_level", &opt_level).unwrap();
         flag_builder.set("is_pic", "false").unwrap();
 
@@ -49,7 +51,11 @@ impl JITCompiler {
         }
     }
 
-    fn register_interfaces(&mut self, arena: &pace_ast::arena::AstArena, stmts: &[pace_ast::arena::StmtId]) {
+    fn register_interfaces(
+        &mut self,
+        arena: &pace_ast::arena::AstArena,
+        stmts: &[pace_ast::arena::StmtId],
+    ) {
         for stmt_id in stmts {
             let stmt = arena.get_stmt(*stmt_id).clone();
             if let Stmt::InterfaceDecl {
@@ -66,10 +72,11 @@ impl JITCompiler {
                     if let Stmt::FuncDecl {
                         name: method_name, ..
                     } = method_stmt
-                        && method_name != "init" {
-                            method_map.insert(method_name, m_offset);
-                            m_offset += 8;
-                        }
+                        && method_name != "init"
+                    {
+                        method_map.insert(method_name, m_offset);
+                        m_offset += 8;
+                    }
                 }
 
                 let layout = InterfaceLayout {
@@ -110,7 +117,11 @@ impl JITCompiler {
         }
     }
 
-    fn register_classes(&mut self, arena: &pace_ast::arena::AstArena, stmts: &[pace_ast::arena::StmtId]) -> Result<(), CodegenError> {
+    fn register_classes(
+        &mut self,
+        arena: &pace_ast::arena::AstArena,
+        stmts: &[pace_ast::arena::StmtId],
+    ) -> Result<(), CodegenError> {
         let _ptr_ty = self.context.module.target_config().pointer_type();
 
         for stmt_id in stmts {
@@ -202,7 +213,8 @@ impl JITCompiler {
 
                 let mut method_map = HashMap::new();
                 let mut m_offset = 16;
-                let mut vtable_funcs: HashMap<ustr::Ustr, cranelift_module::FuncId> = HashMap::new();
+                let mut vtable_funcs: HashMap<ustr::Ustr, cranelift_module::FuncId> =
+                    HashMap::new();
 
                 // Seed methods from interface if implemented
                 if let Some(iface_annotation) = implements
@@ -283,7 +295,9 @@ impl JITCompiler {
                                     .map_err(|e| CodegenError {
                                         message: e.to_string(),
                                     })?;
-                                self.context.funcs.insert(async_name.clone().into(), async_id);
+                                self.context
+                                    .funcs
+                                    .insert(async_name.clone().into(), async_id);
                                 vtable_funcs.insert(method_name, async_id);
                             } else {
                                 vtable_funcs.insert(method_name, id);
@@ -336,9 +350,7 @@ impl JITCompiler {
                     static_fields,
                     vtable_id,
                 };
-                self.context
-                    .class_layouts
-                    .insert(class_name, layout);
+                self.context.class_layouts.insert(class_name, layout);
             } else if let Stmt::EnumDecl {
                 name: enum_name,
                 variants,
@@ -384,8 +396,7 @@ impl JITCompiler {
                         max_size = variant_size;
                     }
 
-                    variant_map
-                        .insert(variant.name, (tag_id as u64, variant_types.clone()));
+                    variant_map.insert(variant.name, (tag_id as u64, variant_types.clone()));
 
                     // Generate Constructor Signature: e.g. Result_Ok(T) -> ResultPtr
                     let constructor_name = format!("{}_{}", enum_name, variant.name);
@@ -403,7 +414,9 @@ impl JITCompiler {
                         .map_err(|e| CodegenError {
                             message: e.to_string(),
                         })?;
-                    self.context.funcs.insert(constructor_name.into(), constructor_id);
+                    self.context
+                        .funcs
+                        .insert(constructor_name.into(), constructor_id);
                 }
 
                 let layout = EnumLayout {
@@ -488,15 +501,17 @@ impl JITCompiler {
                     static_fields,
                     size: offset,
                 };
-                self.context
-                    .struct_layouts
-                    .insert(struct_name, layout);
+                self.context.struct_layouts.insert(struct_name, layout);
             }
         }
         Ok(())
     }
 
-    pub fn compile_and_run(&mut self, arena: &mut pace_ast::arena::AstArena, stmts: &[pace_ast::arena::StmtId]) -> Result<(), CodegenError> {
+    pub fn compile_and_run(
+        &mut self,
+        arena: &mut pace_ast::arena::AstArena,
+        stmts: &[pace_ast::arena::StmtId],
+    ) -> Result<(), CodegenError> {
         let flat_stmts = crate::flatten_ast(arena, stmts);
 
         // Run Monomorphization Pass
@@ -651,7 +666,15 @@ impl JITCompiler {
             } = stmt
             {
                 let id = *self.context.funcs.get(&name).unwrap();
-                self.compile_function(arena, name.as_str(), &params, &body, id, &func_returns, None)?;
+                self.compile_function(
+                    arena,
+                    name.as_str(),
+                    &params,
+                    &body,
+                    id,
+                    &func_returns,
+                    None,
+                )?;
             } else if let Stmt::ClassDecl {
                 name: class_name,
                 methods,
@@ -676,7 +699,11 @@ impl JITCompiler {
                     } = method_stmt
                     {
                         let full_name = format!("{}_{}", class_name, name);
-                        let id = *self.context.funcs.get(&ustr::Ustr::from(&full_name)).unwrap();
+                        let id = *self
+                            .context
+                            .funcs
+                            .get(&ustr::Ustr::from(&full_name))
+                            .unwrap();
 
                         let mut new_params = vec![];
                         if !is_static {
@@ -706,7 +733,11 @@ impl JITCompiler {
                         )?;
 
                         if !is_static && name != "init" && is_actor {
-                            self.generate_async_wrapper(class_name.as_str(), name.as_str(), params.len())?;
+                            self.generate_async_wrapper(
+                                class_name.as_str(),
+                                name.as_str(),
+                                params.len(),
+                            )?;
                         }
                     }
                 }
@@ -734,7 +765,10 @@ impl JITCompiler {
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
-        let mut variables: std::collections::HashMap<ustr::Ustr, (cranelift::prelude::Variable, crate::translator::VarType)> = std::collections::HashMap::new();
+        let mut variables: std::collections::HashMap<
+            ustr::Ustr,
+            (cranelift::prelude::Variable, crate::translator::VarType),
+        > = std::collections::HashMap::new();
         let mut var_index = 0;
         let mut last_val = None;
 
@@ -839,9 +873,18 @@ impl JITCompiler {
     }
 
     fn generate_drop_function(&mut self, class_name: &str) -> Result<(), CodegenError> {
-        let layout = self.context.class_layouts.get(&ustr::Ustr::from(class_name)).unwrap().clone();
+        let layout = self
+            .context
+            .class_layouts
+            .get(&ustr::Ustr::from(class_name))
+            .unwrap()
+            .clone();
         let drop_name = format!("__drop_{}", class_name);
-        let func_id = *self.context.funcs.get(&ustr::Ustr::from(&drop_name)).unwrap();
+        let func_id = *self
+            .context
+            .funcs
+            .get(&ustr::Ustr::from(&drop_name))
+            .unwrap();
 
         self.ctx.func.signature.params.push(AbiParam::new(
             self.context.module.target_config().pointer_type(),
@@ -863,7 +906,11 @@ impl JITCompiler {
                     obj_ptr,
                     offset as i32,
                 );
-                let release_id = *self.context.funcs.get(&ustr::Ustr::from("release")).unwrap();
+                let release_id = *self
+                    .context
+                    .funcs
+                    .get(&ustr::Ustr::from("release"))
+                    .unwrap();
                 let local_release = self
                     .context
                     .module
@@ -893,11 +940,18 @@ impl JITCompiler {
         num_args: usize,
     ) -> Result<(), CodegenError> {
         let async_name = format!("__async_{}_{}", class_name, method_name);
-        let id = *self.context.funcs.get(&ustr::Ustr::from(&async_name)).unwrap();
+        let id = *self
+            .context
+            .funcs
+            .get(&ustr::Ustr::from(&async_name))
+            .unwrap();
         let target_id = *self
             .context
             .funcs
-            .get(&ustr::Ustr::from(&format!("{}_{}", class_name, method_name)))
+            .get(&ustr::Ustr::from(&format!(
+                "{}_{}",
+                class_name, method_name
+            )))
             .unwrap();
 
         self.ctx
@@ -970,7 +1024,12 @@ impl JITCompiler {
     }
 
     fn generate_enum_drop_function(&mut self, enum_name: &str) -> Result<(), CodegenError> {
-        let layout = self.context.enum_layouts.get(&ustr::Ustr::from(enum_name)).unwrap().clone();
+        let layout = self
+            .context
+            .enum_layouts
+            .get(&ustr::Ustr::from(enum_name))
+            .unwrap()
+            .clone();
         let func_id = layout.drop_func_id;
 
         self.ctx.func.signature.params.push(AbiParam::new(
@@ -1031,7 +1090,11 @@ impl JITCompiler {
                         obj_ptr,
                         offset,
                     );
-                    let release_id = *self.context.funcs.get(&ustr::Ustr::from("release")).unwrap();
+                    let release_id = *self
+                        .context
+                        .funcs
+                        .get(&ustr::Ustr::from("release"))
+                        .unwrap();
                     let local_release = self
                         .context
                         .module
@@ -1068,11 +1131,20 @@ impl JITCompiler {
         enum_name: &str,
         variants: &[pace_ast::EnumVariant],
     ) -> Result<(), CodegenError> {
-        let layout = self.context.enum_layouts.get(&ustr::Ustr::from(enum_name)).unwrap().clone();
+        let layout = self
+            .context
+            .enum_layouts
+            .get(&ustr::Ustr::from(enum_name))
+            .unwrap()
+            .clone();
 
         for variant in variants {
             let constructor_name = format!("{}_{}", enum_name, variant.name);
-            let func_id = *self.context.funcs.get(&ustr::Ustr::from(&constructor_name)).unwrap();
+            let func_id = *self
+                .context
+                .funcs
+                .get(&ustr::Ustr::from(&constructor_name))
+                .unwrap();
             let (tag_id, fields) = layout.variants.get(&variant.name).unwrap();
 
             for field_ty in fields {
@@ -1186,7 +1258,10 @@ impl JITCompiler {
         builder.switch_to_block(entry_block);
         builder.seal_block(entry_block);
 
-        let mut variables: std::collections::HashMap<ustr::Ustr, (cranelift::prelude::Variable, crate::translator::VarType)> = std::collections::HashMap::new();
+        let mut variables: std::collections::HashMap<
+            ustr::Ustr,
+            (cranelift::prelude::Variable, crate::translator::VarType),
+        > = std::collections::HashMap::new();
         let mut var_index = 0;
 
         // Declare parameters as variables
@@ -1271,7 +1346,14 @@ impl JITCompiler {
         self.context.module.clear_context(&mut self.ctx);
 
         for (fn_name, expr, captured_vars) in pending_closures.into_iter() {
-            self.compile_closure(arena, &fn_name, expr, captured_vars, func_returns, current_class)?;
+            self.compile_closure(
+                arena,
+                &fn_name,
+                expr,
+                captured_vars,
+                func_returns,
+                current_class,
+            )?;
         }
 
         Ok(())
@@ -1321,7 +1403,10 @@ impl JITCompiler {
 
         let env_ptr = builder.block_params(entry_block)[0];
 
-        let mut variables: std::collections::HashMap<ustr::Ustr, (cranelift::prelude::Variable, crate::translator::VarType)> = std::collections::HashMap::new();
+        let mut variables: std::collections::HashMap<
+            ustr::Ustr,
+            (cranelift::prelude::Variable, crate::translator::VarType),
+        > = std::collections::HashMap::new();
         let mut var_index = 0;
 
         // Load captured variables from environment
@@ -1361,7 +1446,7 @@ impl JITCompiler {
             Vec<(ustr::Ustr, crate::translator::VarType)>,
         )> = Vec::new();
         let body_stmt_id = arena.alloc_stmt(pace_ast::Stmt::Expr(body));
-        
+
         let mut translator = Translator {
             arena,
             context: &mut self.context,

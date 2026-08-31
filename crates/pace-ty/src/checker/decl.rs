@@ -1,7 +1,7 @@
-use crate::env::{ClassSignature, EnumSignature, FunctionSignature, Type};
-use super::is_camel_case;
-use pace_ast::Stmt;
 use super::TypeChecker;
+use super::is_camel_case;
+use crate::env::{ClassSignature, EnumSignature, FunctionSignature, Type};
+use pace_ast::Stmt;
 use std::collections::HashMap;
 
 impl<'a> TypeChecker<'a> {
@@ -94,7 +94,7 @@ impl<'a> TypeChecker<'a> {
                         self.warnings.push(pace_errors::SemanticWarning::NamingConvention {
                             name: name.to_string(),
                             src: self.get_source(),
-                            span: (*span).into(),
+                            span: (*span),
                         });
                     }
                     let sig = FunctionSignature {
@@ -376,7 +376,5 @@ impl<'a> TypeChecker<'a> {
                 _ => {}
             }
         }
-        
     }
-
 }

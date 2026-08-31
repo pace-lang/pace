@@ -53,12 +53,19 @@ impl SymbolResolver {
         }
     }
 
-    pub fn run(arena: &mut pace_ast::arena::AstArena, ast: Vec<pace_ast::arena::StmtId>) -> Result<Vec<pace_ast::arena::StmtId>> {
+    pub fn run(
+        arena: &mut pace_ast::arena::AstArena,
+        ast: Vec<pace_ast::arena::StmtId>,
+    ) -> Result<Vec<pace_ast::arena::StmtId>> {
         let mut resolver = Self::new();
         resolver.resolve(arena, ast)
     }
 
-    pub fn resolve(&mut self, arena: &mut pace_ast::arena::AstArena, ast: Vec<pace_ast::arena::StmtId>) -> Result<Vec<pace_ast::arena::StmtId>> {
+    pub fn resolve(
+        &mut self,
+        arena: &mut pace_ast::arena::AstArena,
+        ast: Vec<pace_ast::arena::StmtId>,
+    ) -> Result<Vec<pace_ast::arena::StmtId>> {
         // Pass 1: Collect exports for all modules and mangle their definitions
         for &stmt_id in &ast {
             let stmt = arena.get_stmt(stmt_id).clone();
@@ -168,13 +175,15 @@ impl SymbolResolver {
                                         continue;
                                     }
                                     if let Some(hide_list) = hide
-                                        && hide_list.contains(sym) {
-                                            continue;
-                                        }
+                                        && hide_list.contains(sym)
+                                    {
+                                        continue;
+                                    }
                                     if let Some(show_list) = show
-                                        && !show_list.contains(sym) {
-                                            continue;
-                                        }
+                                        && !show_list.contains(sym)
+                                    {
+                                        continue;
+                                    }
 
                                     if local_declarations.contains_key(sym) {
                                         continue; // Local declarations shadow imports implicitly
@@ -344,29 +353,38 @@ impl SymbolResolver {
                     object, property, ..
                 } = arena.get_expr(*callee)
                     && let Expr::Identifier(obj_name, _) = arena.get_expr(*object)
-                        && let Some(mod_name) = aliases.get(obj_name)
-                            && let Some(mod_exports) = self.exports.get(&ustr::Ustr::from(mod_name.as_str()))
-                                && let Some(export) = mod_exports.get(property) {
-                                    if export.visibility == Visibility::Private {
-                                        return Err(Report::new(ResolutionError::PrivateSymbol {
-                                            name: property.to_string(),
-                                            span: (0, 0),
-                                        }));
-                                    }
-                                    *callee = arena.alloc_expr(Expr::Identifier(export.mangled_name.clone().into(), pace_ast::Span::default()));
-                                }
+                    && let Some(mod_name) = aliases.get(obj_name)
+                    && let Some(mod_exports) =
+                        self.exports.get(&ustr::Ustr::from(mod_name.as_str()))
+                    && let Some(export) = mod_exports.get(property)
+                {
+                    if export.visibility == Visibility::Private {
+                        return Err(Report::new(ResolutionError::PrivateSymbol {
+                            name: property.to_string(),
+                            span: (0, 0),
+                        }));
+                    }
+                    *callee = arena.alloc_expr(Expr::Identifier(
+                        export.mangled_name.clone().into(),
+                        pace_ast::Span::default(),
+                    ));
+                }
 
                 // If callee is just an Identifier, look it up in scope
                 if let Expr::Identifier(name, _) = arena.get_expr(*callee)
-                    && let Some(export) = scope.get(&ustr::Ustr::from(name.as_str())) {
-                        if export.mangled_name == "COLLISION" {
-                            return Err(Report::new(ResolutionError::Collision {
-                                name: name.to_string(),
-                                span: (0, 0),
-                            }));
-                        }
-                        *callee = arena.alloc_expr(Expr::Identifier(export.mangled_name.clone().into(), pace_ast::Span::default()));
+                    && let Some(export) = scope.get(&ustr::Ustr::from(name.as_str()))
+                {
+                    if export.mangled_name == "COLLISION" {
+                        return Err(Report::new(ResolutionError::Collision {
+                            name: name.to_string(),
+                            span: (0, 0),
+                        }));
                     }
+                    *callee = arena.alloc_expr(Expr::Identifier(
+                        export.mangled_name.clone().into(),
+                        pace_ast::Span::default(),
+                    ));
+                }
 
                 self.resolve_expr(arena, *callee, scope, aliases)?;
                 for arg in args {
@@ -374,7 +392,6 @@ impl SymbolResolver {
                 }
             }
             Expr::Identifier(name, _) => {
-                
                 if let Some(export) = scope.get(&ustr::Ustr::from(name.as_str())) {
                     if export.mangled_name == "COLLISION" {
                         return Err(Report::new(ResolutionError::Collision {
@@ -433,9 +450,10 @@ impl SymbolResolver {
                 enum_name, fields, ..
             } => {
                 if let Some(name) = enum_name
-                    && let Some(export) = scope.get(&ustr::Ustr::from(name.as_str())) {
-                        *name = export.mangled_name.clone().into();
-                    }
+                    && let Some(export) = scope.get(&ustr::Ustr::from(name.as_str()))
+                {
+                    *name = export.mangled_name.clone().into();
+                }
                 if let Some(flds) = fields {
                     for f in flds {
                         self.resolve_pattern(arena, f, scope, aliases)?;

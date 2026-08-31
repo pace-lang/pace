@@ -1,13 +1,17 @@
+use super::Parser;
 use crate::lexer::Token;
 use pace_ast::{BinaryOp, Expr, Stmt, UnaryOp};
-use super::Parser;
 
 impl<'a, 'b> Parser<'a, 'b> {
-    pub(crate) fn parse_expr(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_expr(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         self.parse_assignment()
     }
 
-    pub(crate) fn parse_assignment(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_assignment(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         let expr = self.parse_null_coalesce()?;
 
         if self.match_token(Token::Eq) {
@@ -33,19 +37,20 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(expr)
     }
 
-    pub(crate) fn parse_null_coalesce(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_null_coalesce(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         let mut expr = self.parse_logical_or()?;
         while self.match_token(Token::QuestionQuestion) {
             let right = self.parse_logical_or()?;
-            expr = self.alloc_expr(Expr::NullCoalesce {
-                left: expr,
-                right,
-            });
+            expr = self.alloc_expr(Expr::NullCoalesce { left: expr, right });
         }
         Ok(expr)
     }
 
-    pub(crate) fn parse_logical_or(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_logical_or(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         let mut expr = self.parse_logical_and()?;
         while self.match_token(Token::PipePipe) {
             let right = self.parse_logical_and()?;
@@ -58,7 +63,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(expr)
     }
 
-    pub(crate) fn parse_logical_and(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_logical_and(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         let mut expr = self.parse_equality()?;
         while self.match_token(Token::AndAnd) {
             let right = self.parse_equality()?;
@@ -71,7 +78,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(expr)
     }
 
-    pub(crate) fn parse_equality(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_equality(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         let mut expr = self.parse_relational()?;
         while self.current_token == Token::EqEq || self.current_token == Token::NotEq {
             let op = if self.current_token == Token::EqEq {
@@ -90,7 +99,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(expr)
     }
 
-    pub(crate) fn parse_relational(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_relational(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         let mut expr = self.parse_term()?;
         while matches!(
             self.current_token,
@@ -114,7 +125,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(expr)
     }
 
-    pub(crate) fn parse_term(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_term(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         let mut expr = self.parse_factor()?;
         while self.current_token == Token::Plus || self.current_token == Token::Minus {
             let op = if self.current_token == Token::Plus {
@@ -133,7 +146,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(expr)
     }
 
-    pub(crate) fn parse_factor(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_factor(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         let mut expr = self.parse_unary()?;
         while self.current_token == Token::Star
             || self.current_token == Token::Slash
@@ -157,11 +172,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(expr)
     }
 
-    pub(crate) fn parse_unary(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_unary(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         if self.match_token(Token::Await) {
             let expr = self.parse_unary()?;
             Ok(self.alloc_expr(Expr::Await(expr)))
-        } else if self.current_token == Token::Bang || self.current_token == Token::Minus || self.current_token == Token::BitNot {
+        } else if self.current_token == Token::Bang
+            || self.current_token == Token::Minus
+            || self.current_token == Token::BitNot
+        {
             let op = match self.current_token {
                 Token::Bang => UnaryOp::Not,
                 Token::Minus => UnaryOp::Neg,
@@ -176,7 +196,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    pub(crate) fn parse_postfix(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_postfix(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         let mut expr = self.parse_primary()?;
 
         loop {
@@ -190,7 +212,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     _ => {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected property name after '.'".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -208,7 +233,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     _ => {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected variant name after '::'".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -226,7 +254,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     _ => {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected property name after '?.'".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -295,10 +326,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         span: self.current_span,
                     });
                 }
-                expr = self.alloc_expr(Expr::Call {
-                    callee: expr,
-                    args,
-                });
+                expr = self.alloc_expr(Expr::Call { callee: expr, args });
             } else {
                 break;
             }
@@ -307,7 +335,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(expr)
     }
 
-    pub(crate) fn parse_primary(&mut self) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_primary(
+        &mut self,
+    ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         match &self.current_token {
             Token::Int(n) => {
                 let v = *n;
@@ -338,7 +368,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let v = *id;
                 let span = self.current_span;
                 self.advance();
-                Ok(self.alloc_expr(Expr::Identifier(v.into(), span.into())))
+                Ok(self.alloc_expr(Expr::Identifier(v.into(), span)))
             }
             Token::LParen => {
                 let _start_span = self.current_span;
@@ -409,7 +439,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     if !self.match_token(Token::RParen) {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected ')' after closure parameters".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -422,7 +455,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     if !self.match_token(Token::FatArrow) {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected '=>' for closure body".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -504,19 +540,18 @@ impl<'a, 'b> Parser<'a, 'b> {
                     });
                 }
 
-                let mut nested_parser = Parser::new_with_arena(&expr_str, &self.file_name, self.arena);
-                let expr = nested_parser
-                    .parse_expr()
-                    .map_err(|err| {
-                        let msg = match err {
-                            pace_errors::SyntaxError::Generic { message, .. } => message,
-                        };
-                        pace_errors::SyntaxError::Generic {
-                            message: format!("In interpolated string: {}", msg),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
-                            span: base_span,
-                        }
-                    })?;
+                let mut nested_parser =
+                    Parser::new_with_arena(&expr_str, &self.file_name, self.arena);
+                let expr = nested_parser.parse_expr().map_err(|err| {
+                    let msg = match err {
+                        pace_errors::SyntaxError::Generic { message, .. } => message,
+                    };
+                    pace_errors::SyntaxError::Generic {
+                        message: format!("In interpolated string: {}", msg),
+                        src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                        span: base_span,
+                    }
+                })?;
 
                 if nested_parser.current_token != Token::Eof {
                     return Err(pace_errors::SyntaxError::Generic {

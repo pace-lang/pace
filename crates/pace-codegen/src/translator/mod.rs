@@ -93,9 +93,10 @@ pub fn parse_vartype(
             }
 
             if let Some(structs) = struct_layouts
-                && structs.contains_key(&ustr::Ustr::from(other)) {
-                    return VarType::Struct(other.to_string());
-                }
+                && structs.contains_key(&ustr::Ustr::from(other))
+            {
+                return VarType::Struct(other.to_string());
+            }
 
             VarType::Object(ustr::Ustr::from(other))
         }

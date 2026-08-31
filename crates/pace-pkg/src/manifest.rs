@@ -114,11 +114,10 @@ impl PaceToml {
             .parse::<toml_edit::DocumentMut>()
             .map_err(|e| ManifestError::EditError(e.to_string()))?;
 
-        if let Some(deps) = doc.get_mut("dependencies") {
-            if let Some(table) = deps.as_table_mut() {
+        if let Some(deps) = doc.get_mut("dependencies")
+            && let Some(table) = deps.as_table_mut() {
                 table.remove(name);
             }
-        }
 
         fs::write(&toml_path, doc.to_string())?;
         Ok(())
@@ -136,16 +135,14 @@ impl PaceToml {
             .parse::<toml_edit::DocumentMut>()
             .map_err(|e| ManifestError::EditError(e.to_string()))?;
 
-        if let Some(deps) = doc.get_mut("dependencies") {
-            if let Some(table) = deps.as_table_mut() {
-                if table.contains_key(name) {
+        if let Some(deps) = doc.get_mut("dependencies")
+            && let Some(table) = deps.as_table_mut()
+                && table.contains_key(name) {
                     // Only update if it's a simple version string, don't overwrite { path = "..." }
                     if table[name].is_str() {
                         table[name] = toml_edit::value(new_version);
                     }
                 }
-            }
-        }
 
         fs::write(&toml_path, doc.to_string())?;
         Ok(())

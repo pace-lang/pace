@@ -6,7 +6,11 @@ use std::fs::File;
 use std::io::Write;
 use walkdir::WalkDir;
 
-pub fn execute(session: &CompilerSession, arena: &mut pace_ast::arena::AstArena, dry_run: bool) -> Result<()> {
+pub fn execute(
+    session: &CompilerSession,
+    arena: &mut pace_ast::arena::AstArena,
+    dry_run: bool,
+) -> Result<()> {
     let current_dir =
         std::env::current_dir().map_err(|e| miette::miette!("Failed to get current dir: {}", e))?;
 

@@ -43,7 +43,7 @@ impl Fetcher {
             .map_err(|e| miette!("Failed to load pace.toml: {}", e))?;
 
         let mut lock = PaceLock::load_from_dir(project_dir)
-            .unwrap_or_else(|_| None)
+            .unwrap_or(None)
             .unwrap_or_default();
 
         // Clear the packages so we don't keep removed dependencies around
@@ -76,7 +76,7 @@ impl Fetcher {
         let root_pkg = crate::resolver::PackageName(manifest.package.name.clone());
         let root_version = pubgrub::SemanticVersion::new(0, 0, 0);
 
-        provider.add_root_dependencies(root_pkg.clone(), root_version.clone(), pubgrub_deps);
+        provider.add_root_dependencies(root_pkg.clone(), root_version, pubgrub_deps);
 
         println!("🔄 Resolving dependency graph...");
         let resolved =

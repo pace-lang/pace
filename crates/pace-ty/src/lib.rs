@@ -96,8 +96,12 @@ mod tests {
         // No explicit type annotations, should be inferred
         let src = "func main() { let x = 42; let y = x; }";
         let res = check_source(src);
-        assert!(res.is_ok(), "Expected no errors for valid type inference, got {:?}", res.unwrap_err());
-        
+        assert!(
+            res.is_ok(),
+            "Expected no errors for valid type inference, got {:?}",
+            res.unwrap_err()
+        );
+
         // Cannot infer type for uninitialized variables without type annotation
         let src = "func main() { let x; }";
         let res = check_source(src);

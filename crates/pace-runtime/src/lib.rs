@@ -771,10 +771,11 @@ pub extern "C" fn __pace_init_runtime(num_threads: usize) {
                                         // Double-check queue to avoid race condition
                                         let q = mailbox.queue.lock().unwrap();
                                         if !q.is_empty()
-                                            && !mailbox.is_scheduled.swap(true, Ordering::SeqCst) {
-                                                // Keep processing since a message arrived right after we stored false
-                                                continue;
-                                            }
+                                            && !mailbox.is_scheduled.swap(true, Ordering::SeqCst)
+                                        {
+                                            // Keep processing since a message arrived right after we stored false
+                                            continue;
+                                        }
                                         break;
                                     }
                                 }

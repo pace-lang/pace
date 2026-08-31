@@ -1,12 +1,15 @@
+use super::{Translator, VarType};
 use super::{parse_type_annotation, parse_vartype};
 use crate::layouts::CodegenError;
 use cranelift::prelude::*;
 use cranelift_module::Module;
 use pace_ast::{Expr, Stmt};
-use super::{VarType, Translator};
 
 impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
-    pub fn translate_stmt(&mut self, stmt_id: pace_ast::arena::StmtId) -> Result<(Value, bool), CodegenError> {
+    pub fn translate_stmt(
+        &mut self,
+        stmt_id: pace_ast::arena::StmtId,
+    ) -> Result<(Value, bool), CodegenError> {
         let stmt = self.arena.get_stmt(stmt_id);
         match stmt {
             Stmt::VarDecl {
@@ -26,23 +29,21 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 };
 
                 if self.is_global_context
-                    && let Some(&data_id) = self.context.global_vars.get(name) {
-                        let local_data = self
-                            .context
-                            .module
-                            .declare_data_in_func(data_id, self.builder.func);
-                        let ptr = self.builder.ins().symbol_value(
-                            self.context.module.target_config().pointer_type(),
-                            local_data,
-                        );
-                        self.builder.ins().store(
-                            cranelift::prelude::MemFlagsData::new(),
-                            val,
-                            ptr,
-                            0,
-                        );
-                        return Ok((val, false));
-                    }
+                    && let Some(&data_id) = self.context.global_vars.get(name)
+                {
+                    let local_data = self
+                        .context
+                        .module
+                        .declare_data_in_func(data_id, self.builder.func);
+                    let ptr = self.builder.ins().symbol_value(
+                        self.context.module.target_config().pointer_type(),
+                        local_data,
+                    );
+                    self.builder
+                        .ins()
+                        .store(cranelift::prelude::MemFlagsData::new(), val, ptr, 0);
+                    return Ok((val, false));
+                }
 
                 let val_ty = self.builder.func.dfg.value_type(val);
                 let var = self.builder.declare_var(val_ty);
@@ -55,7 +56,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let ty = self.get_expr_type(*expr);
                 let val = self.translate_expr(*expr)?;
                 if matches!(ty, VarType::Object(_)) {
-                    let release_id = *self.context.funcs.get(&ustr::Ustr::from("release")).unwrap();
+                    let release_id = *self
+                        .context
+                        .funcs
+                        .get(&ustr::Ustr::from("release"))
+                        .unwrap();
                     let local_release = self
                         .context
                         .module
@@ -134,7 +139,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 self.builder
                     .ins()
                     .brif(cond_val, body_block, &[], exit_block, &[]);
-                
+
                 // Now that all branches to body_block and check_block have been generated:
                 self.builder.seal_block(body_block);
                 self.builder.seal_block(check_block);
@@ -156,7 +161,12 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         message: "Match expression must be an Enum type".to_string(),
                     });
                 };
-                let enum_layout = self.context.enum_layouts.get(&ustr::Ustr::from(&enum_name)).unwrap().clone();
+                let enum_layout = self
+                    .context
+                    .enum_layouts
+                    .get(&ustr::Ustr::from(&enum_name))
+                    .unwrap()
+                    .clone();
 
                 let obj_ptr = self.translate_expr(*expr)?;
 
@@ -272,7 +282,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let iter_ty = self.get_expr_type(*iterable);
 
                 let (length_offset, get_offset) = if let VarType::Object(type_name) = &iter_ty {
-                    let layout = self.context.class_layouts.get(&ustr::Ustr::from(type_name)).unwrap();
+                    let layout = self
+                        .context
+                        .class_layouts
+                        .get(&ustr::Ustr::from(type_name))
+                        .unwrap();
                     let l = *layout.methods.get(&ustr::Ustr::from("length")).unwrap();
                     let g = *layout.methods.get(&ustr::Ustr::from("get")).unwrap();
                     (l, g)
@@ -369,8 +383,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
 
                 let item_var = self.builder.declare_var(types::I64);
                 self.builder.def_var(item_var, item_val);
-                self.variables
-                    .insert(*item, (item_var, VarType::Unknown));
+                self.variables.insert(*item, (item_var, VarType::Unknown));
                 *self.var_index += 1;
 
                 let (_, body_term) = self.translate_stmt(*body)?;
@@ -404,7 +417,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     let current_vars: Vec<ustr::Ustr> = self.variables.keys().cloned().collect();
                     for var_name in current_vars {
                         if !initial_vars.contains(&var_name) {
-                            let (var, ty) = self.variables.get(&ustr::Ustr::from(&var_name)).unwrap().clone();
+                            let (var, ty) = self
+                                .variables
+                                .get(&ustr::Ustr::from(&var_name))
+                                .unwrap()
+                                .clone();
                             if matches!(ty, VarType::Object(_)) {
                                 let obj_val = self.builder.use_var(var);
                                 let release_id = *self
@@ -499,20 +516,25 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             return f_ty.clone();
                         }
                     } else if let Some(layout) = self.context.struct_layouts.get(obj_name)
-                        && let Some((_, f_ty)) = layout.static_fields.get(property) {
-                            return f_ty.clone();
-                        }
+                        && let Some((_, f_ty)) = layout.static_fields.get(property)
+                    {
+                        return f_ty.clone();
+                    }
                 }
 
                 let obj_ty = self.get_expr_type(*object);
                 if let VarType::Object(obj_name) = obj_ty {
-                    if let Some(layout) = self.context.class_layouts.get(&ustr::Ustr::from(&obj_name))
+                    if let Some(layout) =
+                        self.context.class_layouts.get(&ustr::Ustr::from(&obj_name))
                         && let Some(f_ty) = layout.fields.get(property)
                     {
                         return f_ty.1.clone();
                     }
                 } else if let VarType::Struct(obj_name) = obj_ty
-                    && let Some(layout) = self.context.struct_layouts.get(&ustr::Ustr::from(&obj_name))
+                    && let Some(layout) = self
+                        .context
+                        .struct_layouts
+                        .get(&ustr::Ustr::from(&obj_name))
                     && let Some(f_ty) = layout.fields.get(property)
                 {
                     return f_ty.1.clone();
@@ -522,13 +544,17 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             Expr::OptionalMemberAccess { object, property } => {
                 let obj_ty = self.get_expr_type(*object);
                 if let VarType::Object(obj_name) = obj_ty {
-                    if let Some(layout) = self.context.class_layouts.get(&ustr::Ustr::from(&obj_name))
+                    if let Some(layout) =
+                        self.context.class_layouts.get(&ustr::Ustr::from(&obj_name))
                         && let Some(f_ty) = layout.fields.get(property)
                     {
                         return f_ty.1.clone();
                     }
                 } else if let VarType::Struct(obj_name) = obj_ty
-                    && let Some(layout) = self.context.struct_layouts.get(&ustr::Ustr::from(&obj_name))
+                    && let Some(layout) = self
+                        .context
+                        .struct_layouts
+                        .get(&ustr::Ustr::from(&obj_name))
                     && let Some(f_ty) = layout.fields.get(property)
                 {
                     return f_ty.1.clone();
@@ -580,14 +606,20 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 } = self.arena.get_expr(*callee)
                 {
                     if let Expr::Identifier(obj_name, _) = self.arena.get_expr(*object) {
-                        if obj_name.starts_with("Result_") || obj_name.starts_with("Option_") || self.context.enum_layouts.contains_key(obj_name) {
+                        if obj_name.starts_with("Result_")
+                            || obj_name.starts_with("Option_")
+                            || self.context.enum_layouts.contains_key(obj_name)
+                        {
                             return VarType::Enum(ustr::Ustr::from(obj_name));
                         }
                         if self.context.class_layouts.contains_key(obj_name)
                             || self.context.struct_layouts.contains_key(obj_name)
                         {
                             let static_method_name = format!("{}_{}", obj_name, property);
-                            if let Some(ty) = self.func_returns.get(&ustr::Ustr::from(&static_method_name)) {
+                            if let Some(ty) = self
+                                .func_returns
+                                .get(&ustr::Ustr::from(&static_method_name))
+                            {
                                 return ty.clone();
                             }
                         }
@@ -673,7 +705,10 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         }
     }
 
-    pub fn translate_args(&mut self, args: &[pace_ast::arena::ExprId]) -> Result<Vec<Value>, CodegenError> {
+    pub fn translate_args(
+        &mut self,
+        args: &[pace_ast::arena::ExprId],
+    ) -> Result<Vec<Value>, CodegenError> {
         let mut arg_vals = Vec::new();
         for arg in args {
             let mut arg_val = self.translate_expr(*arg)?;
@@ -687,7 +722,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
     }
 
     pub(crate) fn copy_struct(&mut self, name: &str, src_ptr: Value) -> Value {
-        let layout = self.context.struct_layouts.get(&ustr::Ustr::from(name)).unwrap();
+        let layout = self
+            .context
+            .struct_layouts
+            .get(&ustr::Ustr::from(name))
+            .unwrap();
         let ptr_ty = self.context.module.target_config().pointer_type();
 
         let size = layout.size as u32;
@@ -717,5 +756,4 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
 
         dst_ptr
     }
-
 }

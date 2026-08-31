@@ -1,9 +1,11 @@
+use super::Parser;
 use crate::lexer::Token;
 use pace_ast::{Expr, Stmt, TypeAnnotation, Visibility};
-use super::Parser;
 
 impl<'a, 'b> Parser<'a, 'b> {
-    pub(crate) fn parse_stmt(&mut self) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_stmt(
+        &mut self,
+    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         let mut doc_comment = None;
         while let Token::DocComment(c) = &self.current_token {
             let existing = doc_comment.get_or_insert_with(String::new);
@@ -26,10 +28,17 @@ impl<'a, 'b> Parser<'a, 'b> {
         match self.current_token {
             Token::Let => self.parse_var_decl(false, is_static, visibility), // doc_comments on vars omitted for now
             Token::Var => self.parse_var_decl(true, is_static, visibility),
-            Token::Func => self.parse_func_decl(is_async, visibility, is_static, doc_comment.as_deref().map(ustr::Ustr::from)),
+            Token::Func => self.parse_func_decl(
+                is_async,
+                visibility,
+                is_static,
+                doc_comment.as_deref().map(ustr::Ustr::from),
+            ),
             Token::Class => self.parse_class_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
             Token::Actor => self.parse_actor_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
-            Token::Interface => self.parse_interface_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
+            Token::Interface => {
+                self.parse_interface_decl(doc_comment.as_deref().map(ustr::Ustr::from))
+            }
             Token::Struct => self.parse_struct_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
             Token::Enum => self.parse_enum_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
             Token::If => self.parse_if_stmt(),
@@ -60,20 +69,22 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let expr = self.parse_expr()?;
                 if !self.match_token(Token::Semi) {
                     if let pace_ast::Expr::Call { callee, .. } = self.arena.get_expr(expr)
-                        && (self.current_token == Token::LBrace || self.current_token == Token::Arrow)
-                            && let Expr::Identifier(name, _) = self.arena.get_expr(*callee) {
-                                return Err(pace_errors::SyntaxError::Generic {
-                                    message: format!(
-                                        "Functions and methods must be prefixed with 'func'. Did you forget 'func' before '{}'?",
-                                        name
-                                    ),
-                                    src: miette::NamedSource::new(
-                                        self.file_name.clone(),
-                                        self.src.to_string(),
-                                    ),
-                                    span: self.current_span,
-                                });
-                            }
+                        && (self.current_token == Token::LBrace
+                            || self.current_token == Token::Arrow)
+                        && let Expr::Identifier(name, _) = self.arena.get_expr(*callee)
+                    {
+                        return Err(pace_errors::SyntaxError::Generic {
+                            message: format!(
+                                "Functions and methods must be prefixed with 'func'. Did you forget 'func' before '{}'?",
+                                name
+                            ),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
+                            span: self.current_span,
+                        });
+                    }
                     return Err(pace_errors::SyntaxError::Generic {
                         message: "Expected ';' after expression".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
@@ -85,7 +96,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    pub(crate) fn parse_generic_params(&mut self) -> Result<Option<Vec<ustr::Ustr>>, pace_errors::SyntaxError> {
+    pub(crate) fn parse_generic_params(
+        &mut self,
+    ) -> Result<Option<Vec<ustr::Ustr>>, pace_errors::SyntaxError> {
         if self.match_token(Token::Less) {
             let mut params = Vec::new();
             while self.current_token != Token::Greater && self.current_token != Token::Eof {
@@ -116,7 +129,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    pub(crate) fn parse_type_annotation(&mut self) -> Result<TypeAnnotation, pace_errors::SyntaxError> {
+    pub(crate) fn parse_type_annotation(
+        &mut self,
+    ) -> Result<TypeAnnotation, pace_errors::SyntaxError> {
         // Parse function types like (Int, String) -> Bool
         if self.match_token(Token::LParen) {
             let mut params = Vec::new();
@@ -211,7 +226,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub(crate) fn parse_block(&mut self) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_block(
+        &mut self,
+    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance(); // consume '{'
         let mut stmts = Vec::new();
         while self.current_token != Token::RBrace && self.current_token != Token::Eof {
@@ -233,7 +250,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(self.alloc_stmt(Stmt::Block(stmts)))
     }
 
-    pub(crate) fn parse_if_stmt(&mut self) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_if_stmt(
+        &mut self,
+    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance(); // consume if
         let condition = self.parse_expr()?;
 
@@ -251,20 +270,26 @@ impl<'a, 'b> Parser<'a, 'b> {
         }))
     }
 
-    pub(crate) fn parse_while_stmt(&mut self) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_while_stmt(
+        &mut self,
+    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance(); // consume while
         let condition = self.parse_expr()?;
         let body = self.parse_stmt()?;
         Ok(self.alloc_stmt(Stmt::While { condition, body }))
     }
 
-    pub(crate) fn parse_loop_stmt(&mut self) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_loop_stmt(
+        &mut self,
+    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance(); // consume loop
         let body = self.parse_stmt()?;
         Ok(self.alloc_stmt(Stmt::Loop { body }))
     }
 
-    pub(crate) fn parse_for_stmt(&mut self) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_for_stmt(
+        &mut self,
+    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance(); // consume for
         let item = match &self.current_token {
             Token::Ident(id) => *id,
@@ -319,7 +344,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     if !self.match_token(Token::Greater) {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected '>' after generic arguments in pattern".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -340,7 +368,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     } else {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected variant name after :: in pattern".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -362,7 +393,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     if !self.match_token(Token::RParen) {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected ')' after pattern fields".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -383,7 +417,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     })
                 } else {
                     // Lowercase without parenthesis -> Variable binding
-                    Ok(pace_ast::Pattern::Variable(variant_name.into(), self.current_span.into()))
+                    Ok(pace_ast::Pattern::Variable(
+                        variant_name.into(),
+                        self.current_span,
+                    ))
                 }
             }
             Token::Int(_) | Token::Float(_) | Token::String(_) | Token::Bool(_) => {
@@ -398,7 +435,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    pub(crate) fn parse_match_stmt(&mut self) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_match_stmt(
+        &mut self,
+    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance(); // consume match
         let expr = self.parse_expr()?;
 
@@ -440,7 +479,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(self.alloc_stmt(Stmt::Match { expr, arms }))
     }
 
-    pub(crate) fn parse_import_stmt(&mut self) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_import_stmt(
+        &mut self,
+    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance(); // consume 'import'
 
         let path = match &self.current_token {
@@ -487,7 +528,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     _ => {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected identifier to show".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -509,7 +553,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                     _ => {
                         return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected identifier to hide".to_string(),
-                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            src: miette::NamedSource::new(
+                                self.file_name.clone(),
+                                self.src.to_string(),
+                            ),
                             span: self.current_span,
                         });
                     }
@@ -538,7 +585,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         }))
     }
 
-    pub(crate) fn parse_export_stmt(&mut self) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
+    pub(crate) fn parse_export_stmt(
+        &mut self,
+    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance(); // consume 'export'
 
         let path = match &self.current_token {
@@ -566,5 +615,4 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         Ok(self.alloc_stmt(Stmt::Export { path: path.into() }))
     }
-
 }

@@ -49,16 +49,26 @@ impl Type {
                     self.clone()
                 }
             }
-            Type::GenericInstance { base, args } => {
-                Type::GenericInstance {
-                    base: Box::new(base.resolve_generics(substitutions)),
-                    args: args.iter().map(|arg| arg.resolve_generics(substitutions)).collect(),
-                }
+            Type::GenericInstance { base, args } => Type::GenericInstance {
+                base: Box::new(base.resolve_generics(substitutions)),
+                args: args
+                    .iter()
+                    .map(|arg| arg.resolve_generics(substitutions))
+                    .collect(),
+            },
+            Type::Nullable(inner) => {
+                Type::Nullable(Box::new(inner.resolve_generics(substitutions)))
             }
-            Type::Nullable(inner) => Type::Nullable(Box::new(inner.resolve_generics(substitutions))),
-            Type::Function { generic_params, params, return_type } => Type::Function {
+            Type::Function {
+                generic_params,
+                params,
+                return_type,
+            } => Type::Function {
                 generic_params: generic_params.clone(),
-                params: params.iter().map(|p| p.resolve_generics(substitutions)).collect(),
+                params: params
+                    .iter()
+                    .map(|p| p.resolve_generics(substitutions))
+                    .collect(),
                 return_type: Box::new(return_type.resolve_generics(substitutions)),
             },
             Type::Promise(inner) => Type::Promise(Box::new(inner.resolve_generics(substitutions))),

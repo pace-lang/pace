@@ -9,3 +9,6 @@ license.workspace = true
 [dependencies]
 miette.workspace = true
 ustr = "1.1.0"
+
+[lints]
+workspace = true

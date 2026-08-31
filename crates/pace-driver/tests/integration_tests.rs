@@ -132,4 +132,3 @@ fn test_run_string_manipulation() {
         panic!("Failed to JIT run string manipulation program: {:?}", e);
     }
 }
-

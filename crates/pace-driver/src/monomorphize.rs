@@ -35,7 +35,7 @@ impl Monomorphizer {
         ast: Vec<pace_ast::arena::StmtId>,
     ) -> Result<Vec<pace_ast::arena::StmtId>, miette::Report> {
         let mut mono = Self::new();
-        
+
         // Pass 1: Collect generic classes/actors and interfaces
         let mut final_ast = Vec::new();
         for &stmt_id in &ast {
@@ -45,19 +45,47 @@ impl Monomorphizer {
                 for &inner_stmt_id in &body {
                     let inner_stmt = arena.get_stmt(inner_stmt_id).clone();
                     match inner_stmt {
-                        Stmt::ClassDecl { generic_params: Some(_), name: class_name, .. }
-                        | Stmt::ActorDecl { generic_params: Some(_), name: class_name, .. }
-                        | Stmt::StructDecl { generic_params: Some(_), name: class_name, .. }
-                        | Stmt::EnumDecl { generic_params: Some(_), name: class_name, .. }
-                        | Stmt::InterfaceDecl { generic_params: Some(_), name: class_name, .. } => {
+                        Stmt::ClassDecl {
+                            generic_params: Some(_),
+                            name: class_name,
+                            ..
+                        }
+                        | Stmt::ActorDecl {
+                            generic_params: Some(_),
+                            name: class_name,
+                            ..
+                        }
+                        | Stmt::StructDecl {
+                            generic_params: Some(_),
+                            name: class_name,
+                            ..
+                        }
+                        | Stmt::EnumDecl {
+                            generic_params: Some(_),
+                            name: class_name,
+                            ..
+                        }
+                        | Stmt::InterfaceDecl {
+                            generic_params: Some(_),
+                            name: class_name,
+                            ..
+                        } => {
                             mono.generic_classes.insert(class_name, inner_stmt_id);
-                            mono.generic_class_modules.insert(class_name, name.as_str().to_string());
+                            mono.generic_class_modules
+                                .insert(class_name, name.as_str().to_string());
                         }
-                        Stmt::FuncDecl { generic_params: Some(_), name: func_name, .. } => {
+                        Stmt::FuncDecl {
+                            generic_params: Some(_),
+                            name: func_name,
+                            ..
+                        } => {
                             mono.generic_funcs.insert(func_name, inner_stmt_id);
-                            mono.generic_func_modules.insert(func_name, name.as_str().to_string());
+                            mono.generic_func_modules
+                                .insert(func_name, name.as_str().to_string());
                         }
-                        Stmt::InterfaceDecl { name: iface_name, .. } => {
+                        Stmt::InterfaceDecl {
+                            name: iface_name, ..
+                        } => {
                             mono.all_interfaces.insert(iface_name, inner_stmt_id);
                             new_body.push(inner_stmt_id);
                         }
@@ -66,7 +94,7 @@ impl Monomorphizer {
                         }
                     }
                 }
-                
+
                 let mod_stmt = Stmt::Module {
                     name,
                     body: new_body,
@@ -131,7 +159,11 @@ impl Monomorphizer {
         name
     }
 
-    fn rewrite_type_annotation(&mut self, arena: &mut pace_ast::arena::AstArena, ty: &mut pace_ast::TypeAnnotation) -> Result<(), miette::Report> {
+    fn rewrite_type_annotation(
+        &mut self,
+        arena: &mut pace_ast::arena::AstArena,
+        ty: &mut pace_ast::TypeAnnotation,
+    ) -> Result<(), miette::Report> {
         if !ty.args.is_empty() {
             for arg in &mut ty.args {
                 self.rewrite_type_annotation(arena, arg)?;
@@ -139,7 +171,10 @@ impl Monomorphizer {
 
             let concrete_name = Self::generate_name(&ty.name, &ty.args);
 
-            if !self.generated_classes.contains_key(&ustr::Ustr::from(&concrete_name)) {
+            if !self
+                .generated_classes
+                .contains_key(&ustr::Ustr::from(&concrete_name))
+            {
                 if let Some(generic_decl) = self.generic_classes.get(&ty.name).cloned() {
                     self.instantiate_class(arena, generic_decl, concrete_name.clone(), &ty.args)?;
                 } else {
@@ -149,13 +184,21 @@ impl Monomorphizer {
                     let target_suffix_2 = format!("__{}", ty.name.as_str());
                     for (k, v) in &self.generic_classes {
                         let k_str = k.as_str();
-                        if k_str.ends_with(&target_suffix) || k_str.ends_with(&target_suffix_2) || k_str == ty.name.as_str() {
+                        if k_str.ends_with(&target_suffix)
+                            || k_str.ends_with(&target_suffix_2)
+                            || k_str == ty.name.as_str()
+                        {
                             found = Some(*v);
                             break;
                         }
                     }
                     if let Some(generic_decl) = found {
-                        self.instantiate_class(arena, generic_decl, concrete_name.clone(), &ty.args)?;
+                        self.instantiate_class(
+                            arena,
+                            generic_decl,
+                            concrete_name.clone(),
+                            &ty.args,
+                        )?;
                     }
                 }
             }
@@ -166,152 +209,301 @@ impl Monomorphizer {
         Ok(())
     }
 
-    fn clone_stmt(&mut self, arena: &mut pace_ast::arena::AstArena, stmt_id: pace_ast::arena::StmtId) -> pace_ast::arena::StmtId {
+    fn clone_stmt(
+        &mut self,
+        arena: &mut pace_ast::arena::AstArena,
+        stmt_id: pace_ast::arena::StmtId,
+    ) -> pace_ast::arena::StmtId {
         let stmt = arena.get_stmt(stmt_id).clone();
         let new_stmt = match stmt {
             Stmt::Module { name, body } => {
-                let new_body = body.into_iter().map(|s| self.clone_stmt(arena, s)).collect();
-                Stmt::Module { name, body: new_body }
-            }
-            Stmt::FuncDecl { name, generic_params, params, return_type, body, is_async, is_static, visibility, doc_comment, span } => {
-                let new_body = body.into_iter().map(|s| self.clone_stmt(arena, s)).collect();
-                Stmt::FuncDecl {
-                    name, generic_params, params, return_type,
-                    body: new_body, is_async, is_static, visibility, doc_comment, span
+                let new_body = body
+                    .into_iter()
+                    .map(|s| self.clone_stmt(arena, s))
+                    .collect();
+                Stmt::Module {
+                    name,
+                    body: new_body,
                 }
             }
-            Stmt::ClassDecl { name, generic_params, fields, methods, implements, doc_comment } => {
-                let new_fields = fields.into_iter().map(|f| self.clone_stmt(arena, f)).collect();
-                let new_methods = methods.into_iter().map(|m| self.clone_stmt(arena, m)).collect();
-                Stmt::ClassDecl { name, generic_params, fields: new_fields, methods: new_methods, implements, doc_comment }
+            Stmt::FuncDecl {
+                name,
+                generic_params,
+                params,
+                return_type,
+                body,
+                is_async,
+                is_static,
+                visibility,
+                doc_comment,
+                span,
+            } => {
+                let new_body = body
+                    .into_iter()
+                    .map(|s| self.clone_stmt(arena, s))
+                    .collect();
+                Stmt::FuncDecl {
+                    name,
+                    generic_params,
+                    params,
+                    return_type,
+                    body: new_body,
+                    is_async,
+                    is_static,
+                    visibility,
+                    doc_comment,
+                    span,
+                }
             }
-            Stmt::ActorDecl { name, generic_params, fields, methods, implements, doc_comment } => {
-                let new_fields = fields.into_iter().map(|f| self.clone_stmt(arena, f)).collect();
-                let new_methods = methods.into_iter().map(|m| self.clone_stmt(arena, m)).collect();
-                Stmt::ActorDecl { name, generic_params, fields: new_fields, methods: new_methods, implements, doc_comment }
+            Stmt::ClassDecl {
+                name,
+                generic_params,
+                fields,
+                methods,
+                implements,
+                doc_comment,
+            } => {
+                let new_fields = fields
+                    .into_iter()
+                    .map(|f| self.clone_stmt(arena, f))
+                    .collect();
+                let new_methods = methods
+                    .into_iter()
+                    .map(|m| self.clone_stmt(arena, m))
+                    .collect();
+                Stmt::ClassDecl {
+                    name,
+                    generic_params,
+                    fields: new_fields,
+                    methods: new_methods,
+                    implements,
+                    doc_comment,
+                }
             }
-            Stmt::StructDecl { name, generic_params, fields, doc_comment } => {
-                let new_fields = fields.into_iter().map(|f| self.clone_stmt(arena, f)).collect();
-                Stmt::StructDecl { name, generic_params, fields: new_fields, doc_comment }
+            Stmt::ActorDecl {
+                name,
+                generic_params,
+                fields,
+                methods,
+                implements,
+                doc_comment,
+            } => {
+                let new_fields = fields
+                    .into_iter()
+                    .map(|f| self.clone_stmt(arena, f))
+                    .collect();
+                let new_methods = methods
+                    .into_iter()
+                    .map(|m| self.clone_stmt(arena, m))
+                    .collect();
+                Stmt::ActorDecl {
+                    name,
+                    generic_params,
+                    fields: new_fields,
+                    methods: new_methods,
+                    implements,
+                    doc_comment,
+                }
             }
-            Stmt::EnumDecl { name, generic_params, variants, doc_comment } => {
-                Stmt::EnumDecl { name, generic_params, variants, doc_comment }
+            Stmt::StructDecl {
+                name,
+                generic_params,
+                fields,
+                doc_comment,
+            } => {
+                let new_fields = fields
+                    .into_iter()
+                    .map(|f| self.clone_stmt(arena, f))
+                    .collect();
+                Stmt::StructDecl {
+                    name,
+                    generic_params,
+                    fields: new_fields,
+                    doc_comment,
+                }
             }
-            Stmt::InterfaceDecl { name, generic_params, methods, doc_comment } => {
-                let new_methods = methods.into_iter().map(|m| self.clone_stmt(arena, m)).collect();
-                Stmt::InterfaceDecl { name, generic_params, methods: new_methods, doc_comment }
+            Stmt::EnumDecl {
+                name,
+                generic_params,
+                variants,
+                doc_comment,
+            } => Stmt::EnumDecl {
+                name,
+                generic_params,
+                variants,
+                doc_comment,
+            },
+            Stmt::InterfaceDecl {
+                name,
+                generic_params,
+                methods,
+                doc_comment,
+            } => {
+                let new_methods = methods
+                    .into_iter()
+                    .map(|m| self.clone_stmt(arena, m))
+                    .collect();
+                Stmt::InterfaceDecl {
+                    name,
+                    generic_params,
+                    methods: new_methods,
+                    doc_comment,
+                }
             }
-            Stmt::VarDecl { name, is_mutable, type_annotation, is_static, visibility, initializer, span } => {
+            Stmt::VarDecl {
+                name,
+                is_mutable,
+                type_annotation,
+                is_static,
+                visibility,
+                initializer,
+                span,
+            } => {
                 let new_initializer = initializer.map(|expr| self.clone_expr(arena, expr));
-                Stmt::VarDecl { name, is_mutable, type_annotation, is_static, visibility, initializer: new_initializer, span }
+                Stmt::VarDecl {
+                    name,
+                    is_mutable,
+                    type_annotation,
+                    is_static,
+                    visibility,
+                    initializer: new_initializer,
+                    span,
+                }
             }
             Stmt::Expr(expr) => Stmt::Expr(self.clone_expr(arena, expr)),
             Stmt::Return(expr) => Stmt::Return(expr.map(|e| self.clone_expr(arena, e))),
-            Stmt::Block(stmts) => {
-                Stmt::Block(stmts.into_iter().map(|s| self.clone_stmt(arena, s)).collect())
-            }
-            Stmt::If { condition, then_branch, else_branch } => {
-                Stmt::If {
-                    condition: self.clone_expr(arena, condition),
-                    then_branch: self.clone_stmt(arena, then_branch),
-                    else_branch: else_branch.map(|eb| self.clone_stmt(arena, eb)),
-                }
-            }
-            Stmt::While { condition, body } => {
-                Stmt::While {
-                    condition: self.clone_expr(arena, condition),
-                    body: self.clone_stmt(arena, body),
-                }
-            }
-            Stmt::Loop { body } => {
-                Stmt::Loop {
-                    body: self.clone_stmt(arena, body),
-                }
-            }
-            Stmt::ForIn { item, iterable, body } => {
-                Stmt::ForIn {
-                    item,
-                    iterable: self.clone_expr(arena, iterable),
-                    body: self.clone_stmt(arena, body),
-                }
-            }
+            Stmt::Block(stmts) => Stmt::Block(
+                stmts
+                    .into_iter()
+                    .map(|s| self.clone_stmt(arena, s))
+                    .collect(),
+            ),
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => Stmt::If {
+                condition: self.clone_expr(arena, condition),
+                then_branch: self.clone_stmt(arena, then_branch),
+                else_branch: else_branch.map(|eb| self.clone_stmt(arena, eb)),
+            },
+            Stmt::While { condition, body } => Stmt::While {
+                condition: self.clone_expr(arena, condition),
+                body: self.clone_stmt(arena, body),
+            },
+            Stmt::Loop { body } => Stmt::Loop {
+                body: self.clone_stmt(arena, body),
+            },
+            Stmt::ForIn {
+                item,
+                iterable,
+                body,
+            } => Stmt::ForIn {
+                item,
+                iterable: self.clone_expr(arena, iterable),
+                body: self.clone_stmt(arena, body),
+            },
             Stmt::Match { expr, arms } => {
-                let new_arms = arms.into_iter().map(|(p, s)| (p, self.clone_stmt(arena, s))).collect();
-                Stmt::Match { expr: self.clone_expr(arena, expr), arms: new_arms }
+                let new_arms = arms
+                    .into_iter()
+                    .map(|(p, s)| (p, self.clone_stmt(arena, s)))
+                    .collect();
+                Stmt::Match {
+                    expr: self.clone_expr(arena, expr),
+                    arms: new_arms,
+                }
             }
             Stmt::Export { .. } | Stmt::Import { .. } => stmt,
         };
         arena.alloc_stmt(new_stmt)
     }
 
-    fn clone_expr(&mut self, arena: &mut pace_ast::arena::AstArena, expr_id: pace_ast::arena::ExprId) -> pace_ast::arena::ExprId {
+    fn clone_expr(
+        &mut self,
+        arena: &mut pace_ast::arena::AstArena,
+        expr_id: pace_ast::arena::ExprId,
+    ) -> pace_ast::arena::ExprId {
         let expr = arena.get_expr(expr_id).clone();
         let new_expr = match expr {
-            Expr::Call { callee, args } => {
-                Expr::Call {
-                    callee: self.clone_expr(arena, callee),
-                    args: args.into_iter().map(|a| self.clone_expr(arena, a)).collect(),
-                }
-            }
-            Expr::Unary { op, expr: inner_expr } => {
-                Expr::Unary { op, expr: self.clone_expr(arena, inner_expr) }
-            }
-            Expr::Binary { left, op, right } => {
-                Expr::Binary {
-                    left: self.clone_expr(arena, left),
-                    op,
-                    right: self.clone_expr(arena, right),
-                }
-            }
-            Expr::Assign { target, value } => {
-                Expr::Assign {
-                    target: self.clone_expr(arena, target),
-                    value: self.clone_expr(arena, value),
-                }
-            }
-            Expr::MemberAccess { object, property, computed_class, is_static_operator } => {
-                Expr::MemberAccess {
-                    object: self.clone_expr(arena, object),
-                    property,
-                    computed_class,
-                    is_static_operator,
-                }
-            }
-            Expr::OptionalMemberAccess { object, property } => {
-                Expr::OptionalMemberAccess {
-                    object: self.clone_expr(arena, object),
-                    property,
-                }
-            }
-            Expr::Block(stmts) => {
-                Expr::Block(stmts.into_iter().map(|s| self.clone_stmt(arena, s)).collect())
-            }
-            Expr::GenericInstantiation { callee, generic_args } => {
-                Expr::GenericInstantiation {
-                    callee: self.clone_expr(arena, callee),
-                    generic_args,
-                }
-            }
-            Expr::Closure { params, return_type, body } => {
-                Expr::Closure {
-                    params,
-                    return_type,
-                    body: self.clone_expr(arena, body),
-                }
-            }
-            Expr::InterpolatedString(parts) => {
-                Expr::InterpolatedString(parts.into_iter().map(|p| self.clone_expr(arena, p)).collect())
-            }
+            Expr::Call { callee, args } => Expr::Call {
+                callee: self.clone_expr(arena, callee),
+                args: args
+                    .into_iter()
+                    .map(|a| self.clone_expr(arena, a))
+                    .collect(),
+            },
+            Expr::Unary {
+                op,
+                expr: inner_expr,
+            } => Expr::Unary {
+                op,
+                expr: self.clone_expr(arena, inner_expr),
+            },
+            Expr::Binary { left, op, right } => Expr::Binary {
+                left: self.clone_expr(arena, left),
+                op,
+                right: self.clone_expr(arena, right),
+            },
+            Expr::Assign { target, value } => Expr::Assign {
+                target: self.clone_expr(arena, target),
+                value: self.clone_expr(arena, value),
+            },
+            Expr::MemberAccess {
+                object,
+                property,
+                computed_class,
+                is_static_operator,
+            } => Expr::MemberAccess {
+                object: self.clone_expr(arena, object),
+                property,
+                computed_class,
+                is_static_operator,
+            },
+            Expr::OptionalMemberAccess { object, property } => Expr::OptionalMemberAccess {
+                object: self.clone_expr(arena, object),
+                property,
+            },
+            Expr::Block(stmts) => Expr::Block(
+                stmts
+                    .into_iter()
+                    .map(|s| self.clone_stmt(arena, s))
+                    .collect(),
+            ),
+            Expr::GenericInstantiation {
+                callee,
+                generic_args,
+            } => Expr::GenericInstantiation {
+                callee: self.clone_expr(arena, callee),
+                generic_args,
+            },
+            Expr::Closure {
+                params,
+                return_type,
+                body,
+            } => Expr::Closure {
+                params,
+                return_type,
+                body: self.clone_expr(arena, body),
+            },
+            Expr::InterpolatedString(parts) => Expr::InterpolatedString(
+                parts
+                    .into_iter()
+                    .map(|p| self.clone_expr(arena, p))
+                    .collect(),
+            ),
             Expr::Unwrap(expr) => Expr::Unwrap(self.clone_expr(arena, expr)),
-            Expr::NullCoalesce { left, right } => {
-                Expr::NullCoalesce {
-                    left: self.clone_expr(arena, left),
-                    right: self.clone_expr(arena, right),
-                }
-            }
+            Expr::NullCoalesce { left, right } => Expr::NullCoalesce {
+                left: self.clone_expr(arena, left),
+                right: self.clone_expr(arena, right),
+            },
             Expr::Try(expr) => Expr::Try(self.clone_expr(arena, expr)),
             Expr::Await(expr) => Expr::Await(self.clone_expr(arena, expr)),
-            Expr::Identifier(..) | Expr::IntLiteral(..) | Expr::FloatLiteral(..) | Expr::StringLiteral(..) | Expr::BoolLiteral(..) | Expr::Null => expr,
+            Expr::Identifier(..)
+            | Expr::IntLiteral(..)
+            | Expr::FloatLiteral(..)
+            | Expr::StringLiteral(..)
+            | Expr::BoolLiteral(..)
+            | Expr::Null => expr,
         };
         arena.alloc_expr(new_expr)
     }
@@ -332,8 +524,22 @@ impl Monomorphizer {
         let generic_decl = arena.get_stmt(generic_decl_id).clone();
         let is_actor = matches!(generic_decl, Stmt::ActorDecl { .. });
         match generic_decl {
-            Stmt::ClassDecl { name: _, generic_params, fields, methods, implements, .. }
-            | Stmt::ActorDecl { name: _, generic_params, fields, methods, implements, .. } => {
+            Stmt::ClassDecl {
+                name: _,
+                generic_params,
+                fields,
+                methods,
+                implements,
+                ..
+            }
+            | Stmt::ActorDecl {
+                name: _,
+                generic_params,
+                fields,
+                methods,
+                implements,
+                ..
+            } => {
                 let params = generic_params.unwrap();
                 let mut type_mapping = std::collections::HashMap::new();
                 for (i, p) in params.iter().enumerate() {
@@ -372,34 +578,35 @@ impl Monomorphizer {
                             methods: iface_methods,
                             ..
                         } = arena.get_stmt(iface_decl_id).clone()
-                        {
-                            for iface_method_id in iface_methods {
-                                if let Stmt::FuncDecl {
-                                    name: iface_m_name,
-                                    body: iface_m_body,
-                                    ..
-                                } = arena.get_stmt(iface_method_id).clone()
-                                {
-                                    if iface_m_body.is_empty() {
-                                        continue;
+                    {
+                        for iface_method_id in iface_methods {
+                            if let Stmt::FuncDecl {
+                                name: iface_m_name,
+                                body: iface_m_body,
+                                ..
+                            } = arena.get_stmt(iface_method_id).clone()
+                            {
+                                if iface_m_body.is_empty() {
+                                    continue;
+                                }
+                                let already_implemented = new_methods.iter().any(|&m_id| {
+                                    if let Stmt::FuncDecl {
+                                        name: cls_m_name, ..
+                                    } = arena.get_stmt(m_id)
+                                    {
+                                        cls_m_name == &iface_m_name
+                                    } else {
+                                        false
                                     }
-                                    let already_implemented = new_methods.iter().any(|&m_id| {
-                                        if let Stmt::FuncDecl {
-                                            name: cls_m_name, ..
-                                        } = arena.get_stmt(m_id)
-                                        {
-                                            cls_m_name == &iface_m_name
-                                        } else {
-                                            false
-                                        }
-                                    });
-                                    if !already_implemented {
-                                        let cloned_iface_method_id = self.clone_stmt(arena, iface_method_id);
-                                        new_methods.push(cloned_iface_method_id);
-                                    }
+                                });
+                                if !already_implemented {
+                                    let cloned_iface_method_id =
+                                        self.clone_stmt(arena, iface_method_id);
+                                    new_methods.push(cloned_iface_method_id);
                                 }
                             }
                         }
+                    }
                 }
 
                 let instantiated = if is_actor {
@@ -423,7 +630,12 @@ impl Monomorphizer {
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
             }
-            Stmt::StructDecl { name: _, generic_params, fields, .. } => {
+            Stmt::StructDecl {
+                name: _,
+                generic_params,
+                fields,
+                ..
+            } => {
                 let params = generic_params.unwrap();
                 let mut type_mapping = std::collections::HashMap::new();
                 for (i, p) in params.iter().enumerate() {
@@ -445,7 +657,12 @@ impl Monomorphizer {
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
             }
-            Stmt::EnumDecl { name: _, generic_params, variants, .. } => {
+            Stmt::EnumDecl {
+                name: _,
+                generic_params,
+                variants,
+                ..
+            } => {
                 let params = generic_params.unwrap();
                 let mut type_mapping = std::collections::HashMap::new();
                 for (i, p) in params.iter().enumerate() {
@@ -479,7 +696,12 @@ impl Monomorphizer {
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
             }
-            Stmt::InterfaceDecl { name: _, generic_params, methods, .. } => {
+            Stmt::InterfaceDecl {
+                name: _,
+                generic_params,
+                methods,
+                ..
+            } => {
                 let params = generic_params.unwrap();
                 let mut type_mapping = std::collections::HashMap::new();
                 for (i, p) in params.iter().enumerate() {
@@ -501,7 +723,18 @@ impl Monomorphizer {
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
             }
-            Stmt::FuncDecl { name: _, generic_params, params, return_type, body, is_async, is_static, visibility, doc_comment: _, span } => {
+            Stmt::FuncDecl {
+                name: _,
+                generic_params,
+                params,
+                return_type,
+                body,
+                is_async,
+                is_static,
+                visibility,
+                doc_comment: _,
+                span,
+            } => {
                 let gen_params = generic_params.unwrap();
                 let mut type_mapping = std::collections::HashMap::new();
                 for (i, p) in gen_params.iter().enumerate() {
@@ -509,7 +742,7 @@ impl Monomorphizer {
                         type_mapping.insert(*p, arg.clone());
                     }
                 }
-                
+
                 let mut new_params = Vec::new();
                 for p in params {
                     let mut new_p = p.clone();
@@ -517,7 +750,7 @@ impl Monomorphizer {
                     self.rewrite_type_annotation(arena, &mut new_p.type_annotation)?;
                     new_params.push(new_p);
                 }
-                
+
                 let mut new_return_type = return_type.clone();
                 if let Some(ty) = &mut new_return_type {
                     self.replace_types(ty, &type_mapping)?;
@@ -750,17 +983,19 @@ impl Monomorphizer {
         Ok(())
     }
 
-    fn rewrite_stmt(&mut self, arena: &mut pace_ast::arena::AstArena, stmt_id: pace_ast::arena::StmtId) -> Result<(), miette::Report> {
+    fn rewrite_stmt(
+        &mut self,
+        arena: &mut pace_ast::arena::AstArena,
+        stmt_id: pace_ast::arena::StmtId,
+    ) -> Result<(), miette::Report> {
         let mut stmt = arena.get_stmt(stmt_id).clone();
-        
+
         match &mut stmt {
-            Stmt::ClassDecl { name: _, .. } | Stmt::ActorDecl { name: _, .. } => {
-            }
-            Stmt::FuncDecl { name: _, .. } => {
-            }
+            Stmt::ClassDecl { .. } | Stmt::ActorDecl { .. } => {}
+            Stmt::FuncDecl { .. } => {}
             _ => {}
         }
-        
+
         match &mut stmt {
             Stmt::VarDecl {
                 type_annotation,
@@ -772,8 +1007,7 @@ impl Monomorphizer {
                 }
                 if let Some(expr) = initializer {
                     let ex = arena.get_expr(*expr).clone();
-                    if let pace_ast::expr::Expr::Call { callee: _, .. } = &ex {
-                    }
+                    if let pace_ast::expr::Expr::Call { .. } = &ex {}
                     self.rewrite_expr(arena, *expr)?;
                 }
             }
@@ -825,33 +1059,33 @@ impl Monomorphizer {
                             methods: iface_methods,
                             ..
                         } = arena.get_stmt(iface_decl_id).clone()
-                        {
-                            for iface_method_id in iface_methods {
-                                if let Stmt::FuncDecl {
-                                    name: iface_m_name,
-                                    body: iface_m_body,
-                                    ..
-                                } = arena.get_stmt(iface_method_id).clone()
-                                {
-                                    if iface_m_body.is_empty() {
-                                        continue;
+                    {
+                        for iface_method_id in iface_methods {
+                            if let Stmt::FuncDecl {
+                                name: iface_m_name,
+                                body: iface_m_body,
+                                ..
+                            } = arena.get_stmt(iface_method_id).clone()
+                            {
+                                if iface_m_body.is_empty() {
+                                    continue;
+                                }
+                                let already_implemented = methods.iter().any(|&m_id| {
+                                    if let Stmt::FuncDecl {
+                                        name: cls_m_name, ..
+                                    } = arena.get_stmt(m_id)
+                                    {
+                                        cls_m_name == &iface_m_name
+                                    } else {
+                                        false
                                     }
-                                    let already_implemented = methods.iter().any(|&m_id| {
-                                        if let Stmt::FuncDecl {
-                                            name: cls_m_name, ..
-                                        } = arena.get_stmt(m_id)
-                                        {
-                                            cls_m_name == &iface_m_name
-                                        } else {
-                                            false
-                                        }
-                                    });
-                                    if !already_implemented {
-                                        methods.push(iface_method_id);
-                                    }
+                                });
+                                if !already_implemented {
+                                    methods.push(iface_method_id);
                                 }
                             }
                         }
+                    }
                 }
             }
             Stmt::InterfaceDecl { methods, .. } => {
@@ -917,7 +1151,11 @@ impl Monomorphizer {
         Ok(())
     }
 
-    fn rewrite_expr(&mut self, arena: &mut pace_ast::arena::AstArena, expr_id: pace_ast::arena::ExprId) -> Result<(), miette::Report> {
+    fn rewrite_expr(
+        &mut self,
+        arena: &mut pace_ast::arena::AstArena,
+        expr_id: pace_ast::arena::ExprId,
+    ) -> Result<(), miette::Report> {
         let mut expr = arena.get_expr(expr_id).clone();
         match &mut expr {
             Expr::GenericInstantiation {
@@ -928,18 +1166,33 @@ impl Monomorphizer {
                 for arg in generic_args.iter_mut() {
                     self.rewrite_type_annotation(arena, arg)?;
                 }
-                
+
                 if let Expr::Identifier(name, _) = arena.get_expr(*callee) {
-                    if name.as_str() == "__pace_retain_generic" || name.as_str() == "__pace_release_generic" {
+                    if name.as_str() == "__pace_retain_generic"
+                        || name.as_str() == "__pace_release_generic"
+                    {
                         let type_name = generic_args[0].name.as_str();
-                        let is_primitive = matches!(type_name, "Int" | "Float" | "Bool" | "Char" | "Byte" | "Void" | "String");
+                        let is_primitive = matches!(
+                            type_name,
+                            "Int" | "Float" | "Bool" | "Char" | "Byte" | "Void" | "String"
+                        );
                         if is_primitive {
                             // We shouldn't hit this normally because Expr::Call intercepts it,
                             // but just in case, we leave it as a dummy identifier
-                            expr = Expr::Identifier(ustr::Ustr::from("__pace_noop"), pace_ast::Span::default());
+                            expr = Expr::Identifier(
+                                ustr::Ustr::from("__pace_noop"),
+                                pace_ast::Span::default(),
+                            );
                         } else {
-                            let target_func = if name.as_str() == "__pace_retain_generic" { "retain" } else { "release" };
-                            expr = Expr::Identifier(ustr::Ustr::from(target_func), pace_ast::Span::default());
+                            let target_func = if name.as_str() == "__pace_retain_generic" {
+                                "retain"
+                            } else {
+                                "release"
+                            };
+                            expr = Expr::Identifier(
+                                ustr::Ustr::from(target_func),
+                                pace_ast::Span::default(),
+                            );
                         }
                         *arena.get_expr_mut(expr_id) = expr;
                         return Ok(());
@@ -947,7 +1200,13 @@ impl Monomorphizer {
 
                     // Convert to a simple identifier and instantiate the class
                     let concrete_name = Self::generate_name(name, generic_args);
-                    if !self.generated_classes.contains_key(&ustr::Ustr::from(&concrete_name)) && !self.generated_funcs.contains_key(&ustr::Ustr::from(&concrete_name)) {
+                    if !self
+                        .generated_classes
+                        .contains_key(&ustr::Ustr::from(&concrete_name))
+                        && !self
+                            .generated_funcs
+                            .contains_key(&ustr::Ustr::from(&concrete_name))
+                    {
                         let mut found = self.generic_classes.get(name).cloned();
                         if found.is_none() {
                             found = self.generic_funcs.get(name).cloned();
@@ -955,20 +1214,27 @@ impl Monomorphizer {
                         if found.is_none() {
                             let target_suffix = format!("_{}", name.as_str());
                             let target_suffix_2 = format!("__{}", name.as_str());
-                            for (k, v) in self.generic_classes.iter().chain(self.generic_funcs.iter()) {
+                            for (k, v) in
+                                self.generic_classes.iter().chain(self.generic_funcs.iter())
+                            {
                                 let k_str = k.as_str();
-                                if k_str.ends_with(&target_suffix) || k_str.ends_with(&target_suffix_2) || k_str == name.as_str() {
+                                if k_str.ends_with(&target_suffix)
+                                    || k_str.ends_with(&target_suffix_2)
+                                    || k_str == name.as_str()
+                                {
                                     found = Some(*v);
                                     break;
                                 }
                             }
                         }
                         if let Some(generic_decl) = found {
-                            let is_func = matches!(arena.get_stmt(generic_decl), Stmt::FuncDecl { .. });
+                            let is_func =
+                                matches!(arena.get_stmt(generic_decl), Stmt::FuncDecl { .. });
                             if is_func {
                                 let dummy_expr_id = arena.alloc_expr(Expr::Null);
                                 let dummy_id = arena.alloc_stmt(Stmt::Expr(dummy_expr_id));
-                                self.generated_funcs.insert(concrete_name.clone().into(), dummy_id); // Dummy to prevent recursion
+                                self.generated_funcs
+                                    .insert(concrete_name.clone().into(), dummy_id); // Dummy to prevent recursion
                             }
                             let _ = self.instantiate_class(
                                 arena,
@@ -982,17 +1248,25 @@ impl Monomorphizer {
                 }
             }
             Expr::Call { callee, args } => {
-                if let Expr::GenericInstantiation { callee: inner_callee, generic_args } = arena.get_expr(*callee)
+                if let Expr::GenericInstantiation {
+                    callee: inner_callee,
+                    generic_args,
+                } = arena.get_expr(*callee)
                     && let Expr::Identifier(name, _) = arena.get_expr(*inner_callee)
-                        && (name.as_str() == "__pace_retain_generic" || name.as_str() == "__pace_release_generic") {
-                            let type_name = generic_args[0].name.as_str();
-                            let is_primitive = matches!(type_name, "Int" | "Float" | "Bool" | "Char" | "Byte" | "Void" | "String");
-                            if is_primitive {
-                                expr = Expr::IntLiteral(0);
-                                *arena.get_expr_mut(expr_id) = expr;
-                                return Ok(());
-                            }
-                        }
+                    && (name.as_str() == "__pace_retain_generic"
+                        || name.as_str() == "__pace_release_generic")
+                {
+                    let type_name = generic_args[0].name.as_str();
+                    let is_primitive = matches!(
+                        type_name,
+                        "Int" | "Float" | "Bool" | "Char" | "Byte" | "Void" | "String"
+                    );
+                    if is_primitive {
+                        expr = Expr::IntLiteral(0);
+                        *arena.get_expr_mut(expr_id) = expr;
+                        return Ok(());
+                    }
+                }
 
                 self.rewrite_expr(arena, *callee)?;
                 for arg in args {
@@ -1017,13 +1291,16 @@ impl Monomorphizer {
             }
             _ => {}
         }
-        if expr_id.0 == 4214 || expr_id.0 == 4215 {
-        }
+        
         *arena.get_expr_mut(expr_id) = expr;
         Ok(())
     }
 
-    fn rewrite_pattern(&mut self, arena: &mut pace_ast::arena::AstArena, pat: &mut pace_ast::Pattern) -> Result<(), miette::Report> {
+    fn rewrite_pattern(
+        &mut self,
+        arena: &mut pace_ast::arena::AstArena,
+        pat: &mut pace_ast::Pattern,
+    ) -> Result<(), miette::Report> {
         if let pace_ast::Pattern::Variant {
             enum_name,
             variant_name: _,

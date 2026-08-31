@@ -1,11 +1,14 @@
+use super::{Translator, VarType};
 use crate::layouts::CodegenError;
 use cranelift::prelude::*;
 use cranelift_module::{DataDescription, Linkage, Module};
 use pace_ast::{BinaryOp, Expr};
-use super::{VarType, Translator};
 
 impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
-    pub fn translate_expr(&mut self, expr_id: pace_ast::arena::ExprId) -> Result<Value, CodegenError> {
+    pub fn translate_expr(
+        &mut self,
+        expr_id: pace_ast::arena::ExprId,
+    ) -> Result<Value, CodegenError> {
         let expr = self.arena.get_expr(expr_id);
         match expr {
             Expr::IntLiteral(i) => Ok(self.builder.ins().iconst(types::I64, *i)),
@@ -84,14 +87,22 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             );
                         }
                         let to_str = self.context.module.declare_func_in_func(
-                            *self.context.funcs.get(&ustr::Ustr::from("float_to_string")).unwrap(),
+                            *self
+                                .context
+                                .funcs
+                                .get(&ustr::Ustr::from("float_to_string"))
+                                .unwrap(),
                             self.builder.func,
                         );
                         let call = self.builder.ins().call(to_str, &[float_val]);
                         self.builder.inst_results(call)[0]
                     } else if part_ty == VarType::Bool {
                         let to_str = self.context.module.declare_func_in_func(
-                            *self.context.funcs.get(&ustr::Ustr::from("bool_to_string")).unwrap(),
+                            *self
+                                .context
+                                .funcs
+                                .get(&ustr::Ustr::from("bool_to_string"))
+                                .unwrap(),
                             self.builder.func,
                         );
                         let call = self.builder.ins().call(to_str, &[val]);
@@ -99,7 +110,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     } else {
                         // Assume Int
                         let to_str = self.context.module.declare_func_in_func(
-                            *self.context.funcs.get(&ustr::Ustr::from("int_to_string")).unwrap(),
+                            *self
+                                .context
+                                .funcs
+                                .get(&ustr::Ustr::from("int_to_string"))
+                                .unwrap(),
                             self.builder.func,
                         );
                         let call = self.builder.ins().call(to_str, &[val]);
@@ -108,7 +123,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
 
                     if let Some(prev) = current_val {
                         let concat = self.context.module.declare_func_in_func(
-                            *self.context.funcs.get(&ustr::Ustr::from("concat_strings")).unwrap(),
+                            *self
+                                .context
+                                .funcs
+                                .get(&ustr::Ustr::from("concat_strings"))
+                                .unwrap(),
                             self.builder.func,
                         );
                         let call = self.builder.ins().call(concat, &[prev, str_val]);
@@ -128,7 +147,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 if let Some((var, ty)) = self.variables.get(name) {
                     let val = self.builder.use_var(*var);
                     if matches!(ty, VarType::Object(_)) {
-                        let retain_id = *self.context.funcs.get(&ustr::Ustr::from("retain")).unwrap();
+                        let retain_id =
+                            *self.context.funcs.get(&ustr::Ustr::from("retain")).unwrap();
                         let local_retain = self
                             .context
                             .module
@@ -159,7 +179,10 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     })
                 }
             }
-            Expr::Unary { op, expr: inner_expr } => {
+            Expr::Unary {
+                op,
+                expr: inner_expr,
+            } => {
                 let inner_val = self.translate_expr(*inner_expr)?;
                 let ty = self.builder.func.dfg.value_type(inner_val);
                 let is_float = ty == types::F64;
@@ -175,9 +198,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             Ok(self.builder.ins().ineg(inner_val))
                         }
                     }
-                    pace_ast::UnaryOp::BitNot => {
-                        Ok(self.builder.ins().bnot(inner_val))
-                    }
+                    pace_ast::UnaryOp::BitNot => Ok(self.builder.ins().bnot(inner_val)),
                 }
             }
             Expr::Binary { left, op, right } => {
@@ -299,7 +320,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
             }
             Expr::Await(inner) => {
                 let promise_ptr = self.translate_expr(*inner)?;
-                let await_id = *self.context.funcs.get(&ustr::Ustr::from("__pace_promise_await")).unwrap();
+                let await_id = *self
+                    .context
+                    .funcs
+                    .get(&ustr::Ustr::from("__pace_promise_await"))
+                    .unwrap();
                 let local_await = self
                     .context
                     .module
@@ -321,7 +346,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         message: "? operator used on non-enum".to_string(),
                     });
                 };
-                let enum_layout = self.context.enum_layouts.get(&ustr::Ustr::from(&enum_name)).unwrap();
+                let enum_layout = self
+                    .context
+                    .enum_layouts
+                    .get(&ustr::Ustr::from(&enum_name))
+                    .unwrap();
 
                 // Determine which tags represent the success and failure
                 let is_result = enum_name.starts_with("Result_");
@@ -381,7 +410,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         if matches!(ty, VarType::Object(_)) {
                             // Release old value
                             let old_val = self.builder.use_var(*var);
-                            let release_id = *self.context.funcs.get(&ustr::Ustr::from("release")).unwrap();
+                            let release_id = *self
+                                .context
+                                .funcs
+                                .get(&ustr::Ustr::from("release"))
+                                .unwrap();
                             let local_release = self
                                 .context
                                 .module
@@ -389,7 +422,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             self.builder.ins().call(local_release, &[old_val]);
 
                             // Retain new value for the variable (caller gets the original +1)
-                            let retain_id = *self.context.funcs.get(&ustr::Ustr::from("retain")).unwrap();
+                            let retain_id =
+                                *self.context.funcs.get(&ustr::Ustr::from("retain")).unwrap();
                             let local_retain = self
                                 .context
                                 .module
@@ -449,14 +483,19 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                                     addr,
                                     0,
                                 );
-                                let release_id = *self.context.funcs.get(&ustr::Ustr::from("release")).unwrap();
+                                let release_id = *self
+                                    .context
+                                    .funcs
+                                    .get(&ustr::Ustr::from("release"))
+                                    .unwrap();
                                 let local_release = self
                                     .context
                                     .module
                                     .declare_func_in_func(release_id, self.builder.func);
                                 self.builder.ins().call(local_release, &[old_val]);
 
-                                let retain_id = *self.context.funcs.get(&ustr::Ustr::from("retain")).unwrap();
+                                let retain_id =
+                                    *self.context.funcs.get(&ustr::Ustr::from("retain")).unwrap();
                                 let local_retain = self
                                     .context
                                     .module
@@ -479,11 +518,19 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     let obj_type = self.get_expr_type(*object);
                     let (f_offset, f_ty) = match obj_type {
                         VarType::Object(name) => {
-                            let layout = self.context.class_layouts.get(&ustr::Ustr::from(name.as_ref())).unwrap();
+                            let layout = self
+                                .context
+                                .class_layouts
+                                .get(&ustr::Ustr::from(name.as_ref()))
+                                .unwrap();
                             layout.fields.get(property).unwrap().clone()
                         }
                         VarType::Struct(name) => {
-                            let layout = self.context.struct_layouts.get(&ustr::Ustr::from(name.as_ref())).unwrap();
+                            let layout = self
+                                .context
+                                .struct_layouts
+                                .get(&ustr::Ustr::from(name.as_ref()))
+                                .unwrap();
                             layout.fields.get(property).unwrap().clone()
                         }
                         _ => panic!("MemberAccess assign on non-object type: {:?}", obj_type),
@@ -496,14 +543,19 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             obj_ptr,
                             f_offset as i32,
                         );
-                        let release_id = *self.context.funcs.get(&ustr::Ustr::from("release")).unwrap();
+                        let release_id = *self
+                            .context
+                            .funcs
+                            .get(&ustr::Ustr::from("release"))
+                            .unwrap();
                         let local_release = self
                             .context
                             .module
                             .declare_func_in_func(release_id, self.builder.func);
                         self.builder.ins().call(local_release, &[old_val]);
 
-                        let retain_id = *self.context.funcs.get(&ustr::Ustr::from("retain")).unwrap();
+                        let retain_id =
+                            *self.context.funcs.get(&ustr::Ustr::from("retain")).unwrap();
                         let local_retain = self
                             .context
                             .module
@@ -588,7 +640,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             "print_int" // Fallback to int
                         };
 
-                        let func_id = *self.context.funcs.get(&ustr::Ustr::from(target_name)).unwrap();
+                        let func_id = *self
+                            .context
+                            .funcs
+                            .get(&ustr::Ustr::from(target_name))
+                            .unwrap();
                         let local_func = self
                             .context
                             .module
@@ -618,7 +674,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     } else if let Some(layout) = self.context.class_layouts.get(func_name) {
                         let ptr_ty = self.context.module.target_config().pointer_type();
 
-                        let malloc_id = *self.context.funcs.get(&ustr::Ustr::from("malloc")).unwrap();
+                        let malloc_id =
+                            *self.context.funcs.get(&ustr::Ustr::from("malloc")).unwrap();
                         let local_malloc = self
                             .context
                             .module
@@ -655,8 +712,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         let zero = self.builder.ins().iconst(types::I64, 0);
                         for (field_name, &(offset, _)) in &layout.fields {
                             if field_name == "__mailbox" {
-                                let mb_create_id =
-                                    *self.context.funcs.get(&ustr::Ustr::from("__pace_mailbox_create")).unwrap();
+                                let mb_create_id = *self
+                                    .context
+                                    .funcs
+                                    .get(&ustr::Ustr::from("__pace_mailbox_create"))
+                                    .unwrap();
                                 let local_mb_create = self
                                     .context
                                     .module
@@ -681,7 +741,9 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
 
                         // Call init if it exists
                         let init_name = format!("{}_init", func_name);
-                        if let Some(&init_id) = self.context.funcs.get(&ustr::Ustr::from(&init_name)) {
+                        if let Some(&init_id) =
+                            self.context.funcs.get(&ustr::Ustr::from(&init_name))
+                        {
                             let local_init = self
                                 .context
                                 .module
@@ -704,11 +766,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         let obj_ptr = self.builder.ins().stack_addr(ptr_ty, slot, 0);
 
                         // Create a sorted list of fields by offset to map args correctly
-                        let mut sorted_fields: Vec<_> = layout
-                            .fields
-                            .iter()
-                            .map(|(k, v)| (*k, v.clone()))
-                            .collect();
+                        let mut sorted_fields: Vec<_> =
+                            layout.fields.iter().map(|(k, v)| (*k, v.clone())).collect();
                         sorted_fields.sort_by_key(|(_, (offset, _))| *offset);
 
                         for (i, arg) in args.iter().enumerate() {
@@ -739,21 +798,23 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     let mut obj_name_opt = None;
                     if let Expr::Identifier(obj_name, _) = self.arena.get_expr(*object) {
                         obj_name_opt = Some(*obj_name);
-                    } else if let Expr::GenericInstantiation { callee, .. } = self.arena.get_expr(*object)
-                        && let Expr::Identifier(obj_name, _) = self.arena.get_expr(*callee) {
-                            obj_name_opt = Some(*obj_name);
-                        }
+                    } else if let Expr::GenericInstantiation { callee, .. } =
+                        self.arena.get_expr(*object)
+                        && let Expr::Identifier(obj_name, _) = self.arena.get_expr(*callee)
+                    {
+                        obj_name_opt = Some(*obj_name);
+                    }
 
                     if let Some(obj_name) = obj_name_opt {
                         if self.context.enum_layouts.contains_key(&obj_name) {
                             let constructor_name = format!("{}_{}", obj_name, property);
-                            let func_id =
-                                self.context
-                                    .funcs
-                                    .get(&ustr::Ustr::from(&constructor_name))
-                                    .unwrap_or_else(|| {
-                                        panic!("Enum constructor {} not found", constructor_name)
-                                    });
+                            let func_id = self
+                                .context
+                                .funcs
+                                .get(&ustr::Ustr::from(&constructor_name))
+                                .unwrap_or_else(|| {
+                                    panic!("Enum constructor {} not found", constructor_name)
+                                });
                             let local_callee = self
                                 .context
                                 .module
@@ -797,13 +858,13 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
 
                     let obj_type = self.get_expr_type(*object);
                     let (m_offset, is_actor) = if let VarType::Object(type_name) = &obj_type {
-                        let layout =
-                            self.context
-                                .class_layouts
-                                .get(&ustr::Ustr::from(type_name))
-                                .unwrap_or_else(|| {
-                                    panic!("Class or interface {} not found in layouts", type_name)
-                                });
+                        let layout = self
+                            .context
+                            .class_layouts
+                            .get(&ustr::Ustr::from(type_name))
+                            .unwrap_or_else(|| {
+                                panic!("Class or interface {} not found in layouts", type_name)
+                            });
                         (
                             *layout.methods.get(property).unwrap_or_else(|| {
                                 panic!("Method {} not found in {}", property, type_name)
@@ -846,8 +907,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     }
 
                     if is_actor {
-                        let promise_create_id =
-                            *self.context.funcs.get(&ustr::Ustr::from("__pace_promise_create")).unwrap();
+                        let promise_create_id = *self
+                            .context
+                            .funcs
+                            .get(&ustr::Ustr::from("__pace_promise_create"))
+                            .unwrap();
                         let local_promise_create = self
                             .context
                             .module
@@ -864,7 +928,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                                 unreachable!()
                             })
                             .unwrap();
-                        let mb_offset = layout.fields.get(&ustr::Ustr::from("__mailbox")).unwrap().0;
+                        let mb_offset =
+                            layout.fields.get(&ustr::Ustr::from("__mailbox")).unwrap().0;
                         let mailbox_ptr = self.builder.ins().load(
                             types::I64,
                             cranelift::prelude::MemFlagsData::new(),
@@ -872,7 +937,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             mb_offset as i32,
                         );
 
-                        let malloc_id = *self.context.funcs.get(&ustr::Ustr::from("malloc")).unwrap();
+                        let malloc_id =
+                            *self.context.funcs.get(&ustr::Ustr::from("malloc")).unwrap();
                         let local_malloc = self
                             .context
                             .module
@@ -891,7 +957,11 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             );
                         }
 
-                        let mb_send_id = *self.context.funcs.get(&ustr::Ustr::from("__pace_mailbox_send")).unwrap();
+                        let mb_send_id = *self
+                            .context
+                            .funcs
+                            .get(&ustr::Ustr::from("__pace_mailbox_send"))
+                            .unwrap();
                         let local_mb_send = self
                             .context
                             .module
@@ -938,21 +1008,23 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let mut obj_name_opt = None;
                 if let Expr::Identifier(obj_name, _) = self.arena.get_expr(*object) {
                     obj_name_opt = Some(*obj_name);
-                } else if let Expr::GenericInstantiation { callee, .. } = self.arena.get_expr(*object)
-                    && let Expr::Identifier(obj_name, _) = self.arena.get_expr(*callee) {
-                        obj_name_opt = Some(*obj_name);
-                    }
+                } else if let Expr::GenericInstantiation { callee, .. } =
+                    self.arena.get_expr(*object)
+                    && let Expr::Identifier(obj_name, _) = self.arena.get_expr(*callee)
+                {
+                    obj_name_opt = Some(*obj_name);
+                }
 
                 if let Some(obj_name) = obj_name_opt {
                     if self.context.enum_layouts.contains_key(&obj_name) {
                         let constructor_name = format!("{}_{}", obj_name, property);
-                        let func_id =
-                            self.context
-                                .funcs
-                                .get(&ustr::Ustr::from(&constructor_name))
-                                .unwrap_or_else(|| {
-                                    panic!("Enum constructor {} not found", constructor_name)
-                                });
+                        let func_id = self
+                            .context
+                            .funcs
+                            .get(&ustr::Ustr::from(&constructor_name))
+                            .unwrap_or_else(|| {
+                                panic!("Enum constructor {} not found", constructor_name)
+                            });
                         let local_callee = self
                             .context
                             .module
@@ -962,14 +1034,19 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         return Ok(self.builder.inst_results(call)[0]);
                     }
 
-                    let maybe_static_field =
-                        if let Some(layout) = self.context.class_layouts.get(&ustr::Ustr::from(&obj_name)) {
-                            layout.static_fields.get(property)
-                        } else if let Some(layout) = self.context.struct_layouts.get(&ustr::Ustr::from(&obj_name)) {
-                            layout.static_fields.get(property)
-                        } else {
-                            None
-                        };
+                    let maybe_static_field = if let Some(layout) =
+                        self.context.class_layouts.get(&ustr::Ustr::from(&obj_name))
+                    {
+                        layout.static_fields.get(property)
+                    } else if let Some(layout) = self
+                        .context
+                        .struct_layouts
+                        .get(&ustr::Ustr::from(&obj_name))
+                    {
+                        layout.static_fields.get(property)
+                    } else {
+                        None
+                    };
 
                     if let Some(&(data_id, ref f_ty)) = maybe_static_field {
                         let ptr_ty = self.context.module.target_config().pointer_type();
@@ -986,7 +1063,8 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         );
 
                         if matches!(f_ty, VarType::Object(_)) {
-                            let retain_id = *self.context.funcs.get(&ustr::Ustr::from("retain")).unwrap();
+                            let retain_id =
+                                *self.context.funcs.get(&ustr::Ustr::from("retain")).unwrap();
                             let local_retain = self
                                 .context
                                 .module
@@ -1003,11 +1081,19 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let obj_type = self.get_expr_type(*object);
                 let (f_offset, f_ty) = match obj_type {
                     VarType::Object(name) => {
-                        let layout = self.context.class_layouts.get(&ustr::Ustr::from(name.as_ref())).unwrap();
+                        let layout = self
+                            .context
+                            .class_layouts
+                            .get(&ustr::Ustr::from(name.as_ref()))
+                            .unwrap();
                         layout.fields.get(property).unwrap().clone()
                     }
                     VarType::Struct(name) => {
-                        let layout = self.context.struct_layouts.get(&ustr::Ustr::from(name.as_ref())).unwrap();
+                        let layout = self
+                            .context
+                            .struct_layouts
+                            .get(&ustr::Ustr::from(name.as_ref()))
+                            .unwrap();
                         layout.fields.get(property).unwrap().clone()
                     }
                     _ => panic!("MemberAccess on non-object type: {:?}", obj_type),
@@ -1198,11 +1284,19 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 let obj_type = self.get_expr_type(*object);
                 let (f_offset, f_ty) = match obj_type {
                     VarType::Object(name) => {
-                        let layout = self.context.class_layouts.get(&ustr::Ustr::from(name.as_ref())).unwrap();
+                        let layout = self
+                            .context
+                            .class_layouts
+                            .get(&ustr::Ustr::from(name.as_ref()))
+                            .unwrap();
                         layout.fields.get(property).unwrap().clone()
                     }
                     VarType::Struct(name) => {
-                        let layout = self.context.struct_layouts.get(&ustr::Ustr::from(name.as_ref())).unwrap();
+                        let layout = self
+                            .context
+                            .struct_layouts
+                            .get(&ustr::Ustr::from(name.as_ref()))
+                            .unwrap();
                         layout.fields.get(property).unwrap().clone()
                     }
                     _ => panic!("OptionalMemberAccess on non-object type: {:?}", obj_type),

@@ -1,16 +1,17 @@
-use crate::env::{Type, Environment};
+use crate::env::{Environment, Type};
 use pace_errors::TypeError;
 use std::collections::HashMap;
 
+pub mod decl;
 pub mod expr;
 pub mod stmt;
-pub mod decl;
 impl<'a> TypeChecker<'a> {
     pub fn get_span_for(&self, token: &str) -> pace_ast::Span {
         if let Some(src) = self.sources.get(&self.current_module)
-            && let Some(idx) = src.find(token) {
-                return pace_ast::Span::new(idx, token.len());
-            }
+            && let Some(idx) = src.find(token)
+        {
+            return pace_ast::Span::new(idx, token.len());
+        }
         pace_ast::Span::default()
     }
 
@@ -53,7 +54,11 @@ pub fn check(
 }
 
 impl<'a> TypeChecker<'a> {
-    pub fn new(arena: &'a pace_ast::arena::AstArena, sources: HashMap<ustr::Ustr, String>, file_name: &str) -> Self {
+    pub fn new(
+        arena: &'a pace_ast::arena::AstArena,
+        sources: HashMap<ustr::Ustr, String>,
+        file_name: &str,
+    ) -> Self {
         Self {
             file_name: file_name.to_string(),
             sources,
@@ -69,13 +74,19 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub(crate) fn define_var(&mut self, name: ustr::Ustr, ty: Type, span: pace_ast::Span, is_mutable: bool) {
+    pub(crate) fn define_var(
+        &mut self,
+        name: ustr::Ustr,
+        ty: Type,
+        span: pace_ast::Span,
+        is_mutable: bool,
+    ) {
         if let Err(original_span) = self.env.define(name, ty, span, is_mutable) {
             self.errors.push(TypeError::DuplicateDeclaration {
                 name: name.to_string(),
                 src: self.get_source(),
-                span: span.into(),
-                original_span: original_span.into(),
+                span: span,
+                original_span: original_span,
             });
         }
     }
@@ -113,7 +124,7 @@ impl<'a> TypeChecker<'a> {
                         kind: kind.to_string(),
                         name: name.to_string(),
                         src: self.get_source(),
-                        span: var_info.span.into(),
+                        span: var_info.span,
                     });
             }
         }
@@ -144,7 +155,10 @@ impl<'a> TypeChecker<'a> {
                 }
             }
             _ => {
-                let ty = if self.generic_params_in_scope.contains(&ustr::Ustr::from(base_name)) {
+                let ty = if self
+                    .generic_params_in_scope
+                    .contains(&ustr::Ustr::from(base_name))
+                {
                     Type::GenericParameter(ustr::Ustr::from(base_name))
                 } else if self.env.structs.contains_key(&ustr::Ustr::from(base_name)) {
                     Type::Struct(ustr::Ustr::from(base_name))
@@ -155,8 +169,7 @@ impl<'a> TypeChecker<'a> {
                 } else {
                     Type::Class(ustr::Ustr::from(base_name))
                 };
-                if base_name.starts_with("Result_") {
-                }
+                base_name.starts_with("Result_");
                 ty
             }
         };
@@ -206,7 +219,7 @@ impl<'a> TypeChecker<'a> {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),
-                            span: self.current_span.into(),
+                            span: self.current_span,
                             message: format!(
                                 "Pattern type mismatch: expected {:?}, got {:?}",
                                 expected_type, ty
@@ -214,11 +227,9 @@ impl<'a> TypeChecker<'a> {
                         });
                     }
                 }
-                
             }
             pace_ast::Pattern::Variable(name, span) => {
                 self.define_var(*name, expected_type.clone(), *span, false);
-                
             }
             pace_ast::Pattern::Variant {
                 enum_name,
@@ -237,23 +248,23 @@ impl<'a> TypeChecker<'a> {
 
                 if let Some(ename) = resolved_enum_name
                     && let Some(sig) = self.env.enums.get(&ename)
-                        && let Some((_, v_fields_opt)) = sig
-                            .variants
-                            .iter()
-                            .find(|(name, _)| **name == *variant_name)
-                            && let Some(v_fields) = v_fields_opt {
-                                for (i, f_ty) in v_fields.iter().enumerate() {
-                                    if i < field_types.len() {
-                                        field_types[i] = f_ty.clone();
-                                    }
-                                }
-                            }
+                    && let Some((_, v_fields_opt)) = sig
+                        .variants
+                        .iter()
+                        .find(|(name, _)| **name == *variant_name)
+                    && let Some(v_fields) = v_fields_opt
+                {
+                    for (i, f_ty) in v_fields.iter().enumerate() {
+                        if i < field_types.len() {
+                            field_types[i] = f_ty.clone();
+                        }
+                    }
+                }
                 if let Some(fs) = fields {
                     for (i, pat) in fs.iter().enumerate() {
                         self.check_pattern(pat, &field_types[i]);
                     }
                 }
-                
             }
         }
     }

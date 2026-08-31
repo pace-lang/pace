@@ -1,7 +1,5 @@
 use crate::arena::{ExprId, StmtId};
-use pace_common::{Span, Visibility, TypeAnnotation};
-
-
+use pace_common::{Span, TypeAnnotation, Visibility};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
@@ -111,8 +109,6 @@ pub struct Param {
     pub name: ustr::Ustr,
     pub type_annotation: TypeAnnotation,
 }
-
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumVariant {

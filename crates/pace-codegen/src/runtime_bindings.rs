@@ -128,7 +128,10 @@ impl RuntimeBindings {
             "__pace_string_substring",
             pace_runtime::__pace_string_substring as *const u8,
         );
-        builder.symbol("__pace_string_trim", pace_runtime::__pace_string_trim as *const u8);
+        builder.symbol(
+            "__pace_string_trim",
+            pace_runtime::__pace_string_trim as *const u8,
+        );
         builder.symbol(
             "__pace_string_index_of",
             pace_runtime::__pace_string_index_of as *const u8,

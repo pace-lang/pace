@@ -19,3 +19,6 @@ pace-ty = { path = "../pace-ty" }
 walkdir.workspace = true
 pathdiff = "0.2.3"
 ustr = "1.1.0"
+
+[lints]
+workspace = true
