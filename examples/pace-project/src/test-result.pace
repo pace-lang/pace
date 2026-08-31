@@ -5,12 +5,44 @@ func divide(a: Int, b: Int) -> Result<Int, String> {
     return Result<Int, String>::Ok(a / b);
 }
 
-func runResultTest() -> Result<Bool, String> {
-    print("--- Testing Results ---");
+
+func runResultReturnTest() -> Result<Int, String> {
     let res = divide(10, 2);
     let val = res?;
     print("10 / 2 result: ");
     print(val);
-    return Result<Bool, String>::Ok(true);
+    return Result<Int, String>::Ok(val);
 }
+
+func runResultTest() {
+    print("--- Testing Results ---");
+
+    runResultReturnTest();
+
+    let res1 = divide(10, 2);
+    match res1 {
+        Result::Ok(v) => {
+            print("First result: ");
+            print(v);
+        }
+        Result::Err(e) => {
+            print("First error: ");
+            print(e);
+        }
+    }
+    
+    let res2 = divide(10, 0);
+    match res2 {
+        Result::Ok(v) => {
+            print("Second result: ");
+            print(v);
+        }
+        Result::Err(e) => {
+            print("Second error: ");
+            print(e);
+        }
+    }
+}
+
+
 
