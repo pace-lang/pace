@@ -1,4 +1,4 @@
-use pace_common::Span;
+use pace_common::{Span, BinaryOp};
 use crate::arena::{ExprId, StmtId};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -20,7 +20,7 @@ pub enum Expr {
     /// A generic instantiation (e.g., Box<Int> or first<String>)
     GenericInstantiation {
         callee: ExprId,
-        generic_args: Vec<crate::stmt::TypeAnnotation>,
+        generic_args: Vec<pace_common::TypeAnnotation>,
     },
     /// A binary operation (e.g., a + b)
     Binary {
@@ -62,8 +62,8 @@ pub enum Expr {
     Await(ExprId),
     /// A closure (anonymous function)
     Closure {
-        params: Vec<(ustr::Ustr, crate::stmt::TypeAnnotation)>,
-        return_type: Option<crate::stmt::TypeAnnotation>,
+        params: Vec<(ustr::Ustr, pace_common::TypeAnnotation)>,
+        return_type: Option<pace_common::TypeAnnotation>,
         body: ExprId, // Using Expr for both implicit return expressions and blocks (Expr::Block)
     },
 
@@ -71,19 +71,4 @@ pub enum Expr {
     Block(Vec<StmtId>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BinaryOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Eq,
-    NotEq,
-    Less,
-    LessEq,
-    Greater,
-    GreaterEq,
-    And,
-    Or,
-}
+

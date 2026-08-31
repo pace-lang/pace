@@ -6,6 +6,7 @@ pub mod clone;
 pub use expr::*;
 pub use stmt::*;
 pub use arena::*;
+pub use pace_common::{BinaryOp, TypeAnnotation};
 pub use pace_common::{Span, Visibility};
 
 #[cfg(test)]
@@ -22,7 +23,7 @@ mod tests {
             is_mutable: false,
             is_static: false,
             visibility: Visibility::Public,
-            type_annotation: Some(crate::stmt::TypeAnnotation {
+            type_annotation: Some(pace_common::TypeAnnotation {
                 module_prefix: None,
                 name: ustr::Ustr::from("Int"),
                 args: vec![],

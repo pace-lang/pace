@@ -768,8 +768,8 @@ impl<'a> Formatter<'a> {
     }
 
 
-    fn binary_precedence(op: &pace_ast::expr::BinaryOp) -> u8 {
-        use pace_ast::expr::BinaryOp::*;
+    fn binary_precedence(op: &pace_ast::BinaryOp) -> u8 {
+        use pace_ast::BinaryOp::*;
         match op {
             Mul | Div | Mod => 6,
             Add | Sub => 5,

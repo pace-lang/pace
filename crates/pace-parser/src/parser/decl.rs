@@ -10,13 +10,13 @@ impl<'a, 'b> Parser<'a, 'b> {
         is_static: bool,
         doc_comment: Option<ustr::Ustr>,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
-        let start_pos = self.current_span.0;
+        let start_pos = self.current_span.start;
         self.advance(); // consume func
 
         let name = match &self.current_token {
             Token::Ident(id) => *id,
             _ => {
-                return Err(pace_errors::SyntaxError {
+                return Err(pace_errors::SyntaxError::Generic {
                     message: "Expected function name".to_string(),
                     src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                     span: self.current_span,
@@ -28,7 +28,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let generic_params = self.parse_generic_params()?;
 
         if !self.match_token(Token::LParen) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '(' after function name".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -41,7 +41,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let param_name = match &self.current_token {
                     Token::Ident(id) => *id,
                     _ => {
-                        return Err(pace_errors::SyntaxError {
+                        return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected parameter name".to_string(),
                             src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                             span: self.current_span,
@@ -51,7 +51,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.advance();
 
                 if !self.match_token(Token::Colon) {
-                    return Err(pace_errors::SyntaxError {
+                    return Err(pace_errors::SyntaxError::Generic {
                         message: "Expected ':' after parameter name".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                         span: self.current_span,
@@ -72,7 +72,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if !self.match_token(Token::RParen) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected ')' after parameters".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -85,7 +85,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if !self.match_token(Token::LBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '{' before function body".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -104,7 +104,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if !self.match_token(Token::RBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '}' after function body".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -123,7 +123,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             doc_comment,
             span: pace_ast::Span::new(
                 start_pos,
-                (self.current_span.0 + self.current_span.1).saturating_sub(start_pos),
+                (self.current_span.start + self.current_span.len).saturating_sub(start_pos),
             ),
         }))
     }
@@ -137,7 +137,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let name = match &self.current_token {
             Token::Ident(id) => *id,
             _ => {
-                return Err(pace_errors::SyntaxError {
+                return Err(pace_errors::SyntaxError::Generic {
                     message: "Expected class name".to_string(),
                     src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                     span: self.current_span,
@@ -154,7 +154,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if !self.match_token(Token::LBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '{' before class body".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -172,9 +172,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                     Stmt::Expr(expr_id) => {
                         if let pace_ast::Expr::Call { callee, .. } = self.arena.get_expr(*expr_id) {
                             if let pace_ast::Expr::Identifier(name, _) = self.arena.get_expr(*callee) {
-                                self.errors.push(pace_errors::SyntaxError { message: format!("Methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()), span: self.current_span });
+                                self.errors.push(pace_errors::SyntaxError::Generic { message: format!("Methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()), span: self.current_span });
                             } else {
-                                self.errors.push(pace_errors::SyntaxError {
+                                self.errors.push(pace_errors::SyntaxError::Generic {
                                     message: "Classes can only contain fields and methods".to_string(),
                                     src: miette::NamedSource::new(
                                         self.file_name.clone(),
@@ -187,7 +187,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         self.synchronize();
                     }
                     _ => {
-                        self.errors.push(pace_errors::SyntaxError {
+                        self.errors.push(pace_errors::SyntaxError::Generic {
                             message: "Classes can only contain fields and methods".to_string(),
                             src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                             span: self.current_span,
@@ -203,7 +203,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if !self.match_token(Token::RBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '}' after class body".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -228,7 +228,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let name = match &self.current_token {
             Token::Ident(id) => *id,
             _ => {
-                return Err(pace_errors::SyntaxError {
+                return Err(pace_errors::SyntaxError::Generic {
                     message: "Expected actor name".to_string(),
                     src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                     span: self.current_span,
@@ -245,7 +245,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if !self.match_token(Token::LBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '{' before actor body".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -263,9 +263,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                     Stmt::Expr(expr_id) => {
                         if let pace_ast::Expr::Call { callee, .. } = self.arena.get_expr(*expr_id) {
                             if let pace_ast::Expr::Identifier(name, _) = self.arena.get_expr(*callee) {
-                                self.errors.push(pace_errors::SyntaxError { message: format!("Methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()), span: self.current_span });
+                                self.errors.push(pace_errors::SyntaxError::Generic { message: format!("Methods must be prefixed with 'func'. Did you forget 'func' before '{}'?", name), src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()), span: self.current_span });
                             } else {
-                                self.errors.push(pace_errors::SyntaxError {
+                                self.errors.push(pace_errors::SyntaxError::Generic {
                                     message: "Actors can only contain fields and methods".to_string(),
                                     src: miette::NamedSource::new(
                                         self.file_name.clone(),
@@ -278,7 +278,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         self.synchronize();
                     }
                     _ => {
-                        self.errors.push(pace_errors::SyntaxError {
+                        self.errors.push(pace_errors::SyntaxError::Generic {
                             message: "Actors can only contain fields and methods".to_string(),
                             src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                             span: self.current_span,
@@ -294,7 +294,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if !self.match_token(Token::RBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '}' after actor body".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -320,7 +320,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let name = match &self.current_token {
             Token::Ident(id) => *id,
             _ => {
-                return Err(pace_errors::SyntaxError {
+                return Err(pace_errors::SyntaxError::Generic {
                     message: "Expected interface name".to_string(),
                     src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                     span: self.current_span,
@@ -332,7 +332,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let generic_params = self.parse_generic_params()?;
 
         if !self.match_token(Token::LBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '{' before interface body".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -345,7 +345,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             let is_async = self.match_token(Token::Async);
 
             if !self.match_token(Token::Func) {
-                return Err(pace_errors::SyntaxError {
+                return Err(pace_errors::SyntaxError::Generic {
                     message: "Expected 'func' in interface definition".to_string(),
                     src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                     span: self.current_span,
@@ -355,7 +355,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             let method_name = match &self.current_token {
                 Token::Ident(id) => *id,
                 _ => {
-                    return Err(pace_errors::SyntaxError {
+                    return Err(pace_errors::SyntaxError::Generic {
                         message: "Expected function name".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                         span: self.current_span,
@@ -365,7 +365,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.advance();
 
             if !self.match_token(Token::LParen) {
-                return Err(pace_errors::SyntaxError {
+                return Err(pace_errors::SyntaxError::Generic {
                     message: "Expected '(' after function name".to_string(),
                     src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                     span: self.current_span,
@@ -378,7 +378,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     let param_name = match &self.current_token {
                         Token::Ident(id) => *id,
                         _ => {
-                            return Err(pace_errors::SyntaxError {
+                            return Err(pace_errors::SyntaxError::Generic {
                                 message: "Expected parameter name".to_string(),
                                 src: miette::NamedSource::new(
                                     self.file_name.clone(),
@@ -391,7 +391,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     self.advance();
 
                     if !self.match_token(Token::Colon) {
-                        return Err(pace_errors::SyntaxError {
+                        return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected ':' after parameter name".to_string(),
                             src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                             span: self.current_span,
@@ -412,7 +412,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
 
             if !self.match_token(Token::RParen) {
-                return Err(pace_errors::SyntaxError {
+                return Err(pace_errors::SyntaxError::Generic {
                     message: "Expected ')' after parameters".to_string(),
                     src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                     span: self.current_span,
@@ -456,7 +456,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if !self.match_token(Token::RBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '}' after interface body".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -480,7 +480,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let name = match &self.current_token {
             Token::Ident(id) => *id,
             _ => {
-                return Err(pace_errors::SyntaxError {
+                return Err(pace_errors::SyntaxError::Generic {
                     message: "Expected enum name".to_string(),
                     src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                     span: self.current_span,
@@ -496,7 +496,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     params.push((*id).into());
                     self.advance();
                 } else {
-                    return Err(pace_errors::SyntaxError {
+                    return Err(pace_errors::SyntaxError::Generic {
                         message: "Expected generic parameter name".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                         span: self.current_span,
@@ -508,7 +508,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
             }
             if !self.match_token(Token::Greater) {
-                return Err(pace_errors::SyntaxError {
+                return Err(pace_errors::SyntaxError::Generic {
                     message: "Expected '>' after generic parameters".to_string(),
                     src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                     span: self.current_span,
@@ -520,7 +520,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         };
 
         if !self.match_token(Token::LBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '{' after enum name".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -532,7 +532,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             let variant_name = match &self.current_token {
                 Token::Ident(id) => *id,
                 _ => {
-                    return Err(pace_errors::SyntaxError {
+                    return Err(pace_errors::SyntaxError::Generic {
                         message: "Expected enum variant name".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                         span: self.current_span,
@@ -550,7 +550,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     }
                 }
                 if !self.match_token(Token::RParen) {
-                    return Err(pace_errors::SyntaxError {
+                    return Err(pace_errors::SyntaxError::Generic {
                         message: "Expected ')' after enum variant fields".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                         span: self.current_span,
@@ -572,7 +572,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if !self.match_token(Token::RBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '}' after enum body".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -596,7 +596,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let name = match &self.current_token {
             Token::Ident(id) => *id,
             _ => {
-                return Err(pace_errors::SyntaxError {
+                return Err(pace_errors::SyntaxError::Generic {
                     message: "Expected struct name".to_string(),
                     src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                     span: self.current_span,
@@ -608,7 +608,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         let generic_params = self.parse_generic_params()?;
 
         if !self.match_token(Token::LBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '{' before struct body".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -621,7 +621,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             match self.arena.get_stmt(stmt) {
                 Stmt::VarDecl { .. } => fields.push(stmt),
                 _ => {
-                    return Err(pace_errors::SyntaxError {
+                    return Err(pace_errors::SyntaxError::Generic {
                         message: "Structs can only contain fields".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                         span: self.current_span,
@@ -631,7 +631,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if !self.match_token(Token::RBrace) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected '}' after struct body".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -652,12 +652,12 @@ impl<'a, 'b> Parser<'a, 'b> {
         is_static: bool,
         visibility: Visibility,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
-        let start_pos = self.current_span.0;
+        let start_pos = self.current_span.start;
         self.advance(); // consume let/var
         let name = match &self.current_token {
             Token::Ident(id) => *id,
             _ => {
-                return Err(pace_errors::SyntaxError {
+                return Err(pace_errors::SyntaxError::Generic {
                     message: "Expected identifier".to_string(),
                     src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                     span: self.current_span,
@@ -677,7 +677,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         if !self.match_token(Token::Semi) {
-            return Err(pace_errors::SyntaxError {
+            return Err(pace_errors::SyntaxError::Generic {
                 message: "Expected ';' after variable declaration".to_string(),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -693,7 +693,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             initializer,
             span: pace_ast::Span::new(
                 start_pos,
-                (self.current_span.0 + self.current_span.1).saturating_sub(start_pos),
+                (self.current_span.start + self.current_span.len).saturating_sub(start_pos),
             ),
         }))
     }

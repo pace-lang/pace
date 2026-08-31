@@ -9,7 +9,7 @@ pub mod decl;
 pub struct Parser<'a, 'b> {
     pub lexer: Lexer<'a>,
     pub current_token: Token<'a>,
-    pub current_span: (usize, usize),
+    pub current_span: pace_common::Span,
     pub errors: Vec<pace_errors::SyntaxError>,
     pub file_name: String,
     pub src: &'a str,
@@ -27,7 +27,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             src,
             lexer,
             current_token,
-            current_span,
+            current_span: current_span.into(),
             errors: Vec::new(),
             arena,
         }
@@ -44,7 +44,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn advance(&mut self) {
         let (tok, span) = self.lexer.next_token();
         self.current_token = tok;
-        self.current_span = span;
+        self.current_span = span.into();
     }
 
     fn match_token(&mut self, expected: Token<'a>) -> bool {

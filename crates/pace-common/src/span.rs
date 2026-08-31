@@ -45,3 +45,9 @@ impl From<(usize, usize)> for Span {
         Span::new(tuple.0, tuple.1)
     }
 }
+
+impl From<Span> for miette::SourceSpan {
+    fn from(span: Span) -> Self {
+        miette::SourceSpan::new(span.start.into(), span.len)
+    }
+}

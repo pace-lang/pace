@@ -2,19 +2,19 @@ use miette::{Diagnostic, NamedSource};
 use thiserror::Error;
 
 #[derive(Clone, Error, Diagnostic, Debug)]
-#[error("Syntax error: {message}")]
-#[diagnostic(
-    code(P1002),
-    help("Check the language syntax guidelines for proper formatting.")
-)]
-pub struct SyntaxError {
-    pub message: String,
-
-    #[source_code]
-    pub src: miette::NamedSource<String>,
-
-    #[label("Unexpected token")]
-    pub span: (usize, usize),
+pub enum SyntaxError {
+    #[error("Syntax error: {message}")]
+    #[diagnostic(
+        code(P1002),
+        help("Check the language syntax guidelines for proper formatting.")
+    )]
+    Generic {
+        message: String,
+        #[source_code]
+        src: miette::NamedSource<String>,
+        #[label("Unexpected token")]
+        span: pace_common::Span,
+    },
 }
 
 #[derive(Error, Diagnostic, Debug)]
@@ -35,7 +35,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Not found")]
-        span: (usize, usize),
+        span: pace_common::Span,
     },
 
     #[error("Duplicate declaration of '{name}'")]
@@ -48,9 +48,9 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Cannot redeclare '{name}'")]
-        span: (usize, usize),
+        span: pace_common::Span,
         #[label("Originally defined here")]
-        original_span: (usize, usize),
+        original_span: pace_common::Span,
     },
 
     #[error("Type mismatch: {message}")]
@@ -60,7 +60,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Type mismatch")]
-        span: (usize, usize),
+        span: pace_common::Span,
     },
 
     #[error("Unknown type '{name}'")]
@@ -73,7 +73,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Type not found")]
-        span: (usize, usize),
+        span: pace_common::Span,
     },
 
     #[error("Invalid weak reference")]
@@ -85,7 +85,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Invalid weak")]
-        span: (usize, usize),
+        span: pace_common::Span,
     },
 
     #[error("Ownership violation: {message}")]
@@ -100,7 +100,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Violation here")]
-        span: (usize, usize),
+        span: pace_common::Span,
     },
 
     #[error("Type error: {message}")]
@@ -110,7 +110,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Here")]
-        span: (usize, usize),
+        span: pace_common::Span,
     },
 }
 
@@ -123,7 +123,7 @@ pub enum SemanticWarning {
         #[source_code]
         src: NamedSource<String>,
         #[label("Consider renaming to camelCase")]
-        span: (usize, usize),
+        span: pace_common::Span,
     },
 
     #[error("Unused {kind} '{name}'")]
@@ -134,6 +134,6 @@ pub enum SemanticWarning {
         #[source_code]
         src: NamedSource<String>,
         #[label("This is never used")]
-        span: (usize, usize),
+        span: pace_common::Span,
     },
 }

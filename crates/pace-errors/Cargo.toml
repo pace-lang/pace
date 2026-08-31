@@ -8,4 +8,5 @@ license.workspace = true
 
 [dependencies]
 miette = { workspace = true }
+pace-common = { version = "0.1.0", path = "../pace-common" }
 thiserror = "2"

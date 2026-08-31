@@ -121,7 +121,7 @@ impl Monomorphizer {
         name
     }
 
-    fn rewrite_type_annotation(&mut self, arena: &mut pace_ast::arena::AstArena, ty: &mut pace_ast::stmt::TypeAnnotation) -> Result<(), miette::Report> {
+    fn rewrite_type_annotation(&mut self, arena: &mut pace_ast::arena::AstArena, ty: &mut pace_ast::TypeAnnotation) -> Result<(), miette::Report> {
         if !ty.args.is_empty() {
             for arg in &mut ty.args {
                 self.rewrite_type_annotation(arena, arg)?;
@@ -648,7 +648,7 @@ impl Monomorphizer {
         &mut self,
         arena: &mut pace_ast::arena::AstArena,
         expr_id: pace_ast::arena::ExprId,
-        mapping: &std::collections::HashMap<ustr::Ustr, pace_ast::stmt::TypeAnnotation>,
+        mapping: &std::collections::HashMap<ustr::Ustr, pace_ast::TypeAnnotation>,
     ) -> Result<(), miette::Report> {
         let mut expr = arena.get_expr(expr_id).clone();
         match &mut expr {

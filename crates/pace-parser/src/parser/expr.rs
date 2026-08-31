@@ -21,7 +21,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     }));
                 }
                 _ => {
-                    return Err(pace_errors::SyntaxError {
+                    return Err(pace_errors::SyntaxError::Generic {
                         message: "Invalid assignment target".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                         span: self.current_span,
@@ -178,7 +178,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let property = match &self.current_token {
                     Token::Ident(id) => *id,
                     _ => {
-                        return Err(pace_errors::SyntaxError {
+                        return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected property name after '.'".to_string(),
                             src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                             span: self.current_span,
@@ -196,7 +196,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let property = match &self.current_token {
                     Token::Ident(id) => *id,
                     _ => {
-                        return Err(pace_errors::SyntaxError {
+                        return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected variant name after '::'".to_string(),
                             src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                             span: self.current_span,
@@ -214,7 +214,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let property = match &self.current_token {
                     Token::Ident(id) => *id,
                     _ => {
-                        return Err(pace_errors::SyntaxError {
+                        return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected property name after '?.'".to_string(),
                             src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                             span: self.current_span,
@@ -277,9 +277,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
                 if !self.match_token(Token::RParen) {
                     if self.current_token == Token::Colon {
-                        return Err(pace_errors::SyntaxError { message: "Expected ')' after arguments. (Note: if you are declaring a function, ensure it is prefixed with the 'func' keyword)".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()), span: self.current_span });
+                        return Err(pace_errors::SyntaxError::Generic { message: "Expected ')' after arguments. (Note: if you are declaring a function, ensure it is prefixed with the 'func' keyword)".to_string(), src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()), span: self.current_span });
                     }
-                    return Err(pace_errors::SyntaxError {
+                    return Err(pace_errors::SyntaxError::Generic {
                         message: "Expected ')' after arguments".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                         span: self.current_span,
@@ -369,7 +369,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         let param_name = match &self.current_token {
                             Token::Ident(id) => *id,
                             _ => {
-                                return Err(pace_errors::SyntaxError {
+                                return Err(pace_errors::SyntaxError::Generic {
                                     message: "Expected parameter name in closure".to_string(),
                                     src: miette::NamedSource::new(
                                         self.file_name.clone(),
@@ -381,7 +381,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         };
                         self.advance();
                         if !self.match_token(Token::Colon) {
-                            return Err(pace_errors::SyntaxError {
+                            return Err(pace_errors::SyntaxError::Generic {
                                 message: "Expected ':' after closure parameter name".to_string(),
                                 src: miette::NamedSource::new(
                                     self.file_name.clone(),
@@ -397,7 +397,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         }
                     }
                     if !self.match_token(Token::RParen) {
-                        return Err(pace_errors::SyntaxError {
+                        return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected ')' after closure parameters".to_string(),
                             src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                             span: self.current_span,
@@ -410,7 +410,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     }
 
                     if !self.match_token(Token::FatArrow) {
-                        return Err(pace_errors::SyntaxError {
+                        return Err(pace_errors::SyntaxError::Generic {
                             message: "Expected '=>' for closure body".to_string(),
                             src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                             span: self.current_span,
@@ -438,7 +438,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.advance(); // consume '(' as normal group
                 let expr = self.parse_expr()?;
                 if !self.match_token(Token::RParen) {
-                    return Err(pace_errors::SyntaxError {
+                    return Err(pace_errors::SyntaxError::Generic {
                         message: "Expected ')'".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                         span: self.current_span,
@@ -446,7 +446,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
                 Ok(expr)
             }
-            _ => Err(pace_errors::SyntaxError {
+            _ => Err(pace_errors::SyntaxError::Generic {
                 message: format!("Unexpected token: {:?}", self.current_token),
                 src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                 span: self.current_span,
@@ -457,7 +457,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     pub(crate) fn parse_interpolated_string(
         &mut self,
         s: String,
-        base_span: (usize, usize),
+        base_span: pace_common::Span,
     ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         let mut parts = Vec::new();
         let mut current_text = String::new();
@@ -487,7 +487,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
 
                 if depth > 0 {
-                    return Err(pace_errors::SyntaxError {
+                    return Err(pace_errors::SyntaxError::Generic {
                         message: "Unclosed string interpolation block, expected '}'".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                         span: base_span,
@@ -497,14 +497,19 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let mut nested_parser = Parser::new_with_arena(&expr_str, &self.file_name, self.arena);
                 let expr = nested_parser
                     .parse_expr()
-                    .map_err(|err| pace_errors::SyntaxError {
-                        message: format!("In interpolated string: {}", err.message),
-                        src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
-                        span: base_span,
+                    .map_err(|err| {
+                        let msg = match err {
+                            pace_errors::SyntaxError::Generic { message, .. } => message,
+                        };
+                        pace_errors::SyntaxError::Generic {
+                            message: format!("In interpolated string: {}", msg),
+                            src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
+                            span: base_span,
+                        }
                     })?;
 
                 if nested_parser.current_token != Token::Eof {
-                    return Err(pace_errors::SyntaxError {
+                    return Err(pace_errors::SyntaxError::Generic {
                         message: "Unexpected tokens in interpolated string".to_string(),
                         src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
                         span: base_span,

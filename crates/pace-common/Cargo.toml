@@ -7,3 +7,5 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+miette.workspace = true
+ustr = "1.1.0"

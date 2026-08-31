@@ -246,8 +246,8 @@ fn map_warning(
             name, span, src: s, ..
         } => (
             format!("Variable or function '{}' should use camelCase", name),
-            span.0,
-            span.1,
+            span.start,
+            span.len,
             s.name(),
         ),
         UnusedItem {
@@ -258,8 +258,8 @@ fn map_warning(
             ..
         } => (
             format!("Unused {} '{}'", kind, name),
-            span.0,
-            span.1,
+            span.start,
+            span.len,
             s.name(),
         ),
     };
@@ -284,18 +284,23 @@ fn map_syntax_error(
     src: &str,
     active_file: &str,
 ) -> Option<Diagnostic> {
-    if err.src.name() != active_file {
+    let (msg, err_src, span) = match err {
+        pace_errors::SyntaxError::Generic { message, src, span } => (message.clone(), src.name(), span),
+    };
+
+    if err_src != active_file {
         return None;
     }
 
-    let (offset, length) = err.span;
+    let offset = span.start;
+    let length = span.len;
     let start = get_position(src, offset);
     let end = get_position(src, offset + length);
 
     Some(Diagnostic {
         range: Range { start, end },
         severity: Some(DiagnosticSeverity::ERROR),
-        message: err.message.clone(),
+        message: msg,
         ..Default::default()
     })
 }
@@ -321,10 +326,10 @@ fn map_type_error(err: &pace_ty::TypeError, src: &str, active_file: &str) -> Opt
     let (message, start_offset, length) = match err {
         Generic {
             span, message: msg, ..
-        } => (msg.clone(), span.0, span.1),
+        } => (msg.clone(), span.start, span.len),
         TypeMismatch {
             message: msg, span, ..
-        } => (format!("Type mismatch: {}", msg), span.0, span.1),
+        } => (format!("Type mismatch: {}", msg), span.start, span.len),
         UnknownIdentifier {
             name,
             help_text,
@@ -332,19 +337,19 @@ fn map_type_error(err: &pace_ty::TypeError, src: &str, active_file: &str) -> Opt
             ..
         } => (
             format!("Unknown identifier '{}'\nHelp: {}", name, help_text),
-            span.0,
-            span.1,
+            span.start,
+            span.len,
         ),
         DuplicateDeclaration { name, span, .. } => (
             format!("Duplicate declaration of '{}'", name),
-            span.0,
-            span.1,
+            span.start,
+            span.len,
         ),
-        UnknownType { name, span, .. } => (format!("Unknown type '{}'", name), span.0, span.1),
-        InvalidWeakReference { span, .. } => ("Invalid weak reference".to_string(), span.0, span.1),
+        UnknownType { name, span, .. } => (format!("Unknown type '{}'", name), span.start, span.len),
+        InvalidWeakReference { span, .. } => ("Invalid weak reference".to_string(), span.start, span.len),
         OwnershipViolation {
             message: msg, span, ..
-        } => (format!("Ownership violation: {}", msg), span.0, span.1),
+        } => (format!("Ownership violation: {}", msg), span.start, span.len),
     };
 
     let start = get_position(src, start_offset);
@@ -358,8 +363,8 @@ fn map_type_error(err: &pace_ty::TypeError, src: &str, active_file: &str) -> Opt
     };
 
     if let DuplicateDeclaration { original_span, .. } = err {
-        let orig_start = get_position(src, original_span.0);
-        let orig_end = get_position(src, original_span.0 + original_span.1);
+        let orig_start = get_position(src, original_span.start);
+        let orig_end = get_position(src, original_span.start + original_span.len);
         diag.related_information = Some(vec![DiagnosticRelatedInformation {
             location: Location {
                 uri: Url::parse("file:///dummy").unwrap(), // We need actual URI but this is tricky without keeping track. In a real LSP we'd resolve it.

@@ -1231,6 +1231,10 @@ dependencies = [
 [[package]]
 name = "pace-common"
 version = "0.1.0"
+dependencies = [
+ "miette",
+ "ustr",
+]
 
 [[package]]
 name = "pace-driver"
@@ -1253,6 +1257,7 @@ name = "pace-errors"
 version = "0.1.0"
 dependencies = [
  "miette",
+ "pace-common",
  "thiserror",
 ]
 
