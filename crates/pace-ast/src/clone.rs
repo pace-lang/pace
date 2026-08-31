@@ -181,7 +181,6 @@ impl AstArena {
                 is_static,
                 is_extern,
                 visibility,
-                doc_comment,
                 span,
             } => {
                 let new_body = body.into_iter().map(|s| self.deep_clone_stmt(s)).collect();
@@ -195,7 +194,6 @@ impl AstArena {
                     is_static,
                     is_extern,
                     visibility,
-                    doc_comment,
                     span,
                 }
             }
@@ -205,7 +203,6 @@ impl AstArena {
                 fields,
                 methods,
                 implements,
-                doc_comment,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -221,7 +218,6 @@ impl AstArena {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
-                    doc_comment,
                 }
             }
             Stmt::ActorDecl {
@@ -230,7 +226,6 @@ impl AstArena {
                 fields,
                 methods,
                 implements,
-                doc_comment,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -246,14 +241,12 @@ impl AstArena {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
-                    doc_comment,
                 }
             }
             Stmt::InterfaceDecl {
                 name,
                 generic_params,
                 methods,
-                doc_comment,
             } => {
                 let new_methods = methods
                     .into_iter()
@@ -263,14 +256,12 @@ impl AstArena {
                     name,
                     generic_params,
                     methods: new_methods,
-                    doc_comment,
                 }
             }
             Stmt::StructDecl {
                 name,
                 generic_params,
                 fields,
-                doc_comment,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -280,7 +271,6 @@ impl AstArena {
                     name,
                     generic_params,
                     fields: new_fields,
-                    doc_comment,
                 }
             }
             Stmt::Module { name, body } => {

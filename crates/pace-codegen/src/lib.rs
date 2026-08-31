@@ -2,7 +2,7 @@ pub mod aot;
 pub mod compiler;
 pub mod context;
 pub mod layouts;
-pub mod monomorphize;
+
 pub mod runtime_bindings;
 pub mod translator;
 

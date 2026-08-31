@@ -100,7 +100,6 @@ impl Inliner {
                 is_static,
                 is_extern,
                 visibility,
-                doc_comment,
                 span,
             } => {
                 let new_body = body
@@ -117,7 +116,6 @@ impl Inliner {
                     is_static,
                     is_extern,
                     visibility,
-                    doc_comment,
                     span,
                 }
             }
@@ -127,7 +125,6 @@ impl Inliner {
                 fields,
                 methods,
                 implements,
-                doc_comment,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -143,7 +140,6 @@ impl Inliner {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
-                    doc_comment,
                 }
             }
             Stmt::ActorDecl {
@@ -152,7 +148,6 @@ impl Inliner {
                 fields,
                 methods,
                 implements,
-                doc_comment,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -168,7 +163,6 @@ impl Inliner {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
-                    doc_comment,
                 }
             }
             Stmt::VarDecl {

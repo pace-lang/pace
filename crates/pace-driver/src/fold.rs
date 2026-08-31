@@ -52,7 +52,6 @@ impl ConstantFolder {
                 is_static,
                 is_extern,
                 visibility,
-                doc_comment,
                 span,
             } => {
                 let new_body = body
@@ -69,7 +68,6 @@ impl ConstantFolder {
                     is_static,
                     is_extern,
                     visibility,
-                    doc_comment,
                     span,
                 }
             }
@@ -79,7 +77,6 @@ impl ConstantFolder {
                 fields,
                 methods,
                 implements,
-                doc_comment,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -95,7 +92,6 @@ impl ConstantFolder {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
-                    doc_comment,
                 }
             }
             Stmt::ActorDecl {
@@ -104,7 +100,6 @@ impl ConstantFolder {
                 fields,
                 methods,
                 implements,
-                doc_comment,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -120,7 +115,6 @@ impl ConstantFolder {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
-                    doc_comment,
                 }
             }
             Stmt::VarDecl {

@@ -23,6 +23,7 @@ toml_edit = "0.25"
 tempfile = "3.10"
 tar = "0.4.40"
 flate2 = "1.0.28"
+pretty = "0.12.3"
 walkdir = "2.4.0"
 ureq = { version = "3.4", features = ["json"] }
 dialoguer = "0.12"
@@ -37,6 +38,7 @@ pace-driver = { path = "crates/pace-driver" }
 pace-ty = { path = "crates/pace-ty" }
 pace-codegen = { path = "crates/pace-codegen" }
 pace-pkg = { path = "crates/pace-pkg" }
+pace-common = { path = "crates/pace-common" }
 
 cranelift = "0.135.0"
 cranelift-module = "0.135.0"

@@ -36,7 +36,6 @@ pub enum Stmt {
         is_static: bool,
         is_extern: bool,
         visibility: Visibility,
-        doc_comment: Option<ustr::Ustr>,
         span: Span,
     },
     ClassDecl {
@@ -45,7 +44,6 @@ pub enum Stmt {
         fields: Vec<StmtId>,  // VarDecl
         methods: Vec<StmtId>, // FuncDecl
         implements: Option<TypeAnnotation>,
-        doc_comment: Option<ustr::Ustr>,
     },
     /// An actor declaration
     ActorDecl {
@@ -54,28 +52,24 @@ pub enum Stmt {
         fields: Vec<StmtId>,  // VarDecl
         methods: Vec<StmtId>, // FuncDecl
         implements: Option<TypeAnnotation>,
-        doc_comment: Option<ustr::Ustr>,
     },
     /// An interface declaration
     InterfaceDecl {
         name: ustr::Ustr,
         generic_params: Option<Vec<ustr::Ustr>>,
         methods: Vec<StmtId>, // FuncDecl without body
-        doc_comment: Option<ustr::Ustr>,
     },
     /// A struct declaration
     StructDecl {
         name: ustr::Ustr,
         generic_params: Option<Vec<ustr::Ustr>>,
         fields: Vec<StmtId>, // VarDecl
-        doc_comment: Option<ustr::Ustr>,
     },
     /// An enum declaration
     EnumDecl {
         name: ustr::Ustr,
         generic_params: Option<Vec<ustr::Ustr>>,
         variants: Vec<EnumVariant>,
-        doc_comment: Option<ustr::Ustr>,
     },
     /// A while loop
     While { condition: ExprId, body: StmtId },

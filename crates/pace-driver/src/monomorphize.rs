@@ -236,7 +236,6 @@ impl Monomorphizer {
                 is_static,
                 is_extern,
                 visibility,
-                doc_comment,
                 span,
             } => {
                 let new_body = body
@@ -253,7 +252,6 @@ impl Monomorphizer {
                     is_static,
                     is_extern,
                     visibility,
-                    doc_comment,
                     span,
                 }
             }
@@ -263,7 +261,6 @@ impl Monomorphizer {
                 fields,
                 methods,
                 implements,
-                doc_comment,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -279,7 +276,6 @@ impl Monomorphizer {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
-                    doc_comment,
                 }
             }
             Stmt::ActorDecl {
@@ -288,7 +284,6 @@ impl Monomorphizer {
                 fields,
                 methods,
                 implements,
-                doc_comment,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -304,14 +299,12 @@ impl Monomorphizer {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
-                    doc_comment,
                 }
             }
             Stmt::StructDecl {
                 name,
                 generic_params,
                 fields,
-                doc_comment,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -321,25 +314,21 @@ impl Monomorphizer {
                     name,
                     generic_params,
                     fields: new_fields,
-                    doc_comment,
                 }
             }
             Stmt::EnumDecl {
                 name,
                 generic_params,
                 variants,
-                doc_comment,
             } => Stmt::EnumDecl {
                 name,
                 generic_params,
                 variants,
-                doc_comment,
             },
             Stmt::InterfaceDecl {
                 name,
                 generic_params,
                 methods,
-                doc_comment,
             } => {
                 let new_methods = methods
                     .into_iter()
@@ -349,7 +338,6 @@ impl Monomorphizer {
                     name,
                     generic_params,
                     methods: new_methods,
-                    doc_comment,
                 }
             }
             Stmt::VarDecl {
@@ -618,7 +606,6 @@ impl Monomorphizer {
                         fields: new_fields,
                         methods: new_methods,
                         implements: new_implements,
-                        doc_comment: None,
                     }
                 } else {
                     Stmt::ClassDecl {
@@ -627,7 +614,6 @@ impl Monomorphizer {
                         fields: new_fields,
                         methods: new_methods,
                         implements: new_implements,
-                        doc_comment: None,
                     }
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
@@ -655,7 +641,6 @@ impl Monomorphizer {
                     name: concrete_name.clone().into(),
                     generic_params: None,
                     fields: new_fields,
-                    doc_comment: None,
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
             }
@@ -694,7 +679,6 @@ impl Monomorphizer {
                     name: concrete_name.clone().into(),
                     generic_params: None,
                     variants: new_variants,
-                    doc_comment: None,
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
             }
@@ -721,7 +705,6 @@ impl Monomorphizer {
                     name: concrete_name.clone().into(),
                     generic_params: None,
                     methods: new_methods,
-                    doc_comment: None,
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
             }
@@ -735,7 +718,6 @@ impl Monomorphizer {
                 is_static,
                 is_extern,
                 visibility,
-                doc_comment: _,
                 span,
             } => {
                 let gen_params = generic_params.unwrap();
@@ -777,7 +759,6 @@ impl Monomorphizer {
                     is_static,
                     is_extern,
                     visibility,
-                    doc_comment: None,
                     span,
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;

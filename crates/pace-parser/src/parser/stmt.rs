@@ -5,18 +5,7 @@ use pace_ast::{Expr, Stmt, TypeAnnotation, Visibility};
 impl<'a, 'b> Parser<'a, 'b> {
     pub(crate) fn parse_stmt(
         &mut self,
-    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
-        let mut doc_comment = None;
-        while let Token::DocComment(c) = &self.current_token {
-            let existing = doc_comment.get_or_insert_with(String::new);
-            if !existing.is_empty() {
-                existing.push('\n');
-            }
-            existing.push_str(c);
-            self.advance();
-        }
-
-        let visibility = if self.match_token(Token::Private) {
+    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {        let visibility = if self.match_token(Token::Private) {
             Visibility::Private
         } else {
             Visibility::Public // Default is public
@@ -34,15 +23,14 @@ impl<'a, 'b> Parser<'a, 'b> {
                 visibility,
                 is_static,
                 is_extern,
-                doc_comment.as_deref().map(ustr::Ustr::from),
             ),
-            Token::Class => self.parse_class_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
-            Token::Actor => self.parse_actor_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
+            Token::Class => self.parse_class_decl(),
+            Token::Actor => self.parse_actor_decl(),
             Token::Interface => {
-                self.parse_interface_decl(doc_comment.as_deref().map(ustr::Ustr::from))
+                self.parse_interface_decl()
             }
-            Token::Struct => self.parse_struct_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
-            Token::Enum => self.parse_enum_decl(doc_comment.as_deref().map(ustr::Ustr::from)),
+            Token::Struct => self.parse_struct_decl(),
+            Token::Enum => self.parse_enum_decl(),
             Token::If => self.parse_if_stmt(),
             Token::While => self.parse_while_stmt(),
             Token::Loop => self.parse_loop_stmt(),

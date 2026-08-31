@@ -482,10 +482,8 @@ impl AotCompiler {
         stmts: &[pace_ast::arena::StmtId],
     ) -> Result<Vec<u8>, CodegenError> {
         let flat_stmts = crate::flatten_ast(arena, stmts);
-        // Run Monomorphization Pass
-        let mut mono = crate::monomorphize::MonomorphizationPass::new(arena);
-        mono.process(&flat_stmts);
-        let final_stmts = &mono.final_stmts;
+        // Monomorphization is now exclusively handled and memoized in pace-driver.
+        let final_stmts = &flat_stmts;
 
         // Register layouts for classes and interfaces
         self.register_interfaces(arena, final_stmts);

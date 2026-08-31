@@ -410,6 +410,9 @@ impl LanguageServer for PaceLanguageServer {
                     trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
                     ..Default::default()
                 }),
+                references_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Left(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 ..ServerCapabilities::default()
             },
             ..Default::default()
@@ -740,6 +743,125 @@ impl LanguageServer for PaceLanguageServer {
             Ok(None)
         } else {
             Ok(Some(CompletionResponse::Array(items)))
+        }
+    }
+
+    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        let uri = params.text_document_position.text_document.uri;
+        let pos = params.text_document_position.position;
+        let mut locations = Vec::new();
+
+        let src_cache = self.src_cache.read().await;
+        if let Some(src) = src_cache.get(&uri) {
+            if let Some(word) = get_word_at_position(src, pos) {
+                let re = regex::Regex::new(&format!(r"\b{}\b", regex::escape(&word))).unwrap();
+                for (doc_uri, doc_src) in src_cache.iter() {
+                    for mat in re.find_iter(doc_src) {
+                        let start = get_position(doc_src, mat.start());
+                        let end = get_position(doc_src, mat.end());
+                        locations.push(Location {
+                            uri: doc_uri.clone(),
+                            range: Range { start, end },
+                        });
+                    }
+                }
+            }
+        }
+
+        if locations.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(locations))
+        }
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri;
+        let pos = params.text_document_position.position;
+        let new_name = params.new_name;
+
+        let mut changes = std::collections::HashMap::new();
+        let src_cache = self.src_cache.read().await;
+        if let Some(src) = src_cache.get(&uri) {
+            if let Some(word) = get_word_at_position(src, pos) {
+                let re = regex::Regex::new(&format!(r"\b{}\b", regex::escape(&word))).unwrap();
+                for (doc_uri, doc_src) in src_cache.iter() {
+                    let mut edits = Vec::new();
+                    for mat in re.find_iter(doc_src) {
+                        let start = get_position(doc_src, mat.start());
+                        let end = get_position(doc_src, mat.end());
+                        edits.push(TextEdit {
+                            range: Range { start, end },
+                            new_text: new_name.clone(),
+                        });
+                    }
+                    if !edits.is_empty() {
+                        changes.insert(doc_uri.clone(), edits);
+                    }
+                }
+            }
+        }
+
+        if changes.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(WorkspaceEdit {
+                changes: Some(changes),
+                ..Default::default()
+            }))
+        }
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let uri = params.text_document.uri;
+        let mut symbols = Vec::new();
+
+        let env_cache = self.env_cache.read().await;
+        if let Some(env) = env_cache.get(&uri) {
+            for (name, func) in &env.functions {
+                let range = Range {
+                    start: get_position("", 0), // Ideally use span
+                    end: get_position("", 0),
+                };
+                #[allow(deprecated)]
+                symbols.push(DocumentSymbol {
+                    name: name.to_string(),
+                    detail: Some(format!("{:?}", func.return_type)),
+                    kind: SymbolKind::FUNCTION,
+                    tags: None,
+                    deprecated: None,
+                    range,
+                    selection_range: range,
+                    children: None,
+                });
+            }
+
+            for name in env.classes.keys() {
+                let range = Range {
+                    start: get_position("", 0),
+                    end: get_position("", 0),
+                };
+                #[allow(deprecated)]
+                symbols.push(DocumentSymbol {
+                    name: name.to_string(),
+                    detail: None,
+                    kind: SymbolKind::CLASS,
+                    tags: None,
+                    deprecated: None,
+                    range,
+                    selection_range: range,
+                    children: None,
+                });
+            }
+        }
+
+        if symbols.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(DocumentSymbolResponse::Nested(symbols)))
         }
     }
 }

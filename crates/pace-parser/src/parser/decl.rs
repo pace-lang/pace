@@ -9,7 +9,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         visibility: Visibility,
         is_static: bool,
         is_extern: bool,
-        doc_comment: Option<ustr::Ustr>,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         let start_pos = self.current_span.start;
         self.advance(); // consume func
@@ -136,7 +135,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             is_static,
             is_extern,
             visibility,
-            doc_comment,
             span: pace_ast::Span::new(
                 start_pos,
                 end_pos.saturating_sub(start_pos),
@@ -146,7 +144,6 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     pub(crate) fn parse_class_decl(
         &mut self,
-        doc_comment: Option<ustr::Ustr>,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         // Assume current_token is Class or Actor
         self.advance();
@@ -238,13 +235,11 @@ impl<'a, 'b> Parser<'a, 'b> {
             fields,
             methods,
             implements,
-            doc_comment,
         }))
     }
 
     pub(crate) fn parse_actor_decl(
         &mut self,
-        doc_comment: Option<ustr::Ustr>,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance();
         let name = match &self.current_token {
@@ -335,13 +330,11 @@ impl<'a, 'b> Parser<'a, 'b> {
             fields,
             methods,
             implements,
-            doc_comment,
         }))
     }
 
     pub(crate) fn parse_interface_decl(
         &mut self,
-        doc_comment: Option<ustr::Ustr>,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance(); // consume interface
 
@@ -482,7 +475,6 @@ impl<'a, 'b> Parser<'a, 'b> {
                 is_static: false,
                 is_extern: false,
                 visibility: Visibility::Public,
-                doc_comment: None,
                 span: pace_ast::Span::default(),
             }));
         }
@@ -499,13 +491,11 @@ impl<'a, 'b> Parser<'a, 'b> {
             name: name.into(),
             generic_params,
             methods,
-            doc_comment,
         }))
     }
 
     pub(crate) fn parse_enum_decl(
         &mut self,
-        doc_comment: Option<ustr::Ustr>,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance(); // consume enum
 
@@ -615,13 +605,11 @@ impl<'a, 'b> Parser<'a, 'b> {
             name: name.into(),
             generic_params,
             variants,
-            doc_comment,
         }))
     }
 
     pub(crate) fn parse_struct_decl(
         &mut self,
-        doc_comment: Option<ustr::Ustr>,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         self.advance(); // consume struct
 
@@ -674,7 +662,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             name: name.into(),
             generic_params,
             fields,
-            doc_comment,
         }))
     }
 

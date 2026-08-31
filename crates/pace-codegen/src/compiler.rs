@@ -522,10 +522,8 @@ impl JITCompiler {
     ) -> Result<(), CodegenError> {
         let flat_stmts = crate::flatten_ast(arena, stmts);
 
-        // Run Monomorphization Pass
-        let mut mono = crate::monomorphize::MonomorphizationPass::new(arena);
-        mono.process(&flat_stmts);
-        let final_stmts = &mono.final_stmts;
+        // Monomorphization is now exclusively handled and memoized in pace-driver.
+        let final_stmts = &flat_stmts;
 
         self.register_interfaces(arena, final_stmts);
         self.register_classes(arena, final_stmts)?;
@@ -868,7 +866,7 @@ impl JITCompiler {
                 .declare_func_in_func(main_id, builder.func);
             let call = builder.ins().call(local_func, &[]);
             let results = builder.inst_results(call);
-            if results.len() > 0 {
+            if !results.is_empty() {
                 last_val = Some(results[0]);
             }
         }
