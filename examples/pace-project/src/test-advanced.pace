@@ -3,6 +3,10 @@ enum Shape {
     Rectangle(Float, Float),
 }
 
+func identity<T>(value: T) -> T {
+    return value;
+}
+
 func runAdvancedTest() {
     print("--- Testing Advanced Features ---");
 
@@ -18,8 +22,10 @@ func runAdvancedTest() {
     print(notActive);
 
     // 3. Basic Generics
-    // Generic functions are type-checked, but full monomorphization 
-    // of generic functions is still a work in progress!
+    let stringId = identity<String>("Generic String");
+    let intId = identity<Int>(42);
+    print(stringId);
+    print(intId);
     
     // 4. Pattern Matching
     let shape = Shape::Rectangle(10.0, 5.0);

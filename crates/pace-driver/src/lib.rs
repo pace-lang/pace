@@ -88,10 +88,10 @@ impl CompilerSession {
             }
         };
 
-        // Auto-inject pace:core if not the core library itself
-        if path_buf.file_stem().unwrap_or_default() != "core" {
-                        let import_stmt_id = arena.alloc_stmt(Stmt::Import {
-                path: ustr::Ustr::from("pace:core"),
+        // Auto-inject pace:prelude if not the core or prelude library itself
+        if path_buf.file_stem().unwrap_or_default() != "core" && path_buf.file_stem().unwrap_or_default() != "prelude" {
+            let import_stmt_id = arena.alloc_stmt(Stmt::Import {
+                path: ustr::Ustr::from("pace:prelude"),
                 alias: None,
                 show: None,
                 hide: None,

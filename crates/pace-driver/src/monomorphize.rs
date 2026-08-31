@@ -5,7 +5,10 @@ pub struct Monomorphizer {
     pub generic_classes: HashMap<ustr::Ustr, pace_ast::arena::StmtId>,
     pub generic_class_modules: HashMap<ustr::Ustr, String>,
     pub generated_classes: HashMap<ustr::Ustr, pace_ast::arena::StmtId>,
-    pub all_interfaces: HashMap<ustr::Ustr, pace_ast::arena::StmtId>, // Stores all interfaces (generic and concrete)
+    pub generic_funcs: HashMap<ustr::Ustr, pace_ast::arena::StmtId>,
+    pub generic_func_modules: HashMap<ustr::Ustr, String>,
+    pub generated_funcs: HashMap<ustr::Ustr, pace_ast::arena::StmtId>,
+    pub all_interfaces: HashMap<ustr::Ustr, pace_ast::arena::StmtId>,
 }
 
 impl Default for Monomorphizer {
@@ -20,6 +23,9 @@ impl Monomorphizer {
             generic_classes: HashMap::new(),
             generic_class_modules: HashMap::new(),
             generated_classes: HashMap::new(),
+            generic_funcs: HashMap::new(),
+            generic_func_modules: HashMap::new(),
+            generated_funcs: HashMap::new(),
             all_interfaces: HashMap::new(),
         }
     }
@@ -46,6 +52,10 @@ impl Monomorphizer {
                         | Stmt::InterfaceDecl { generic_params: Some(_), name: class_name, .. } => {
                             mono.generic_classes.insert(class_name, inner_stmt_id);
                             mono.generic_class_modules.insert(class_name, name.as_str().to_string());
+                        }
+                        Stmt::FuncDecl { generic_params: Some(_), name: func_name, .. } => {
+                            mono.generic_funcs.insert(func_name, inner_stmt_id);
+                            mono.generic_func_modules.insert(func_name, name.as_str().to_string());
                         }
                         Stmt::InterfaceDecl { name: iface_name, .. } => {
                             mono.all_interfaces.insert(iface_name, inner_stmt_id);
@@ -491,6 +501,50 @@ impl Monomorphizer {
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
             }
+            Stmt::FuncDecl { name: _, generic_params, params, return_type, body, is_async, is_static, visibility, doc_comment: _, span } => {
+                let gen_params = generic_params.unwrap();
+                let mut type_mapping = std::collections::HashMap::new();
+                for (i, p) in gen_params.iter().enumerate() {
+                    if let Some(arg) = concrete_args.get(i) {
+                        type_mapping.insert(*p, arg.clone());
+                    }
+                }
+                
+                let mut new_params = Vec::new();
+                for p in params {
+                    let mut new_p = p.clone();
+                    self.replace_types(&mut new_p.type_annotation, &type_mapping)?;
+                    self.rewrite_type_annotation(arena, &mut new_p.type_annotation)?;
+                    new_params.push(new_p);
+                }
+                
+                let mut new_return_type = return_type.clone();
+                if let Some(ty) = &mut new_return_type {
+                    self.replace_types(ty, &type_mapping)?;
+                    self.rewrite_type_annotation(arena, ty)?;
+                }
+
+                let mut new_body = Vec::new();
+                for &s_id in &body {
+                    let new_s_id = self.clone_stmt(arena, s_id);
+                    self.rewrite_stmt_with_mapping(arena, new_s_id, &type_mapping)?;
+                    new_body.push(new_s_id);
+                }
+
+                let instantiated = Stmt::FuncDecl {
+                    name: concrete_name.clone().into(),
+                    generic_params: None,
+                    params: new_params,
+                    return_type: new_return_type,
+                    body: new_body,
+                    is_async,
+                    is_static,
+                    visibility,
+                    doc_comment: None,
+                    span,
+                };
+                *arena.get_stmt_mut(dummy_id) = instantiated;
+            }
             _ => {}
         }
         Ok(())
@@ -893,12 +947,15 @@ impl Monomorphizer {
 
                     // Convert to a simple identifier and instantiate the class
                     let concrete_name = Self::generate_name(name, generic_args);
-                    if !self.generated_classes.contains_key(&ustr::Ustr::from(&concrete_name)) {
+                    if !self.generated_classes.contains_key(&ustr::Ustr::from(&concrete_name)) && !self.generated_funcs.contains_key(&ustr::Ustr::from(&concrete_name)) {
                         let mut found = self.generic_classes.get(name).cloned();
+                        if found.is_none() {
+                            found = self.generic_funcs.get(name).cloned();
+                        }
                         if found.is_none() {
                             let target_suffix = format!("_{}", name.as_str());
                             let target_suffix_2 = format!("__{}", name.as_str());
-                            for (k, v) in &self.generic_classes {
+                            for (k, v) in self.generic_classes.iter().chain(self.generic_funcs.iter()) {
                                 let k_str = k.as_str();
                                 if k_str.ends_with(&target_suffix) || k_str.ends_with(&target_suffix_2) || k_str == name.as_str() {
                                     found = Some(*v);
@@ -907,6 +964,12 @@ impl Monomorphizer {
                             }
                         }
                         if let Some(generic_decl) = found {
+                            let is_func = matches!(arena.get_stmt(generic_decl), Stmt::FuncDecl { .. });
+                            if is_func {
+                                let dummy_expr_id = arena.alloc_expr(Expr::Null);
+                                let dummy_id = arena.alloc_stmt(Stmt::Expr(dummy_expr_id));
+                                self.generated_funcs.insert(concrete_name.clone().into(), dummy_id); // Dummy to prevent recursion
+                            }
                             let _ = self.instantiate_class(
                                 arena,
                                 generic_decl,

@@ -1,0 +1,9 @@
+// Pace Standard Library Prelude
+// This file is automatically imported into every Pace program.
+
+import "pace:core";
+import "pace:io";
+
+// Re-export core types for global availability
+// (Note: Currently the Pace compiler resolves stdlib core types globally if imported,
+// so importing core here ensures they are available).
