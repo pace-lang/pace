@@ -1,5 +1,5 @@
 use crate::arena::{ExprId, StmtId};
-use crate::Span;
+use pace_common::{Span, Visibility};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeAnnotation {
@@ -122,12 +122,7 @@ pub struct Param {
     pub type_annotation: TypeAnnotation,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
-pub enum Visibility {
-    #[default]
-    Private,
-    Public,
-}
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumVariant {

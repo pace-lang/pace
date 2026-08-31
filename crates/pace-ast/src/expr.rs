@@ -1,4 +1,4 @@
-use crate::Span;
+use pace_common::Span;
 use crate::arena::{ExprId, StmtId};
 
 #[derive(Debug, Clone, PartialEq)]

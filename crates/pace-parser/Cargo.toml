@@ -11,6 +11,7 @@ miette = { workspace = true }
 pace-errors = { workspace = true }
 pace-ast = { workspace = true }
 ustr = "1.1.0"
+pace-common = { version = "0.1.0", path = "../pace-common" }
 
 [dev-dependencies]
 insta = { workspace = true }

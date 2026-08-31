@@ -1180,6 +1180,7 @@ name = "pace-ast"
 version = "0.1.0"
 dependencies = [
  "insta",
+ "pace-common",
  "ustr",
 ]
 
@@ -1226,6 +1227,10 @@ dependencies = [
  "thiserror",
  "ustr",
 ]
+
+[[package]]
+name = "pace-common"
+version = "0.1.0"
 
 [[package]]
 name = "pace-driver"
@@ -1276,6 +1281,7 @@ dependencies = [
  "insta",
  "miette",
  "pace-ast",
+ "pace-common",
  "pace-errors",
  "ustr",
 ]

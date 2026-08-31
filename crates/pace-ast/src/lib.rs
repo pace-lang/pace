@@ -1,13 +1,12 @@
 pub mod expr;
 pub mod stmt;
-pub mod span;
 pub mod arena;
 pub mod clone;
 
 pub use expr::*;
 pub use stmt::*;
-pub use span::*;
 pub use arena::*;
+pub use pace_common::{Span, Visibility};
 
 #[cfg(test)]
 mod tests {
@@ -22,7 +21,7 @@ mod tests {
             name: ustr::Ustr::from("x"),
             is_mutable: false,
             is_static: false,
-            visibility: crate::stmt::Visibility::Public,
+            visibility: Visibility::Public,
             type_annotation: Some(crate::stmt::TypeAnnotation {
                 module_prefix: None,
                 name: ustr::Ustr::from("Int"),
@@ -33,7 +32,7 @@ mod tests {
                 function_return: None,
             }),
             initializer: Some(init_expr),
-            span: span::Span::default(),
+            span: Span::default(),
         };
 
         // Snapshot test the debug output of the AST
