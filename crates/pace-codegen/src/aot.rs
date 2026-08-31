@@ -29,6 +29,14 @@ impl AotCompiler {
             .unwrap();
         flag_builder.set("opt_level", &opt_level).unwrap();
         flag_builder.set("is_pic", "true").unwrap(); // Need PIC for AOT compilation
+        
+        if opt_level == "speed_and_size" || opt_level == "speed" {
+            let _ = flag_builder.set("enable_alias_analysis", "true");
+            let _ = flag_builder.set("enable_simd", "true");
+            let _ = flag_builder.set("enable_llvm_abi_extensions", "true");
+            let _ = flag_builder.set("enable_safepoints", "false");
+            let _ = flag_builder.set("unwind_info", "false");
+        }
 
         let isa_builder = cranelift_native::builder().unwrap_or_else(|msg| {
             panic!("host machine is not supported: {}", msg);
