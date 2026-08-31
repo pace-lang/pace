@@ -1,4 +1,4 @@
-use pace_common::{Span, BinaryOp};
+use pace_common::{Span, BinaryOp, UnaryOp};
 use crate::arena::{ExprId, StmtId};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +21,11 @@ pub enum Expr {
     GenericInstantiation {
         callee: ExprId,
         generic_args: Vec<pace_common::TypeAnnotation>,
+    },
+    /// A unary operation (e.g. !a, -5)
+    Unary {
+        op: UnaryOp,
+        expr: ExprId,
     },
     /// A binary operation (e.g., a + b)
     Binary {

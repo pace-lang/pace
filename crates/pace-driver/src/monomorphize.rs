@@ -243,6 +243,9 @@ impl Monomorphizer {
                     args: args.into_iter().map(|a| self.clone_expr(arena, a)).collect(),
                 }
             }
+            Expr::Unary { op, expr: inner_expr } => {
+                Expr::Unary { op, expr: self.clone_expr(arena, inner_expr) }
+            }
             Expr::Binary { left, op, right } => {
                 Expr::Binary {
                     left: self.clone_expr(arena, left),

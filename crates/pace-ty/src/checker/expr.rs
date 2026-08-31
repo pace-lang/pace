@@ -126,6 +126,31 @@ impl<'a> TypeChecker<'a> {
                 Type::Void
             }
             Expr::Identifier(name, _) => self.check_expr_identifier(name),
+            Expr::Unary { op, expr: inner_expr } => {
+                let inner_ty = self.check_expr(*inner_expr);
+                match op {
+                    pace_ast::UnaryOp::Not => {
+                        if inner_ty != Type::Bool && inner_ty != Type::Unknown && inner_ty != Type::Error {
+                            self.errors.push(pace_errors::TypeError::Generic {
+                                message: format!("Type mismatch: expected Bool, found {:?}", inner_ty),
+                                src: self.get_source(),
+                                span: self.current_span.into(),
+                            });
+                        }
+                        Type::Bool
+                    }
+                    pace_ast::UnaryOp::Neg | pace_ast::UnaryOp::BitNot => {
+                        if inner_ty != Type::Int && inner_ty != Type::Float && inner_ty != Type::Unknown && inner_ty != Type::Error {
+                            self.errors.push(pace_errors::TypeError::Generic {
+                                message: format!("Type mismatch: expected numeric type, found {:?}", inner_ty),
+                                src: self.get_source(),
+                                span: self.current_span.into(),
+                            });
+                        }
+                        inner_ty
+                    }
+                }
+            }
             Expr::Binary { left, op, right } => {
                 let left_ty = self.check_expr(*left);
                 let right_ty = self.check_expr(*right);

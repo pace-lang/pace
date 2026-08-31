@@ -81,20 +81,29 @@ mod tests {
 
     #[test]
     fn test_undefined_variable() {
-        let src = "
-            func main() {
-                let x: Int = y;
-            }
-        ";
+        let src = "func main() { let x: Int = y; }";
         let res = check_source(src);
         assert!(res.is_err());
         let errs = res.unwrap_err();
-        println!("{:#?}", errs);
-        assert!(!errs.is_empty());
-        if let pace_errors::TypeError::UnknownIdentifier { name, .. } = &errs[0] {
-            assert_eq!(name, "y");
-        } else {
-            panic!("Expected UnknownIdentifier");
+        match &errs[0] {
+            TypeError::UnknownIdentifier { name, .. } => assert_eq!(name.as_str(), "y"),
+            _ => panic!("Expected UnknownIdentifier error"),
         }
+    }
+
+    #[test]
+    fn test_type_inference() {
+        // No explicit type annotations, should be inferred
+        let src = "func main() { let x = 42; let y = x; }";
+        let res = check_source(src);
+        assert!(res.is_ok(), "Expected no errors for valid type inference, got {:?}", res.unwrap_err());
+        
+        // Cannot infer type for uninitialized variables without type annotation
+        let src = "func main() { let x; }";
+        let res = check_source(src);
+        assert!(res.is_err());
+        let errs = res.unwrap_err();
+        assert_eq!(errs.len(), 1);
+        assert!(format!("{:?}", errs[0]).contains("Cannot infer type for variable"));
     }
 }

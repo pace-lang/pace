@@ -551,6 +551,15 @@ impl<'a> Formatter<'a> {
             Expr::BoolLiteral(b) => self.output.push_str(if *b { "true" } else { "false" }),
             Expr::Null => self.output.push_str("null"),
             Expr::Identifier(name, _) => self.output.push_str(name),
+            Expr::Unary { op, expr: inner } => {
+                let op_str = match op {
+                    pace_ast::UnaryOp::Not => "!",
+                    pace_ast::UnaryOp::Neg => "-",
+                    pace_ast::UnaryOp::BitNot => "~",
+                };
+                self.output.push_str(op_str);
+                self.format_sub_expr(*inner, 100, false)?;
+            }
             Expr::Call { callee, args } => {
                 self.format_expr(*callee)?;
                 self.output.push('(');

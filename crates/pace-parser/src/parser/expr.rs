@@ -1,5 +1,5 @@
 use crate::lexer::Token;
-use pace_ast::{BinaryOp, Expr, Stmt};
+use pace_ast::{BinaryOp, Expr, Stmt, UnaryOp};
 use super::Parser;
 
 impl<'a, 'b> Parser<'a, 'b> {
@@ -161,6 +161,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         if self.match_token(Token::Await) {
             let expr = self.parse_unary()?;
             Ok(self.alloc_expr(Expr::Await(expr)))
+        } else if self.current_token == Token::Bang || self.current_token == Token::Minus || self.current_token == Token::BitNot {
+            let op = match self.current_token {
+                Token::Bang => UnaryOp::Not,
+                Token::Minus => UnaryOp::Neg,
+                Token::BitNot => UnaryOp::BitNot,
+                _ => unreachable!(),
+            };
+            self.advance();
+            let expr = self.parse_unary()?;
+            Ok(self.alloc_expr(Expr::Unary { op, expr }))
         } else {
             self.parse_postfix()
         }

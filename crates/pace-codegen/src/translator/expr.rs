@@ -159,6 +159,27 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                     })
                 }
             }
+            Expr::Unary { op, expr: inner_expr } => {
+                let inner_val = self.translate_expr(*inner_expr)?;
+                let ty = self.builder.func.dfg.value_type(inner_val);
+                let is_float = ty == types::F64;
+                match op {
+                    pace_ast::UnaryOp::Not => {
+                        let c = self.builder.ins().icmp_imm_u(IntCC::Equal, inner_val, 0);
+                        Ok(self.builder.ins().uextend(types::I64, c))
+                    }
+                    pace_ast::UnaryOp::Neg => {
+                        if is_float {
+                            Ok(self.builder.ins().fneg(inner_val))
+                        } else {
+                            Ok(self.builder.ins().ineg(inner_val))
+                        }
+                    }
+                    pace_ast::UnaryOp::BitNot => {
+                        Ok(self.builder.ins().bnot(inner_val))
+                    }
+                }
+            }
             Expr::Binary { left, op, right } => {
                 let lhs = self.translate_expr(*left)?;
                 let rhs = self.translate_expr(*right)?;

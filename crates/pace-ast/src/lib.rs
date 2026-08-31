@@ -6,7 +6,7 @@ pub mod clone;
 pub use expr::*;
 pub use stmt::*;
 pub use arena::*;
-pub use pace_common::{BinaryOp, TypeAnnotation};
+pub use pace_common::{BinaryOp, UnaryOp, TypeAnnotation};
 pub use pace_common::{Span, Visibility};
 
 #[cfg(test)]
