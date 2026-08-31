@@ -8,6 +8,7 @@ pub mod inline;
 pub mod monomorphize;
 pub mod resolve;
 pub mod shake;
+pub mod fold;
 
 #[derive(Error, Diagnostic, Debug)]
 #[error("Found multiple type errors")]
@@ -177,6 +178,9 @@ impl CompilerSession {
 
         // Apply AST Inlining
         let mono_ast = inline::Inliner::run(arena, mono_ast);
+
+        // Apply Constant Folding
+        let mono_ast = fold::ConstantFolder::run(arena, mono_ast);
 
         // Apply Dead Code Elimination (Tree Shaking)
         let mono_ast = shake::TreeShaker::run(arena, mono_ast);
@@ -409,7 +413,7 @@ impl CompilerSession {
         let mut arena = pace_ast::arena::AstArena::new();
         let ast = self.check_file(&mut arena, path)?;
         let mut compiler = pace_codegen::JITCompiler::new(if release {
-            "speed".to_string()
+            "speed_and_size".to_string()
         } else {
             "none".to_string()
         });
@@ -423,7 +427,7 @@ impl CompilerSession {
         let mut arena = pace_ast::arena::AstArena::new();
         let ast = self.check_source(&mut arena, src)?;
         let mut compiler = pace_codegen::JITCompiler::new(if release {
-            "speed".to_string()
+            "speed_and_size".to_string()
         } else {
             "none".to_string()
         });
@@ -447,7 +451,7 @@ impl CompilerSession {
 
     fn build_from_ast(&self, arena: &mut pace_ast::arena::AstArena, ast: &[pace_ast::arena::StmtId], output: &str, release: bool) -> Result<()> {
         let compiler = pace_codegen::AotCompiler::new(if release {
-            "speed".to_string()
+            "speed_and_size".to_string()
         } else {
             "none".to_string()
         });

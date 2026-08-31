@@ -11,8 +11,9 @@ fn test_basic_arithmetic_typecheck() {
         let y: Float = 3.14 * 2.0;
         let z: Bool = x > 10;
     }";
+    let mut arena = pace_ast::arena::AstArena::new();
     assert!(
-        session.check_source(src).is_ok(),
+        session.check_source(&mut arena, src).is_ok(),
         "Basic arithmetic failed to typecheck"
     );
 }
@@ -24,8 +25,9 @@ fn test_type_error_detection() {
     func main() {
         let x: Int = \"hello\";
     }";
+    let mut arena = pace_ast::arena::AstArena::new();
     assert!(
-        session.check_source(src).is_err(),
+        session.check_source(&mut arena, src).is_err(),
         "Expected type error for string to int assignment"
     );
 }

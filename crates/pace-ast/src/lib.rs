@@ -15,6 +15,8 @@ mod tests {
 
     #[test]
     fn test_ast_snapshot() {
+        let mut arena = AstArena::new();
+        let init_expr = arena.alloc_expr(Expr::IntLiteral(42));
         // let x: Int = 42;
         let ast = Stmt::VarDecl {
             name: ustr::Ustr::from("x"),
@@ -30,7 +32,7 @@ mod tests {
                 function_params: None,
                 function_return: None,
             }),
-            initializer: Some(Expr::IntLiteral(42)),
+            initializer: Some(init_expr),
             span: span::Span::default(),
         };
 

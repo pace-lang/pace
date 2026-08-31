@@ -19,8 +19,8 @@ VarDecl {
     is_static: false,
     visibility: Public,
     initializer: Some(
-        IntLiteral(
-            42,
+        ExprId(
+            0,
         ),
     ),
     span: (0..0),
