@@ -185,6 +185,7 @@ impl<'a> TypeChecker<'a> {
                 Box::new(Type::Void)
             };
             base_type = Type::Function {
+                generic_params: None,
                 params,
                 return_type,
             };
@@ -226,8 +227,16 @@ impl<'a> TypeChecker<'a> {
                 generic_args: _,
             } => {
                 let mut field_types = vec![Type::Unknown; fields.as_ref().map_or(0, |f| f.len())];
-                if let Some(ename) = enum_name
-                    && let Some(sig) = self.env.enums.get(&ustr::Ustr::from(ename))
+                let resolved_enum_name = enum_name.or_else(|| {
+                    if let Type::Enum(name) = expected_type {
+                        Some(*name)
+                    } else {
+                        None
+                    }
+                });
+
+                if let Some(ename) = resolved_enum_name
+                    && let Some(sig) = self.env.enums.get(&ename)
                         && let Some((_, v_fields_opt)) = sig
                             .variants
                             .iter()
@@ -239,10 +248,9 @@ impl<'a> TypeChecker<'a> {
                                     }
                                 }
                             }
-
-                if let Some(fields) = fields {
-                    for (i, field) in fields.iter().enumerate() {
-                        self.check_pattern(field, &field_types[i]);
+                if let Some(fs) = fields {
+                    for (i, pat) in fs.iter().enumerate() {
+                        self.check_pattern(pat, &field_types[i]);
                     }
                 }
                 

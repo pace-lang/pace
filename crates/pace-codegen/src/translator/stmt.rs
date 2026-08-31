@@ -173,6 +173,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 }
                 let end_block = self.builder.create_block();
 
+                let mut has_wildcard = false;
                 for (i, (pattern, _)) in arms.iter().enumerate() {
                     if let pace_ast::Pattern::Variant { variant_name, .. } = pattern {
                         let (tag_id, _) = enum_layout.variants.get(variant_name).unwrap();
@@ -191,12 +192,15 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                         self.builder.switch_to_block(next_check);
                     } else if matches!(pattern, pace_ast::Pattern::Wildcard) {
                         self.builder.ins().jump(blocks[i], &[]);
+                        has_wildcard = true;
                         break; // No more checks needed
                     } else {
                         return Err(CodegenError { message: "Only Variant and Wildcard patterns are supported in Enums right now".to_string() });
                     }
                 }
-                self.builder.ins().jump(end_block, &[]); // Fallback if no match (shouldn't happen if exhaustive)
+                if !has_wildcard {
+                    self.builder.ins().jump(end_block, &[]); // Fallback if no match (shouldn't happen if exhaustive)
+                }
 
                 for (i, (pattern, body)) in arms.iter().enumerate() {
                     let block = blocks[i];
@@ -215,13 +219,14 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                             let mut offset = 16;
                             for (j, pat) in pat_fields.iter().enumerate() {
                                 if let pace_ast::Pattern::Variable(var_name, _span) = pat {
+                                    let cl_ty = variant_types[j].to_cranelift_type();
                                     let field_val = self.builder.ins().load(
-                                        types::I64,
+                                        cl_ty,
                                         cranelift::prelude::MemFlagsData::new(),
                                         obj_ptr,
                                         offset,
                                     );
-                                    let var = self.builder.declare_var(types::I64);
+                                    let var = self.builder.declare_var(cl_ty);
                                     self.builder.def_var(var, field_val);
                                     self.variables
                                         .insert(*var_name, (var, variant_types[j].clone()));
@@ -575,7 +580,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
                 } = self.arena.get_expr(*callee)
                 {
                     if let Expr::Identifier(obj_name, _) = self.arena.get_expr(*object) {
-                        if obj_name.starts_with("Result_") || obj_name.starts_with("Option_") {
+                        if obj_name.starts_with("Result_") || obj_name.starts_with("Option_") || self.context.enum_layouts.contains_key(obj_name) {
                             return VarType::Enum(ustr::Ustr::from(obj_name));
                         }
                         if self.context.class_layouts.contains_key(obj_name)

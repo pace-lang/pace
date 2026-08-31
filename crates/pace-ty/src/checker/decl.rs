@@ -73,6 +73,9 @@ impl<'a> TypeChecker<'a> {
                     self.current_module = old_module;
                 }
                 Stmt::FuncDecl { name, params, return_type, span, visibility, generic_params, is_static, .. } => {
+                    if let Some(gp) = generic_params {
+                        self.generic_params_in_scope.extend(gp.clone());
+                    }
                     let mut param_types = Vec::new();
                     for param in params {
                         param_types.push(self.resolve_type_name(&param.type_annotation));
@@ -82,6 +85,11 @@ impl<'a> TypeChecker<'a> {
                     } else {
                         Type::Void
                     };
+                    if let Some(gp) = generic_params {
+                        for _ in gp {
+                            self.generic_params_in_scope.pop();
+                        }
+                    }
                     if !is_camel_case(name) && name != "main" && !name.contains("__") {
                         self.warnings.push(pace_errors::SemanticWarning::NamingConvention {
                             name: name.to_string(),
@@ -102,6 +110,9 @@ impl<'a> TypeChecker<'a> {
                     self.env.register_function(*name, sig);
                 }
                 Stmt::ClassDecl { name, fields, methods, generic_params, .. } => {
+                    if let Some(gp) = generic_params {
+                        self.generic_params_in_scope.extend(gp.clone());
+                    }
                     self.current_class = Some(*name);
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
@@ -152,10 +163,18 @@ impl<'a> TypeChecker<'a> {
                         static_fields: static_field_map,
                         methods: method_map,
                     };
+                    if let Some(gp) = generic_params {
+                        for _ in gp {
+                            self.generic_params_in_scope.pop();
+                        }
+                    }
                     self.env.register_class(*name, sig);
                     self.current_class = None;
                 }
                 Stmt::ActorDecl { name, fields, methods, generic_params, .. } => {
+                    if let Some(gp) = generic_params {
+                        self.generic_params_in_scope.extend(gp.clone());
+                    }
                     self.current_class = Some(*name);
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
@@ -206,10 +225,18 @@ impl<'a> TypeChecker<'a> {
                         static_fields: static_field_map,
                         methods: method_map,
                     };
+                    if let Some(gp) = generic_params {
+                        for _ in gp {
+                            self.generic_params_in_scope.pop();
+                        }
+                    }
                     self.env.register_actor(*name, sig);
                     self.current_class = None;
                 }
                 Stmt::StructDecl { name, fields, generic_params, .. } => {
+                    if let Some(gp) = generic_params {
+                        self.generic_params_in_scope.extend(gp.clone());
+                    }
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
                     for f in fields {
@@ -232,6 +259,11 @@ impl<'a> TypeChecker<'a> {
                         static_fields: static_field_map,
                         methods: HashMap::new(),
                     };
+                    if let Some(gp) = generic_params {
+                        for _ in gp {
+                            self.generic_params_in_scope.pop();
+                        }
+                    }
                     self.env.register_struct(*name, sig);
                 }
                 Stmt::EnumDecl { name, variants, generic_params, .. } => {
@@ -239,10 +271,7 @@ impl<'a> TypeChecker<'a> {
                     self.current_class = Some(*name);
 
                     if let Some(params) = generic_params {
-                        self.env.push_scope();
-                        for param in params {
-                            self.define_var(*param, Type::GenericParameter(*param), pace_ast::Span::default(), false);
-                        }
+                        self.generic_params_in_scope.extend(params.clone());
                     }
 
                     for v in variants {
@@ -258,8 +287,10 @@ impl<'a> TypeChecker<'a> {
                         variant_map.insert(v.name, fields);
                     }
 
-                    if generic_params.is_some() {
-                        self.env.pop_scope();
+                    if let Some(gp) = generic_params {
+                        for _ in gp {
+                            self.generic_params_in_scope.pop();
+                        }
                     }
 
                     self.current_class = None;
@@ -271,6 +302,9 @@ impl<'a> TypeChecker<'a> {
                     self.env.register_enum(*name, sig);
                 }
                 Stmt::InterfaceDecl { name, methods, generic_params, .. } => {
+                    if let Some(gp) = generic_params {
+                        self.generic_params_in_scope.extend(gp.clone());
+                    }
                     self.current_class = Some(*name);
                     let mut method_map = HashMap::new();
                     for m in methods {
@@ -295,6 +329,11 @@ impl<'a> TypeChecker<'a> {
                                 is_static: *is_static,
                             };
                             method_map.insert(*m_name, sig);
+                        }
+                    }
+                    if let Some(gp) = generic_params {
+                        for _ in gp {
+                            self.generic_params_in_scope.pop();
                         }
                     }
                     let sig = ClassSignature {

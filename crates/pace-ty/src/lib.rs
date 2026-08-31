@@ -106,4 +106,22 @@ mod tests {
         assert_eq!(errs.len(), 1);
         assert!(format!("{:?}", errs[0]).contains("Cannot infer type for variable"));
     }
+
+    #[test]
+    fn test_generic_function_call() {
+        let src = "
+            func id<T>(x: T) -> T {
+                return x;
+            }
+            func main() {
+                let x = id<Int>(5);
+                let y: String = id<Int>(5);
+            }
+        ";
+        let res = check_source(src);
+        assert!(res.is_err());
+        let errs = res.unwrap_err();
+        assert_eq!(errs.len(), 1);
+        assert!(format!("{:?}", errs[0]).contains("expected String, found Int"));
+    }
 }

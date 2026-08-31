@@ -22,9 +22,7 @@ func runInterfaceTest() {
     print("--- Testing Interfaces ---");
     let d = Dog();
     let c = Cat();
-    print("Dog says: ");
-    print(d.speak());
-    print("Cat says: ");
-    print(c.speak());
+    print("Dog says: ${d.speak()}");
+    print("Cat says: ${c.speak()}");
 }
 

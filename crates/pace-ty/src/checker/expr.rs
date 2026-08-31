@@ -40,6 +40,7 @@ impl<'a> TypeChecker<'a> {
         };
 
         Type::Function {
+            generic_params: None,
             params: param_types,
             return_type: Box::new(final_ret),
         }
@@ -89,7 +90,17 @@ impl<'a> TypeChecker<'a> {
             Expr::IntLiteral(_) => Type::Int,
             Expr::FloatLiteral(_) => Type::Float,
             Expr::StringLiteral(_) => Type::String,
-            Expr::GenericInstantiation { callee, .. } => self.check_expr(*callee),
+            Expr::GenericInstantiation { callee, generic_args } => {
+                let base_ty = self.check_expr(*callee);
+                let mut arg_types = Vec::new();
+                for arg in generic_args {
+                    arg_types.push(self.resolve_type_name(arg));
+                }
+                Type::GenericInstance {
+                    base: Box::new(base_ty),
+                    args: arg_types,
+                }
+            }
             Expr::InterpolatedString(parts) => {
                 for part in parts {
                     let ty = self.check_expr(*part);
@@ -364,11 +375,40 @@ impl<'a> TypeChecker<'a> {
                 // Currently, callee_ty might just be Type::Unknown if it was a MemberAccess
                 // So if we don't know the type, we just return Unknown.
 
+                let mut actual_callee_ty = callee_ty.clone();
+                if let Type::GenericInstance { base, args: gen_args } = &callee_ty {
+                    if let Type::Function { generic_params: Some(g_params), params, return_type } = &**base {
+                        let mut substs = std::collections::HashMap::new();
+                        if g_params.len() == gen_args.len() {
+                            for (p, arg) in g_params.iter().zip(gen_args.iter()) {
+                                substs.insert(*p, arg.clone());
+                            }
+                            actual_callee_ty = Type::Function {
+                                generic_params: None,
+                                params: params.iter().map(|p| p.resolve_generics(&substs)).collect(),
+                                return_type: Box::new(return_type.resolve_generics(&substs)),
+                            };
+                        } else {
+                            self.errors.push(TypeError::Generic {
+                                src: self.get_source(),
+                                span: self.current_span.into(),
+                                message: format!(
+                                    "Generic function expects {} type arguments, got {}",
+                                    g_params.len(),
+                                    gen_args.len()
+                                ),
+                            });
+                            return Type::Error;
+                        }
+                    }
+                }
+
                 // For first-class function values (closures, callbacks)
                 if let Type::Function {
+                    generic_params: _,
                     params,
                     return_type,
-                } = &callee_ty
+                } = &actual_callee_ty
                 {
                     if params.len() != args.len() {
                         {

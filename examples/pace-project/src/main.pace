@@ -15,6 +15,8 @@ import "./test-datetime";
 import "./test-os";
 import "self:test-process";
 import "package:pace-package";
+import "./test-advanced";
+
 func main() {
     print("⚡ Running Pace Test Suite...");
     runClassTest();
@@ -33,6 +35,7 @@ func main() {
     runDateTimeTest();
     runOsTest();
     runProcessTest();
+    runAdvancedTest();
     print("--- Testing External Package ---");
     greet();
     print("✅ All tests executed.");

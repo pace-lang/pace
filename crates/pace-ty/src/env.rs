@@ -22,6 +22,7 @@ pub enum Type {
     Enum(ustr::Ustr),
     /// A function type
     Function {
+        generic_params: Option<Vec<ustr::Ustr>>,
         params: Vec<Type>,
         return_type: Box<Type>,
     },
@@ -34,7 +35,36 @@ pub enum Type {
         args: Vec<Type>,
     },
     /// An asynchronous value that resolves to the inner type
+    /// An asynchronous value that resolves to the inner type
     Promise(Box<Type>),
+}
+
+impl Type {
+    pub fn resolve_generics(&self, substitutions: &HashMap<ustr::Ustr, Type>) -> Type {
+        match self {
+            Type::GenericParameter(name) => {
+                if let Some(subst) = substitutions.get(name) {
+                    subst.clone()
+                } else {
+                    self.clone()
+                }
+            }
+            Type::GenericInstance { base, args } => {
+                Type::GenericInstance {
+                    base: Box::new(base.resolve_generics(substitutions)),
+                    args: args.iter().map(|arg| arg.resolve_generics(substitutions)).collect(),
+                }
+            }
+            Type::Nullable(inner) => Type::Nullable(Box::new(inner.resolve_generics(substitutions))),
+            Type::Function { generic_params, params, return_type } => Type::Function {
+                generic_params: generic_params.clone(),
+                params: params.iter().map(|p| p.resolve_generics(substitutions)).collect(),
+                return_type: Box::new(return_type.resolve_generics(substitutions)),
+            },
+            Type::Promise(inner) => Type::Promise(Box::new(inner.resolve_generics(substitutions))),
+            _ => self.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -726,6 +756,7 @@ impl Environment {
     pub fn register_function(&mut self, name: ustr::Ustr, sig: FunctionSignature) {
         let span = sig.span;
         let fn_type = Type::Function {
+            generic_params: sig.generic_params.clone(),
             params: sig.params.clone(),
             return_type: Box::new(sig.return_type.clone()),
         };

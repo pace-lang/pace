@@ -47,6 +47,35 @@ fn test_run_simple_program() {
 }
 
 #[test]
+fn test_pattern_matching() {
+    let source = r#"
+        enum Option {
+            Some(Int),
+            None,
+        }
+
+        func main() -> Int {
+            let x = Option::Some(42);
+            var result = 0;
+            match x {
+                Some(v) => {
+                    result = v;
+                }
+                None => {
+                    result = -1;
+                }
+            }
+            return result;
+        }
+    "#;
+    let session = CompilerSession::new();
+    if let Err(e) = session.run_source(source, false) {
+        println!("{:?}", e);
+        panic!("Failed to JIT run pattern matching");
+    }
+}
+
+#[test]
 fn test_run_examples_suite() {
     let session = CompilerSession::new();
     let manifest_dir = env!("CARGO_MANIFEST_DIR");

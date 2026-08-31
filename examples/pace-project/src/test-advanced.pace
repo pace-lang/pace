@@ -1,0 +1,37 @@
+enum Shape {
+    Circle(Float),
+    Rectangle(Float, Float),
+}
+
+func runAdvancedTest() {
+    print("--- Testing Advanced Features ---");
+
+    // 1. Type Inference
+    let x = 10;
+    var isActive = true;
+    print(x);
+    
+    // 2. Unary Operators
+    let negX = -x;
+    let notActive = !isActive;
+    print(negX);
+    print(notActive);
+
+    // 3. Basic Generics
+    // Generic functions are type-checked, but full monomorphization 
+    // of generic functions is still a work in progress!
+    
+    // 4. Pattern Matching
+    let shape = Shape::Rectangle(10.0, 5.0);
+    match shape {
+        Circle(radius) => {
+            print("Circle with radius: ${radius}");
+        }
+        Rectangle(w, h) => {
+            print("Rectangle with width: ${w} and height: ${h}");
+        }
+        _ => {
+            print("Unknown shape");
+        }
+    }
+}

@@ -391,8 +391,8 @@ impl JITCompiler {
                     let constructor_name = format!("{}_{}", enum_name, variant.name);
                     let mut sig = self.context.module.make_signature();
                     sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
-                    for _ in 0..variant_types.len() {
-                        sig.params.push(AbiParam::new(types::I64));
+                    for field_ty in &variant_types {
+                        sig.params.push(AbiParam::new(field_ty.to_cranelift_type()));
                     }
                     sig.returns.push(AbiParam::new(types::I64));
 
@@ -1075,12 +1075,12 @@ impl JITCompiler {
             let func_id = *self.context.funcs.get(&ustr::Ustr::from(&constructor_name)).unwrap();
             let (tag_id, fields) = layout.variants.get(&variant.name).unwrap();
 
-            for _ in 0..fields.len() {
+            for field_ty in fields {
                 self.ctx
                     .func
                     .signature
                     .params
-                    .push(AbiParam::new(types::I64));
+                    .push(AbiParam::new(field_ty.to_cranelift_type()));
             }
             self.ctx
                 .func
