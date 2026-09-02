@@ -909,3 +909,22 @@ pub extern "C" fn __pace_promise_destroy(p: *mut Promise) {
         }
     }
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_is_err(ptr: *const u8) -> i64 {
+    if ptr.is_null() {
+        return 1;
+    }
+    unsafe {
+        // Tag is at offset 8. Success (Ok/Some) is usually 0.
+        let tag = *(ptr.add(8) as *const i64);
+        if tag == 0 { 0 } else { 1 }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_await(promise: i64) -> i64 {
+    // Basic stub for await: in a real implementation this would yield back to the scheduler
+    // For now, it just returns 0 or blocks. We don't have a full promise structure yet.
+    promise
+}

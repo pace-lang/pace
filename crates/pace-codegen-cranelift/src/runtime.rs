@@ -163,6 +163,12 @@ pub fn declare_runtime_functions<M: Module>(
         .declare_function("__pace_mailbox_send", Linkage::Import, &sig_mb_send)
         .unwrap();
 
+    let mut sig_is_err = module.make_signature();
+    sig_is_err.params.push(AbiParam::new(ptr_ty)); // ptr
+    sig_is_err.returns.push(AbiParam::new(types::I64)); // bool (i64)
+    let is_err_id = module
+        .declare_function("__pace_is_err", Linkage::Import, &sig_is_err)
+        .unwrap();
     let mut sig_mb_destroy = module.make_signature();
     sig_mb_destroy.params.push(AbiParam::new(ptr_ty));
     let mb_destroy_id = module
@@ -216,6 +222,7 @@ pub fn declare_runtime_functions<M: Module>(
     funcs.insert(ustr::Ustr::from("__pace_promise_create"), prom_create_id);
     funcs.insert(ustr::Ustr::from("__pace_promise_resolve"), prom_resolve_id);
     funcs.insert(ustr::Ustr::from("__pace_promise_await"), prom_await_id);
+    funcs.insert(ustr::Ustr::from("__pace_is_err"), is_err_id);
 
 
     funcs

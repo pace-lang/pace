@@ -102,6 +102,10 @@ impl RuntimeBindings {
             "__pace_promise_await",
             pace_runtime::__pace_promise_await as *const u8,
         );
+        builder.symbol(
+            "__pace_is_err",
+            pace_runtime::__pace_is_err as *const u8,
+        );
 
         // Add FS, OS, Process, HTTP, and String symbols
         builder.symbol("fsWriteText", pace_runtime::__pace_fs_write as *const u8);

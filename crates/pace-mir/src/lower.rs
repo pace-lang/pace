@@ -1,6 +1,7 @@
-use crate::basic_block::{BasicBlock, BasicBlockData, Terminator, SwitchTargets};
+use crate::basic_block::{BasicBlock, BasicBlockData, SwitchTargets, Terminator};
 use crate::body::{LocalDecl, LocalKind, MirBody, Mutability};
 use crate::statement::{AggregateKind, Constant, Local, Operand, Place, ProjectionElem, Rvalue, Statement};
+use pace_ast::BinaryOp;
 use pace_hir::{Expr, ExprId, HirArena, Stmt, StmtId};
 use pace_ty::{Environment, Type};
 use std::collections::HashMap;
@@ -283,8 +284,109 @@ impl<'a> FuncMirBuilder<'a> {
                 self.current_block = next_block;
                 Operand::Copy(Place::new(temp))
             }
+            Expr::Unwrap(inner) => {
+                let inner_op = self.lower_expr(*inner);
+                let is_null_temp = self.new_temp(Type::Bool);
+                self.push_statement(Statement::Assign(
+                    Place::new(is_null_temp),
+                    Rvalue::BinaryOp(BinaryOp::Eq, inner_op.clone(), Operand::Constant(Constant::Null))
+                ));
+                
+                let panic_block = self.new_block();
+                let continue_block = self.new_block();
+                
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::SwitchInt {
+                    discr: Operand::Copy(Place::new(is_null_temp)),
+                    targets: SwitchTargets::new(vec![0], vec![continue_block, panic_block]), // false(0) -> continue, true -> panic
+                });
+                
+                self.body.basic_blocks[panic_block.0].terminator = Some(Terminator::Unreachable);
+                self.current_block = continue_block;
+                inner_op
+            }
+            Expr::NullCoalesce { left, right } => {
+                let left_op = self.lower_expr(*left);
+                let is_null_temp = self.new_temp(Type::Bool);
+                self.push_statement(Statement::Assign(
+                    Place::new(is_null_temp),
+                    Rvalue::BinaryOp(BinaryOp::Eq, left_op.clone(), Operand::Constant(Constant::Null))
+                ));
+                
+                let right_block = self.new_block();
+                let continue_block = self.new_block();
+                
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::SwitchInt {
+                    discr: Operand::Copy(Place::new(is_null_temp)),
+                    targets: SwitchTargets::new(vec![0], vec![continue_block, right_block]),
+                });
+                
+                let result_temp = self.new_temp(Type::Unknown);
+                let merge_block = self.new_block();
+
+                self.current_block = right_block;
+                let right_op = self.lower_expr(*right);
+                self.push_statement(Statement::Assign(Place::new(result_temp), Rvalue::Use(right_op)));
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Goto { target: merge_block });
+                
+                self.current_block = continue_block;
+                self.push_statement(Statement::Assign(Place::new(result_temp), Rvalue::Use(left_op)));
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Goto { target: merge_block });
+                
+                self.current_block = merge_block;
+                Operand::Copy(Place::new(result_temp))
+            }
+            Expr::Try(inner) => {
+                let inner_op = self.lower_expr(*inner);
+                let is_err_temp = self.new_temp(Type::Bool);
+                let next_block = self.new_block();
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                    func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_is_err"))),
+                    args: vec![inner_op.clone()],
+                    destination: Place::new(is_err_temp),
+                    target: Some(next_block),
+                    cleanup: None,
+                });
+                self.current_block = next_block;
+
+                let err_block = self.new_block();
+                let continue_block = self.new_block();
+
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::SwitchInt {
+                    discr: Operand::Copy(Place::new(is_err_temp)),
+                    targets: SwitchTargets::new(vec![0], vec![continue_block, err_block]),
+                });
+
+                self.current_block = err_block;
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Return);
+
+                self.current_block = continue_block;
+                inner_op
+            }
+            Expr::Await(inner) => {
+                let inner_op = self.lower_expr(*inner);
+                let temp = self.new_temp(Type::Unknown);
+                let next_block = self.new_block();
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                    func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_promise_await"))),
+                    args: vec![inner_op],
+                    destination: Place::new(temp),
+                    target: Some(next_block),
+                    cleanup: None,
+                });
+                self.current_block = next_block;
+                Operand::Copy(Place::new(temp))
+            }
+            Expr::Closure { params: _, return_type: _, body: _ } => {
+                let closure_name = ustr::Ustr::from(&format!("closure_{}", self.body.basic_blocks.len()));
+                let temp = self.new_temp(Type::Unknown);
+                // Lower to an aggregate containing the environment (currently empty for simplicity without a full capture pass)
+                self.push_statement(Statement::Assign(
+                    Place::new(temp),
+                    Rvalue::Aggregate(AggregateKind::Closure(closure_name), vec![])
+                ));
+                Operand::Copy(Place::new(temp))
+            }
             _ => {
-                // Fallback for unimplemened
                 Operand::Constant(Constant::Null)
             }
         }

@@ -37,6 +37,7 @@ pub enum AggregateKind {
     Array,
     Tuple,
     Class(Ustr),
+    Closure(Ustr),
 }
 
 #[derive(Debug, Clone)]
