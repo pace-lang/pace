@@ -524,10 +524,15 @@ impl AotCompiler {
                     Linkage::Local
                 };
 
+                let export_name = if name.as_str() == "main" {
+                    "pace_main"
+                } else {
+                    name.as_str()
+                };
                 let id = self
                     .context
                     .module
-                    .declare_function(name.as_str(), linkage, &sig)
+                    .declare_function(export_name, linkage, &sig)
                     .map_err(|e| CodegenError {
                         message: e.to_string(),
                     })?;
@@ -829,8 +834,10 @@ impl AotCompiler {
                 .module
                 .declare_func_in_func(main_id, builder.func);
             let call = builder.ins().call(local_func, &[]);
-            let res = builder.inst_results(call)[0];
-            last_val = Some(res);
+            let results = builder.inst_results(call);
+            if !results.is_empty() {
+                last_val = Some(results[0]);
+            }
         }
 
         let ret_val =

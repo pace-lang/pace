@@ -1,0 +1,29 @@
+actor Counter {
+    var count: Int;
+
+    func init() {
+        self.count = 0;
+    }
+
+    func increment() {
+        self.count = self.count + 1;
+    }
+
+    func get_count() -> Int {
+        return self.count;
+    }
+}
+
+func actor_test() -> Int {
+    var i = 0;
+    let c = Counter();
+    while i < 100000 {
+        c.increment();
+        i = i + 1;
+    }
+    return await c.get_count();
+}
+
+func main() {
+    print(actor_test());
+}

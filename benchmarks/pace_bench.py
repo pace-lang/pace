@@ -46,7 +46,7 @@ def get_tool_versions():
         "java": "javac --version",
         "dart": "dart --version",
         "python": "python3 --version",
-        "pace": "../../target/release/pace --version"
+        "pace": "../target/release/pace --version"
     }
     
     for lang, cmd in cmds.items():
@@ -61,11 +61,13 @@ def get_tool_versions():
     return versions
 
 def run_command(cmd, cwd, capture_output=False):
+    import shlex
+    cmd_args = shlex.split(cmd)
     t0 = time.perf_counter()
     if capture_output:
-        p = subprocess.Popen(cmd, shell=True, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p = subprocess.Popen(cmd_args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     else:
-        p = subprocess.Popen(cmd, shell=True, cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        p = subprocess.Popen(cmd_args, cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     
     _, status, rusage = os.wait4(p.pid, 0)
     t1 = time.perf_counter()
@@ -84,6 +86,8 @@ def run_command(cmd, cwd, capture_output=False):
 
 def color_time(ms, all_ms):
     sorted_ms = sorted(all_ms)
+    if len(sorted_ms) < 2:
+        return f"$\\color{{#ca8a04}}{{\\text{{{ms:.3f} ms}}}}$"
     if ms <= sorted_ms[1]: # Top 2
         return f"$\\color{{#16a34a}}{{\\text{{{ms:.3f} ms}}}}$"
     elif ms >= sorted_ms[-2]: # Bottom 2
@@ -94,10 +98,11 @@ def color_time(ms, all_ms):
 def get_color_code(ms, all_ms, is_pace):
     sorted_ms = sorted(all_ms)
     color = "#ca8a04" # default average
-    if ms <= sorted_ms[1]:
-        color = "#16a34a"
-    elif ms >= sorted_ms[-2]:
-        color = "#dc2626"
+    if len(sorted_ms) >= 2:
+        if ms <= sorted_ms[1]:
+            color = "#16a34a"
+        elif ms >= sorted_ms[-2]:
+            color = "#dc2626"
         
     val_str = f"{ms:.3f} ms"
     if is_pace:

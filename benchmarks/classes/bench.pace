@@ -1,0 +1,28 @@
+class Person {
+    var age: Int;
+    var weight: Int;
+
+    func init(age: Int, weight: Int) {
+        self.age = age;
+        self.weight = weight;
+    }
+
+    func get_value() -> Int {
+        return self.age + self.weight;
+    }
+}
+
+func class_test() -> Int {
+    var sum = 0;
+    var i = 0;
+    while i < 1000000 {
+        let p = Person(i, i + 1);
+        sum = sum + p.get_value();
+        i = i + 1;
+    }
+    return sum;
+}
+
+func main() {
+    print(class_test());
+}
