@@ -41,6 +41,10 @@ pace = ">=0.1.0 <1.0.0"
         .map_err(|e| miette::miette!("Failed to write pace.toml: {}", e))?;
 
     let src_path = current_dir.join("src");
+    let gitignore_path = current_dir.join(".gitignore");
+    if !gitignore_path.exists() {
+        let _ = std::fs::write(&gitignore_path, "target/\nbuild/\n.pace/\n");
+    }
     if !src_path.exists() {
         std::fs::create_dir_all(&src_path)
             .map_err(|e| miette::miette!("Failed to create src directory: {}", e))?;

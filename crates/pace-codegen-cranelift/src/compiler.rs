@@ -59,6 +59,24 @@ impl JITCompiler {
         }
     }
 
+    pub fn compile_and_run_mir(
+        &mut self,
+        mir: &pace_mir::MirProgram,
+    ) -> Result<(), crate::layouts::CodegenError> {
+        crate::translator::mir::compile_mir_program(&mut self.context, &mut self.builder_context, &mut self.ctx, mir)?;
+        
+        self.context.module.finalize_definitions().unwrap();
+        
+        // Execute main block
+        if let Some(main_id) = self.context.funcs.get(&ustr::Ustr::from("main")) {
+            let code_ptr = self.context.module.get_finalized_function(*main_id);
+            let func: extern "C" fn() -> i64 = unsafe { std::mem::transmute(code_ptr) };
+            func();
+        }
+        
+        Ok(())
+    }
+
     fn register_interfaces(
         &mut self,
         arena: &pace_ast::arena::AstArena,

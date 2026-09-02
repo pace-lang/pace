@@ -1241,6 +1241,7 @@ dependencies = [
  "object 0.40.0",
  "pace-ast",
  "pace-errors",
+ "pace-mir",
  "pace-runtime",
  "thiserror",
  "ustr",
@@ -1255,6 +1256,7 @@ dependencies = [
  "pace-codegen-cranelift",
  "pace-errors",
  "pace-hir",
+ "pace-mir",
  "pace-parser",
  "pace-pkg",
  "pace-runtime",
@@ -1310,6 +1312,14 @@ version = "0.1.0"
 [[package]]
 name = "pace-mir"
 version = "0.1.0"
+dependencies = [
+ "miette",
+ "pace-ast",
+ "pace-hir",
+ "pace-span",
+ "pace-ty",
+ "ustr",
+]
 
 [[package]]
 name = "pace-parser"

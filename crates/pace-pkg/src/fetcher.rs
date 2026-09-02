@@ -127,6 +127,26 @@ impl Fetcher {
 
         lock.save_to_dir(project_dir)
             .map_err(|e| miette!("Failed to save lockfile: {}", e))?;
+
+        // Link dependencies to .pace/deps for the compiler to find them
+        let deps_dir = project_dir.join(".pace").join("deps");
+        let _ = std::fs::remove_dir_all(&deps_dir);
+        std::fs::create_dir_all(&deps_dir)
+            .map_err(|e| miette!("Failed to create .pace/deps: {}", e))?;
+
+        for (pkg_name, locked) in &lock.packages {
+            if let Some(src_path) = &locked.path {
+                let dst_path = deps_dir.join(pkg_name);
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(src_path, &dst_path)
+                    .map_err(|e| miette!("Failed to symlink package {}: {}", pkg_name, e))?;
+                
+                #[cfg(not(unix))]
+                std::os::windows::fs::symlink_dir(src_path, &dst_path)
+                    .map_err(|e| miette!("Failed to symlink package {}: {}", pkg_name, e))?;
+            }
+        }
+
         Ok(())
     }
 

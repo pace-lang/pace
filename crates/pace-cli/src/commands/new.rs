@@ -57,7 +57,7 @@ pace = ">=0.1.0 <1.0.0"
     std::fs::write(project_path.join("pace.lock"), "")
         .map_err(|e| miette::miette!("Failed to write pace.lock: {}", e))?;
 
-    std::fs::write(project_path.join(".gitignore"), "target/\nbuild/\n")
+    std::fs::write(project_path.join(".gitignore"), "target/\nbuild/\n.pace/\n")
         .map_err(|e| miette::miette!("Failed to write .gitignore: {}", e))?;
 
     let readme_content = format!(

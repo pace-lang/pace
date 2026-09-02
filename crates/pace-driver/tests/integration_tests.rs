@@ -1,10 +1,10 @@
-use pace_driver::CompilerSession;
+use pace_driver::Compiler;
 
 use std::path::Path;
 
 #[test]
 fn test_basic_arithmetic_typecheck() {
-    let session = CompilerSession::new();
+    let session = Compiler::new(pace_session::Session::new(pace_session::Options::default()));
     let src = "
     func main() {
         let x: Int = 5 + 10;
@@ -20,7 +20,7 @@ fn test_basic_arithmetic_typecheck() {
 
 #[test]
 fn test_type_error_detection() {
-    let session = CompilerSession::new();
+    let session = Compiler::new(pace_session::Session::new(pace_session::Options::default()));
     let src = "
     func main() {
         let x: Int = \"hello\";
@@ -34,14 +34,14 @@ fn test_type_error_detection() {
 
 #[test]
 fn test_run_simple_program() {
-    let session = CompilerSession::new();
+    let session = Compiler::new(pace_session::Session::new(pace_session::Options::default()));
     let src = "
     func main() {
         let x: Int = 42;
     }";
     // release = false (none optimization)
     assert!(
-        session.run_source(src, false).is_ok(),
+        session.run_source(src).is_ok(),
         "Failed to JIT run simple program"
     );
 }
@@ -68,8 +68,8 @@ fn test_pattern_matching() {
             return result;
         }
     "#;
-    let session = CompilerSession::new();
-    if let Err(e) = session.run_source(source, false) {
+    let session = Compiler::new(pace_session::Session::new(pace_session::Options::default()));
+    if let Err(e) = session.run_source(source) {
         println!("{:?}", e);
         panic!("Failed to JIT run pattern matching");
     }
@@ -77,7 +77,7 @@ fn test_pattern_matching() {
 
 #[test]
 fn test_run_examples_suite() {
-    let session = CompilerSession::new();
+    let session = Compiler::new(pace_session::Session::new(pace_session::Options::default()));
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let main_pace_path = Path::new(manifest_dir)
         .join("../../examples/pace-project/src/main.pace")
@@ -87,7 +87,7 @@ fn test_run_examples_suite() {
     let main_path_str = main_pace_path.to_str().unwrap();
 
     // Parse, typecheck, compile, and JIT run the whole examples suite
-    let result = session.run_file(main_path_str, false);
+    let result = session.run_file(main_path_str);
     assert!(
         result.is_ok(),
         "Failed to run the examples suite: {:?}",
@@ -97,7 +97,7 @@ fn test_run_examples_suite() {
 
 #[test]
 fn test_run_logical_operations() {
-    let session = CompilerSession::new();
+    let session = Compiler::new(pace_session::Session::new(pace_session::Options::default()));
     let src = "
     func main() {
         let a: Bool = true;
@@ -110,14 +110,14 @@ fn test_run_logical_operations() {
             if x == 1 {}
         }
     }";
-    if let Err(e) = session.run_source(src, false) {
+    if let Err(e) = session.run_source(src) {
         panic!("Failed to JIT run logical operations program: {:?}", e);
     }
 }
 
 #[test]
 fn test_run_string_manipulation() {
-    let session = CompilerSession::new();
+    let session = Compiler::new(pace_session::Session::new(pace_session::Options::default()));
     let src = "
     import \"std:string\";
     func main() {
@@ -128,7 +128,7 @@ fn test_run_string_manipulation() {
             let y: String = s;
         }
     }";
-    if let Err(e) = session.run_source(src, false) {
+    if let Err(e) = session.run_source(src) {
         panic!("Failed to JIT run string manipulation program: {:?}", e);
     }
 }

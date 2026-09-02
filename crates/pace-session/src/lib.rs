@@ -116,27 +116,42 @@ impl Session {
             ));
         }
 
-        let resolved_path = package_root.join(format!("{}.pace", sub_path));
+        let mut possible_paths = vec![
+            package_root.join("src").join(format!("{}.pace", sub_path)),
+            package_root.join(format!("{}.pace", sub_path)),
+        ];
+        if pkg_name == sub_path {
+            possible_paths.push(package_root.join("src").join("main.pace"));
+            possible_paths.push(package_root.join("src").join("lib.pace"));
+        }
 
-        if resolved_path.exists() {
-            Ok(resolved_path)
-        } else {
-            // Try platform-specific implementation
-            let platform_path = package_root
-                .join("impl")
-                .join(target_platform)
-                .join(format!("{}.pace", sub_path));
-
-            if platform_path.exists() {
-                Ok(platform_path)
-            } else {
-                Err(miette::miette!(
-                    "Module '{}' not found in package '{}' (checked generic and {} specific paths)",
-                    sub_path,
-                    pkg_name,
-                    target_platform
-                ))
+        for p in possible_paths {
+            if p.exists() {
+                return Ok(p);
             }
         }
+
+        // Try platform-specific implementation
+        let mut platform_paths = vec![
+            package_root.join("impl").join(target_platform).join("src").join(format!("{}.pace", sub_path)),
+            package_root.join("impl").join(target_platform).join(format!("{}.pace", sub_path)),
+        ];
+        if pkg_name == sub_path {
+            platform_paths.push(package_root.join("impl").join(target_platform).join("src").join("main.pace"));
+            platform_paths.push(package_root.join("impl").join(target_platform).join("src").join("lib.pace"));
+        }
+
+        for p in platform_paths {
+            if p.exists() {
+                return Ok(p);
+            }
+        }
+
+        Err(miette::miette!(
+            "Module '{}' not found in package '{}' (checked generic and {} specific paths)",
+            sub_path,
+            pkg_name,
+            target_platform
+        ))
     }
 }

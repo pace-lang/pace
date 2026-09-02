@@ -1,6 +1,6 @@
+[packages.pace-package]
+path = "/home/aniket/Documents/Projects/pace-team/pace/examples/pace-package"
+
 [packages.remote-package]
 version = "0.2.0"
 path = "/home/aniket/.pace/cache/registry/remote-package-0.2.0"
-
-[packages.pace-package]
-path = "/home/aniket/Documents/Projects/pace-team/pace/examples/pace-package"

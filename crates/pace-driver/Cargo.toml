@@ -10,6 +10,7 @@ license.workspace = true
 pace-ast = { workspace = true }
 pace-parser = { workspace = true }
 pace-hir = { workspace = true }
+pace-mir = { workspace = true }
 pace-errors = { workspace = true }
 pace-ty = { workspace = true }
 pace-codegen-cranelift = { workspace = true }

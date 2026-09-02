@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 pub mod expr;
 pub mod stmt;
+pub mod mir;
 #[derive(Clone, Debug, PartialEq)]
 pub enum VarType {
     Int,

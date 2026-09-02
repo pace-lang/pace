@@ -173,6 +173,7 @@ impl Compiler {
         Vec<pace_errors::SemanticWarning>,
         Vec<pace_ty::TypeError>,
         pace_ty::Environment,
+        pace_mir::MirProgram,
     )> {
         // Symbol Resolution and Name Mangling pass
         let resolved_ast = resolve::SymbolResolver::run(arena, ast)?;
@@ -197,7 +198,11 @@ impl Compiler {
         // Run typechecker on the parsed HIR
         let (warnings, type_errors, env) = pace_ty::check(&hir_arena, &hir_stmts, sources, module_path);
 
-        Ok((mono_ast, warnings, type_errors, env))
+        // Lower HIR to MIR
+        let mir_builder = pace_mir::MirBuilder::new(&hir_arena, &env);
+        let mir_program = mir_builder.build(&hir_stmts);
+
+        Ok((mono_ast, warnings, type_errors, env, mir_program))
     }
 
 
@@ -205,7 +210,7 @@ impl Compiler {
         &self,
         arena: &mut pace_ast::arena::AstArena,
         path: &str,
-    ) -> Result<Vec<pace_ast::arena::StmtId>> {
+    ) -> Result<(Vec<pace_ast::arena::StmtId>, pace_mir::MirProgram)> {
         let mut visited = std::collections::HashSet::new();
         let path_buf = std::path::Path::new(path);
         let module_name = path_buf
@@ -224,7 +229,7 @@ impl Compiler {
             &mut sources,
         )?;
 
-        let (mono_ast, warnings, type_errors, _) =
+        let (mono_ast, warnings, type_errors, _, mir) =
             self.process_ast_pipeline(arena, ast, sources, &path_buf.display().to_string())?;
 
         for warning in warnings {
@@ -236,7 +241,7 @@ impl Compiler {
             }));
         }
 
-        Ok(mono_ast)
+        Ok((mono_ast, mir))
     }
 
     pub fn check_file_with_source(
@@ -264,7 +269,7 @@ impl Compiler {
             &mut sources,
         )?;
 
-        let (mono_ast, warnings, type_errors, env) =
+        let (mono_ast, warnings, type_errors, env, _mir) =
             self.process_ast_pipeline(arena, ast, sources, &path_buf.display().to_string())?;
 
         for warning in &warnings {
@@ -276,45 +281,57 @@ impl Compiler {
 
     pub fn run_file(&self, path: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
-        let ast = self.check_file(&mut arena, path)?;
+        let (ast, mir) = self.check_file(&mut arena, path)?;
         let mut compiler = pace_codegen_cranelift::JITCompiler::new(if self.session.options.release_mode {
             "speed_and_size".to_string()
         } else {
             "none".to_string()
         });
 
-        compiler
-            .compile_and_run(&mut arena, &ast)
-            .map_err(Report::new)?;
+        if self.session.options.use_mir {
+            compiler
+                .compile_and_run_mir(&mir)
+                .map_err(Report::new)?;
+        } else {
+            compiler
+                .compile_and_run(&mut arena, &ast)
+                .map_err(Report::new)?;
+        }
 
         Ok(())
     }
 
     pub fn run_source(&self, src: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
-        let ast = self.check_source(&mut arena, src)?;
+        let (ast, mir) = self.check_source(&mut arena, src)?;
         let mut compiler = pace_codegen_cranelift::JITCompiler::new(if self.session.options.release_mode {
             "speed_and_size".to_string()
         } else {
             "none".to_string()
         });
 
-        compiler
-            .compile_and_run(&mut arena, &ast)
-            .map_err(Report::new)?;
+        if self.session.options.use_mir {
+            compiler
+                .compile_and_run_mir(&mir)
+                .map_err(Report::new)?;
+        } else {
+            compiler
+                .compile_and_run(&mut arena, &ast)
+                .map_err(Report::new)?;
+        }
 
         Ok(())
     }
 
     pub fn build_file(&self, path: &str, output: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
-        let ast = self.check_file(&mut arena, path)?;
+        let (ast, _mir) = self.check_file(&mut arena, path)?;
         self.build_from_ast(&mut arena, &ast, output)
     }
 
     pub fn build_source(&self, src: &str, output: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
-        let ast = self.check_source(&mut arena, src)?;
+        let (ast, _mir) = self.check_source(&mut arena, src)?;
         self.build_from_ast(&mut arena, &ast, output)
     }
 
@@ -405,7 +422,7 @@ impl Compiler {
         &self,
         arena: &mut pace_ast::arena::AstArena,
         src: &str,
-    ) -> Result<Vec<pace_ast::arena::StmtId>> {
+    ) -> Result<(Vec<pace_ast::arena::StmtId>, pace_mir::MirProgram)> {
         let ast = match pace_parser::parse(arena, src, "source") {
             Ok((ast, _)) => {
                 let mod_id = arena.alloc_stmt(Stmt::Module {
@@ -424,7 +441,7 @@ impl Compiler {
         let mut sources = std::collections::HashMap::new();
         sources.insert(ustr::Ustr::from("source"), src.to_string());
 
-        let (mono_ast, warnings, type_errors, _env) =
+        let (mono_ast, warnings, type_errors, _env, mir) =
             self.process_ast_pipeline(arena, ast, sources, "source")?;
 
         for warning in warnings {
@@ -436,7 +453,7 @@ impl Compiler {
             }));
         }
 
-        Ok(mono_ast)
+        Ok((mono_ast, mir))
     }
 }
 pub mod escape;
