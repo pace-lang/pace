@@ -82,7 +82,7 @@ impl TreeShaker {
                     let new_mod_id = arena.alloc_stmt(Stmt::Module {
                         name,
                         body: filtered_body,
-                    });
+                    }, pace_ast::Span::default());
                     new_ast.push(new_mod_id);
                 }
                 Stmt::FuncDecl { name, .. }

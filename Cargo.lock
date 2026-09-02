@@ -1293,6 +1293,7 @@ dependencies = [
  "pace-ast",
  "pace-driver",
  "pace-errors",
+ "pace-hir",
  "pace-session",
  "pace-ty",
  "pathdiff",

@@ -99,7 +99,7 @@ impl Monomorphizer {
                     name,
                     body: new_body,
                 };
-                let mod_id = arena.alloc_stmt(mod_stmt);
+                let mod_id = arena.alloc_stmt(mod_stmt, pace_ast::Span::default());
                 final_ast.push(mod_id);
             } else {
                 final_ast.push(stmt_id);
@@ -131,7 +131,7 @@ impl Monomorphizer {
                 name: original_module.into(),
                 body: vec![instantiated_stmt_id],
             };
-            let mod_id = arena.alloc_stmt(mod_stmt);
+            let mod_id = arena.alloc_stmt(mod_stmt, pace_ast::Span::default());
             generated.push(mod_id);
         }
 
@@ -405,7 +405,7 @@ impl Monomorphizer {
             }
             Stmt::Export { .. } | Stmt::Import { .. } => stmt,
         };
-        arena.alloc_stmt(new_stmt)
+        arena.alloc_stmt(new_stmt, pace_ast::Span::default())
     }
 
     fn clone_expr(
@@ -495,7 +495,7 @@ impl Monomorphizer {
             | Expr::BoolLiteral(..)
             | Expr::Null => expr,
         };
-        arena.alloc_expr(new_expr)
+        arena.alloc_expr(new_expr, pace_ast::Span::default())
     }
 
     fn instantiate_class(
@@ -506,8 +506,8 @@ impl Monomorphizer {
         concrete_args: &[TypeAnnotation],
     ) -> Result<(), miette::Report> {
         // Prevent infinite recursion by inserting a dummy first
-        let dummy_expr = arena.alloc_expr(Expr::Null);
-        let dummy_id = arena.alloc_stmt(Stmt::Expr(dummy_expr));
+        let dummy_expr = arena.alloc_expr(Expr::Null, pace_ast::Span::default());
+        let dummy_id = arena.alloc_stmt(Stmt::Expr(dummy_expr), pace_ast::Span::default());
         self.generated_classes
             .insert(concrete_name.clone().into(), dummy_id);
 
@@ -1216,8 +1216,8 @@ impl Monomorphizer {
                             let is_func =
                                 matches!(arena.get_stmt(generic_decl), Stmt::FuncDecl { .. });
                             if is_func {
-                                let dummy_expr_id = arena.alloc_expr(Expr::Null);
-                                let dummy_id = arena.alloc_stmt(Stmt::Expr(dummy_expr_id));
+                                let dummy_expr_id = arena.alloc_expr(Expr::Null, pace_ast::Span::default());
+                                let dummy_id = arena.alloc_stmt(Stmt::Expr(dummy_expr_id), pace_ast::Span::default());
                                 self.generated_funcs
                                     .insert(concrete_name.clone().into(), dummy_id); // Dummy to prevent recursion
                             }

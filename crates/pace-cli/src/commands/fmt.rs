@@ -135,7 +135,7 @@ impl<'a> Formatter<'a> {
                 if let Some(init) = initializer {
                     doc = doc.append(RcDoc::text(" = ")).append(self.format_expr(*init));
                 }
-                c.append(doc).append(RcDoc::text(";")).append(self.check_inline_comments(span.start + span.len))
+                c.append(doc).append(RcDoc::text(";")).append(self.check_inline_comments(span.start + span.len()))
             }
             Stmt::Block(stmts) => {
                 let mut docs = Vec::new();

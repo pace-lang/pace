@@ -14,6 +14,7 @@ pub struct PaceLanguageServer {
     pub arena: Arc<RwLock<pace_ast::arena::AstArena>>,
     pub src_cache: Arc<RwLock<HashMap<Url, String>>>,
     pub env_cache: Arc<RwLock<HashMap<Url, pace_ty::Environment>>>,
+    pub hir_cache: Arc<RwLock<HashMap<Url, pace_hir::arena::HirArena>>>,
     pub root_uri: Arc<RwLock<Option<Url>>>,
 }
 
@@ -26,6 +27,7 @@ impl PaceLanguageServer {
             arena: Arc::new(RwLock::new(pace_ast::arena::AstArena::new())),
             src_cache: Arc::new(RwLock::new(HashMap::new())),
             env_cache: Arc::new(RwLock::new(HashMap::new())),
+            hir_cache: Arc::new(RwLock::new(HashMap::new())),
             root_uri: Arc::new(RwLock::new(None)),
         }
     }
@@ -47,9 +49,10 @@ impl PaceLanguageServer {
             .insert(uri.clone(), src.to_string());
 
         match ast_result {
-            Ok((ast, warnings, type_errors, env)) => {
+            Ok((ast, warnings, type_errors, env, hir_arena)) => {
                 self.ast_cache.write().await.insert(uri.clone(), ast);
                 self.env_cache.write().await.insert(uri.clone(), env);
+                self.hir_cache.write().await.insert(uri.clone(), hir_arena);
 
                 let active_file = path.display().to_string();
                 for warn in &warnings {
@@ -146,6 +149,20 @@ fn position_to_offset(src: &str, pos: Position) -> Option<usize> {
     } else {
         None
     }
+}
+
+fn find_node_at_offset(hir: &pace_hir::arena::HirArena, offset: usize) -> Option<pace_hir::arena::ExprId> {
+    let mut best_match: Option<(pace_hir::arena::ExprId, usize)> = None;
+
+    for (idx, span) in hir.expr_spans.iter().enumerate() {
+        if offset >= span.start && offset <= span.end {
+            let len = span.len();
+            if best_match.is_none() || len < best_match.unwrap().1 {
+                best_match = Some((pace_hir::arena::ExprId(idx), len));
+            }
+        }
+    }
+    best_match.map(|(id, _)| id)
 }
 
 fn get_word_at_position(src: &str, pos: Position) -> Option<String> {
@@ -247,7 +264,7 @@ fn map_warning(
         } => (
             format!("Variable or function '{}' should use camelCase", name),
             span.start,
-            span.len,
+            span.len(),
             s.name(),
         ),
         UnusedItem {
@@ -259,7 +276,7 @@ fn map_warning(
         } => (
             format!("Unused {} '{}'", kind, name),
             span.start,
-            span.len,
+            span.len(),
             s.name(),
         ),
     };
@@ -295,7 +312,7 @@ fn map_syntax_error(
     }
 
     let offset = span.start;
-    let length = span.len;
+    let length = span.len();
     let start = get_position(src, offset);
     let end = get_position(src, offset + length);
 
@@ -328,10 +345,10 @@ fn map_type_error(err: &pace_ty::TypeError, src: &str, active_file: &str) -> Opt
     let (message, start_offset, length) = match err {
         Generic {
             span, message: msg, ..
-        } => (msg.clone(), span.start, span.len),
+        } => (msg.clone(), span.start, span.len()),
         TypeMismatch {
             message: msg, span, ..
-        } => (format!("Type mismatch: {}", msg), span.start, span.len),
+        } => (format!("Type mismatch: {}", msg), span.start, span.len()),
         UnknownIdentifier {
             name,
             help_text,
@@ -340,25 +357,25 @@ fn map_type_error(err: &pace_ty::TypeError, src: &str, active_file: &str) -> Opt
         } => (
             format!("Unknown identifier '{}'\nHelp: {}", name, help_text),
             span.start,
-            span.len,
+            span.len(),
         ),
         DuplicateDeclaration { name, span, .. } => (
             format!("Duplicate declaration of '{}'", name),
             span.start,
-            span.len,
+            span.len(),
         ),
         UnknownType { name, span, .. } => {
-            (format!("Unknown type '{}'", name), span.start, span.len)
+            (format!("Unknown type '{}'", name), span.start, span.len())
         }
         InvalidWeakReference { span, .. } => {
-            ("Invalid weak reference".to_string(), span.start, span.len)
+            ("Invalid weak reference".to_string(), span.start, span.len())
         }
         OwnershipViolation {
             message: msg, span, ..
         } => (
             format!("Ownership violation: {}", msg),
             span.start,
-            span.len,
+            span.len(),
         ),
     };
 
@@ -374,7 +391,7 @@ fn map_type_error(err: &pace_ty::TypeError, src: &str, active_file: &str) -> Opt
 
     if let DuplicateDeclaration { original_span, .. } = err {
         let orig_start = get_position(src, original_span.start);
-        let orig_end = get_position(src, original_span.start + original_span.len);
+        let orig_end = get_position(src, original_span.start + original_span.len());
         diag.related_information = Some(vec![DiagnosticRelatedInformation {
             location: Location {
                 uri: Url::parse("file:///dummy").unwrap(), // We need actual URI but this is tricky without keeping track. In a real LSP we'd resolve it.
@@ -477,41 +494,60 @@ impl LanguageServer for PaceLanguageServer {
         let pos = params.text_document_position_params.position;
 
         let src_cache = self.src_cache.read().await;
-        if let Some(src) = src_cache.get(&uri)
-            && let Some(word) = get_word_at_position(src, pos)
-        {
-            let mut hover_text = format!("Symbol: `{}`", word);
-
-            let env_cache = self.env_cache.read().await;
-            if let Some(env) = env_cache.get(&uri) {
-                if let Some(ty) = env.symbol_types.get(&ustr::Ustr::from(&word)) {
-                    hover_text = format!("```pace\nlet {}: {:?}\n```", word, ty);
-                } else if let Some(func) = env.functions.get(&ustr::Ustr::from(&word)) {
-                    let params_str = func
-                        .params
-                        .iter()
-                        .map(|p| format!("{:?}", p))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    hover_text = format!(
-                        "```pace\nfunc {}({}) -> {:?}\n```",
-                        word, params_str, func.return_type
-                    );
-                } else if let Some(_cls) = env.classes.get(&ustr::Ustr::from(&word)) {
-                    hover_text = format!("```pace\nclass {}\n```", word);
-                } else if let Some(_strct) = env.structs.get(&ustr::Ustr::from(&word)) {
-                    hover_text = format!("```pace\nstruct {}\n```", word);
-                } else if let Some(_enm) = env.enums.get(&ustr::Ustr::from(&word)) {
-                    hover_text = format!("```pace\nenum {}\n```", word);
-                } else if let Some(_act) = env.actors.get(&ustr::Ustr::from(&word)) {
-                    hover_text = format!("```pace\nactor {}\n```", word);
+        if let Some(src) = src_cache.get(&uri) {
+            if let Some(offset) = position_to_offset(src, pos) {
+                let hir_cache = self.hir_cache.read().await;
+                if let Some(hir) = hir_cache.get(&uri) {
+                    if let Some(expr_id) = find_node_at_offset(hir, offset) {
+                        let env_cache = self.env_cache.read().await;
+                        if let Some(env) = env_cache.get(&uri) {
+                            if let Some(ty) = env.node_types.get(&expr_id) {
+                                let hover_text = format!("```pace\n(expression) {:?}\n```", ty);
+                                return Ok(Some(Hover {
+                                    contents: HoverContents::Scalar(MarkedString::String(hover_text)),
+                                    range: None,
+                                }));
+                            }
+                        }
+                    }
                 }
             }
 
-            return Ok(Some(Hover {
-                contents: HoverContents::Scalar(MarkedString::String(hover_text)),
-                range: None,
-            }));
+            // Fallback
+            if let Some(word) = get_word_at_position(src, pos) {
+                let mut hover_text = format!("Symbol: `{}`", word);
+
+                let env_cache = self.env_cache.read().await;
+                if let Some(env) = env_cache.get(&uri) {
+                    if let Some(ty) = env.symbol_types.get(&ustr::Ustr::from(&word)) {
+                        hover_text = format!("```pace\nlet {}: {:?}\n```", word, ty);
+                    } else if let Some(func) = env.functions.get(&ustr::Ustr::from(&word)) {
+                        let params_str = func
+                            .params
+                            .iter()
+                            .map(|p| format!("{:?}", p))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        hover_text = format!(
+                            "```pace\nfunc {}({}) -> {:?}\n```",
+                            word, params_str, func.return_type
+                        );
+                    } else if let Some(_cls) = env.classes.get(&ustr::Ustr::from(&word)) {
+                        hover_text = format!("```pace\nclass {}\n```", word);
+                    } else if let Some(_strct) = env.structs.get(&ustr::Ustr::from(&word)) {
+                        hover_text = format!("```pace\nstruct {}\n```", word);
+                    } else if let Some(_enm) = env.enums.get(&ustr::Ustr::from(&word)) {
+                        hover_text = format!("```pace\nenum {}\n```", word);
+                    } else if let Some(_act) = env.actors.get(&ustr::Ustr::from(&word)) {
+                        hover_text = format!("```pace\nactor {}\n```", word);
+                    }
+                }
+
+                return Ok(Some(Hover {
+                    contents: HoverContents::Scalar(MarkedString::String(hover_text)),
+                    range: None,
+                }));
+            }
         }
 
         Ok(None)
@@ -556,6 +592,26 @@ impl LanguageServer for PaceLanguageServer {
                 })));
             }
 
+            if let Some(offset) = position_to_offset(src, pos) {
+                let hir_cache = self.hir_cache.read().await;
+                if let Some(hir) = hir_cache.get(&uri) {
+                    if let Some(expr_id) = find_node_at_offset(hir, offset) {
+                        let env_cache = self.env_cache.read().await;
+                        if let Some(env) = env_cache.get(&uri) {
+                            if let Some(span) = env.node_definitions.get(&expr_id) {
+                                let start = get_position(src, span.start);
+                                let end = get_position(src, span.end);
+                                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                                    uri: uri.clone(),
+                                    range: Range { start, end },
+                                })));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fallback to AST symbol lookup
             if let Some(word) = get_word_at_position(src, pos)
                 && let Some(ast) = ast_cache.get(&uri)
             {
@@ -571,14 +627,13 @@ impl LanguageServer for PaceLanguageServer {
                         | pace_ast::Stmt::EnumDecl { name, .. }
                         | pace_ast::Stmt::ActorDecl { name, .. }
                         | pace_ast::Stmt::InterfaceDecl { name, .. } => {
-                            // Basic matching. `pace_ast::Stmt::ClassDecl` etc don't have span yet,
-                            // but we can use the ones that do.
+                            // Basic matching.
                             if (name == &word || name.ends_with(&format!("__{}", word)))
                                 && let pace_ast::Stmt::FuncDecl { span, .. }
                                 | pace_ast::Stmt::VarDecl { span, .. } = stmt
                             {
                                 let start = get_position(src, span.start);
-                                let end = get_position(src, span.start + span.len);
+                                let end = get_position(src, span.end);
                                 return Ok(Some(GotoDefinitionResponse::Scalar(Location {
                                     uri: uri.clone(),
                                     range: Range { start, end },

@@ -94,7 +94,7 @@ impl Compiler {
                 alias: None,
                 show: None,
                 hide: None,
-            });
+            }, pace_ast::Span::default());
             ast.insert(0, import_stmt_id);
         }
 
@@ -156,7 +156,7 @@ impl Compiler {
         let module_stmt_id = arena.alloc_stmt(Stmt::Module {
             name: ustr::Ustr::from(module_name),
             body: ast,
-        });
+        }, pace_ast::Span::default());
         final_ast.push(module_stmt_id);
 
         Ok(final_ast)
@@ -173,6 +173,7 @@ impl Compiler {
         Vec<pace_errors::SemanticWarning>,
         Vec<pace_ty::TypeError>,
         pace_ty::Environment,
+        pace_hir::arena::HirArena,
         pace_mir::MirProgram,
     )> {
         // Symbol Resolution and Name Mangling pass
@@ -202,7 +203,7 @@ impl Compiler {
         let mir_builder = pace_mir::MirBuilder::new(&hir_arena, &env);
         let mir_program = mir_builder.build(&hir_stmts);
 
-        Ok((mono_ast, warnings, type_errors, env, mir_program))
+        Ok((mono_ast, warnings, type_errors, env, hir_arena, mir_program))
     }
 
 
@@ -229,7 +230,7 @@ impl Compiler {
             &mut sources,
         )?;
 
-        let (mono_ast, warnings, type_errors, _, mir) =
+        let (mono_ast, warnings, type_errors, _, _, mir) =
             self.process_ast_pipeline(arena, ast, sources, &path_buf.display().to_string())?;
 
         for warning in warnings {
@@ -254,6 +255,7 @@ impl Compiler {
         Vec<pace_errors::SemanticWarning>,
         Vec<pace_ty::TypeError>,
         pace_ty::Environment,
+        pace_hir::arena::HirArena,
     )> {
         let mut visited = std::collections::HashSet::new();
         let path_buf = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -269,14 +271,14 @@ impl Compiler {
             &mut sources,
         )?;
 
-        let (mono_ast, warnings, type_errors, env, _mir) =
+        let (mono_ast, warnings, type_errors, env, hir_arena, _mir) =
             self.process_ast_pipeline(arena, ast, sources, &path_buf.display().to_string())?;
 
         for warning in &warnings {
             eprintln!("{:?}", miette::Report::new(warning.clone()));
         }
 
-        Ok((mono_ast, warnings, type_errors, env))
+        Ok((mono_ast, warnings, type_errors, env, hir_arena))
     }
 
     pub fn run_file(&self, path: &str) -> Result<()> {
@@ -428,7 +430,7 @@ impl Compiler {
                 let mod_id = arena.alloc_stmt(Stmt::Module {
                     name: ustr::Ustr::from("__repl__"),
                     body: ast,
-                });
+                }, pace_ast::Span::default());
                 vec![mod_id]
             }
             Err(parse_errors) => {
@@ -441,7 +443,7 @@ impl Compiler {
         let mut sources = std::collections::HashMap::new();
         sources.insert(ustr::Ustr::from("source"), src.to_string());
 
-        let (mono_ast, warnings, type_errors, _env, mir) =
+        let (mono_ast, warnings, type_errors, _env, _hir_arena, mir) =
             self.process_ast_pipeline(arena, ast, sources, "source")?;
 
         for warning in warnings {

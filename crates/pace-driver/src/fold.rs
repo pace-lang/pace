@@ -160,7 +160,7 @@ impl ConstantFolder {
                         return self.rewrite_stmt(arena, eb);
                     } else {
                         // Dead branch, just return an empty block
-                        return arena.alloc_stmt(Stmt::Block(vec![]));
+                        return arena.alloc_stmt(Stmt::Block(vec![]), pace_ast::Span::default());
                     }
                 }
 
@@ -175,7 +175,7 @@ impl ConstantFolder {
 
                 if let Expr::BoolLiteral(b) = arena.get_expr(cond_expr)
                     && !*b {
-                        return arena.alloc_stmt(Stmt::Block(vec![]));
+                        return arena.alloc_stmt(Stmt::Block(vec![]), pace_ast::Span::default());
                     }
 
                 Stmt::While {

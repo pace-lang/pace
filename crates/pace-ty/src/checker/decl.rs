@@ -23,7 +23,8 @@ impl<'a> TypeChecker<'a> {
                             fields: HashMap::new(),
                             static_fields: HashMap::new(),
                             methods: HashMap::new(),
-                        },
+                        span: pace_span::Span::default(),
+},
                     );
                 }
                 Stmt::ActorDecl { name, .. } => {
@@ -34,7 +35,8 @@ impl<'a> TypeChecker<'a> {
                             fields: HashMap::new(),
                             static_fields: HashMap::new(),
                             methods: HashMap::new(),
-                        },
+                        span: pace_span::Span::default(),
+},
                     );
                 }
                 Stmt::StructDecl { name, .. } => {
@@ -45,7 +47,8 @@ impl<'a> TypeChecker<'a> {
                             fields: HashMap::new(),
                             static_fields: HashMap::new(),
                             methods: HashMap::new(),
-                        },
+                        span: pace_span::Span::default(),
+},
                     );
                 }
                 Stmt::EnumDecl { name, .. } => {
@@ -54,7 +57,8 @@ impl<'a> TypeChecker<'a> {
                         EnumSignature {
                             generic_params: None,
                             variants: HashMap::new(),
-                        },
+                        span: pace_span::Span::default(),
+},
                     );
                 }
                 _ => {}
@@ -163,6 +167,7 @@ impl<'a> TypeChecker<'a> {
                         fields: field_map,
                         static_fields: static_field_map,
                         methods: method_map,
+                        span: pace_span::Span::default(),
                     };
                     if let Some(gp) = generic_params {
                         for _ in gp {
@@ -225,6 +230,7 @@ impl<'a> TypeChecker<'a> {
                         fields: field_map,
                         static_fields: static_field_map,
                         methods: method_map,
+                        span: pace_span::Span::default(),
                     };
                     if let Some(gp) = generic_params {
                         for _ in gp {
@@ -259,7 +265,8 @@ impl<'a> TypeChecker<'a> {
                         fields: field_map,
                         static_fields: static_field_map,
                         methods: HashMap::new(),
-                    };
+                    span: pace_span::Span::default(),
+};
                     if let Some(gp) = generic_params {
                         for _ in gp {
                             self.generic_params_in_scope.pop();
@@ -299,6 +306,7 @@ impl<'a> TypeChecker<'a> {
                     let sig = EnumSignature {
                         generic_params: generic_params.clone(),
                         variants: variant_map,
+                        span: pace_span::Span::default(),
                     };
                     self.env.register_enum(*name, sig);
                 }
@@ -341,6 +349,7 @@ impl<'a> TypeChecker<'a> {
                         generic_params: generic_params.clone(),
                         fields: HashMap::new(), static_fields: HashMap::new(),
                         methods: method_map,
+                        span: pace_span::Span::default(),
                     };
                     self.env.register_class(*name, sig);
                     self.current_class = None;
@@ -353,12 +362,14 @@ impl<'a> TypeChecker<'a> {
                             generic_params: Some(vec!["T".into()]),
                             fields: HashMap::new(), static_fields: HashMap::new(),
                             methods: HashMap::new(),
-                        });
+                        span: pace_span::Span::default(),
+});
                         self.env.register_class("Set".into(), ClassSignature {
                             generic_params: Some(vec!["T".into()]),
                             fields: HashMap::new(), static_fields: HashMap::new(),
                             methods: HashMap::new(),
-                        });
+                        span: pace_span::Span::default(),
+});
                     }
                 Stmt::VarDecl { name, type_annotation, is_mutable, visibility, .. } => {
                     let span = self.arena.get_stmt_span(*stmt_id);

@@ -5,6 +5,7 @@ use crate::{
 
 impl AstArena {
     pub fn deep_clone_expr(&mut self, expr_id: ExprId) -> ExprId {
+        let span = self.get_expr_span(expr_id);
         let expr = self.get_expr(expr_id).clone();
         let cloned_expr = match expr {
             Expr::InterpolatedString(parts) => {
@@ -100,10 +101,11 @@ impl AstArena {
             // Leaf nodes
             other => other,
         };
-        self.alloc_expr(cloned_expr)
+        self.alloc_expr(cloned_expr, span)
     }
 
     pub fn deep_clone_stmt(&mut self, stmt_id: StmtId) -> StmtId {
+        let span = self.get_stmt_span(stmt_id);
         let stmt = self.get_stmt(stmt_id).clone();
         let cloned_stmt = match stmt {
             Stmt::Expr(expr) => Stmt::Expr(self.deep_clone_expr(expr)),
@@ -282,6 +284,6 @@ impl AstArena {
             }
             other => other,
         };
-        self.alloc_stmt(cloned_stmt)
+        self.alloc_stmt(cloned_stmt, span)
     }
 }

@@ -1497,7 +1497,7 @@ impl JITCompiler {
             pace_ast::Expr,
             Vec<(ustr::Ustr, crate::translator::VarType)>,
         )> = Vec::new();
-        let body_stmt_id = arena.alloc_stmt(pace_ast::Stmt::Expr(body));
+        let body_stmt_id = arena.alloc_stmt(pace_ast::Stmt::Expr(body), pace_ast::Span::default());
 
         let mut translator = Translator {
             arena,

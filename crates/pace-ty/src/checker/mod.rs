@@ -10,7 +10,7 @@ impl<'a> TypeChecker<'a> {
         if let Some(src) = self.sources.get(&self.current_module)
             && let Some(idx) = src.find(token)
         {
-            return pace_span::Span::new(idx, token.len());
+            return pace_span::Span::new(idx, idx + token.len());
         }
         pace_span::Span::default()
     }

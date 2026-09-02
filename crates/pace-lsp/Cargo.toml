@@ -21,6 +21,7 @@ pace-session = { path = "../pace-session" }
 walkdir.workspace = true
 pathdiff = "0.2.3"
 ustr = "1.1.0"
+pace-hir = { version = "0.1.0", path = "../pace-hir" }
 
 [lints]
 workspace = true

@@ -370,7 +370,7 @@ impl SymbolResolver {
                     *callee = arena.alloc_expr(Expr::Identifier(
                         export.mangled_name.clone().into(),
                         pace_ast::Span::default(),
-                    ));
+                    ), pace_ast::Span::default());
                 }
 
                 // If callee is just an Identifier, look it up in scope
@@ -386,7 +386,7 @@ impl SymbolResolver {
                     *callee = arena.alloc_expr(Expr::Identifier(
                         export.mangled_name.clone().into(),
                         pace_ast::Span::default(),
-                    ));
+                    ), pace_ast::Span::default());
                 }
 
                 self.resolve_expr(arena, *callee, scope, aliases)?;

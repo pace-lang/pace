@@ -124,7 +124,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
 
-        let end_pos = self.current_span.start + self.current_span.len;
+        let end_pos = self.current_span.end;
         Ok(self.alloc_stmt(Stmt::FuncDecl {
             name: name.into(),
             generic_params,
@@ -137,7 +137,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             visibility,
             span: pace_ast::Span::new(
                 start_pos,
-                end_pos.saturating_sub(start_pos),
+                self.current_span.end,
             ),
         }))
     }
@@ -712,7 +712,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             initializer,
             span: pace_ast::Span::new(
                 start_pos,
-                (self.current_span.start + self.current_span.len).saturating_sub(start_pos),
+                self.current_span.end,
             ),
         }))
     }

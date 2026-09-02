@@ -81,6 +81,7 @@ impl Type {
 pub struct EnumSignature {
     pub generic_params: Option<Vec<ustr::Ustr>>,
     pub variants: HashMap<ustr::Ustr, Option<Vec<Type>>>,
+    pub span: pace_span::Span,
 }
 
 #[derive(Debug, Clone)]
@@ -110,6 +111,7 @@ pub struct ActorSignature {
     pub fields: HashMap<ustr::Ustr, Type>,
     pub static_fields: HashMap<ustr::Ustr, Type>,
     pub methods: HashMap<ustr::Ustr, FunctionSignature>,
+    pub span: pace_span::Span,
 }
 
 #[derive(Debug, Clone)]
@@ -118,6 +120,7 @@ pub struct ClassSignature {
     pub fields: HashMap<ustr::Ustr, Type>,
     pub static_fields: HashMap<ustr::Ustr, Type>,
     pub methods: HashMap<ustr::Ustr, FunctionSignature>,
+    pub span: pace_span::Span,
 }
 
 #[derive(Debug, Clone)]
@@ -138,6 +141,8 @@ pub struct Environment {
     pub actors: HashMap<ustr::Ustr, ActorSignature>,
     pub symbol_types: HashMap<ustr::Ustr, Type>,
     pub global_vars: HashMap<ustr::Ustr, GlobalVariableSignature>,
+    pub node_types: HashMap<pace_hir::arena::ExprId, Type>,
+    pub node_definitions: HashMap<pace_hir::arena::ExprId, pace_span::Span>,
 }
 
 impl Environment {
@@ -151,6 +156,8 @@ impl Environment {
             actors: HashMap::new(),
             symbol_types: HashMap::new(),
             global_vars: HashMap::new(),
+            node_types: HashMap::new(),
+            node_definitions: HashMap::new(),
         };
         e.inject_prelude();
         e
@@ -382,6 +389,31 @@ impl Environment {
             if let Some(var_info) = scope.get(&name) {
                 return Some(&var_info.ty);
             }
+        }
+        None
+    }
+
+    pub fn get_definition_span(&self, name: ustr::Ustr) -> Option<pace_span::Span> {
+        if let Some(var_info) = self.get_var_info(name) {
+            return Some(var_info.span);
+        }
+        if let Some(func) = self.functions.get(&name) {
+            return Some(func.span);
+        }
+        if let Some(cls) = self.classes.get(&name) {
+            return Some(cls.span);
+        }
+        if let Some(strct) = self.structs.get(&name) {
+            return Some(strct.span);
+        }
+        if let Some(enm) = self.enums.get(&name) {
+            return Some(enm.span);
+        }
+        if let Some(act) = self.actors.get(&name) {
+            return Some(act.span);
+        }
+        if let Some(glob) = self.global_vars.get(&name) {
+            return Some(glob.span);
         }
         None
     }

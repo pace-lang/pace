@@ -31,11 +31,13 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     pub fn alloc_expr(&mut self, expr: pace_ast::Expr) -> pace_ast::arena::ExprId {
-        self.arena.alloc_expr(expr)
+        let span = self.current_span; // Naive span tracking for now
+        self.arena.alloc_expr(expr, span)
     }
 
     pub fn alloc_stmt(&mut self, stmt: pace_ast::Stmt) -> pace_ast::arena::StmtId {
-        self.arena.alloc_stmt(stmt)
+        let span = self.current_span;
+        self.arena.alloc_stmt(stmt, span)
     }
 
     fn advance(&mut self) {

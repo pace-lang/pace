@@ -36,7 +36,7 @@ impl<'a> HirBuilder<'a> {
 
     pub fn lower_expr(&mut self, ast_expr_id: pace_ast::arena::ExprId) -> ExprId {
         let ast_expr = self.ast_arena.get_expr(ast_expr_id);
-        let span = get_expr_span(ast_expr);
+        let span = self.ast_arena.get_expr_span(ast_expr_id);
 
         let hir_expr = match ast_expr {
             pace_ast::Expr::IntLiteral(val) => Expr::IntLiteral(*val),
@@ -152,7 +152,7 @@ impl<'a> HirBuilder<'a> {
 
     pub fn lower_stmt(&mut self, ast_stmt_id: pace_ast::arena::StmtId) -> StmtId {
         let ast_stmt = self.ast_arena.get_stmt(ast_stmt_id);
-        let span = get_stmt_span(ast_stmt);
+        let span = self.ast_arena.get_stmt_span(ast_stmt_id);
 
         let hir_stmt = match ast_stmt {
             pace_ast::Stmt::Expr(expr) => {
@@ -397,20 +397,5 @@ impl<'a> HirBuilder<'a> {
                 }
             }
         }
-    }
-}
-
-fn get_expr_span(expr: &pace_ast::Expr) -> pace_span::Span {
-    match expr {
-        pace_ast::Expr::Identifier(_, span) => *span,
-        _ => pace_span::Span::default(),
-    }
-}
-
-fn get_stmt_span(stmt: &pace_ast::Stmt) -> pace_span::Span {
-    match stmt {
-        pace_ast::Stmt::VarDecl { span, .. } => *span,
-        pace_ast::Stmt::FuncDecl { span, .. } => *span,
-        _ => pace_span::Span::default(),
     }
 }

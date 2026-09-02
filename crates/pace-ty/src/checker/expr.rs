@@ -88,6 +88,12 @@ impl<'a> TypeChecker<'a> {
     }
 
     pub(crate) fn check_expr(&mut self, expr_id: pace_hir::ExprId) -> Type {
+        let ty = self.check_expr_inner(expr_id);
+        self.env.node_types.insert(expr_id, ty.clone());
+        ty
+    }
+
+    pub(crate) fn check_expr_inner(&mut self, expr_id: pace_hir::ExprId) -> Type {
         let expr = self.arena.get_expr(expr_id);
         match expr {
             Expr::IntLiteral(_) => Type::Int,
@@ -142,7 +148,13 @@ impl<'a> TypeChecker<'a> {
                 self.pop_scope_and_check_unused();
                 Type::Void
             }
-            Expr::Identifier(name) => self.check_expr_identifier(name),
+            Expr::Identifier(name) => {
+                let ty = self.check_expr_identifier(name);
+                if let Some(def_span) = self.env.get_definition_span(*name) {
+                    self.env.node_definitions.insert(expr_id, def_span);
+                }
+                ty
+            },
             Expr::Unary {
                 op,
                 expr: inner_expr,
