@@ -1,8 +1,8 @@
 use crate::utils::resolve_file;
 use miette::Result;
-use pace_driver::CompilerSession;
+use pace_driver::Compiler;
 
-pub fn execute(session: &CompilerSession, file: Option<String>, release: bool) -> Result<()> {
+pub fn execute(session: &Compiler, file: Option<String>) -> Result<()> {
     let resolved_file = resolve_file(file)?;
 
     if let Ok(current_dir) = std::env::current_dir()
@@ -11,6 +11,6 @@ pub fn execute(session: &CompilerSession, file: Option<String>, release: bool) -
         crate::utils::check_sdk_compatibility(&manifest)?;
     }
 
-    session.run_file(&resolved_file, release)?;
+    session.run_file(&resolved_file)?;
     Ok(())
 }

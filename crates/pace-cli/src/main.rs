@@ -3,7 +3,7 @@ pub mod utils;
 
 use clap::{Parser, Subcommand};
 use miette::Result;
-use pace_driver::CompilerSession;
+use pace_driver::Compiler;
 
 #[derive(Parser)]
 #[command(name = "pace")]
@@ -107,7 +107,20 @@ fn main() -> Result<()> {
         miette::set_hook(Box::new(|_| Box::new(miette::JSONReportHandler::new()))).unwrap();
     }
 
-    let session = CompilerSession::new();
+    let mut options = pace_session::Options::default();
+    match &cli.command {
+        Commands::Build { release, .. } | Commands::Run { release, .. } => {
+            options.release_mode = *release;
+        }
+        Commands::Check { output_format, .. } => {
+            if output_format == "json" {
+                options.output_format = pace_session::OutputFormat::Json;
+            }
+        }
+        _ => {}
+    }
+    let session = pace_session::Session::new(options);
+    let compiler = Compiler::new(session);
     let mut arena = pace_ast::arena::AstArena::new();
 
     match cli.command {
@@ -125,14 +138,14 @@ fn main() -> Result<()> {
         Commands::Fmt => commands::fmt::execute()?,
         Commands::Upgrade => commands::upgrade::execute()?,
         Commands::Outdated => commands::outdated::execute()?,
-        Commands::Publish { dry_run } => commands::publish::execute(&session, &mut arena, dry_run)?,
+        Commands::Publish { dry_run } => commands::publish::execute(&compiler, &mut arena, dry_run)?,
         Commands::Login { token } => commands::login::login(token)?,
         Commands::Check {
             file,
             output_format,
-        } => commands::check::execute(&session, &mut arena, file, output_format)?,
-        Commands::Build { file, release } => commands::build::execute(&session, file, release)?,
-        Commands::Run { file, release } => commands::run::execute(&session, file, release)?,
+        } => commands::check::execute(&compiler, &mut arena, file, output_format)?,
+        Commands::Build { file, release } => commands::build::execute(&compiler, file)?,
+        Commands::Run { file, release } => commands::run::execute(&compiler, file)?,
         Commands::Lsp => pace_lsp::run_server(),
         Commands::Version => commands::version::execute()?,
     }

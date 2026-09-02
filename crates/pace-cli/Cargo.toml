@@ -8,10 +8,11 @@ license.workspace = true
 
 [dependencies]
 pace-lsp = { path = "../pace-lsp" }
-clap = { workspace = true }
+clap = { version = "4.5.31", features = ["derive"] }
 miette = { workspace = true }
 pace-driver = { workspace = true }
 pace-pkg = { workspace = true }
+pace-session = { workspace = true }
 pace-ast = { workspace = true }
 pace-parser = { workspace = true }
 serde = { workspace = true }

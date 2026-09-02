@@ -1,9 +1,9 @@
 use crate::utils::resolve_file;
 use miette::Result;
-use pace_driver::CompilerSession;
+use pace_driver::Compiler;
 
 pub fn execute(
-    session: &CompilerSession,
+    session: &Compiler,
     arena: &mut pace_ast::arena::AstArena,
     file: Option<String>,
     output_format: String,

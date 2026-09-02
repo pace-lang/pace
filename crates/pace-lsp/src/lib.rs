@@ -1,4 +1,4 @@
-use pace_driver::CompilerSession;
+use pace_driver::Compiler;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 
 pub struct PaceLanguageServer {
     pub client: Client,
-    pub session: CompilerSession,
+    pub compiler: Compiler,
     pub ast_cache: Arc<RwLock<HashMap<Url, Vec<pace_ast::arena::StmtId>>>>,
     pub arena: Arc<RwLock<pace_ast::arena::AstArena>>,
     pub src_cache: Arc<RwLock<HashMap<Url, String>>>,
@@ -21,7 +21,7 @@ impl PaceLanguageServer {
     pub fn new(client: Client) -> Self {
         Self {
             client,
-            session: CompilerSession::new(),
+            compiler: Compiler::new(pace_session::Session::default()),
             ast_cache: Arc::new(RwLock::new(HashMap::new())),
             arena: Arc::new(RwLock::new(pace_ast::arena::AstArena::new())),
             src_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -39,7 +39,7 @@ impl PaceLanguageServer {
             return;
         };
         let mut arena = self.arena.write().await;
-        let ast_result = self.session.check_file_with_source(&mut arena, &path, src);
+        let ast_result = self.compiler.check_file_with_source(&mut arena, &path, src);
 
         self.src_cache
             .write()
@@ -537,7 +537,7 @@ impl LanguageServer for PaceLanguageServer {
                     || string_content.starts_with("../"))
                 && let Ok(path_buf) = uri.to_file_path()
                 && let Ok(resolved_path) =
-                    pace_driver::CompilerSession::resolve_import_path(&string_content, &path_buf)
+                    self.compiler.session.resolve_import_path(&string_content, &path_buf)
                 && resolved_path.exists()
                 && let Ok(resolved_uri) = Url::from_file_path(resolved_path)
             {

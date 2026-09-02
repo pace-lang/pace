@@ -1,13 +1,13 @@
 use crate::utils::resolve_file;
 use miette::Result;
-use pace_driver::CompilerSession;
+use pace_driver::Compiler;
 use pace_pkg::manifest::PaceToml;
 use std::fs::File;
 use std::io::Write;
 use walkdir::WalkDir;
 
 pub fn execute(
-    session: &CompilerSession,
+    session: &Compiler,
     arena: &mut pace_ast::arena::AstArena,
     dry_run: bool,
 ) -> Result<()> {

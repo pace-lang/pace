@@ -18,16 +18,12 @@ pub struct MultipleTypeErrors {
     pub errors: Vec<pace_ty::TypeError>,
 }
 
-pub struct CompilerSession;
-
-impl Default for CompilerSession {
-    fn default() -> Self {
-        Self::new()
-    }
+pub struct Compiler {
+    pub session: pace_session::Session,
 }
 
-impl CompilerSession {
-    pub fn new() -> Self {
+impl Compiler {
+    pub fn new(session: pace_session::Session) -> Self {
         // Ensure pace-runtime is linked in the driver for JIT
         let _ = pace_runtime::__pace_print_int as *const () as usize;
         let _ = pace_runtime::__pace_print_float as *const () as usize;
@@ -48,7 +44,7 @@ impl CompilerSession {
         let _ = pace_runtime::__pace_sb_append as *const () as usize;
         let _ = pace_runtime::__pace_sb_build as *const () as usize;
         let _ = pace_runtime::__pace_sb_free as *const () as usize;
-        Self
+        Self { session }
     }
 
     fn load_file(
@@ -112,7 +108,7 @@ impl CompilerSession {
             }
             | Stmt::Export { path: import_path } = arena.get_stmt(stmt_id)
             {
-                let resolved_path = Self::resolve_import_path(import_path.as_str(), &path_buf)?;
+                let resolved_path = self.session.resolve_import_path(import_path.as_str(), &path_buf)?;
 
                 if resolved_path.exists() {
                     let mod_name =
@@ -200,161 +196,6 @@ impl CompilerSession {
         Ok((mono_ast, warnings, type_errors, env))
     }
 
-    pub fn resolve_import_path(
-        import_path: &str,
-        path_buf: &std::path::Path,
-    ) -> Result<std::path::PathBuf> {
-        let target_platform = std::env::var("PACE_TARGET").unwrap_or_else(|_| "native".to_string());
-
-        if import_path.starts_with("pace:") {
-            Self::resolve_stdlib_path(import_path)
-        } else if import_path.starts_with("self:") {
-            Self::resolve_self_path(import_path, path_buf)
-        } else if import_path.starts_with("./") || import_path.starts_with("../") {
-            Self::resolve_relative_path(import_path, path_buf)
-        } else if import_path.starts_with("package:") {
-            Self::resolve_package_path(import_path, path_buf, &target_platform)
-        } else {
-            Err(miette::miette!(
-                "Invalid import path format: '{}'. Must start with pace:, package:, self:, or ./",
-                import_path
-            ))
-        }
-    }
-
-    fn resolve_stdlib_path(import_path: &str) -> Result<std::path::PathBuf> {
-        let path_without_pace = import_path.strip_prefix("pace:").unwrap_or(import_path);
-        let resolved_path = if let Ok(stdlib_path) = std::env::var("PACE_STDLIB") {
-            std::path::Path::new(&stdlib_path).join(format!("{}.pace", path_without_pace))
-        } else if let Ok(home_path) = std::env::var("PACE_HOME") {
-            std::path::Path::new(&home_path)
-                .join("stdlib")
-                .join(format!("{}.pace", path_without_pace))
-        } else {
-            // Fallback to compile-time repository root
-            let manifest_dir = env!("CARGO_MANIFEST_DIR");
-            let fallback_path = std::path::Path::new(manifest_dir).join("../../stdlib");
-            fallback_path.join(format!("{}.pace", path_without_pace))
-        };
-
-        if !resolved_path.exists() {
-            Err(miette::miette!(
-                "Package Error: Standard library not found at '{}'. Please set PACE_STDLIB or PACE_HOME.",
-                resolved_path.display()
-            ))
-        } else {
-            Ok(resolved_path)
-        }
-    }
-
-    fn resolve_self_path(
-        import_path: &str,
-        path_buf: &std::path::Path,
-    ) -> Result<std::path::PathBuf> {
-        let path_without_self = import_path.strip_prefix("self:").unwrap();
-        let mut current_dir = path_buf
-            .parent()
-            .unwrap_or(std::path::Path::new(""))
-            .to_path_buf();
-        while !current_dir.join("pace.toml").exists() && current_dir.parent().is_some() {
-            current_dir = current_dir.parent().unwrap().to_path_buf();
-        }
-        Ok(current_dir
-            .join("src")
-            .join(format!("{}.pace", path_without_self)))
-    }
-
-    fn resolve_relative_path(
-        import_path: &str,
-        path_buf: &std::path::Path,
-    ) -> Result<std::path::PathBuf> {
-        let parent_dir = path_buf.parent().unwrap_or(std::path::Path::new(""));
-        Ok(parent_dir.join(format!("{}.pace", import_path)))
-    }
-
-    fn resolve_package_path(
-        import_path: &str,
-        path_buf: &std::path::Path,
-        target_platform: &str,
-    ) -> Result<std::path::PathBuf> {
-        let path_without_pkg = import_path.strip_prefix("package:").unwrap();
-
-        let (pkg_name, sub_path) = if let Some(idx) = path_without_pkg.find('/') {
-            (&path_without_pkg[..idx], &path_without_pkg[idx + 1..])
-        } else {
-            (path_without_pkg, path_without_pkg)
-        };
-
-        let mut current_dir = path_buf
-            .parent()
-            .unwrap_or(std::path::Path::new(""))
-            .to_path_buf();
-        while !current_dir.join("pace.toml").exists() && current_dir.parent().is_some() {
-            current_dir = current_dir.parent().unwrap().to_path_buf();
-        }
-        let lock_opt = pace_pkg::lockfile::PaceLock::load_from_dir(&current_dir).unwrap_or(None);
-
-        let resolved_path = if let Some(lock) = lock_opt {
-            if let Some(pkg) = lock.packages.get(pkg_name) {
-                if let Some(path) = &pkg.path {
-                    let pkg_path = std::path::PathBuf::from(path);
-
-                    // Platform validation
-                    if let Ok(manifest) = pace_pkg::manifest::PaceToml::load_from_dir(&pkg_path)
-                        && let Some(platforms) = manifest.package.platforms
-                        && !platforms.contains(&target_platform.to_string())
-                    {
-                        return Err(miette::miette!(
-                            "Error: package '{}' is not compatible with target '{}'.\n\nSupported targets:\n  {}\n\nCurrent target:\n  {}",
-                            pkg_name,
-                            target_platform,
-                            platforms.join("\n  "),
-                            target_platform
-                        ));
-                    }
-
-                    pkg_path.join("src").join(format!("{}.pace", sub_path))
-                } else {
-                    return Err(miette::miette!(
-                        "Package Error: External package '{}' missing path in pace.lock.",
-                        pkg_name
-                    ));
-                }
-            } else {
-                return Err(miette::miette!(
-                    "Package Error: External package '{}' not found in pace.lock. Did you run 'pace fetch'?",
-                    pkg_name
-                ));
-            }
-        } else {
-            // Fallback for when there's no lockfile
-            let mut fallback_path = current_dir
-                .join("packages")
-                .join(pkg_name)
-                .join("src")
-                .join(format!("{}.pace", sub_path));
-            if let Ok(manifest) = pace_pkg::manifest::PaceToml::load_from_dir(&current_dir)
-                && let Some(dep) = manifest.dependencies.get(pkg_name)
-                && let pace_pkg::manifest::Dependency::Path { path } = dep
-            {
-                fallback_path = current_dir
-                    .join(path)
-                    .join("src")
-                    .join(format!("{}.pace", sub_path));
-            }
-            fallback_path
-        };
-
-        if !resolved_path.exists() {
-            Err(miette::miette!(
-                "Package Error: External package module '{}' not found at expected path: {}",
-                import_path,
-                resolved_path.display()
-            ))
-        } else {
-            Ok(resolved_path)
-        }
-    }
 
     pub fn check_file(
         &self,
@@ -429,10 +270,10 @@ impl CompilerSession {
         Ok((mono_ast, warnings, type_errors, env))
     }
 
-    pub fn run_file(&self, path: &str, release: bool) -> Result<()> {
+    pub fn run_file(&self, path: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
         let ast = self.check_file(&mut arena, path)?;
-        let mut compiler = pace_codegen_cranelift::JITCompiler::new(if release {
+        let mut compiler = pace_codegen_cranelift::JITCompiler::new(if self.session.options.release_mode {
             "speed_and_size".to_string()
         } else {
             "none".to_string()
@@ -445,10 +286,10 @@ impl CompilerSession {
         Ok(())
     }
 
-    pub fn run_source(&self, src: &str, release: bool) -> Result<()> {
+    pub fn run_source(&self, src: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
         let ast = self.check_source(&mut arena, src)?;
-        let mut compiler = pace_codegen_cranelift::JITCompiler::new(if release {
+        let mut compiler = pace_codegen_cranelift::JITCompiler::new(if self.session.options.release_mode {
             "speed_and_size".to_string()
         } else {
             "none".to_string()
@@ -461,16 +302,16 @@ impl CompilerSession {
         Ok(())
     }
 
-    pub fn build_file(&self, path: &str, output: &str, release: bool) -> Result<()> {
+    pub fn build_file(&self, path: &str, output: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
         let ast = self.check_file(&mut arena, path)?;
-        self.build_from_ast(&mut arena, &ast, output, release)
+        self.build_from_ast(&mut arena, &ast, output)
     }
 
-    pub fn build_source(&self, src: &str, output: &str, release: bool) -> Result<()> {
+    pub fn build_source(&self, src: &str, output: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
         let ast = self.check_source(&mut arena, src)?;
-        self.build_from_ast(&mut arena, &ast, output, release)
+        self.build_from_ast(&mut arena, &ast, output)
     }
 
     fn build_from_ast(
@@ -478,9 +319,8 @@ impl CompilerSession {
         arena: &mut pace_ast::arena::AstArena,
         ast: &[pace_ast::arena::StmtId],
         output: &str,
-        release: bool,
     ) -> Result<()> {
-        let compiler = pace_codegen_cranelift::AotCompiler::new(if release {
+        let compiler = pace_codegen_cranelift::AotCompiler::new(if self.session.options.release_mode {
             "speed_and_size".to_string()
         } else {
             "none".to_string()

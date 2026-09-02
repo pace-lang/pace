@@ -1217,6 +1217,7 @@ dependencies = [
  "pace-lsp",
  "pace-parser",
  "pace-pkg",
+ "pace-session",
  "pretty",
  "semver",
  "serde",
@@ -1266,6 +1267,7 @@ dependencies = [
  "pace-parser",
  "pace-pkg",
  "pace-runtime",
+ "pace-session",
  "pace-ty",
  "thiserror",
  "ustr",
@@ -1292,6 +1294,7 @@ dependencies = [
  "pace-ast",
  "pace-driver",
  "pace-errors",
+ "pace-session",
  "pace-ty",
  "pathdiff",
  "regex",
@@ -1352,6 +1355,9 @@ dependencies = [
 [[package]]
 name = "pace-session"
 version = "0.1.0"
+dependencies = [
+ "miette",
+]
 
 [[package]]
 name = "pace-span"
