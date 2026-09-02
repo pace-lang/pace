@@ -5,8 +5,8 @@ pub mod stmt;
 
 pub use arena::*;
 pub use expr::*;
-pub use pace_common::{BinaryOp, TypeAnnotation, UnaryOp};
-pub use pace_common::{Span, Visibility};
+pub use pace_common::{BinaryOp, TypeAnnotation, UnaryOp, Visibility};
+pub use pace_span::Span;
 pub use stmt::*;
 
 #[cfg(test)]

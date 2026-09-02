@@ -1,5 +1,5 @@
 [package]
-name = "pace-ast"
+name = "pace-middle"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -7,12 +7,6 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-pace-common = { version = "0.1.0", path = "../pace-common" }
-pace-span = { workspace = true }
-ustr = "1.1.0"
-
-[dev-dependencies]
-insta = { workspace = true }
 
 [lints]
 workspace = true

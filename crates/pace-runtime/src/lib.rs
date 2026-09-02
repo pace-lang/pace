@@ -267,7 +267,7 @@ fn set_last_error(msg: &str) {
     });
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "getLastError")]
 pub extern "C" fn __pace_get_last_error() -> *mut std::ffi::c_char {
     LAST_ERROR_MESSAGE.with(|e| {
         let mut msg = e.borrow_mut();
@@ -406,7 +406,7 @@ pub extern "C" fn __pace_string_starts_with(
 // FS RUNTIME (File System)
 // ==========================================
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "fsWriteText")]
 pub extern "C" fn __pace_fs_write(
     path: *const std::ffi::c_char,
     content: *const std::ffi::c_char,
@@ -431,7 +431,7 @@ pub extern "C" fn __pace_fs_write(
     }
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "fsExists")]
 pub extern "C" fn __pace_fs_exists(path: *const std::ffi::c_char) -> i64 {
     if path.is_null() {
         return 0;
@@ -456,7 +456,7 @@ pub extern "C" fn __pace_fs_exists(path: *const std::ffi::c_char) -> i64 {
     }
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "fsReadText")]
 pub extern "C" fn __pace_fs_read(path: *const std::ffi::c_char) -> *mut std::ffi::c_char {
     if path.is_null() {
         return std::ptr::null_mut();
@@ -477,7 +477,7 @@ pub extern "C" fn __pace_fs_read(path: *const std::ffi::c_char) -> *mut std::ffi
     }
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "fsDeleteFile")]
 pub extern "C" fn __pace_fs_delete(path: *const std::ffi::c_char) -> i64 {
     if path.is_null() {
         return 0;
@@ -496,7 +496,7 @@ pub extern "C" fn __pace_fs_delete(path: *const std::ffi::c_char) -> i64 {
     }
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "fsMakeDir")]
 pub extern "C" fn __pace_fs_mkdir(path: *const std::ffi::c_char) -> i64 {
     if path.is_null() {
         return 0;
@@ -515,7 +515,7 @@ pub extern "C" fn __pace_fs_mkdir(path: *const std::ffi::c_char) -> i64 {
     }
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "fsDirExists")]
 pub extern "C" fn __pace_fs_dir_exists(path: *const std::ffi::c_char) -> i64 {
     if path.is_null() {
         return 0;
@@ -544,7 +544,7 @@ pub extern "C" fn __pace_fs_dir_exists(path: *const std::ffi::c_char) -> i64 {
 // OS AND PROCESS RUNTIME
 // ==========================================
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "osGetEnv")]
 pub extern "C" fn __pace_os_getenv(key: *const std::ffi::c_char) -> *mut std::ffi::c_char {
     if key.is_null() {
         return std::ptr::null_mut();
@@ -560,14 +560,14 @@ pub extern "C" fn __pace_os_getenv(key: *const std::ffi::c_char) -> *mut std::ff
     }
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "osName")]
 pub extern "C" fn __pace_os_name() -> *mut std::ffi::c_char {
     std::ffi::CString::new(std::env::consts::OS)
         .unwrap()
         .into_raw()
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "processRun")]
 pub extern "C" fn __pace_process_run(command: *const std::ffi::c_char) -> *mut std::ffi::c_char {
     if command.is_null() {
         return std::ptr::null_mut();
@@ -602,7 +602,7 @@ pub extern "C" fn __pace_process_run(command: *const std::ffi::c_char) -> *mut s
     }
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "processExit")]
 pub extern "C" fn __pace_process_exit(code: i64) -> ! {
     std::process::exit(code as i32);
 }
@@ -611,7 +611,7 @@ pub extern "C" fn __pace_process_exit(code: i64) -> ! {
 // HTTP RUNTIME (Network)
 // ==========================================
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "httpGet")]
 pub extern "C" fn __pace_http_get(url: *const std::ffi::c_char) -> *mut std::ffi::c_char {
     if url.is_null() {
         return std::ptr::null_mut();
@@ -638,7 +638,7 @@ pub extern "C" fn __pace_http_get(url: *const std::ffi::c_char) -> *mut std::ffi
     }
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "httpPost")]
 pub extern "C" fn __pace_http_post(
     url: *const std::ffi::c_char,
     body: *const std::ffi::c_char,
@@ -671,7 +671,7 @@ pub extern "C" fn __pace_http_post(
     }
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "httpPut")]
 pub extern "C" fn __pace_http_put(
     url: *const std::ffi::c_char,
     body: *const std::ffi::c_char,
@@ -704,7 +704,7 @@ pub extern "C" fn __pace_http_put(
     }
 }
 
-#[unsafe(no_mangle)]
+#[unsafe(export_name = "httpDelete")]
 pub extern "C" fn __pace_http_delete(url: *const std::ffi::c_char) -> *mut std::ffi::c_char {
     if url.is_null() {
         return std::ptr::null_mut();

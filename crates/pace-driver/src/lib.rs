@@ -432,7 +432,7 @@ impl CompilerSession {
     pub fn run_file(&self, path: &str, release: bool) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
         let ast = self.check_file(&mut arena, path)?;
-        let mut compiler = pace_codegen::JITCompiler::new(if release {
+        let mut compiler = pace_codegen_cranelift::JITCompiler::new(if release {
             "speed_and_size".to_string()
         } else {
             "none".to_string()
@@ -448,7 +448,7 @@ impl CompilerSession {
     pub fn run_source(&self, src: &str, release: bool) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
         let ast = self.check_source(&mut arena, src)?;
-        let mut compiler = pace_codegen::JITCompiler::new(if release {
+        let mut compiler = pace_codegen_cranelift::JITCompiler::new(if release {
             "speed_and_size".to_string()
         } else {
             "none".to_string()
@@ -480,7 +480,7 @@ impl CompilerSession {
         output: &str,
         release: bool,
     ) -> Result<()> {
-        let compiler = pace_codegen::AotCompiler::new(if release {
+        let compiler = pace_codegen_cranelift::AotCompiler::new(if release {
             "speed_and_size".to_string()
         } else {
             "none".to_string()

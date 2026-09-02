@@ -1196,6 +1196,7 @@ version = "0.1.0"
 dependencies = [
  "insta",
  "pace-common",
+ "pace-span",
  "ustr",
 ]
 
@@ -1228,7 +1229,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pace-codegen"
+name = "pace-codegen-cranelift"
 version = "0.1.0"
 dependencies = [
  "cranelift",
@@ -1250,6 +1251,7 @@ name = "pace-common"
 version = "0.1.0"
 dependencies = [
  "miette",
+ "pace-span",
  "ustr",
 ]
 
@@ -1259,7 +1261,7 @@ version = "0.1.0"
 dependencies = [
  "miette",
  "pace-ast",
- "pace-codegen",
+ "pace-codegen-cranelift",
  "pace-errors",
  "pace-parser",
  "pace-pkg",
@@ -1279,6 +1281,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "pace-hir"
+version = "0.1.0"
+
+[[package]]
 name = "pace-lsp"
 version = "0.1.0"
 dependencies = [
@@ -1296,6 +1302,14 @@ dependencies = [
  "ustr",
  "walkdir",
 ]
+
+[[package]]
+name = "pace-middle"
+version = "0.1.0"
+
+[[package]]
+name = "pace-mir"
+version = "0.1.0"
 
 [[package]]
 name = "pace-parser"
@@ -1333,6 +1347,17 @@ name = "pace-runtime"
 version = "0.1.0"
 dependencies = [
  "ureq",
+]
+
+[[package]]
+name = "pace-session"
+version = "0.1.0"
+
+[[package]]
+name = "pace-span"
+version = "0.1.0"
+dependencies = [
+ "miette",
 ]
 
 [[package]]

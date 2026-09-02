@@ -1383,6 +1383,7 @@ impl AotCompiler {
         };
 
         let mut sig = self.context.module.make_signature();
+        sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
         sig.params.push(AbiParam::new(
             self.context.module.target_config().pointer_type(),
         )); // env pointer
