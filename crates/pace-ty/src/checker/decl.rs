@@ -1,11 +1,11 @@
 use super::TypeChecker;
 use super::is_camel_case;
 use crate::env::{ClassSignature, EnumSignature, FunctionSignature, Type};
-use pace_ast::Stmt;
+use pace_hir::Stmt;
 use std::collections::HashMap;
 
 impl<'a> TypeChecker<'a> {
-    pub(crate) fn register_types(&mut self, stmts: &[pace_ast::arena::StmtId]) {
+    pub(crate) fn register_types(&mut self, stmts: &[pace_hir::StmtId]) {
         for stmt_id in stmts {
             let stmt = self.arena.get_stmt(*stmt_id);
             match stmt {
@@ -62,7 +62,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub(crate) fn resolve_signatures(&mut self, stmts: &[pace_ast::arena::StmtId]) {
+    pub(crate) fn resolve_signatures(&mut self, stmts: &[pace_hir::StmtId]) {
         for stmt_id in stmts {
             let stmt = self.arena.get_stmt(*stmt_id);
             match stmt {
@@ -72,7 +72,8 @@ impl<'a> TypeChecker<'a> {
                     self.resolve_signatures(body);
                     self.current_module = old_module;
                 }
-                Stmt::FuncDecl { name, params, return_type, span, visibility, generic_params, is_static, .. } => {
+                Stmt::FuncDecl { name, params, return_type, visibility, generic_params, is_static, .. } => {
+                    let span = self.arena.get_stmt_span(*stmt_id);
                     if let Some(gp) = generic_params {
                         self.generic_params_in_scope.extend(gp.clone());
                     }
@@ -94,13 +95,13 @@ impl<'a> TypeChecker<'a> {
                         self.warnings.push(pace_errors::SemanticWarning::NamingConvention {
                             name: name.to_string(),
                             src: self.get_source(),
-                            span: (*span),
+                            span,
                         });
                     }
                     let sig = FunctionSignature {
                         params: param_types,
                         return_type: ret_ty,
-                        span: (*span),
+                        span,
                         is_used: false,
                         visibility: visibility.clone(),
                         module: self.current_module,
@@ -146,7 +147,7 @@ impl<'a> TypeChecker<'a> {
                             let sig = FunctionSignature {
                                 params: param_types,
                                 return_type: ret_ty,
-                                span: pace_ast::Span::default(),
+                                span: pace_span::Span::default(),
                                 is_used: true,
                                 visibility: visibility.clone(),
                                 module: self.current_module,
@@ -208,7 +209,7 @@ impl<'a> TypeChecker<'a> {
                             let sig = FunctionSignature {
                                 params: param_types,
                                 return_type: ret_ty,
-                                span: pace_ast::Span::default(),
+                                span: pace_span::Span::default(),
                                 is_used: true,
                                 visibility: visibility.clone(),
                                 module: self.current_module,
@@ -321,7 +322,7 @@ impl<'a> TypeChecker<'a> {
                             let sig = FunctionSignature {
                                 params: param_types,
                                 return_type: ret_ty,
-                                span: pace_ast::Span::default(),
+                                span: pace_span::Span::default(),
                                 is_used: true,
                                 visibility: visibility.clone(),
                                 module: self.current_module,
@@ -359,7 +360,8 @@ impl<'a> TypeChecker<'a> {
                             methods: HashMap::new(),
                         });
                     }
-                Stmt::VarDecl { name, type_annotation, is_mutable, visibility, span, .. } => {
+                Stmt::VarDecl { name, type_annotation, is_mutable, visibility, .. } => {
+                    let span = self.arena.get_stmt_span(*stmt_id);
                     let ty = if let Some(annot) = type_annotation {
                         self.resolve_type_name(annot)
                     } else {
@@ -370,7 +372,7 @@ impl<'a> TypeChecker<'a> {
                         is_mutable: *is_mutable,
                         visibility: visibility.clone(),
                         module: self.current_module,
-                        span: (*span),
+                        span,
                     });
                 }
                 _ => {}

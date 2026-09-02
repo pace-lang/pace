@@ -190,8 +190,12 @@ impl Compiler {
         // Apply Dead Code Elimination (Tree Shaking)
         let mono_ast = shake::TreeShaker::run(arena, mono_ast);
 
-        // Run typechecker on the parsed AST
-        let (warnings, type_errors, env) = pace_ty::check(arena, &mono_ast, sources, module_path);
+        // Lower AST to HIR
+        let builder = pace_hir::lower::HirBuilder::new(arena);
+        let (hir_arena, hir_stmts) = builder.build(&mono_ast);
+
+        // Run typechecker on the parsed HIR
+        let (warnings, type_errors, env) = pace_ty::check(&hir_arena, &hir_stmts, sources, module_path);
 
         Ok((mono_ast, warnings, type_errors, env))
     }

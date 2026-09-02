@@ -1,6 +1,7 @@
 use super::TypeChecker;
 use crate::env::Type;
-use pace_ast::{BinaryOp, Expr, Visibility};
+use pace_ast::{BinaryOp, Visibility};
+use pace_hir::Expr;
 use pace_errors::TypeError;
 
 impl<'a> TypeChecker<'a> {
@@ -8,7 +9,7 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         params: &[(ustr::Ustr, pace_ast::TypeAnnotation)],
         return_type: Option<&pace_ast::TypeAnnotation>,
-        body: pace_ast::arena::ExprId,
+        body: pace_hir::ExprId,
     ) -> Type {
         self.env.push_scope();
 
@@ -18,7 +19,7 @@ impl<'a> TypeChecker<'a> {
             param_types.push(param_ty.clone());
             let _ = self
                 .env
-                .define(*param_name, param_ty, pace_ast::Span::default(), true);
+                .define(*param_name, param_ty, pace_span::Span::default(), true);
         }
 
         let ret_ty = if let Some(rt) = return_type {
@@ -86,7 +87,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub(crate) fn check_expr(&mut self, expr_id: pace_ast::arena::ExprId) -> Type {
+    pub(crate) fn check_expr(&mut self, expr_id: pace_hir::ExprId) -> Type {
         let expr = self.arena.get_expr(expr_id);
         match expr {
             Expr::IntLiteral(_) => Type::Int,
@@ -141,7 +142,7 @@ impl<'a> TypeChecker<'a> {
                 self.pop_scope_and_check_unused();
                 Type::Void
             }
-            Expr::Identifier(name, _) => self.check_expr_identifier(name),
+            Expr::Identifier(name) => self.check_expr_identifier(name),
             Expr::Unary {
                 op,
                 expr: inner_expr,
@@ -275,10 +276,10 @@ impl<'a> TypeChecker<'a> {
             Expr::Assign { target, value } => {
                 let val_ty = self.check_expr(*value);
 
-                if let Expr::Identifier(name, _) = self.arena.get_expr(*target) {
+                if let Expr::Identifier(name) = self.arena.get_expr(*target) {
                     let mut is_err = false;
                     let mut err_msg = String::new();
-                    let mut var_span = pace_ast::Span::default();
+                    let mut var_span = pace_span::Span::default();
 
                     if let Some(var_info) = self.env.get_mut(*name) {
                         if !var_info.is_mutable {
@@ -478,7 +479,7 @@ impl<'a> TypeChecker<'a> {
                 }
 
                 // For direct global function calls
-                if let Expr::Identifier(func_name, _) = self.arena.get_expr(*callee)
+                if let Expr::Identifier(func_name) = self.arena.get_expr(*callee)
                     && let Some(sig) = self.env.functions.get(&ustr::Ustr::from(func_name))
                 {
                     if sig.visibility == Visibility::Private && sig.module != self.current_module {
@@ -538,11 +539,11 @@ impl<'a> TypeChecker<'a> {
             } => {
                 let mut is_namespace_access = false;
                 let mut base_ident = None;
-                if let Expr::Identifier(name, _) = self.arena.get_expr(*object) {
+                if let Expr::Identifier(name) = self.arena.get_expr(*object) {
                     base_ident = Some(*name);
                 } else if let Expr::GenericInstantiation { callee, .. } =
                     self.arena.get_expr(*object)
-                    && let Expr::Identifier(name, _) = self.arena.get_expr(*callee)
+                    && let Expr::Identifier(name) = self.arena.get_expr(*callee)
                 {
                     base_ident = Some(*name);
                 }

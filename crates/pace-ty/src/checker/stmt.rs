@@ -1,11 +1,11 @@
 use super::TypeChecker;
 use super::is_camel_case;
 use crate::env::Type;
-use pace_ast::Stmt;
+use pace_hir::Stmt;
 use pace_errors::TypeError;
 
 impl<'a> TypeChecker<'a> {
-    pub(crate) fn check_stmt(&mut self, stmt_id: pace_ast::arena::StmtId) {
+    pub(crate) fn check_stmt(&mut self, stmt_id: pace_hir::StmtId) {
         let stmt = self.arena.get_stmt(stmt_id);
         match stmt {
             Stmt::Module { name, body } => {
@@ -24,15 +24,15 @@ impl<'a> TypeChecker<'a> {
                 is_mutable,
                 type_annotation,
                 initializer,
-                span,
                 ..
             } => {
+                let span = self.arena.get_stmt_span(stmt_id);
                 self.check_stmt_var_decl(
                     *name,
                     *is_mutable,
                     type_annotation.as_ref(),
                     *initializer,
-                    *span,
+                    span,
                 );
             }
             Stmt::Block(stmts) => {
@@ -143,7 +143,7 @@ impl<'a> TypeChecker<'a> {
                 }
 
                 self.env.push_scope();
-                self.define_var(*item, item_ty, pace_ast::Span::default(), false);
+                self.define_var(*item, item_ty, pace_span::Span::default(), false);
                 self.check_stmt(*body);
                 self.pop_scope_and_check_unused();
             }
@@ -162,16 +162,17 @@ impl<'a> TypeChecker<'a> {
                 return_type,
                 generic_params,
                 is_static,
-                span,
+
                 ..
             } => {
+                let span = self.arena.get_stmt_span(stmt_id);
                 self.check_stmt_func_decl(
                     params,
                     body,
                     return_type.as_ref(),
                     generic_params.as_deref(),
                     *is_static,
-                    *span,
+                    span,
                 );
             }
             Stmt::ClassDecl {
@@ -207,8 +208,8 @@ impl<'a> TypeChecker<'a> {
         name: ustr::Ustr,
         is_mutable: bool,
         type_annotation: Option<&pace_ast::TypeAnnotation>,
-        initializer: Option<pace_ast::arena::ExprId>,
-        span: pace_ast::Span,
+        initializer: Option<pace_hir::ExprId>,
+        span: pace_span::Span,
     ) {
         self.current_span = span;
         let mut inferred_type = Type::Unknown;
@@ -270,12 +271,12 @@ impl<'a> TypeChecker<'a> {
 
     pub(crate) fn check_stmt_func_decl(
         &mut self,
-        params: &[pace_ast::Param],
-        body: &[pace_ast::arena::StmtId],
+        params: &[pace_hir::Param],
+        body: &[pace_hir::StmtId],
         return_type: Option<&pace_ast::TypeAnnotation>,
         generic_params: Option<&[ustr::Ustr]>,
         is_static: bool,
-        span: pace_ast::Span,
+        span: pace_span::Span,
     ) {
         self.current_span = span;
         let prev_return = self.current_return_type.clone();
@@ -305,13 +306,13 @@ impl<'a> TypeChecker<'a> {
             } else {
                 Type::Class(*class_name)
             };
-            self.define_var("self".into(), self_ty, pace_ast::Span::default(), false);
+            self.define_var("self".into(), self_ty, pace_span::Span::default(), false);
         }
 
         // Add parameters to scope
         for param in params {
             let param_type = self.resolve_type_name(&param.type_annotation);
-            self.define_var(param.name, param_type, pace_ast::Span::default(), false);
+            self.define_var(param.name, param_type, pace_span::Span::default(), false);
         }
 
         // Check body
@@ -327,7 +328,7 @@ impl<'a> TypeChecker<'a> {
     pub(crate) fn check_stmt_class_decl(
         &mut self,
         name: ustr::Ustr,
-        methods: &[pace_ast::arena::StmtId],
+        methods: &[pace_hir::StmtId],
         implements: Option<&pace_ast::TypeAnnotation>,
         generic_params: Option<&[ustr::Ustr]>,
     ) {

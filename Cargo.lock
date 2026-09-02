@@ -1254,6 +1254,7 @@ dependencies = [
  "pace-ast",
  "pace-codegen-cranelift",
  "pace-errors",
+ "pace-hir",
  "pace-parser",
  "pace-pkg",
  "pace-runtime",
@@ -1275,6 +1276,12 @@ dependencies = [
 [[package]]
 name = "pace-hir"
 version = "0.1.0"
+dependencies = [
+ "pace-ast",
+ "pace-parser",
+ "pace-span",
+ "ustr",
+]
 
 [[package]]
 name = "pace-lsp"
@@ -1363,7 +1370,9 @@ dependencies = [
  "miette",
  "pace-ast",
  "pace-errors",
+ "pace-hir",
  "pace-parser",
+ "pace-span",
  "thiserror",
  "ustr",
 ]

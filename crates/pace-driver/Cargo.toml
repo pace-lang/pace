@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 pace-ast = { workspace = true }
 pace-parser = { workspace = true }
+pace-hir = { workspace = true }
 pace-errors = { workspace = true }
 pace-ty = { workspace = true }
 pace-codegen-cranelift = { workspace = true }

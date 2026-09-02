@@ -89,14 +89,14 @@ pub struct GlobalVariableSignature {
     pub is_mutable: bool,
     pub visibility: Visibility,
     pub module: ustr::Ustr,
-    pub span: pace_ast::Span,
+    pub span: pace_span::Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct FunctionSignature {
     pub params: Vec<Type>,
     pub return_type: Type,
-    pub span: pace_ast::Span,
+    pub span: pace_span::Span,
     pub is_used: bool,
     pub visibility: Visibility,
     pub module: ustr::Ustr,
@@ -123,7 +123,7 @@ pub struct ClassSignature {
 #[derive(Debug, Clone)]
 pub struct VarInfo {
     pub ty: Type,
-    pub span: pace_ast::Span,
+    pub span: pace_span::Span,
     pub is_used: bool,
     pub is_mutable: bool,
 }
@@ -163,7 +163,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Any], // Accept any type
                 return_type: Type::Void,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true, // Always consider built-ins used
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -177,7 +177,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Any], // Accept any type
                 return_type: Type::Int,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -190,7 +190,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -203,7 +203,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int, Type::Int],
                 return_type: Type::Void,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -216,7 +216,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int, Type::Int, Type::Any],
                 return_type: Type::Void,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -229,7 +229,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Any],
                 return_type: Type::Void,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -242,7 +242,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Any],
                 return_type: Type::Void,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -255,7 +255,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Any],
                 return_type: Type::Void,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -268,7 +268,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Any],
                 return_type: Type::Void,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -281,7 +281,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Any],
                 return_type: Type::Void,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -294,7 +294,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int, Type::Int],
                 return_type: Type::Any,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -307,7 +307,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -320,7 +320,7 @@ impl Environment {
             FunctionSignature {
                 params: vec![Type::Int],
                 return_type: Type::Int,
-                span: pace_ast::Span::default(),
+                span: pace_span::Span::default(),
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
@@ -347,9 +347,9 @@ impl Environment {
         &mut self,
         name: ustr::Ustr,
         ty: Type,
-        span: pace_ast::Span,
+        span: pace_span::Span,
         is_mutable: bool,
-    ) -> Result<(), pace_ast::Span> {
+    ) -> Result<(), pace_span::Span> {
         if let Some(scope) = self.scopes.last_mut() {
             if let Some(existing) = scope.get(&name) {
                 return Err(existing.span);
@@ -450,17 +450,17 @@ impl Environment {
 
     pub fn register_class(&mut self, name: ustr::Ustr, sig: ClassSignature) {
         self.classes.insert(name, sig);
-        let _ = self.define(name, Type::Class(name), pace_ast::Span::default(), false);
+        let _ = self.define(name, Type::Class(name), pace_span::Span::default(), false);
     }
 
     pub fn register_struct(&mut self, name: ustr::Ustr, sig: ClassSignature) {
         self.structs.insert(name, sig);
-        let _ = self.define(name, Type::Struct(name), pace_ast::Span::default(), false);
+        let _ = self.define(name, Type::Struct(name), pace_span::Span::default(), false);
     }
 
     pub fn register_enum(&mut self, name: ustr::Ustr, sig: EnumSignature) {
         self.enums.insert(name, sig);
-        let _ = self.define(name, Type::Enum(name), pace_ast::Span::default(), false);
+        let _ = self.define(name, Type::Enum(name), pace_span::Span::default(), false);
     }
 }
 

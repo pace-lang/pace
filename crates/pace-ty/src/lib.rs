@@ -13,11 +13,15 @@ mod tests {
     use pace_ast::arena::AstArena;
 
     fn check_source(src: &str) -> Result<(), Vec<pace_errors::TypeError>> {
-        let mut arena = AstArena::new();
-        let (stmts, _) = pace_parser::parse(&mut arena, src, "test").expect("Syntax error in test");
+        let mut ast_arena = AstArena::new();
+        let (ast_stmts, _) = pace_parser::parse(&mut ast_arena, src, "test").expect("Syntax error in test");
+        
+        let builder = pace_hir::lower::HirBuilder::new(&ast_arena);
+        let (hir_arena, hir_stmts) = builder.build(&ast_stmts);
+
         let mut sources = std::collections::HashMap::new();
         sources.insert(ustr::Ustr::from("test"), src.to_string());
-        let (_, errors, _) = crate::check(&mut arena, &stmts, sources, "test");
+        let (_, errors, _) = crate::check(&hir_arena, &hir_stmts, sources, "test");
         if errors.is_empty() {
             Ok(())
         } else {

@@ -6,13 +6,13 @@ pub mod decl;
 pub mod expr;
 pub mod stmt;
 impl<'a> TypeChecker<'a> {
-    pub fn get_span_for(&self, token: &str) -> pace_ast::Span {
+    pub fn get_span_for(&self, token: &str) -> pace_span::Span {
         if let Some(src) = self.sources.get(&self.current_module)
             && let Some(idx) = src.find(token)
         {
-            return pace_ast::Span::new(idx, token.len());
+            return pace_span::Span::new(idx, token.len());
         }
-        pace_ast::Span::default()
+        pace_span::Span::default()
     }
 
     pub fn get_source(&self) -> miette::NamedSource<String> {
@@ -31,13 +31,13 @@ pub struct TypeChecker<'a> {
     generic_params_in_scope: Vec<ustr::Ustr>,
     pub warnings: Vec<pace_errors::SemanticWarning>,
     pub errors: Vec<TypeError>,
-    pub current_span: pace_ast::Span,
-    pub arena: &'a pace_ast::arena::AstArena,
+    pub current_span: pace_span::Span,
+    pub arena: &'a pace_hir::HirArena,
 }
 
 pub fn check(
-    arena: &pace_ast::arena::AstArena,
-    ast: &[pace_ast::arena::StmtId],
+    arena: &pace_hir::HirArena,
+    ast: &[pace_hir::StmtId],
     sources: HashMap<ustr::Ustr, String>,
     entry_module: &str,
 ) -> (
@@ -55,7 +55,7 @@ pub fn check(
 
 impl<'a> TypeChecker<'a> {
     pub fn new(
-        arena: &'a pace_ast::arena::AstArena,
+        arena: &'a pace_hir::HirArena,
         sources: HashMap<ustr::Ustr, String>,
         file_name: &str,
     ) -> Self {
@@ -69,7 +69,7 @@ impl<'a> TypeChecker<'a> {
             generic_params_in_scope: Vec::new(),
             warnings: Vec::new(),
             errors: Vec::new(),
-            current_span: pace_ast::Span::default(),
+            current_span: pace_span::Span::default(),
             arena,
         }
     }
@@ -78,7 +78,7 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         name: ustr::Ustr,
         ty: Type,
-        span: pace_ast::Span,
+        span: pace_span::Span,
         is_mutable: bool,
     ) {
         if let Err(original_span) = self.env.define(name, ty, span, is_mutable) {
@@ -91,7 +91,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub fn check(&mut self, stmts: &[pace_ast::arena::StmtId]) {
+    pub fn check(&mut self, stmts: &[pace_hir::StmtId]) {
         // Pass 1: Register all types
         self.register_types(stmts);
 
@@ -112,7 +112,7 @@ impl<'a> TypeChecker<'a> {
             if !var_info.is_used
                 && !name.starts_with('_')
                 && name != "self"
-                && var_info.span != pace_ast::Span::default()
+                && var_info.span != pace_span::Span::default()
             {
                 let kind = if matches!(var_info.ty, Type::Function { .. }) {
                     "function"
@@ -210,10 +210,10 @@ impl<'a> TypeChecker<'a> {
             base_type
         }
     }
-    pub fn check_pattern(&mut self, pattern: &pace_ast::Pattern, expected_type: &Type) {
+    pub fn check_pattern(&mut self, pattern: &pace_hir::Pattern, expected_type: &Type) {
         match pattern {
-            pace_ast::Pattern::Wildcard => (),
-            pace_ast::Pattern::Literal(expr) => {
+            pace_hir::Pattern::Wildcard => (),
+            pace_hir::Pattern::Literal(expr) => {
                 let ty = self.check_expr(*expr);
                 if expected_type != &ty && expected_type != &Type::Unknown && ty != Type::Unknown {
                     {
@@ -228,10 +228,10 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
             }
-            pace_ast::Pattern::Variable(name, span) => {
-                self.define_var(*name, expected_type.clone(), *span, false);
+            pace_hir::Pattern::Variable(name) => {
+                self.define_var(*name, expected_type.clone(), self.current_span, false);
             }
-            pace_ast::Pattern::Variant {
+            pace_hir::Pattern::Variant {
                 enum_name,
                 variant_name,
                 fields,
