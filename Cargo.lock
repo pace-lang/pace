@@ -1195,7 +1195,6 @@ name = "pace-ast"
 version = "0.1.0"
 dependencies = [
  "insta",
- "pace-common",
  "pace-span",
  "ustr",
 ]
@@ -1212,9 +1211,9 @@ dependencies = [
  "flate2",
  "miette",
  "pace-ast",
- "pace-common",
  "pace-driver",
  "pace-lsp",
+ "pace-middle",
  "pace-parser",
  "pace-pkg",
  "pace-session",
@@ -1248,15 +1247,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pace-common"
-version = "0.1.0"
-dependencies = [
- "miette",
- "pace-span",
- "ustr",
-]
-
-[[package]]
 name = "pace-driver"
 version = "0.1.0"
 dependencies = [
@@ -1278,7 +1268,7 @@ name = "pace-errors"
 version = "0.1.0"
 dependencies = [
  "miette",
- "pace-common",
+ "pace-span",
  "thiserror",
 ]
 
@@ -1321,8 +1311,8 @@ dependencies = [
  "insta",
  "miette",
  "pace-ast",
- "pace-common",
  "pace-errors",
+ "pace-span",
  "ustr",
 ]
 

@@ -1,5 +1,5 @@
 use crate::arena::{ExprId, StmtId};
-use pace_common::{Span, TypeAnnotation, Visibility};
+use crate::{Span, TypeAnnotation, Visibility};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {

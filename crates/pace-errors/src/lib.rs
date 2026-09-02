@@ -13,7 +13,7 @@ pub enum SyntaxError {
         #[source_code]
         src: miette::NamedSource<String>,
         #[label("Unexpected token")]
-        span: pace_common::Span,
+        span: pace_span::Span,
     },
 }
 
@@ -35,7 +35,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Not found")]
-        span: pace_common::Span,
+        span: pace_span::Span,
     },
 
     #[error("Duplicate declaration of '{name}'")]
@@ -48,9 +48,9 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Cannot redeclare '{name}'")]
-        span: pace_common::Span,
+        span: pace_span::Span,
         #[label("Originally defined here")]
-        original_span: pace_common::Span,
+        original_span: pace_span::Span,
     },
 
     #[error("Type mismatch: {message}")]
@@ -60,7 +60,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Type mismatch")]
-        span: pace_common::Span,
+        span: pace_span::Span,
     },
 
     #[error("Unknown type '{name}'")]
@@ -73,7 +73,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Type not found")]
-        span: pace_common::Span,
+        span: pace_span::Span,
     },
 
     #[error("Invalid weak reference")]
@@ -85,7 +85,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Invalid weak")]
-        span: pace_common::Span,
+        span: pace_span::Span,
     },
 
     #[error("Ownership violation: {message}")]
@@ -100,7 +100,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Violation here")]
-        span: pace_common::Span,
+        span: pace_span::Span,
     },
 
     #[error("Type error: {message}")]
@@ -110,7 +110,7 @@ pub enum TypeError {
         #[source_code]
         src: NamedSource<String>,
         #[label("Here")]
-        span: pace_common::Span,
+        span: pace_span::Span,
     },
 }
 
@@ -123,7 +123,7 @@ pub enum SemanticWarning {
         #[source_code]
         src: NamedSource<String>,
         #[label("Consider renaming to camelCase")]
-        span: pace_common::Span,
+        span: pace_span::Span,
     },
 
     #[error("Unused {kind} '{name}'")]
@@ -134,6 +134,6 @@ pub enum SemanticWarning {
         #[source_code]
         src: NamedSource<String>,
         #[label("This is never used")]
-        span: pace_common::Span,
+        span: pace_span::Span,
     },
 }

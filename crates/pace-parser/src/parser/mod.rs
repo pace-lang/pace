@@ -8,7 +8,7 @@ pub mod stmt;
 pub struct Parser<'a, 'b> {
     pub lexer: Lexer<'a>,
     pub current_token: Token<'a>,
-    pub current_span: pace_common::Span,
+    pub current_span: pace_span::Span,
     pub errors: Vec<pace_errors::SyntaxError>,
     pub file_name: String,
     pub src: &'a str,

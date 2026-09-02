@@ -2,10 +2,17 @@ pub mod arena;
 pub mod clone;
 pub mod expr;
 pub mod stmt;
+pub mod binary_op;
+pub mod type_annotation;
+pub mod unary_op;
+pub mod visibility;
 
 pub use arena::*;
 pub use expr::*;
-pub use pace_common::{BinaryOp, TypeAnnotation, UnaryOp, Visibility};
+pub use binary_op::*;
+pub use type_annotation::*;
+pub use unary_op::*;
+pub use visibility::*;
 pub use pace_span::Span;
 pub use stmt::*;
 
@@ -23,7 +30,7 @@ mod tests {
             is_mutable: false,
             is_static: false,
             visibility: Visibility::Public,
-            type_annotation: Some(pace_common::TypeAnnotation {
+            type_annotation: Some(TypeAnnotation {
                 module_prefix: None,
                 name: ustr::Ustr::from("Int"),
                 args: vec![],

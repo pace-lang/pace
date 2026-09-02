@@ -1,5 +1,5 @@
 use crate::arena::{ExprId, StmtId};
-use pace_common::{BinaryOp, Span, UnaryOp};
+use crate::{BinaryOp, Span, UnaryOp};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -20,7 +20,7 @@ pub enum Expr {
     /// A generic instantiation (e.g., Box<Int> or first<String>)
     GenericInstantiation {
         callee: ExprId,
-        generic_args: Vec<pace_common::TypeAnnotation>,
+        generic_args: Vec<crate::TypeAnnotation>,
     },
     /// A unary operation (e.g. !a, -5)
     Unary {
@@ -67,8 +67,8 @@ pub enum Expr {
     Await(ExprId),
     /// A closure (anonymous function)
     Closure {
-        params: Vec<(ustr::Ustr, pace_common::TypeAnnotation)>,
-        return_type: Option<pace_common::TypeAnnotation>,
+        params: Vec<(ustr::Ustr, crate::TypeAnnotation)>,
+        return_type: Option<crate::TypeAnnotation>,
         body: ExprId, // Using Expr for both implicit return expressions and blocks (Expr::Block)
     },
 

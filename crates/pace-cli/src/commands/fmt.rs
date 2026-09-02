@@ -1,7 +1,7 @@
 use colored::Colorize;
 use miette::Result;
 use pace_ast::{Expr, Pattern, Stmt};
-use pace_common::{TypeAnnotation, Visibility, BinaryOp, UnaryOp};
+use pace_ast::{BinaryOp, TypeAnnotation, UnaryOp, Visibility};
 use pretty::RcDoc;
 use std::fs;
 use std::path::Path;

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/pace-ast","crates/pace-cli", "crates/pace-codegen-cranelift", "crates/pace-driver", "crates/pace-errors", "crates/pace-parser", "crates/pace-runtime", "crates/pace-ty", "crates/pace-pkg", "crates/pace-lsp", "crates/pace-common", "crates/pace-hir", "crates/pace-mir", "crates/pace-middle", "crates/pace-span", "crates/pace-session"]
+members = ["crates/pace-ast","crates/pace-cli", "crates/pace-codegen-cranelift", "crates/pace-driver", "crates/pace-errors", "crates/pace-parser", "crates/pace-runtime", "crates/pace-ty", "crates/pace-pkg", "crates/pace-lsp", "crates/pace-hir", "crates/pace-mir", "crates/pace-middle", "crates/pace-span", "crates/pace-session"]
 default-members = ["crates/pace-cli"]
 resolver = "2"
 
@@ -38,7 +38,6 @@ pace-driver = { path = "crates/pace-driver" }
 pace-ty = { path = "crates/pace-ty" }
 pace-codegen-cranelift = { path = "crates/pace-codegen-cranelift" }
 pace-pkg = { path = "crates/pace-pkg" }
-pace-common = { path = "crates/pace-common" }
 pace-hir = { path = "crates/pace-hir" }
 pace-mir = { path = "crates/pace-mir" }
 pace-middle = { path = "crates/pace-middle" }

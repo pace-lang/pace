@@ -8,7 +8,7 @@ license.workspace = true
 
 [dependencies]
 miette = { workspace = true }
-pace-common = { version = "0.1.0", path = "../pace-common" }
+pace-span = { workspace = true }
 thiserror = "2"
 
 [lints]

@@ -503,7 +503,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     pub(crate) fn parse_interpolated_string(
         &mut self,
         s: String,
-        base_span: pace_common::Span,
+        base_span: pace_span::Span,
     ) -> Result<pace_ast::arena::ExprId, pace_errors::SyntaxError> {
         let mut parts = Vec::new();
         let mut current_text = String::new();
