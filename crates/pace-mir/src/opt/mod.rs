@@ -1,12 +1,20 @@
 pub mod constant_fold;
 pub mod dce;
+pub mod inline;
 
 use crate::MirProgram;
 
 /// Run optimization passes on the MIR program.
 pub fn optimize(program: &mut MirProgram) {
-    for (_, body) in program.functions.iter_mut() {
-        if body.is_extern {
+    let mut any_changed = true;
+    let mut pass_iterations = 0;
+    
+    while any_changed && pass_iterations < 5 {
+        any_changed = false;
+        any_changed |= inline::optimize(program);
+        
+        for (_, body) in program.functions.iter_mut() {
+            if body.is_extern {
             continue;
         }
         
@@ -25,5 +33,8 @@ pub fn optimize(program: &mut MirProgram) {
             
             iterations += 1;
         }
+    }
+    
+    pass_iterations += 1;
     }
 }
