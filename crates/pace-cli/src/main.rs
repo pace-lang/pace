@@ -85,9 +85,6 @@ enum Commands {
         /// Build with optimizations enabled
         #[arg(long)]
         release: bool,
-        /// Use experimental MIR Codegen
-        #[arg(long)]
-        use_mir: bool,
     },
     /// Compile and run a Pace file
     Run {
@@ -96,9 +93,6 @@ enum Commands {
         /// Run with optimizations enabled
         #[arg(long)]
         release: bool,
-        /// Use experimental MIR Codegen
-        #[arg(long)]
-        use_mir: bool,
     },
     /// Start the Pace Language Server
     Lsp,
@@ -115,9 +109,8 @@ fn main() -> Result<()> {
 
     let mut options = pace_session::Options::default();
     match &cli.command {
-        Commands::Build { release, use_mir, .. } | Commands::Run { release, use_mir, .. } => {
+        Commands::Build { release, .. } | Commands::Run { release, .. } => {
             options.release_mode = *release;
-            options.use_mir = *use_mir;
         }
         Commands::Check { output_format, .. } => {
             if output_format == "json" {
@@ -151,8 +144,8 @@ fn main() -> Result<()> {
             file,
             output_format,
         } => commands::check::execute(&compiler, &mut arena, file, output_format)?,
-        Commands::Build { file, release: _, use_mir: _ } => commands::build::execute(&compiler, file)?,
-        Commands::Run { file, release: _, use_mir: _ } => commands::run::execute(&compiler, file)?,
+        Commands::Build { file, release: _ } => commands::build::execute(&compiler, file)?,
+        Commands::Run { file, release: _ } => commands::run::execute(&compiler, file)?,
         Commands::Lsp => pace_lsp::run_server(),
         Commands::Version => commands::version::execute()?,
     }

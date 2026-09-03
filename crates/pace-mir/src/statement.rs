@@ -36,8 +36,9 @@ pub enum Rvalue {
 pub enum AggregateKind {
     Array,
     Tuple,
-    Class(Ustr),
+    Class(Ustr, usize),
     Closure(Ustr),
+    EnumVariant(Ustr, Ustr, usize),
 }
 
 #[derive(Debug, Clone)]
@@ -77,8 +78,8 @@ impl Local {
 pub enum ProjectionElem {
     /// Dereference a pointer (*ptr)
     Deref,
-    /// Field access (e.g. obj.field_name), stores (field_name, class_name)
-    Field(Ustr, Ustr),
+    /// Field access (e.g. obj.field_name), stores (field_name, class_name, offset_bytes)
+    Field(Ustr, Ustr, usize),
     /// Index into an array/slice (e.g. arr[i])
     Index(Local),
 }

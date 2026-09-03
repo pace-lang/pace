@@ -10,7 +10,6 @@ pub struct Options {
     pub release_mode: bool,
     pub output_format: OutputFormat,
     pub target_platform: String,
-    pub use_mir: bool,
 }
 
 impl Default for Options {
@@ -19,7 +18,6 @@ impl Default for Options {
             release_mode: false,
             output_format: OutputFormat::Human,
             target_platform: std::env::var("PACE_TARGET").unwrap_or_else(|_| "native".to_string()),
-            use_mir: false,
         }
     }
 }

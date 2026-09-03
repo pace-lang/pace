@@ -13,57 +13,111 @@ pub struct MirProgram {
 
 pub struct MirBuilder<'a> {
     arena: &'a HirArena,
+    env: &'a Environment,
+    class_layouts: HashMap<Ustr, HashMap<Ustr, usize>>,
 }
 
 impl<'a> MirBuilder<'a> {
-    pub fn new(arena: &'a HirArena, _env: &'a Environment) -> Self {
-        Self { arena }
+    pub fn new(arena: &'a HirArena, env: &'a Environment) -> Self {
+        Self { arena, env, class_layouts: HashMap::new() }
     }
 
-    pub fn build(self, stmts: &[StmtId]) -> MirProgram {
+    pub fn build(mut self, stmts: &[StmtId]) -> MirProgram {
         let mut program = MirProgram { functions: HashMap::new() };
         
+        // First pass: collect class layouts (including nested modules)
         for &stmt_id in stmts {
-            let stmt = self.arena.get_stmt(stmt_id);
-            if let Stmt::Module { body, .. } = stmt {
-                for &item_id in body {
-                    let item = self.arena.get_stmt(item_id);
-                    if let Stmt::FuncDecl { name, body: func_body, params, .. } = item {
-                        let func_builder = FuncMirBuilder::new(self.arena, *name, params.len());
-                        let mir_body = func_builder.build(func_body);
-                        program.functions.insert(*name, mir_body);
-                    } else if let Stmt::ClassDecl { name: class_name, methods, .. } = item {
-                        for &method_id in methods {
-                            if let Stmt::FuncDecl { name, body: func_body, params, .. } = self.arena.get_stmt(method_id) {
-                                let func_builder = FuncMirBuilder::new(self.arena, *name, params.len());
-                                let mir_body = func_builder.build(func_body);
-                                let mangled_name = ustr::Ustr::from(&format!("{}_{}", class_name, name));
-                                program.functions.insert(mangled_name, mir_body);
-                            }
-                        }
-                    }
-                }
-            } else if let Stmt::FuncDecl { name, body: func_body, params, .. } = stmt {
-                let func_builder = FuncMirBuilder::new(self.arena, *name, params.len());
-                let mir_body = func_builder.build(func_body);
-                program.functions.insert(*name, mir_body);
-            }
+            self.collect_layouts(stmt_id);
+        }
+        
+        // Second pass: lower functions and methods
+        for &stmt_id in stmts {
+            self.lower_item(stmt_id, &mut program);
         }
         
         program
+    }
+
+    fn collect_layouts(&mut self, stmt_id: StmtId) {
+        let stmt = self.arena.get_stmt(stmt_id);
+        if let Stmt::Module { body, .. } = stmt {
+            for &item_id in body {
+                self.collect_layouts(item_id);
+            }
+        } else if let Stmt::ClassDecl { name, fields, .. } | Stmt::ActorDecl { name, fields, .. } | Stmt::StructDecl { name, fields, .. } = stmt {
+            let mut field_offsets = HashMap::new();
+            let mut offset = 16; // Offset 0 is RC, Offset 8 is VTable ptr
+            for &field_id in fields {
+                if let Stmt::VarDecl { name: field_name, .. } = self.arena.get_stmt(field_id) {
+                    field_offsets.insert(*field_name, offset);
+                    offset += 8;
+                }
+            }
+            self.class_layouts.insert(*name, field_offsets);
+        }
+    }
+
+    fn lower_item(&mut self, stmt_id: StmtId, program: &mut MirProgram) {
+        let stmt = self.arena.get_stmt(stmt_id);
+        if let Stmt::Module { body, .. } = stmt {
+            for &item_id in body {
+                self.lower_item(item_id, program);
+            }
+        } else if let Stmt::FuncDecl { name, body: func_body, params, is_extern, .. } = stmt {
+            let func_builder = FuncMirBuilder::new(self.arena, self.env, &self.class_layouts, *name, params, *is_extern);
+            let (mir_body, closures) = func_builder.build(func_body);
+            program.functions.insert(*name, mir_body);
+            for closure in closures {
+                program.functions.insert(closure.name, closure);
+            }
+        } else if let Stmt::ClassDecl { name: class_name, methods, .. } | Stmt::ActorDecl { name: class_name, methods, .. } = stmt {
+            for &method_id in methods {
+                if let Stmt::FuncDecl { name, body: func_body, params, is_extern, is_static, .. } = self.arena.get_stmt(method_id) {
+                    let mut method_params = Vec::new();
+                    if !is_static {
+                        method_params.push(pace_hir::Param {
+                            name: ustr::Ustr::from("self"),
+                            type_annotation: pace_ast::TypeAnnotation {
+                                module_prefix: None,
+                                name: *class_name,
+                                args: vec![],
+                                is_nullable: false,
+                                is_function: false,
+                                function_params: None,
+                                function_return: None,
+                            },
+                        });
+                    }
+                    method_params.extend(params.iter().cloned());
+                    let func_builder = FuncMirBuilder::new(self.arena, self.env, &self.class_layouts, *name, &method_params, *is_extern);
+                    let (mir_body, closures) = func_builder.build(func_body);
+                    let mangled_name = ustr::Ustr::from(&format!("{}_{}", class_name, name));
+                    // The function body itself doesn't know its mangled name, so we must set it.
+                    let mut final_body = mir_body;
+                    final_body.name = mangled_name;
+                    program.functions.insert(mangled_name, final_body);
+                    for closure in closures {
+                        program.functions.insert(closure.name, closure);
+                    }
+                }
+            }
+        }
     }
 }
 
 struct FuncMirBuilder<'a> {
     arena: &'a HirArena,
+    env: &'a Environment,
+    class_layouts: &'a HashMap<Ustr, HashMap<Ustr, usize>>,
     body: MirBody,
     current_block: BasicBlock,
     var_map: HashMap<Ustr, Local>,
+    pending_closures: Vec<MirBody>,
 }
 
 impl<'a> FuncMirBuilder<'a> {
-    pub fn new(arena: &'a HirArena, name: Ustr, arg_count: usize) -> Self {
-        let mut body = MirBody::new(name, arg_count);
+    pub fn new(arena: &'a HirArena, env: &'a Environment, class_layouts: &'a HashMap<Ustr, HashMap<Ustr, usize>>, name: Ustr, params: &[pace_hir::Param], is_extern: bool) -> Self {
+        let mut body = MirBody::new(name, params.len(), is_extern);
         // Block 0 is the entry block
         body.basic_blocks.push(BasicBlockData::new());
         // Local 0 is the return pointer
@@ -74,15 +128,31 @@ impl<'a> FuncMirBuilder<'a> {
             source_info: pace_span::Span::default(),
         });
         
+        let mut var_map = HashMap::new();
+        // Add params
+        for param in params {
+            let local = Local(body.local_decls.len());
+            body.local_decls.push(LocalDecl {
+                ty: Type::Unknown,
+                mutability: Mutability::Not,
+                kind: LocalKind::User(param.name),
+                source_info: pace_span::Span::default(),
+            });
+            var_map.insert(param.name, local);
+        }
+        
         Self {
             arena,
+            env,
+            class_layouts,
             body,
             current_block: BasicBlock(0),
-            var_map: HashMap::new(),
+            var_map,
+            pending_closures: Vec::new(),
         }
     }
 
-    pub fn build(mut self, stmts: &[StmtId]) -> MirBody {
+    pub fn build(mut self, stmts: &[StmtId]) -> (MirBody, Vec<MirBody>) {
         for &stmt_id in stmts {
             self.lower_stmt(stmt_id);
         }
@@ -92,7 +162,7 @@ impl<'a> FuncMirBuilder<'a> {
             self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Return);
         }
         
-        self.body
+        (self.body, self.pending_closures)
     }
 
     fn new_local(&mut self, ty: Type, mutability: Mutability, kind: LocalKind, span: pace_span::Span) -> Local {
@@ -212,6 +282,79 @@ impl<'a> FuncMirBuilder<'a> {
             Expr::FloatLiteral(v) => Operand::Constant(Constant::Float(*v)),
             Expr::BoolLiteral(v) => Operand::Constant(Constant::Bool(*v)),
             Expr::StringLiteral(v) => Operand::Constant(Constant::String(v.to_string())),
+            Expr::InterpolatedString(parts) => {
+                if parts.is_empty() {
+                    return Operand::Constant(Constant::String("".to_string()));
+                }
+                
+                let mut current_str_op = None;
+                
+                for &part_id in parts {
+                    let mut part_op = self.lower_expr(part_id);
+                    let part_ty = self.env.node_types.get(&part_id).unwrap_or(&Type::Unknown);
+                    
+                    part_op = match part_ty {
+                        Type::Int => {
+                            let temp = self.new_temp(Type::Unknown);
+                            let next_block = self.new_block();
+                            self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                                func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_int_to_string"))),
+                                args: vec![part_op],
+                                destination: Place::new(temp),
+                                target: Some(next_block),
+                                cleanup: None,
+                            });
+                            self.current_block = next_block;
+                            Operand::Copy(Place::new(temp))
+                        }
+                        Type::Float => {
+                            let temp = self.new_temp(Type::Unknown);
+                            let next_block = self.new_block();
+                            self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                                func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_float_to_string"))),
+                                args: vec![part_op],
+                                destination: Place::new(temp),
+                                target: Some(next_block),
+                                cleanup: None,
+                            });
+                            self.current_block = next_block;
+                            Operand::Copy(Place::new(temp))
+                        }
+                        Type::Bool => {
+                            let temp = self.new_temp(Type::Unknown);
+                            let next_block = self.new_block();
+                            self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                                func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_bool_to_string"))),
+                                args: vec![part_op],
+                                destination: Place::new(temp),
+                                target: Some(next_block),
+                                cleanup: None,
+                            });
+                            self.current_block = next_block;
+                            Operand::Copy(Place::new(temp))
+                        }
+                        _ => part_op,
+                    };
+                    
+                    if let Some(prev_op) = current_str_op {
+                        let temp = self.new_temp(Type::Unknown);
+                        let next_block = self.new_block();
+                        self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                            func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_concat_strings"))),
+                            args: vec![prev_op, part_op],
+                            destination: Place::new(temp),
+                            target: Some(next_block),
+                            cleanup: None,
+                        });
+                        self.current_block = next_block;
+                        current_str_op = Some(Operand::Copy(Place::new(temp)));
+                    } else {
+                        current_str_op = Some(part_op);
+                    }
+                }
+                
+                current_str_op.unwrap()
+            }
             Expr::Identifier(name) => {
                 if let Some(&local) = self.var_map.get(name) {
                     Operand::Copy(Place::new(local))
@@ -252,18 +395,113 @@ impl<'a> FuncMirBuilder<'a> {
                     arg_ops.push(self.lower_expr(*arg));
                 }
 
-                // Check if it's a Class initialization
-                if let Expr::Identifier(name) = self.arena.get_expr(*callee) {
-                    // We check if it's a known class from the environment
-                    // Since environment isn't fully structured for MIR to check classes directly easily,
-                    // we'll rely on the codegen to do it, OR we emit an Aggregate here.
-                    // For now, let's treat capitalized identifiers as Classes
-                    if name.chars().next().unwrap().is_uppercase() {
+                // Check if callee is a MemberAccess (method call)
+                if let Expr::MemberAccess { object, property, is_static_operator, .. } = self.arena.get_expr(*callee) {
+                    let obj_ty = self.env.node_types.get(object);
+                    
+                    if let Some(Type::Enum(enum_name)) = obj_ty {
                         let temp = self.new_temp(Type::Unknown);
                         self.push_statement(Statement::Assign(
                             Place::new(temp),
-                            Rvalue::Aggregate(AggregateKind::Class(*name), arg_ops)
+                            Rvalue::Aggregate(AggregateKind::EnumVariant(*enum_name, *property, 0), arg_ops)
                         ));
+                        return Operand::Copy(Place::new(temp));
+                    }
+
+                    let class_name = match obj_ty {
+                        Some(Type::Class(name)) | Some(Type::Actor(name)) | Some(Type::Struct(name)) => *name,
+                        _ => {
+                            if *is_static_operator {
+                                if let Expr::Identifier(name) = self.arena.get_expr(*object) {
+                                    *name
+                                } else {
+                                    ustr::Ustr::from("Unknown")
+                                }
+                            } else {
+                                ustr::Ustr::from("Unknown")
+                            }
+                        }
+                    };
+                    
+                    let method_name = format!("{}_{}", class_name, property);
+                    let func_op = Operand::Constant(Constant::Function(ustr::Ustr::from(&method_name)));
+                    
+                    // If it's not a static call, the first argument must be the object (self)!
+                    if !is_static_operator {
+                        let obj_op = self.lower_expr(*object);
+                        arg_ops.insert(0, obj_op);
+                    }
+                    
+                    let temp = self.new_temp(Type::Unknown);
+                    let next_block = self.new_block();
+                    self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                        func: func_op,
+                        args: arg_ops,
+                        destination: Place::new(temp),
+                        target: Some(next_block),
+                        cleanup: None,
+                    });
+                    self.current_block = next_block;
+                    return Operand::Copy(Place::new(temp));
+                }
+
+                // Check if it's a Class/Actor/Struct initialization
+                if let Expr::Identifier(name) = self.arena.get_expr(*callee) {
+                    let callee_ty = self.env.node_types.get(callee).unwrap_or(&Type::Unknown);
+                    if let Type::Class(class_name) | Type::Struct(class_name) | Type::Actor(class_name) = callee_ty {
+                        let field_count = if let Some(sig) = self.env.classes.get(class_name) {
+                            sig.fields.len()
+                        } else if let Some(sig) = self.env.actors.get(class_name) {
+                            sig.fields.len()
+                        } else if let Some(sig) = self.env.structs.get(class_name) {
+                            sig.fields.len()
+                        } else {
+                            0
+                        };
+                        let class_size = 16 + field_count * 8;
+                        
+                        let temp = self.new_temp(Type::Unknown);
+                        self.push_statement(Statement::Assign(
+                            Place::new(temp),
+                            Rvalue::Aggregate(AggregateKind::Class(*class_name, class_size), vec![])
+                        ));
+                        
+                        let has_init = if let Some(sig) = self.env.classes.get(class_name) {
+                            sig.methods.contains_key(&ustr::Ustr::from("init"))
+                        } else if let Some(sig) = self.env.actors.get(class_name) {
+                            sig.methods.contains_key(&ustr::Ustr::from("init"))
+                        } else if let Some(sig) = self.env.structs.get(class_name) {
+                            sig.methods.contains_key(&ustr::Ustr::from("init"))
+                        } else {
+                            false
+                        };
+
+                        if has_init {
+                            let init_method_name = format!("{}_init", class_name);
+                            let init_func_op = Operand::Constant(Constant::Function(ustr::Ustr::from(&init_method_name)));
+                            
+                            let mut init_args = arg_ops.clone();
+                            init_args.insert(0, Operand::Copy(Place::new(temp))); // pass self
+                            
+                            let init_temp = self.new_temp(Type::Unknown);
+                            let next_block = self.new_block();
+                            self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                                func: init_func_op,
+                                args: init_args,
+                                destination: Place::new(init_temp),
+                                target: Some(next_block),
+                                cleanup: None,
+                            });
+                            self.current_block = next_block;
+                        } else {
+                            // If there is no init method, we should populate the fields directly from arguments
+                            let last_stmt_idx = self.body.basic_blocks[self.current_block.0].statements.len() - 1;
+                            self.body.basic_blocks[self.current_block.0].statements[last_stmt_idx] = Statement::Assign(
+                                Place::new(temp),
+                                Rvalue::Aggregate(AggregateKind::Class(*class_name, class_size), arg_ops)
+                            );
+                        }
+                        
                         return Operand::Copy(Place::new(temp));
                     }
                 }
@@ -364,28 +602,48 @@ impl<'a> FuncMirBuilder<'a> {
             }
             Expr::Await(inner) => {
                 let inner_op = self.lower_expr(*inner);
-                let temp = self.new_temp(Type::Unknown);
-                let next_block = self.new_block();
-                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
-                    func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_promise_await"))),
-                    args: vec![inner_op],
-                    destination: Place::new(temp),
-                    target: Some(next_block),
-                    cleanup: None,
-                });
-                self.current_block = next_block;
-                Operand::Copy(Place::new(temp))
+                // Temporarily bypass __pace_promise_await since actor methods in MIR currently return their values directly.
+                inner_op
             }
-            Expr::Closure { params: _, return_type: _, body: _ } => {
-                let closure_name = ustr::Ustr::from(&format!("closure_{}", self.body.basic_blocks.len()));
+            Expr::Closure { params, return_type: _, body } => {
+                let closure_name = ustr::Ustr::from(&format!("{}_closure_{}", self.body.name.as_str(), self.body.basic_blocks.len()));
                 let temp = self.new_temp(Type::Unknown);
                 // Lower to an aggregate containing the environment (currently empty for simplicity without a full capture pass)
                 self.push_statement(Statement::Assign(
                     Place::new(temp),
                     Rvalue::Aggregate(AggregateKind::Closure(closure_name), vec![])
                 ));
+                
+                // Build the closure body as a new MirBody
+                let mut hir_params = vec![pace_hir::Param {
+                    name: ustr::Ustr::from("env"),
+                    type_annotation: pace_ast::TypeAnnotation {
+                        module_prefix: None,
+                        name: ustr::Ustr::from("Any"),
+                        args: vec![],
+                        is_nullable: false,
+                        is_function: false,
+                        function_params: None,
+                        function_return: None,
+                    }
+                }];
+                hir_params.extend(params.iter().map(|(n, t)| pace_hir::Param {
+                    name: *n,
+                    type_annotation: t.clone(),
+                }));
+                
+                let mut closure_builder = FuncMirBuilder::new(self.arena, self.env, self.class_layouts, closure_name, &hir_params, false);
+                let body_op = closure_builder.lower_expr(*body);
+                // Closures return the value of their body
+                closure_builder.push_statement(Statement::Assign(Place::new(Local(0)), Rvalue::Use(body_op)));
+                closure_builder.body.basic_blocks[closure_builder.current_block.0].terminator = Some(Terminator::Return);
+                
+                self.pending_closures.push(closure_builder.body);
+                self.pending_closures.append(&mut closure_builder.pending_closures);
+                
                 Operand::Copy(Place::new(temp))
             }
+
             _ => {
                 Operand::Constant(Constant::Null)
             }
@@ -406,8 +664,20 @@ impl<'a> FuncMirBuilder<'a> {
                 let obj_op = self.lower_expr(*object);
                 match obj_op {
                     Operand::Copy(mut place) | Operand::Move(mut place) => {
-                        let class_name = computed_class.unwrap_or(ustr::Ustr::from("Unknown"));
-                        place.projection.push(ProjectionElem::Field(*property, class_name));
+                        let mut class_name = computed_class.unwrap_or(ustr::Ustr::from("Unknown"));
+                        if class_name.as_str() == "Unknown" {
+                            if let Some(obj_ty) = self.env.node_types.get(object) {
+                                if let pace_ty::Type::Class(name) | pace_ty::Type::Struct(name) | pace_ty::Type::Actor(name) = obj_ty {
+                                    class_name = *name;
+                                }
+                            }
+                        }
+                        
+                        let offset = self.class_layouts
+                            .get(&class_name)
+                            .and_then(|layout| layout.get(property).copied())
+                            .unwrap_or(16); // Fallback offset if not found
+                        place.projection.push(ProjectionElem::Field(*property, class_name, offset));
                         Some(place)
                     }
                     _ => None

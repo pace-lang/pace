@@ -283,22 +283,16 @@ impl Compiler {
 
     pub fn run_file(&self, path: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
-        let (ast, mir) = self.check_file(&mut arena, path)?;
+        let (_ast, mir) = self.check_file(&mut arena, path)?;
         let mut compiler = pace_codegen_cranelift::JITCompiler::new(if self.session.options.release_mode {
             "speed_and_size".to_string()
         } else {
             "none".to_string()
         });
 
-        if self.session.options.use_mir {
-            compiler
-                .compile_and_run_mir(&mir)
-                .map_err(Report::new)?;
-        } else {
-            compiler
-                .compile_and_run(&mut arena, &ast)
-                .map_err(Report::new)?;
-        }
+        compiler
+            .compile_and_run_mir(&mir)
+            .map_err(Report::new)?;
 
         Ok(())
     }
@@ -312,35 +306,28 @@ impl Compiler {
             "none".to_string()
         });
 
-        if self.session.options.use_mir {
-            compiler
-                .compile_and_run_mir(&mir)
-                .map_err(Report::new)?;
-        } else {
-            compiler
-                .compile_and_run(&mut arena, &ast)
-                .map_err(Report::new)?;
-        }
+        compiler
+            .compile_and_run_mir(&mir)
+            .map_err(Report::new)?;
 
         Ok(())
     }
 
     pub fn build_file(&self, path: &str, output: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
-        let (ast, _mir) = self.check_file(&mut arena, path)?;
-        self.build_from_ast(&mut arena, &ast, output)
+        let (ast, mir) = self.check_file(&mut arena, path)?;
+        self.build_from_mir(&mir, output)
     }
 
     pub fn build_source(&self, src: &str, output: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
-        let (ast, _mir) = self.check_source(&mut arena, src)?;
-        self.build_from_ast(&mut arena, &ast, output)
+        let (ast, mir) = self.check_source(&mut arena, src)?;
+        self.build_from_mir(&mir, output)
     }
 
-    fn build_from_ast(
+    fn build_from_mir(
         &self,
-        arena: &mut pace_ast::arena::AstArena,
-        ast: &[pace_ast::arena::StmtId],
+        mir: &pace_mir::MirProgram,
         output: &str,
     ) -> Result<()> {
         let compiler = pace_codegen_cranelift::AotCompiler::new(if self.session.options.release_mode {
@@ -350,7 +337,7 @@ impl Compiler {
         });
 
         let obj_bytes = compiler
-            .compile_to_object(arena, ast)
+            .compile_mir_to_object(mir)
             .map_err(Report::new)?;
 
         let obj_path = format!("{}.o", output);

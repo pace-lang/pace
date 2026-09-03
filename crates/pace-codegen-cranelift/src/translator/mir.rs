@@ -1,11 +1,10 @@
 use crate::context::CodegenContext;
 use cranelift::prelude::*;
-use cranelift_jit::JITModule;
 use cranelift_module::{Linkage, Module};
 use pace_mir::{Constant, MirBody, MirProgram, Operand, Rvalue, Statement, Terminator};
 
-pub fn compile_mir_program(
-    context: &mut CodegenContext<JITModule>,
+pub fn compile_mir_program<M: Module>(
+    context: &mut CodegenContext<M>,
     builder_context: &mut cranelift::prelude::FunctionBuilderContext,
     ctx: &mut cranelift::codegen::Context,
     program: &MirProgram,
@@ -13,8 +12,16 @@ pub fn compile_mir_program(
     
     // Pass 1: Declare all functions
     for (name, body) in &program.functions {
+        println!("MIR pass 1: declaring function {}", name);
+        if context.funcs.contains_key(name) {
+            continue;
+        }
         let mut sig = context.module.make_signature();
-        sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
+        sig.call_conv = if body.is_extern {
+            cranelift::prelude::isa::CallConv::SystemV
+        } else {
+            cranelift::prelude::isa::CallConv::Fast
+        };
         
         // Return type (always I64 for now)
         sig.returns.push(AbiParam::new(types::I64));
@@ -24,9 +31,16 @@ pub fn compile_mir_program(
             sig.params.push(AbiParam::new(types::I64));
         }
 
+        let linkage = if body.is_extern { 
+            Linkage::Import 
+        } else if name.as_str() == "main" {
+            Linkage::Local
+        } else { 
+            Linkage::Local 
+        };
         let id = context
             .module
-            .declare_function(name.as_str(), Linkage::Local, &sig)
+            .declare_function(name.as_str(), linkage, &sig)
             .map_err(|e| crate::layouts::CodegenError {
                 message: e.to_string(),
             })?;
@@ -36,6 +50,9 @@ pub fn compile_mir_program(
 
     // Pass 2: Define all functions
     for (name, body) in &program.functions {
+        if body.is_extern {
+            continue;
+        }
         let id = *context.funcs.get(name).unwrap();
         compile_mir_function(context, builder_context, ctx, body, id)?;
     }
@@ -43,14 +60,14 @@ pub fn compile_mir_program(
     Ok(())
 }
 
-fn compile_mir_function(
-    context: &mut CodegenContext<JITModule>,
+fn compile_mir_function<M: Module>(
+    context: &mut CodegenContext<M>,
     builder_context: &mut cranelift::prelude::FunctionBuilderContext,
     ctx: &mut cranelift::codegen::Context,
     body: &MirBody,
     func_id: cranelift_module::FuncId,
 ) -> Result<(), crate::layouts::CodegenError> {
-    ctx.func.clear();
+    ctx.clear();
     
     ctx.func.signature.returns.push(AbiParam::new(types::I64));
     for _ in 0..body.arg_count {
@@ -74,7 +91,11 @@ fn compile_mir_function(
 
     builder.append_block_params_for_function_params(blocks[0]);
     builder.switch_to_block(blocks[0]);
-
+    
+    // Initialize return value (Local 0) with 0 by default, for void functions
+    let default_ret = builder.ins().iconst(types::I64, 0);
+    builder.def_var(locals[0], default_ret);
+    
     // Map arguments to local variables
     for i in 0..body.arg_count {
         let param_val = builder.block_params(blocks[0])[i];
@@ -124,22 +145,85 @@ fn compile_mir_function(
                 }
                 Terminator::Call { func, args, destination, target, .. } => {
                     if let Operand::Constant(Constant::Function(func_name)) = func {
-                        if let Some(callee_id) = context.funcs.get(func_name) {
-                            let callee_ref = context.module.declare_func_in_func(*callee_id, builder.func);
-                            let mut arg_vals = Vec::new();
-                            for arg in args {
-                                arg_vals.push(translate_operand(&mut builder, context, arg, &locals)?);
-                            }
-                            
-                            let inst = builder.ins().call(callee_ref, &arg_vals);
-                            let result_val = builder.inst_results(inst)[0];
-                            builder.def_var(locals[destination.local.index()], result_val);
-                            
-                            if let Some(next_block) = target {
-                                builder.ins().jump(blocks[next_block.index()], &[]);
-                            }
+                        let callee_id = if let Some(callee_id) = context.funcs.get(func_name) {
+                            *callee_id
                         } else {
-                            // Missing function
+                            // Declare missing extern function on the fly
+                            let mut sig = context.module.make_signature();
+                            sig.call_conv = cranelift::prelude::isa::CallConv::SystemV;
+                            for _ in 0..args.len() {
+                                sig.params.push(cranelift::prelude::AbiParam::new(cranelift::prelude::types::I64));
+                            }
+                            sig.returns.push(cranelift::prelude::AbiParam::new(cranelift::prelude::types::I64));
+                            let id = context.module.declare_function(func_name.as_str(), cranelift_module::Linkage::Import, &sig).unwrap();
+                            context.funcs.insert(*func_name, id);
+                            id
+                        };
+                        
+                        let callee_ref = context.module.declare_func_in_func(callee_id, builder.func);
+                        let mut arg_vals = Vec::new();
+                        for arg in args {
+                            arg_vals.push(translate_operand(&mut builder, context, arg, &locals)?);
+                        }
+                        
+                        let inst = builder.ins().call(callee_ref, &arg_vals);
+                        let results = builder.inst_results(inst);
+                        let result_val = if results.is_empty() {
+                            builder.ins().iconst(cranelift::prelude::types::I64, 0)
+                        } else {
+                            results[0]
+                        };
+                        builder.def_var(locals[destination.local.index()], result_val);
+                        
+                        if let Some(next_block) = target {
+                            builder.ins().jump(blocks[next_block.index()], &[]);
+                        } else {
+                            builder.ins().trap(cranelift::prelude::TrapCode::user(1).unwrap());
+                        }
+                    } else {
+                        // Indirect call (e.g., Closures or function pointers)
+                        // A closure evaluates to a pointer (env_ptr), the first 8 bytes of which is the function pointer.
+                        let env_ptr = translate_operand(&mut builder, context, func, &locals)?;
+                        let ptr_ty = context.module.target_config().pointer_type();
+                        
+                        let func_ptr = builder.ins().load(
+                            ptr_ty,
+                            cranelift::prelude::MemFlagsData::new(),
+                            env_ptr,
+                            0,
+                        );
+
+                        let mut sig = context.module.make_signature();
+                        sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
+                        
+                        // Indirect calls pass env_ptr as the first argument
+                        sig.params.push(cranelift::prelude::AbiParam::new(ptr_ty));
+                        for _ in args {
+                            sig.params.push(cranelift::prelude::AbiParam::new(cranelift::prelude::types::I64));
+                        }
+                        sig.returns.push(cranelift::prelude::AbiParam::new(cranelift::prelude::types::I64));
+                        
+                        let sig_ref = builder.import_signature(sig);
+                        
+                        let mut arg_vals = vec![env_ptr];
+                        for arg in args {
+                            arg_vals.push(translate_operand(&mut builder, context, arg, &locals)?);
+                        }
+                        
+                        let inst = builder.ins().call_indirect(sig_ref, func_ptr, &arg_vals);
+                        
+                        let results = builder.inst_results(inst);
+                        let result_val = if results.is_empty() {
+                            builder.ins().iconst(cranelift::prelude::types::I64, 0)
+                        } else {
+                            results[0]
+                        };
+                        builder.def_var(locals[destination.local.index()], result_val);
+                        
+                        if let Some(next_block) = target {
+                            builder.ins().jump(blocks[next_block.index()], &[]);
+                        } else {
+                            builder.ins().trap(cranelift::prelude::TrapCode::user(1).unwrap());
                         }
                     }
                 }
@@ -147,25 +231,37 @@ fn compile_mir_function(
                     builder.ins().trap(cranelift::prelude::TrapCode::user(1).unwrap());
                 }
             }
+        } else {
+            builder.ins().trap(cranelift::prelude::TrapCode::user(1).unwrap());
         }
     }
 
     builder.seal_all_blocks();
     builder.finalize(context.module.target_config());
 
-    context
-        .module
-        .define_function(func_id, ctx)
-        .map_err(|e| crate::layouts::CodegenError {
-            message: e.to_string(),
-        })?;
+    if let Err(e) = cranelift::codegen::verify_function(&ctx.func, &cranelift::codegen::settings::Flags::new(cranelift::codegen::settings::builder())) {
+        panic!("Verifier error in {}: {:#?}", body.name, e);
+    }
+
+    // Compute CFG before defining the function, as Cranelift 0.135.0 has a bug where
+    // Context::compile might use an invalid CFG for verification if it's not pre-computed.
+    ctx.compute_cfg();
+    ctx.compute_domtree();
+
+    if let Err(e) = context.module.define_function(func_id, ctx) {
+        panic!("define_function error in {}: {:#?}\nIR:\n{}", body.name, e, ctx.func.display());
+    }
+    
+    if body.name.as_str() == "main" {
+        println!("MAIN IR:\n{}", ctx.func.display());
+    }
     
     Ok(())
 }
 
-fn translate_rvalue(
+fn translate_rvalue<M: Module>(
     builder: &mut FunctionBuilder,
-    context: &mut CodegenContext<JITModule>,
+    context: &mut CodegenContext<M>,
     rvalue: &Rvalue,
     locals: &[Variable],
 ) -> Result<Value, crate::layouts::CodegenError> {
@@ -210,10 +306,34 @@ fn translate_rvalue(
             };
             Ok(val)
         }
-        Rvalue::Aggregate(pace_mir::AggregateKind::Class(class_name), operands) => {
-            let layout = context.class_layouts.get(class_name).unwrap();
-            let size = 16 + layout.fields.len() * 8;
-            let size_val = builder.ins().iconst(types::I64, size as i64);
+        Rvalue::Aggregate(pace_mir::AggregateKind::Closure(closure_name), _) => {
+            let size_val = builder.ins().iconst(types::I64, 16);
+            let malloc_id = *context.funcs.get(&ustr::Ustr::from("malloc")).unwrap();
+            let local_malloc = context.module.declare_func_in_func(malloc_id, builder.func);
+            let call = builder.ins().call(local_malloc, &[size_val]);
+            let env_ptr = builder.inst_results(call)[0];
+            
+            // Try to resolve the closure function or import it
+            let func_id = if let Some(id) = context.funcs.get(closure_name) {
+                *id
+            } else {
+                let mut sig = context.module.make_signature();
+                sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
+                // Signature is unknown at this point, but we know it's Fast
+                context.module.declare_function(closure_name.as_str(), cranelift_module::Linkage::Export, &sig).unwrap_or_else(|_| {
+                    panic!("Failed to declare closure function {}", closure_name);
+                })
+            };
+            
+            let func_ref = context.module.declare_func_in_func(func_id, builder.func);
+            let func_ptr = builder.ins().func_addr(context.module.target_config().pointer_type(), func_ref);
+            
+            builder.ins().store(cranelift::prelude::MemFlagsData::new(), func_ptr, env_ptr, 0);
+            
+            Ok(env_ptr)
+        }
+        Rvalue::Aggregate(pace_mir::AggregateKind::Class(class_name, class_size), operands) => {
+            let size_val = builder.ins().iconst(types::I64, *class_size as i64);
 
             let malloc_id = *context.funcs.get(&ustr::Ustr::from("malloc")).unwrap();
             let local_malloc = context.module.declare_func_in_func(malloc_id, builder.func);
@@ -223,43 +343,26 @@ fn translate_rvalue(
             let one = builder.ins().iconst(types::I64, 1);
             builder.ins().store(cranelift::prelude::MemFlagsData::new(), one, obj_ptr, 0);
 
-            let vtable_gv = context.module.declare_data_in_func(layout.vtable_id, builder.func);
-            let ptr_ty = context.module.target_config().pointer_type();
-            let vtable_addr = builder.ins().symbol_value(ptr_ty, vtable_gv);
-            builder.ins().store(cranelift::prelude::MemFlagsData::new(), vtable_addr, obj_ptr, 8);
-            
-            let zero = builder.ins().iconst(types::I64, 0);
-            for (field_name, &(offset, _)) in &layout.fields {
-                if field_name == "__mailbox" {
-                    let mb_create_id = *context.funcs.get(&ustr::Ustr::from("__pace_mailbox_create")).unwrap();
-                    let local_mb = context.module.declare_func_in_func(mb_create_id, builder.func);
-                    let mb_call = builder.ins().call(local_mb, &[]);
-                    let mb_ptr = builder.inst_results(mb_call)[0];
-                    builder.ins().store(cranelift::prelude::MemFlagsData::new(), mb_ptr, obj_ptr, offset as i32);
-                } else {
-                    builder.ins().store(cranelift::prelude::MemFlagsData::new(), zero, obj_ptr, offset as i32);
-                }
+            // Null VTable pointer since MIR dynamic dispatch is not implemented
+            let null_vtable = builder.ins().iconst(types::I64, 0);
+            builder.ins().store(cranelift::prelude::MemFlagsData::new(), null_vtable, obj_ptr, 8);
+
+            let mut offset = 16;
+            for op in operands {
+                let val = translate_operand(builder, context, op, locals)?;
+                builder.ins().store(cranelift::prelude::MemFlagsData::new(), val, obj_ptr, offset as i32);
+                offset += 8;
             }
-            
-            let init_name = format!("{}_init", class_name);
-            if let Some(&init_id) = context.funcs.get(&ustr::Ustr::from(&init_name)) {
-                let local_init = context.module.declare_func_in_func(init_id, builder.func);
-                let mut arg_vals = vec![obj_ptr];
-                for op in operands {
-                    arg_vals.push(translate_operand(builder, context, op, locals)?);
-                }
-                builder.ins().call(local_init, &arg_vals);
-            }
-            
+
             Ok(obj_ptr)
         }
         _ => Ok(builder.ins().iconst(types::I64, 0)),
     }
 }
 
-fn translate_operand(
+fn translate_operand<M: Module>(
     builder: &mut FunctionBuilder,
-    context: &mut CodegenContext<JITModule>,
+    context: &mut CodegenContext<M>,
     operand: &Operand,
     locals: &[Variable],
 ) -> Result<Value, crate::layouts::CodegenError> {
@@ -281,8 +384,9 @@ fn translate_operand(
                     context.string_cache.insert(s_ustr.clone(), name.clone());
 
                     let mut data_ctx = cranelift_module::DataDescription::new();
-                    let bytes = s.as_bytes();
-                    data_ctx.define(bytes.to_vec().into_boxed_slice());
+                    let mut bytes = s.as_bytes().to_vec();
+                    bytes.push(0); // Null terminator for CStr
+                    data_ctx.define(bytes.into_boxed_slice());
 
                     let data_id = context
                         .module
@@ -309,21 +413,17 @@ fn translate_operand(
     }
 }
 
-fn translate_place(
+fn translate_place<M: Module>(
     builder: &mut FunctionBuilder,
-    context: &mut CodegenContext<JITModule>,
+    context: &mut CodegenContext<M>,
     place: &pace_mir::Place,
     locals: &[Variable],
 ) -> Result<Value, crate::layouts::CodegenError> {
     let mut val = builder.use_var(locals[place.local.index()]);
     for proj in &place.projection {
         match proj {
-            pace_mir::ProjectionElem::Field(prop, class_name) => {
-                if let Some(layout) = context.class_layouts.get(class_name) {
-                    if let Some(&(offset, _)) = layout.fields.get(prop) {
-                        val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), val, offset as i32);
-                    }
-                }
+            pace_mir::ProjectionElem::Field(_prop, _class_name, offset) => {
+                val = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), val, *offset as i32);
             }
             _ => {}
         }
@@ -331,9 +431,9 @@ fn translate_place(
     Ok(val)
 }
 
-fn store_to_place(
+fn store_to_place<M: Module>(
     builder: &mut FunctionBuilder,
-    context: &mut CodegenContext<JITModule>,
+    context: &mut CodegenContext<M>,
     place: &pace_mir::Place,
     locals: &[Variable],
     value: Value,
@@ -344,20 +444,12 @@ fn store_to_place(
         let mut ptr = builder.use_var(locals[place.local.index()]);
         for (i, proj) in place.projection.iter().enumerate() {
             if i == place.projection.len() - 1 {
-                if let pace_mir::ProjectionElem::Field(prop, class_name) = proj {
-                    if let Some(layout) = context.class_layouts.get(class_name) {
-                        if let Some(&(offset, _)) = layout.fields.get(prop) {
-                            builder.ins().store(cranelift::prelude::MemFlagsData::new(), value, ptr, offset as i32);
-                        }
-                    }
+                if let pace_mir::ProjectionElem::Field(_prop, _class_name, offset) = proj {
+                    builder.ins().store(cranelift::prelude::MemFlagsData::new(), value, ptr, *offset as i32);
                 }
             } else {
-                if let pace_mir::ProjectionElem::Field(prop, class_name) = proj {
-                    if let Some(layout) = context.class_layouts.get(class_name) {
-                        if let Some(&(offset, _)) = layout.fields.get(prop) {
-                            ptr = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), ptr, offset as i32);
-                        }
-                    }
+                if let pace_mir::ProjectionElem::Field(_prop, _class_name, offset) = proj {
+                    ptr = builder.ins().load(types::I64, cranelift::prelude::MemFlagsData::new(), ptr, *offset as i32);
                 }
             }
         }

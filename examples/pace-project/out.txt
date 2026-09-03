@@ -1,0 +1,345 @@
+warning: unused import: `cranelift_module::Module`
+ --> crates/pace-codegen-cranelift/src/aot.rs:3:5
+  |
+3 | use cranelift_module::Module;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `cranelift_module::Module`
+ --> crates/pace-codegen-cranelift/src/compiler.rs:4:5
+  |
+4 | use cranelift_module::Module;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `cranelift_module::Module`
+ --> crates/pace-codegen-cranelift/src/translator/mod.rs:2:5
+  |
+2 | use cranelift_module::Module;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> crates/pace-codegen-cranelift/src/translator/mod.rs:3:5
+  |
+3 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `class_name`
+   --> crates/pace-codegen-cranelift/src/translator/mir.rs:335:58
+    |
+335 | ...::AggregateKind::Class(class_name), operands) => {
+    |                           ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_class_name`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `context`
+   --> crates/pace-codegen-cranelift/src/translator/mir.rs:419:5
+    |
+419 |     context: &mut CodegenContext<M>,
+    |     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_context`
+
+warning: unused variable: `context`
+   --> crates/pace-codegen-cranelift/src/translator/mir.rs:437:5
+    |
+437 |     context: &mut CodegenContext<M>,
+    |     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_context`
+
+warning: unused variable: `end_pos`
+   --> crates/pace-parser/src/parser/decl.rs:127:13
+    |
+127 |         let end_pos = self.current_span.end;
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_end_pos`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `pace-codegen-cranelift` (lib) generated 7 warnings (run `cargo fix --lib -p pace-codegen-cranelift` to apply 7 suggestions)
+warning: `pace-parser` (lib) generated 1 warning (run `cargo fix --lib -p pace-parser` to apply 1 suggestion)
+warning: unused variable: `ast`
+   --> crates/pace-driver/src/lib.rs:302:14
+    |
+302 |         let (ast, mir) = self.check_source(&mut arena, src)?;
+    |              ^^^ help: if this is intentional, prefix it with an underscore: `_ast`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `ast`
+   --> crates/pace-driver/src/lib.rs:318:14
+    |
+318 |         let (ast, mir) = self.check_file(&mut arena, path)?;
+    |              ^^^ help: if this is intentional, prefix it with an underscore: `_ast`
+
+warning: unused variable: `ast`
+   --> crates/pace-driver/src/lib.rs:324:14
+    |
+324 |         let (ast, mir) = self.check_source(&mut arena, src)?;
+    |              ^^^ help: if this is intentional, prefix it with an underscore: `_ast`
+
+warning: `pace-driver` (lib) generated 3 warnings (run `cargo fix --lib -p pace-driver` to apply 3 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.14s
+     Running `/home/aniket/Documents/Projects/pace-team/pace/target/debug/pace run src/main.pace`
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_indexOf
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_insert
+MIR pass 1: declaring function pace_string__StringUtil_split
+MIR pass 1: declaring function fsReadText
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_clear
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_add
+MIR pass 1: declaring function pace_datetime__DateTime_now
+MIR pass 1: declaring function osName
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_interface_pace__Dog_speak
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_class_pace__Person_init
+MIR pass 1: declaring function pace_process__Process_exit
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int__resize
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_conditions_pace__runConditionsTest
+MIR pass 1: declaring function pace_process__Process_run
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_drop
+MIR pass 1: declaring function main
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_length
+MIR pass 1: declaring function processRun
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_string_builder_pace__StringBuilder_build
+MIR pass 1: declaring function pace_math__isEven
+MIR pass 1: declaring function fsDirExists
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_closure_pace__runClosureTest_closure_3
+MIR pass 1: declaring function pace_string__StringUtil_trim
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_keys
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_interface_pace__runInterfaceTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_get
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_length
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_string_builder_pace__StringBuilder_free
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_init
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_class_pace__Person_createDefault
+MIR pass 1: declaring function pace_math__max
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_map_pace__runMapTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_interface_pace__Cat_speak
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_actor_pace__Counter_increment
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_contains
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_length
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_loop_pace__runLoopTest
+MIR pass 1: declaring function pace_math__min
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_math_pace__runMathTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_string_builder_pace__StringBuilder_stringLength
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_remove
+MIR pass 1: declaring function pace_io__File_delete
+MIR pass 1: declaring function pace_datetime__DateTime_init
+MIR pass 1: declaring function pace_os__OS_getEnv
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_actor_pace__Counter_get_count
+MIR pass 1: declaring function pace_io__Directory_exists
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_io_pace__runIoTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_addAllList
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_actor_pace__Counter_init
+MIR pass 1: declaring function __pace_free
+MIR pass 1: declaring function pace_io__File_exists
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_closure_pace__runClosureTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_remove
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_indexOf
+MIR pass 1: declaring function pace_io__Directory_make
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_put
+MIR pass 1: declaring function osGetEnv
+MIR pass 1: declaring function self_test_process__runProcessTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_contains
+MIR pass 1: declaring function pace_io__File_writeText
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_class_pace__Person_unusedMethod
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_remove
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_clear
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_add
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_get
+MIR pass 1: declaring function getLastError
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_isEmpty
+MIR pass 1: declaring function pace_datetime__Duration_init
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_operator_pace__runOperatorTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_class_pace__Person_greet
+MIR pass 1: declaring function fsDeleteFile
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_result_pace__runResultReturnTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_insert
+MIR pass 1: declaring function __pace_ptr_load8
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_string_builder_pace__StringBuilder_append
+MIR pass 1: declaring function pace_datetime__Duration_inSeconds
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_isEmpty
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_os_pace__runOsTest
+MIR pass 1: declaring function fsWriteText
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_string_pace__runStringTest
+MIR pass 1: declaring function __pace_string_to_ptr
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_advanced_pace__runAdvancedTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_isEmpty
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_init
+MIR pass 1: declaring function pace_string__StringUtil_indexOf
+MIR pass 1: declaring function fsMakeDir
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_get
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_result_pace__runResultTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_datetime_pace__runDateTimeTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_list_pace__runListTest
+MIR pass 1: declaring function __pace_malloc
+MIR pass 1: declaring function pace_os__OS_name
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_init
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_result_pace__divide
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_drop
+MIR pass 1: declaring function pace_string__StringUtil_join
+MIR pass 1: declaring function pace_datetime__Duration_inMinutes
+MIR pass 1: declaring function pace_math__isOdd
+MIR pass 1: declaring function pace_string__StringUtil_startsWith
+MIR pass 1: declaring function pace_datetime__Duration_inHours
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_closure_pace__runClosureTest_closure_7
+MIR pass 1: declaring function fsExists
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_class_pace__runClassTest
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_string_builder_pace__StringBuilder_init
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_clear
+MIR pass 1: declaring function pace_string__StringUtil_replace
+MIR pass 1: declaring function pace_io__File_readText
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_putAll
+MIR pass 1: declaring function __pace_ptr_to_string
+MIR pass 1: declaring function pace_string__StringUtil_substring
+MIR pass 1: declaring function __pace_ptr_store8
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_Int_contains
+MIR pass 1: declaring function pace_datetime__DateTime_getYear
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_values
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_examples_pace_project_src_test_actor_pace__runActorTest
+MIR pass 1: declaring function processExit
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_map_pace__Map_String_Int_drop
+MIR pass 1: declaring function _home_aniket_Documents_Projects_pace_team_pace_stdlib_collections_list_pace__List_String_addAllList
+MIR pass 1: declaring function pace_string__StringUtil_length
+MIR pass 1: declaring function pace_datetime__DateTime_toUnixTimestamp
+MIR pass 1: declaring function pace_datetime__DateTime_difference
+MAIN IR:
+function u0:0() -> i64 fast {
+    gv0 = symbol colocated userextname1
+    gv1 = symbol colocated userextname19
+    gv2 = symbol colocated userextname20
+    gv3 = symbol colocated userextname21
+    sig0 = (i64) -> i64 system_v
+    sig1 = () -> i64 fast
+    sig2 = () -> i64 fast
+    sig3 = () -> i64 fast
+    sig4 = () -> i64 fast
+    sig5 = () -> i64 fast
+    sig6 = () -> i64 fast
+    sig7 = () -> i64 fast
+    sig8 = () -> i64 fast
+    sig9 = () -> i64 fast
+    sig10 = () -> i64 fast
+    sig11 = () -> i64 fast
+    sig12 = () -> i64 fast
+    sig13 = () -> i64 fast
+    sig14 = () -> i64 fast
+    sig15 = () -> i64 fast
+    sig16 = () -> i64 fast
+    sig17 = () -> i64 fast
+    sig18 = (i64) -> i64 system_v
+    sig19 = (i64) -> i64 system_v
+    sig20 = (i64) -> i64 system_v
+    fn0 = u0:143 sig0
+    fn1 = colocated u0:125 sig1
+    fn2 = colocated u0:50 sig2
+    fn3 = colocated u0:93 sig3
+    fn4 = colocated u0:38 sig4
+    fn5 = colocated u0:62 sig5
+    fn6 = colocated u0:136 sig6
+    fn7 = colocated u0:76 sig7
+    fn8 = colocated u0:111 sig8
+    fn9 = colocated u0:103 sig9
+    fn10 = colocated u0:57 sig10
+    fn11 = colocated u0:113 sig11
+    fn12 = colocated u0:64 sig12
+    fn13 = colocated u0:72 sig13
+    fn14 = colocated u0:112 sig14
+    fn15 = colocated u0:101 sig15
+    fn16 = colocated u0:82 sig16
+    fn17 = colocated u0:105 sig17
+    fn18 = u0:143 sig18
+    fn19 = u0:143 sig19
+    fn20 = u0:143 sig20
+
+block0:
+    v0 = iconst.i64 0
+    v1 = symbol_value.i64 gv0
+    v2 = call fn0(v1)
+    jump block2
+
+block2:
+    v3 = call fn1()
+    jump block3
+
+block3:
+    v4 = call fn2()
+    jump block4
+
+block4:
+    v5 = call fn3()
+    jump block5
+
+block5:
+    v6 = call fn4()
+    jump block6
+
+block6:
+    v7 = call fn5()
+    jump block7
+
+block7:
+    v8 = call fn6()
+    jump block8
+
+block8:
+    v9 = call fn7()
+    jump block9
+
+block9:
+    v10 = call fn8()
+    jump block10
+
+block10:
+    v11 = call fn9()
+    jump block11
+
+block11:
+    v12 = call fn10()
+    jump block12
+
+block12:
+    v13 = call fn11()
+    jump block13
+
+block13:
+    v14 = call fn12()
+    jump block14
+
+block14:
+    v15 = call fn13()
+    jump block15
+
+block15:
+    v16 = call fn14()
+    jump block16
+
+block16:
+    v17 = call fn15()
+    jump block17
+
+block17:
+    v18 = call fn16()
+    jump block18
+
+block18:
+    v19 = call fn17()
+    jump block19
+
+block19:
+    v20 = symbol_value.i64 gv1
+    v21 = call fn18(v20)
+    jump block20
+
+block20:
+    v22 = symbol_value.i64 gv2
+    v23 = call fn19(v22)
+    jump block21
+
+block21:
+    v24 = symbol_value.i64 gv3
+    v25 = call fn20(v24)
+    jump block22
+
+block22:
+    return v0  ; v0 = 0
+}
+
+🚀 Invoking JIT main function...
+⚡ Running Pace Test Suite...
+--- Testing Classes ---

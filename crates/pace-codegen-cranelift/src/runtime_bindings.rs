@@ -17,6 +17,11 @@ impl RuntimeBindings {
             "__pace_print_string",
             pace_runtime::__pace_print_string as *const u8,
         );
+        // Bind the generic 'print' from stdlib to __pace_print_string
+        builder.symbol(
+            "print",
+            pace_runtime::__pace_print_string as *const u8,
+        );
         builder.symbol(
             "__pace_concat_strings",
             pace_runtime::__pace_concat_strings as *const u8,

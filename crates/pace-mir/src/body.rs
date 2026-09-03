@@ -19,15 +19,23 @@ pub struct MirBody {
     
     /// Name of the function.
     pub name: Ustr,
+    
+    /// Whether this function is an external FFI function.
+    pub is_extern: bool,
 }
 
 impl MirBody {
-    pub fn new(name: Ustr, arg_count: usize) -> Self {
+    pub fn new(name: Ustr, arg_count: usize, is_extern: bool) -> Self {
         Self {
-            basic_blocks: Vec::new(),
+            basic_blocks: vec![BasicBlockData {
+                statements: Vec::new(),
+                terminator: None,
+                is_cleanup: false,
+            }],
             local_decls: Vec::new(),
             arg_count,
             name,
+            is_extern,
         }
     }
 }
