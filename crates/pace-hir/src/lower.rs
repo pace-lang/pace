@@ -325,13 +325,71 @@ impl<'a> HirBuilder<'a> {
                 iterable,
                 body,
             } => {
-                let iter_id = self.lower_expr(*iterable);
-                let body_id = self.lower_stmt(*body);
-                Stmt::ForIn {
-                    item: *item,
-                    iterable: iter_id,
-                    body: body_id,
-                }
+                let iter_expr_id = self.lower_expr(*iterable);
+                let iter_name = ustr::Ustr::from(&format!("__iter_{}", iter_expr_id.0));
+                
+                let iterator_prop = self.hir_arena.alloc_expr(Expr::MemberAccess {
+                    object: iter_expr_id,
+                    property: ustr::Ustr::from("iterator"),
+                    computed_class: None,
+                    is_static_operator: false,
+                }, pace_span::Span::default());
+                let iterator_call = self.hir_arena.alloc_expr(Expr::Call {
+                    callee: iterator_prop,
+                    args: vec![],
+                }, pace_span::Span::default());
+                
+                let iter_decl = self.hir_arena.alloc_stmt(Stmt::VarDecl {
+                    name: iter_name,
+                    is_mutable: false,
+                    type_annotation: None,
+                    is_static: false,
+                    visibility: pace_ast::Visibility::Private,
+                    initializer: Some(iterator_call),
+                }, pace_span::Span::default());
+                
+                let iter_ident = self.hir_arena.alloc_expr(Expr::Identifier(iter_name), pace_span::Span::default());
+                
+                let has_next_prop = self.hir_arena.alloc_expr(Expr::MemberAccess {
+                    object: iter_ident,
+                    property: ustr::Ustr::from("hasNext"),
+                    computed_class: None,
+                    is_static_operator: false,
+                }, pace_span::Span::default());
+                let condition = self.hir_arena.alloc_expr(Expr::Call {
+                    callee: has_next_prop,
+                    args: vec![],
+                }, pace_span::Span::default());
+                
+                let next_prop = self.hir_arena.alloc_expr(Expr::MemberAccess {
+                    object: iter_ident,
+                    property: ustr::Ustr::from("next"),
+                    computed_class: None,
+                    is_static_operator: false,
+                }, pace_span::Span::default());
+                let next_call = self.hir_arena.alloc_expr(Expr::Call {
+                    callee: next_prop,
+                    args: vec![],
+                }, pace_span::Span::default());
+                
+                let item_decl = self.hir_arena.alloc_stmt(Stmt::VarDecl {
+                    name: *item,
+                    is_mutable: false,
+                    type_annotation: None,
+                    is_static: false,
+                    visibility: pace_ast::Visibility::Private,
+                    initializer: Some(next_call),
+                }, pace_span::Span::default());
+                
+                let lowered_body = self.lower_stmt(*body);
+                let while_body = self.hir_arena.alloc_stmt(Stmt::Block(vec![item_decl, lowered_body]), pace_span::Span::default());
+                
+                let while_loop = self.hir_arena.alloc_stmt(Stmt::While {
+                    condition,
+                    body: while_body,
+                }, pace_span::Span::default());
+                
+                Stmt::Block(vec![iter_decl, while_loop])
             }
             pace_ast::Stmt::Match { expr, arms } => {
                 let expr_id = self.lower_expr(*expr);

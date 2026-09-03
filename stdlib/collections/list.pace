@@ -11,6 +11,10 @@ class List<T> implement Iterable<T> {
         self.cap = 0;
     }
 
+    func iterator() -> ListIterator<T> {
+        return ListIterator<T>(self);
+    }
+
     func add(val: T) {
         if self.cap == 0 {
             self.cap = 16;
@@ -126,3 +130,22 @@ class List<T> implement Iterable<T> {
 
 }
 
+class ListIterator<T> {
+    var list: List<T>;
+    var idx: Int;
+
+    func init(list: List<T>) {
+        self.list = list;
+        self.idx = 0;
+    }
+
+    func hasNext() -> Bool {
+        return self.idx < self.list.length();
+    }
+
+    func next() -> T {
+        let val = self.list.get(self.idx);
+        self.idx = self.idx + 1;
+        return val;
+    }
+}

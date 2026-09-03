@@ -5,12 +5,12 @@ pub fn optimize(body: &mut MirBody) -> bool {
     let mut changed = false;
     
     // 1. Compute Liveness and remove dead assignments
-    let mut used_locals = HashSet::new();
+    let mut used_places = HashSet::new();
     
     // Always mark arguments and return pointer as used
-    used_locals.insert(Local(0));
+    used_places.insert(crate::PlaceBase::Local(Local(0)));
     for i in 1..=body.arg_count {
-        used_locals.insert(Local(i));
+        used_places.insert(crate::PlaceBase::Local(Local(i)));
     }
     
     // Also, if a local is used as the receiver of a method call or passed as a ref,
@@ -21,13 +21,13 @@ pub fn optimize(body: &mut MirBody) -> bool {
                 Statement::Assign(place, rvalue) => {
                     // Mark anything in projection as used (e.g. `a.b = ...` means `a` is used)
                     if !place.projection.is_empty() {
-                        used_locals.insert(place.local);
+                        used_places.insert(place.base.clone());
                     }
                     // Mark RHS as used
-                    mark_rvalue_uses(rvalue, &mut used_locals);
+                    mark_rvalue_uses(rvalue, &mut used_places);
                 }
                 Statement::FakeRead(place) => {
-                    used_locals.insert(place.local);
+                    used_places.insert(place.base.clone());
                 }
             }
         }
@@ -36,18 +36,18 @@ pub fn optimize(body: &mut MirBody) -> bool {
             match terminator {
                 Terminator::Goto { .. } => {}
                 Terminator::SwitchInt { discr, .. } => {
-                    mark_operand_uses(discr, &mut used_locals);
+                    mark_operand_uses(discr, &mut used_places);
                 }
                 Terminator::Return => {}
                 Terminator::Unreachable => {}
                 Terminator::Call { func, args, destination, .. } => {
-                    mark_operand_uses(func, &mut used_locals);
+                    mark_operand_uses(func, &mut used_places);
                     for arg in args {
-                        mark_operand_uses(arg, &mut used_locals);
+                        mark_operand_uses(arg, &mut used_places);
                     }
                     // For destination, if it's a projection, the base is used
                     if !destination.projection.is_empty() {
-                        used_locals.insert(destination.local);
+                        used_places.insert(destination.base.clone());
                     }
                 }
             }
@@ -59,7 +59,11 @@ pub fn optimize(body: &mut MirBody) -> bool {
         let original_len = block.statements.len();
         block.statements.retain(|stmt| {
             if let Statement::Assign(place, _) = stmt {
-                if place.projection.is_empty() && !used_locals.contains(&place.local) {
+                // If it's a static, never remove it right now, because global side-effects matter!
+                if matches!(place.base, crate::PlaceBase::Static(_, _)) {
+                    return true;
+                }
+                if place.projection.is_empty() && !used_places.contains(&place.base) {
                     // Assignment to a local that is never used!
                     return false;
                 }
@@ -113,30 +117,30 @@ pub fn optimize(body: &mut MirBody) -> bool {
     changed
 }
 
-fn mark_rvalue_uses(rvalue: &Rvalue, used_locals: &mut HashSet<Local>) {
+fn mark_rvalue_uses(rvalue: &Rvalue, used_places: &mut HashSet<crate::PlaceBase>) {
     match rvalue {
-        Rvalue::Use(op) => mark_operand_uses(op, used_locals),
+        Rvalue::Use(op) => mark_operand_uses(op, used_places),
         Rvalue::BinaryOp(_, left, right) => {
-            mark_operand_uses(left, used_locals);
-            mark_operand_uses(right, used_locals);
+            mark_operand_uses(left, used_places);
+            mark_operand_uses(right, used_places);
         }
-        Rvalue::UnaryOp(_, op) => mark_operand_uses(op, used_locals),
-        Rvalue::Cast(op, _) => mark_operand_uses(op, used_locals),
+        Rvalue::UnaryOp(_, op) => mark_operand_uses(op, used_places),
+        Rvalue::Cast(op, _) => mark_operand_uses(op, used_places),
         Rvalue::Ref(_, place) => {
-            used_locals.insert(place.local);
+            used_places.insert(place.base.clone());
         }
         Rvalue::Aggregate(_, ops) => {
             for op in ops {
-                mark_operand_uses(op, used_locals);
+                mark_operand_uses(op, used_places);
             }
         }
     }
 }
 
-fn mark_operand_uses(operand: &Operand, used_locals: &mut HashSet<Local>) {
+fn mark_operand_uses(operand: &Operand, used_places: &mut HashSet<crate::PlaceBase>) {
     match operand {
         Operand::Copy(place) | Operand::Move(place) => {
-            used_locals.insert(place.local);
+            used_places.insert(place.base.clone());
         }
         Operand::Constant(_) => {}
     }

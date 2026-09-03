@@ -55,13 +55,23 @@ pub enum Operand {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Place {
-    pub local: Local,
+    pub base: PlaceBase,
     pub projection: Vec<ProjectionElem>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PlaceBase {
+    Local(Local),
+    Static(Ustr, Ustr), // Class, Field
+}
+
 impl Place {
-    pub fn new(local: Local) -> Self {
-        Self { local, projection: Vec::new() }
+    pub fn new(base: PlaceBase) -> Self {
+        Self { base, projection: Vec::new() }
+    }
+    
+    pub fn new_local(local: Local) -> Self {
+        Self { base: PlaceBase::Local(local), projection: Vec::new() }
     }
 }
 

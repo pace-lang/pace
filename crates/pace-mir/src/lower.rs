@@ -204,7 +204,7 @@ impl<'a> FuncMirBuilder<'a> {
                 
                 if let Some(init_id) = initializer {
                     let operand = self.lower_expr(*init_id);
-                    self.push_statement(Statement::Assign(Place::new(local), Rvalue::Use(operand)));
+                    self.push_statement(Statement::Assign(Place::new_local(local), Rvalue::Use(operand)));
                 }
             }
             Stmt::Block(stmts) => {
@@ -215,7 +215,7 @@ impl<'a> FuncMirBuilder<'a> {
             Stmt::Return(expr_opt) => {
                 if let Some(expr_id) = expr_opt {
                     let operand = self.lower_expr(*expr_id);
-                    let ret_place = Place::new(Local(0));
+                    let ret_place = Place::new_local(Local(0));
                     self.push_statement(Statement::Assign(ret_place, Rvalue::Use(operand)));
                 }
                 self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Return);
@@ -300,12 +300,12 @@ impl<'a> FuncMirBuilder<'a> {
                             self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
                                 func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_int_to_string"))),
                                 args: vec![part_op],
-                                destination: Place::new(temp),
+                                destination: Place::new_local(temp),
                                 target: Some(next_block),
                                 cleanup: None,
                             });
                             self.current_block = next_block;
-                            Operand::Copy(Place::new(temp))
+                            Operand::Copy(Place::new_local(temp))
                         }
                         Type::Float => {
                             let temp = self.new_temp(Type::Unknown);
@@ -313,12 +313,12 @@ impl<'a> FuncMirBuilder<'a> {
                             self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
                                 func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_float_to_string"))),
                                 args: vec![part_op],
-                                destination: Place::new(temp),
+                                destination: Place::new_local(temp),
                                 target: Some(next_block),
                                 cleanup: None,
                             });
                             self.current_block = next_block;
-                            Operand::Copy(Place::new(temp))
+                            Operand::Copy(Place::new_local(temp))
                         }
                         Type::Bool => {
                             let temp = self.new_temp(Type::Unknown);
@@ -326,12 +326,12 @@ impl<'a> FuncMirBuilder<'a> {
                             self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
                                 func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_bool_to_string"))),
                                 args: vec![part_op],
-                                destination: Place::new(temp),
+                                destination: Place::new_local(temp),
                                 target: Some(next_block),
                                 cleanup: None,
                             });
                             self.current_block = next_block;
-                            Operand::Copy(Place::new(temp))
+                            Operand::Copy(Place::new_local(temp))
                         }
                         _ => part_op,
                     };
@@ -342,12 +342,12 @@ impl<'a> FuncMirBuilder<'a> {
                         self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
                             func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_concat_strings"))),
                             args: vec![prev_op, part_op],
-                            destination: Place::new(temp),
+                            destination: Place::new_local(temp),
                             target: Some(next_block),
                             cleanup: None,
                         });
                         self.current_block = next_block;
-                        current_str_op = Some(Operand::Copy(Place::new(temp)));
+                        current_str_op = Some(Operand::Copy(Place::new_local(temp)));
                     } else {
                         current_str_op = Some(part_op);
                     }
@@ -357,7 +357,7 @@ impl<'a> FuncMirBuilder<'a> {
             }
             Expr::Identifier(name) => {
                 if let Some(&local) = self.var_map.get(name) {
-                    Operand::Copy(Place::new(local))
+                    Operand::Copy(Place::new_local(local))
                 } else {
                     Operand::Constant(Constant::Function(*name))
                 }
@@ -368,10 +368,10 @@ impl<'a> FuncMirBuilder<'a> {
                 
                 let temp = self.new_temp(Type::Unknown);
                 self.push_statement(Statement::Assign(
-                    Place::new(temp),
+                    Place::new_local(temp),
                     Rvalue::BinaryOp(op.clone(), left_op, right_op)
                 ));
-                Operand::Copy(Place::new(temp))
+                Operand::Copy(Place::new_local(temp))
             }
             Expr::Assign { target, value } => {
                 let val_op = self.lower_expr(*value);
@@ -402,10 +402,10 @@ impl<'a> FuncMirBuilder<'a> {
                     if let Some(Type::Enum(enum_name)) = obj_ty {
                         let temp = self.new_temp(Type::Unknown);
                         self.push_statement(Statement::Assign(
-                            Place::new(temp),
+                            Place::new_local(temp),
                             Rvalue::Aggregate(AggregateKind::EnumVariant(*enum_name, *property, 0), arg_ops)
                         ));
-                        return Operand::Copy(Place::new(temp));
+                        return Operand::Copy(Place::new_local(temp));
                     }
 
                     let class_name = match obj_ty {
@@ -437,12 +437,12 @@ impl<'a> FuncMirBuilder<'a> {
                     self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
                         func: func_op,
                         args: arg_ops,
-                        destination: Place::new(temp),
+                        destination: Place::new_local(temp),
                         target: Some(next_block),
                         cleanup: None,
                     });
                     self.current_block = next_block;
-                    return Operand::Copy(Place::new(temp));
+                    return Operand::Copy(Place::new_local(temp));
                 }
 
                 // Check if it's a Class/Actor/Struct initialization
@@ -462,7 +462,7 @@ impl<'a> FuncMirBuilder<'a> {
                         
                         let temp = self.new_temp(Type::Unknown);
                         self.push_statement(Statement::Assign(
-                            Place::new(temp),
+                            Place::new_local(temp),
                             Rvalue::Aggregate(AggregateKind::Class(*class_name, class_size), vec![])
                         ));
                         
@@ -481,14 +481,14 @@ impl<'a> FuncMirBuilder<'a> {
                             let init_func_op = Operand::Constant(Constant::Function(ustr::Ustr::from(&init_method_name)));
                             
                             let mut init_args = arg_ops.clone();
-                            init_args.insert(0, Operand::Copy(Place::new(temp))); // pass self
+                            init_args.insert(0, Operand::Copy(Place::new_local(temp))); // pass self
                             
                             let init_temp = self.new_temp(Type::Unknown);
                             let next_block = self.new_block();
                             self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
                                 func: init_func_op,
                                 args: init_args,
-                                destination: Place::new(init_temp),
+                                destination: Place::new_local(init_temp),
                                 target: Some(next_block),
                                 cleanup: None,
                             });
@@ -497,12 +497,12 @@ impl<'a> FuncMirBuilder<'a> {
                             // If there is no init method, we should populate the fields directly from arguments
                             let last_stmt_idx = self.body.basic_blocks[self.current_block.0].statements.len() - 1;
                             self.body.basic_blocks[self.current_block.0].statements[last_stmt_idx] = Statement::Assign(
-                                Place::new(temp),
+                                Place::new_local(temp),
                                 Rvalue::Aggregate(AggregateKind::Class(*class_name, class_size), arg_ops)
                             );
                         }
                         
-                        return Operand::Copy(Place::new(temp));
+                        return Operand::Copy(Place::new_local(temp));
                     }
                 }
                 let mut callee_op = self.lower_expr(*callee);
@@ -544,19 +544,19 @@ impl<'a> FuncMirBuilder<'a> {
                 self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
                     func: callee_op,
                     args: arg_ops,
-                    destination: Place::new(temp),
+                    destination: Place::new_local(temp),
                     target: Some(next_block),
                     cleanup: None,
                 });
                 
                 self.current_block = next_block;
-                Operand::Copy(Place::new(temp))
+                Operand::Copy(Place::new_local(temp))
             }
             Expr::Unwrap(inner) => {
                 let inner_op = self.lower_expr(*inner);
                 let is_null_temp = self.new_temp(Type::Bool);
                 self.push_statement(Statement::Assign(
-                    Place::new(is_null_temp),
+                    Place::new_local(is_null_temp),
                     Rvalue::BinaryOp(BinaryOp::Eq, inner_op.clone(), Operand::Constant(Constant::Null))
                 ));
                 
@@ -564,7 +564,7 @@ impl<'a> FuncMirBuilder<'a> {
                 let continue_block = self.new_block();
                 
                 self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::SwitchInt {
-                    discr: Operand::Copy(Place::new(is_null_temp)),
+                    discr: Operand::Copy(Place::new_local(is_null_temp)),
                     targets: SwitchTargets::new(vec![0], vec![continue_block, panic_block]), // false(0) -> continue, true -> panic
                 });
                 
@@ -576,7 +576,7 @@ impl<'a> FuncMirBuilder<'a> {
                 let left_op = self.lower_expr(*left);
                 let is_null_temp = self.new_temp(Type::Bool);
                 self.push_statement(Statement::Assign(
-                    Place::new(is_null_temp),
+                    Place::new_local(is_null_temp),
                     Rvalue::BinaryOp(BinaryOp::Eq, left_op.clone(), Operand::Constant(Constant::Null))
                 ));
                 
@@ -584,7 +584,7 @@ impl<'a> FuncMirBuilder<'a> {
                 let continue_block = self.new_block();
                 
                 self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::SwitchInt {
-                    discr: Operand::Copy(Place::new(is_null_temp)),
+                    discr: Operand::Copy(Place::new_local(is_null_temp)),
                     targets: SwitchTargets::new(vec![0], vec![continue_block, right_block]),
                 });
                 
@@ -593,15 +593,15 @@ impl<'a> FuncMirBuilder<'a> {
 
                 self.current_block = right_block;
                 let right_op = self.lower_expr(*right);
-                self.push_statement(Statement::Assign(Place::new(result_temp), Rvalue::Use(right_op)));
+                self.push_statement(Statement::Assign(Place::new_local(result_temp), Rvalue::Use(right_op)));
                 self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Goto { target: merge_block });
                 
                 self.current_block = continue_block;
-                self.push_statement(Statement::Assign(Place::new(result_temp), Rvalue::Use(left_op)));
+                self.push_statement(Statement::Assign(Place::new_local(result_temp), Rvalue::Use(left_op)));
                 self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Goto { target: merge_block });
                 
                 self.current_block = merge_block;
-                Operand::Copy(Place::new(result_temp))
+                Operand::Copy(Place::new_local(result_temp))
             }
             Expr::Try(inner) => {
                 let inner_op = self.lower_expr(*inner);
@@ -610,7 +610,7 @@ impl<'a> FuncMirBuilder<'a> {
                 self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
                     func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_is_err"))),
                     args: vec![inner_op.clone()],
-                    destination: Place::new(is_err_temp),
+                    destination: Place::new_local(is_err_temp),
                     target: Some(next_block),
                     cleanup: None,
                 });
@@ -620,7 +620,7 @@ impl<'a> FuncMirBuilder<'a> {
                 let continue_block = self.new_block();
 
                 self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::SwitchInt {
-                    discr: Operand::Copy(Place::new(is_err_temp)),
+                    discr: Operand::Copy(Place::new_local(is_err_temp)),
                     targets: SwitchTargets::new(vec![0], vec![continue_block, err_block]),
                 });
 
@@ -640,7 +640,7 @@ impl<'a> FuncMirBuilder<'a> {
                 let temp = self.new_temp(Type::Unknown);
                 // Lower to an aggregate containing the environment (currently empty for simplicity without a full capture pass)
                 self.push_statement(Statement::Assign(
-                    Place::new(temp),
+                    Place::new_local(temp),
                     Rvalue::Aggregate(AggregateKind::Closure(closure_name), vec![])
                 ));
                 
@@ -665,13 +665,13 @@ impl<'a> FuncMirBuilder<'a> {
                 let mut closure_builder = FuncMirBuilder::new(self.arena, self.env, self.class_layouts, closure_name, &hir_params, false);
                 let body_op = closure_builder.lower_expr(*body);
                 // Closures return the value of their body
-                closure_builder.push_statement(Statement::Assign(Place::new(Local(0)), Rvalue::Use(body_op)));
+                closure_builder.push_statement(Statement::Assign(Place::new_local(Local(0)), Rvalue::Use(body_op)));
                 closure_builder.body.basic_blocks[closure_builder.current_block.0].terminator = Some(Terminator::Return);
                 
                 self.pending_closures.push(closure_builder.body);
                 self.pending_closures.append(&mut closure_builder.pending_closures);
                 
-                Operand::Copy(Place::new(temp))
+                Operand::Copy(Place::new_local(temp))
             }
 
             _ => {
@@ -685,12 +685,21 @@ impl<'a> FuncMirBuilder<'a> {
         match expr {
             Expr::Identifier(name) => {
                 if let Some(&local) = self.var_map.get(name) {
-                    Some(Place::new(local))
+                    Some(Place::new_local(local))
                 } else {
                     None
                 }
             }
-            Expr::MemberAccess { object, property, computed_class, .. } => {
+            Expr::MemberAccess { object, property, computed_class, is_static_operator, .. } => {
+                if *is_static_operator {
+                    let mut class_name = computed_class.unwrap_or(ustr::Ustr::from("Unknown"));
+                    if class_name.as_str() == "Unknown" {
+                        if let Expr::Identifier(name) = self.arena.get_expr(*object) {
+                            class_name = *name;
+                        }
+                    }
+                    return Some(Place::new(crate::PlaceBase::Static(class_name, *property)));
+                }
                 let obj_op = self.lower_expr(*object);
                 match obj_op {
                     Operand::Copy(mut place) | Operand::Move(mut place) => {

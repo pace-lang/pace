@@ -172,7 +172,7 @@ fn compile_mir_function<M: Module>(
                         } else {
                             results[0]
                         };
-                        builder.def_var(locals[destination.local.index()], result_val);
+                        store_to_place(&mut builder, context, destination, &locals, result_val)?;
                         
                         if let Some(next_block) = target {
                             builder.ins().jump(blocks[next_block.index()], &[]);
@@ -217,7 +217,7 @@ fn compile_mir_function<M: Module>(
                         } else {
                             results[0]
                         };
-                        builder.def_var(locals[destination.local.index()], result_val);
+                        store_to_place(&mut builder, context, destination, &locals, result_val)?;
                         
                         if let Some(next_block) = target {
                             builder.ins().jump(blocks[next_block.index()], &[]);
@@ -408,13 +408,41 @@ fn translate_operand<M: Module>(
     }
 }
 
-fn translate_place<M: Module>(
+fn translate_place<M: cranelift_module::Module>(
     builder: &mut FunctionBuilder,
-    _context: &mut CodegenContext<M>,
+    context: &mut CodegenContext<M>,
     place: &pace_mir::Place,
     locals: &[Variable],
 ) -> Result<Value, crate::CodegenError> {
-    let mut val = builder.use_var(locals[place.local.index()]);
+    let mut val = match &place.base {
+        pace_mir::PlaceBase::Local(local) => builder.use_var(locals[local.index()]),
+        pace_mir::PlaceBase::Static(class_name, field) => {
+            let name_str = format!("__pace_static_{}_{}", class_name.as_str(), field.as_str());
+            let name = ustr::Ustr::from(&name_str);
+            
+            let data_id = if let Some(&id) = context.global_vars.get(&name) {
+                id
+            } else {
+                let id = context
+                    .module
+                    .declare_data(name.as_str(), cranelift_module::Linkage::Export, true, false)
+                    .unwrap();
+                
+                let mut data_ctx = cranelift_module::DataDescription::new();
+                data_ctx.define_zeroinit(8);
+                context.module.define_data(id, &data_ctx).unwrap();
+                
+                context.global_vars.insert(name, id);
+                id
+            };
+            
+            let local_data = context.module.declare_data_in_func(data_id, builder.func);
+            let ptr_ty = context.module.target_config().pointer_type();
+            let ptr = builder.ins().symbol_value(ptr_ty, local_data);
+            builder.ins().load(cranelift::prelude::types::I64, cranelift::prelude::MemFlagsData::new(), ptr, 0)
+        }
+    };
+    
     for proj in &place.projection {
         match proj {
             pace_mir::ProjectionElem::Field(_prop, _class_name, offset) => {
@@ -426,17 +454,73 @@ fn translate_place<M: Module>(
     Ok(val)
 }
 
-fn store_to_place<M: Module>(
+fn store_to_place<M: cranelift_module::Module>(
     builder: &mut FunctionBuilder,
-    _context: &mut CodegenContext<M>,
+    context: &mut CodegenContext<M>,
     place: &pace_mir::Place,
     locals: &[Variable],
     value: Value,
 ) -> Result<(), crate::CodegenError> {
     if place.projection.is_empty() {
-        builder.def_var(locals[place.local.index()], value);
+        match &place.base {
+            pace_mir::PlaceBase::Local(local) => {
+                builder.def_var(locals[local.index()], value);
+            }
+            pace_mir::PlaceBase::Static(class_name, field) => {
+                let name_str = format!("__pace_static_{}_{}", class_name.as_str(), field.as_str());
+                let name = ustr::Ustr::from(&name_str);
+                
+                let data_id = if let Some(&id) = context.global_vars.get(&name) {
+                    id
+                } else {
+                    let id = context
+                        .module
+                        .declare_data(name.as_str(), cranelift_module::Linkage::Export, true, false)
+                        .unwrap();
+                    
+                    let mut data_ctx = cranelift_module::DataDescription::new();
+                    data_ctx.define_zeroinit(8);
+                    context.module.define_data(id, &data_ctx).unwrap();
+                    
+                    context.global_vars.insert(name, id);
+                    id
+                };
+                
+                let local_data = context.module.declare_data_in_func(data_id, builder.func);
+                let ptr_ty = context.module.target_config().pointer_type();
+                let ptr = builder.ins().symbol_value(ptr_ty, local_data);
+                builder.ins().store(cranelift::prelude::MemFlagsData::new(), value, ptr, 0);
+            }
+        }
     } else {
-        let mut ptr = builder.use_var(locals[place.local.index()]);
+        let mut ptr = match &place.base {
+            pace_mir::PlaceBase::Local(local) => builder.use_var(locals[local.index()]),
+            pace_mir::PlaceBase::Static(class_name, field) => {
+                let name_str = format!("__pace_static_{}_{}", class_name.as_str(), field.as_str());
+                let name = ustr::Ustr::from(&name_str);
+                
+                let data_id = if let Some(&id) = context.global_vars.get(&name) {
+                    id
+                } else {
+                    let id = context
+                        .module
+                        .declare_data(name.as_str(), cranelift_module::Linkage::Export, true, false)
+                        .unwrap();
+                    
+                    let mut data_ctx = cranelift_module::DataDescription::new();
+                    data_ctx.define_zeroinit(8);
+                    context.module.define_data(id, &data_ctx).unwrap();
+                    
+                    context.global_vars.insert(name, id);
+                    id
+                };
+                
+                let local_data = context.module.declare_data_in_func(data_id, builder.func);
+                let ptr_ty = context.module.target_config().pointer_type();
+                let global_ptr = builder.ins().symbol_value(ptr_ty, local_data);
+                builder.ins().load(cranelift::prelude::types::I64, cranelift::prelude::MemFlagsData::new(), global_ptr, 0)
+            }
+        };
         for (i, proj) in place.projection.iter().enumerate() {
             if i == place.projection.len() - 1 {
                 if let pace_mir::ProjectionElem::Field(_prop, _class_name, offset) = proj {

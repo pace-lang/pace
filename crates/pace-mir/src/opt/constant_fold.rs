@@ -8,7 +8,7 @@ pub fn optimize(body: &mut MirBody) -> bool {
     // Forward pass through blocks
     for block in &mut body.basic_blocks {
         // Maps a Local to its known Constant value within a single basic block.
-        let mut known_constants: HashMap<Local, Constant> = HashMap::new();
+        let mut known_constants: HashMap<crate::PlaceBase, Constant> = HashMap::new();
         
         for stmt in &mut block.statements {
             match stmt {
@@ -20,17 +20,17 @@ pub fn optimize(body: &mut MirBody) -> bool {
                         
                         // If this place is just a single local, remember its value
                         if place.projection.is_empty() {
-                            known_constants.insert(place.local, folded);
+                            known_constants.insert(place.base.clone(), folded);
                         }
                     } else if let Rvalue::Use(Operand::Constant(c)) = rvalue {
                         // Already a constant, just remember it if it's a simple local
                         if place.projection.is_empty() {
-                            known_constants.insert(place.local, c.clone());
+                            known_constants.insert(place.base.clone(), c.clone());
                         }
                     } else if place.projection.is_empty() {
                         // If it's not a constant, remove any known constant for this local
                         // since it has been reassigned. (A more advanced pass would use SSA).
-                        known_constants.remove(&place.local);
+                        known_constants.remove(&place.base);
                     }
                 }
                 Statement::FakeRead(_) => {}
@@ -47,7 +47,7 @@ pub fn optimize(body: &mut MirBody) -> bool {
                         Operand::Constant(Constant::Bool(b)) => Some(if *b { 1 } else { 0 }),
                         Operand::Copy(p) | Operand::Move(p) => {
                             if p.projection.is_empty() {
-                                if let Some(c) = known_constants.get(&p.local) {
+                                if let Some(c) = known_constants.get(&p.base) {
                                     match c {
                                         Constant::Int(i) => Some(*i),
                                         Constant::Bool(b) => Some(if *b { 1 } else { 0 }),
@@ -74,7 +74,7 @@ pub fn optimize(body: &mut MirBody) -> bool {
     changed
 }
 
-fn fold_rvalue(rvalue: &mut Rvalue, constants: &HashMap<Local, Constant>) -> Option<Constant> {
+fn fold_rvalue(rvalue: &mut Rvalue, constants: &HashMap<crate::PlaceBase, Constant>) -> Option<Constant> {
     match rvalue {
         Rvalue::Use(op) => resolve_operand(op, constants),
         Rvalue::BinaryOp(op, left, right) => {
@@ -147,12 +147,12 @@ fn fold_rvalue(rvalue: &mut Rvalue, constants: &HashMap<Local, Constant>) -> Opt
     }
 }
 
-fn resolve_operand(operand: &mut Operand, constants: &HashMap<Local, Constant>) -> Option<Constant> {
+fn resolve_operand(operand: &mut Operand, constants: &HashMap<crate::PlaceBase, Constant>) -> Option<Constant> {
     match operand {
         Operand::Constant(c) => Some(c.clone()),
         Operand::Copy(p) | Operand::Move(p) => {
             if p.projection.is_empty() {
-                if let Some(c) = constants.get(&p.local) {
+                if let Some(c) = constants.get(&p.base) {
                     // Modify the operand in place to avoid future lookups
                     *operand = Operand::Constant(c.clone());
                     return Some(c.clone());
