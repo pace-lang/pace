@@ -41,7 +41,7 @@ pub enum AggregateKind {
     EnumVariant(Ustr, Ustr, usize),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Operand {
     /// Copies the value from a place (for Copy types).
     Copy(Place),
@@ -84,7 +84,7 @@ pub enum ProjectionElem {
     Index(Local),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     Int(i64),
     Float(f64),

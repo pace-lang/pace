@@ -201,7 +201,12 @@ impl Compiler {
 
         // Lower HIR to MIR
         let mir_builder = pace_mir::MirBuilder::new(&hir_arena, &env);
-        let mir_program = mir_builder.build(&hir_stmts);
+        let mut mir_program = mir_builder.build(&hir_stmts);
+        
+        // Run MIR Optimizations
+        if self.session.options.release_mode {
+            pace_mir::optimize(&mut mir_program);
+        }
 
         Ok((mono_ast, warnings, type_errors, env, hir_arena, mir_program))
     }

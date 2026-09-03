@@ -1,4 +1,0 @@
-func greet() {
-    print("Hello from Remote Pace package!");
-}
-
