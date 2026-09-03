@@ -12,7 +12,6 @@ pub fn compile_mir_program<M: Module>(
     
     // Pass 1: Declare all functions
     for (name, body) in &program.functions {
-        println!("MIR pass 1: declaring function {}", name);
         if context.funcs.contains_key(name) {
             continue;
         }
@@ -252,10 +251,6 @@ fn compile_mir_function<M: Module>(
         panic!("define_function error in {}: {:#?}\nIR:\n{}", body.name, e, ctx.func.display());
     }
     
-    if body.name.as_str() == "main" {
-        println!("MAIN IR:\n{}", ctx.func.display());
-    }
-    
     Ok(())
 }
 
@@ -308,7 +303,7 @@ fn translate_rvalue<M: Module>(
         }
         Rvalue::Aggregate(pace_mir::AggregateKind::Closure(closure_name), _) => {
             let size_val = builder.ins().iconst(types::I64, 16);
-            let malloc_id = *context.funcs.get(&ustr::Ustr::from("malloc")).unwrap();
+            let malloc_id = *context.funcs.get(&ustr::Ustr::from("__pace_malloc")).unwrap();
             let local_malloc = context.module.declare_func_in_func(malloc_id, builder.func);
             let call = builder.ins().call(local_malloc, &[size_val]);
             let env_ptr = builder.inst_results(call)[0];
@@ -335,7 +330,7 @@ fn translate_rvalue<M: Module>(
         Rvalue::Aggregate(pace_mir::AggregateKind::Class(class_name, class_size), operands) => {
             let size_val = builder.ins().iconst(types::I64, *class_size as i64);
 
-            let malloc_id = *context.funcs.get(&ustr::Ustr::from("malloc")).unwrap();
+            let malloc_id = *context.funcs.get(&ustr::Ustr::from("__pace_malloc")).unwrap();
             let local_malloc = context.module.declare_func_in_func(malloc_id, builder.func);
             let call = builder.ins().call(local_malloc, &[size_val]);
             let obj_ptr = builder.inst_results(call)[0];

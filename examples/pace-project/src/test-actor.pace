@@ -20,6 +20,7 @@ func runActorTest() {
     let c = Counter();
     c.increment();
     c.increment();
-    print("Actor count: ${await c.get_count()}");
+    print("Actor count: ");
+    print(await c.get_count());
 }
 

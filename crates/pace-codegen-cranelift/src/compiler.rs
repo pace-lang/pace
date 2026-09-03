@@ -65,9 +65,7 @@ impl JITCompiler {
         if let Some(main_id) = self.context.funcs.get(&ustr::Ustr::from("main")) {
             let code_ptr = self.context.module.get_finalized_function(*main_id);
             let main_func: extern "C" fn() -> i64 = unsafe { std::mem::transmute(code_ptr) };
-            println!("🚀 Invoking JIT main function...");
             main_func();
-            println!("✅ JIT main function finished");
         }
 
         Ok(())

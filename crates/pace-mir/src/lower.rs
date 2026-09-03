@@ -505,9 +505,39 @@ impl<'a> FuncMirBuilder<'a> {
                         return Operand::Copy(Place::new(temp));
                     }
                 }
+                let mut callee_op = self.lower_expr(*callee);
                 
-                let callee_op = self.lower_expr(*callee);
-                
+                if let Expr::Identifier(name) = self.arena.get_expr(*callee) {
+                    match name.as_str() {
+                        "print" => {
+                            if args.len() == 1 {
+                                let arg_ty = self.env.node_types.get(&args[0]).unwrap_or(&Type::Unknown);
+                                match arg_ty {
+                                    Type::Int => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_int"))); },
+                                    Type::Float => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_float"))); },
+                                    Type::Bool => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_bool"))); },
+                                    _ => {}
+                                }
+                            }
+                        }
+                        "malloc" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_malloc"))),
+                        "free" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_free"))),
+                        "ptrStore" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_ptr_store"))),
+                        "ptrStore8" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_ptr_store8"))),
+                        "ptrLoad" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_ptr_load"))),
+                        "ptrLoad8" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_ptr_load8"))),
+                        "time" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_time"))),
+                        "getYear" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_get_year"))),
+                        "hash" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_hash"))),
+                        "retain" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_retain"))),
+                        "release" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_release"))),
+                        "concat_strings" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_concat_strings"))),
+                        "int_to_string" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_int_to_string"))),
+                        "float_to_string" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_float_to_string"))),
+                        "bool_to_string" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_bool_to_string"))),
+                        _ => {}
+                    }
+                }
                 let temp = self.new_temp(Type::Unknown);
                 let next_block = self.new_block();
                 

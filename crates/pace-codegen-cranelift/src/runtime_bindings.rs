@@ -14,6 +14,10 @@ impl RuntimeBindings {
             pace_runtime::__pace_print_float as *const u8,
         );
         builder.symbol(
+            "__pace_print_bool",
+            pace_runtime::__pace_print_bool as *const u8,
+        );
+        builder.symbol(
             "__pace_print_string",
             pace_runtime::__pace_print_string as *const u8,
         );

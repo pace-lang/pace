@@ -13,19 +13,19 @@ func runAdvancedTest() {
     // 1. Type Inference
     let x = 10;
     var isActive = true;
-    print("${x}");
+    print(x);
     
     // 2. Unary Operators
     let negX = -x;
     let notActive = !isActive;
-    print("${negX}");
-    print("${notActive}");
+    print(negX);
+    print(notActive);
 
     // 3. Basic Generics
     let stringId = identity<String>("Generic String");
     let intId = identity<Int>(42);
     print(stringId);
-    print("${intId}");
+    print(intId);
     
     // 4. Pattern Matching
     let shape = Shape::Rectangle(10.0, 5.0);

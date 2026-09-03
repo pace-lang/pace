@@ -12,9 +12,18 @@ pub extern "C" fn __pace_print_float(val: f64) {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn __pace_print_bool(val: i64) {
+    if val == 0 {
+        println!("false");
+    } else {
+        println!("true");
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn __pace_print_string(val: *const std::ffi::c_char) {
     if val.is_null() {
-        println!("ptr is {:?}, null", val);
+        println!("null");
     } else {
         unsafe {
             let c_str = std::ffi::CStr::from_ptr(val);
