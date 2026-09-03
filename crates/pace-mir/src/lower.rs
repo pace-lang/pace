@@ -446,7 +446,7 @@ impl<'a> FuncMirBuilder<'a> {
                 }
 
                 // Check if it's a Class/Actor/Struct initialization
-                if let Expr::Identifier(name) = self.arena.get_expr(*callee) {
+                if let Expr::Identifier(_name) = self.arena.get_expr(*callee) {
                     let callee_ty = self.env.node_types.get(callee).unwrap_or(&Type::Unknown);
                     if let Type::Class(class_name) | Type::Struct(class_name) | Type::Actor(class_name) = callee_ty {
                         let field_count = if let Some(sig) = self.env.classes.get(class_name) {
@@ -516,7 +516,7 @@ impl<'a> FuncMirBuilder<'a> {
                                     Type::Int => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_int"))); },
                                     Type::Float => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_float"))); },
                                     Type::Bool => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_bool"))); },
-                                    _ => {}
+                                    _ => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_string"))); }
                                 }
                             }
                         }

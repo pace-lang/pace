@@ -299,7 +299,7 @@ impl Compiler {
 
     pub fn run_source(&self, src: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
-        let (ast, mir) = self.check_source(&mut arena, src)?;
+        let (_ast, mir) = self.check_source(&mut arena, src)?;
         let mut compiler = pace_codegen_cranelift::JITCompiler::new(if self.session.options.release_mode {
             "speed_and_size".to_string()
         } else {
@@ -315,13 +315,13 @@ impl Compiler {
 
     pub fn build_file(&self, path: &str, output: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
-        let (ast, mir) = self.check_file(&mut arena, path)?;
+        let (_ast, mir) = self.check_file(&mut arena, path)?;
         self.build_from_mir(&mir, output)
     }
 
     pub fn build_source(&self, src: &str, output: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
-        let (ast, mir) = self.check_source(&mut arena, src)?;
+        let (_ast, mir) = self.check_source(&mut arena, src)?;
         self.build_from_mir(&mir, output)
     }
 

@@ -1,7 +1,6 @@
 use crate::context::CodegenContext;
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::Module;
 
 pub struct JITCompiler {
     pub context: CodegenContext<JITModule>,
@@ -56,7 +55,7 @@ impl JITCompiler {
     pub fn compile_and_run_mir(
         &mut self,
         mir: &pace_mir::MirProgram,
-    ) -> Result<(), crate::layouts::CodegenError> {
+    ) -> Result<(), crate::CodegenError> {
         crate::translator::mir::compile_mir_program(&mut self.context, &mut self.builder_context, &mut self.ctx, mir)?;
 
         self.context.module.finalize_definitions().unwrap();

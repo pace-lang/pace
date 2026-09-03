@@ -1,6 +1,5 @@
 use crate::context::CodegenContext;
 use cranelift::prelude::*;
-use cranelift_module::Module;
 use cranelift_object::{ObjectBuilder, ObjectModule};
 
 pub struct AotCompiler {
@@ -60,11 +59,11 @@ impl AotCompiler {
     pub fn compile_mir_to_object(
         mut self,
         mir: &pace_mir::MirProgram,
-    ) -> Result<Vec<u8>, crate::layouts::CodegenError> {
+    ) -> Result<Vec<u8>, crate::CodegenError> {
         crate::translator::mir::compile_mir_program(&mut self.context, &mut self.builder_context, &mut self.ctx, mir)?;
         
         let product = self.context.module.finish();
-        let bytes = product.emit().map_err(|e| crate::layouts::CodegenError {
+        let bytes = product.emit().map_err(|e| crate::CodegenError {
             message: e.to_string(),
         })?;
         Ok(bytes)

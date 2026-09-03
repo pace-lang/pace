@@ -124,7 +124,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
 
-        let end_pos = self.current_span.end;
+        let _end_pos = self.current_span.end;
         Ok(self.alloc_stmt(Stmt::FuncDecl {
             name: name.into(),
             generic_params,

@@ -8,7 +8,7 @@ pub fn compile_mir_program<M: Module>(
     builder_context: &mut cranelift::prelude::FunctionBuilderContext,
     ctx: &mut cranelift::codegen::Context,
     program: &MirProgram,
-) -> Result<(), crate::layouts::CodegenError> {
+) -> Result<(), crate::CodegenError> {
     
     // Pass 1: Declare all functions
     for (name, body) in &program.functions {
@@ -16,7 +16,7 @@ pub fn compile_mir_program<M: Module>(
             continue;
         }
         let mut sig = context.module.make_signature();
-        sig.call_conv = if body.is_extern {
+        sig.call_conv = if body.is_extern || name.as_str() == "main" {
             cranelift::prelude::isa::CallConv::SystemV
         } else {
             cranelift::prelude::isa::CallConv::Fast
@@ -33,14 +33,14 @@ pub fn compile_mir_program<M: Module>(
         let linkage = if body.is_extern { 
             Linkage::Import 
         } else if name.as_str() == "main" {
-            Linkage::Local
+            Linkage::Export
         } else { 
             Linkage::Local 
         };
         let id = context
             .module
             .declare_function(name.as_str(), linkage, &sig)
-            .map_err(|e| crate::layouts::CodegenError {
+            .map_err(|e| crate::CodegenError {
                 message: e.to_string(),
             })?;
         
@@ -65,7 +65,7 @@ fn compile_mir_function<M: Module>(
     ctx: &mut cranelift::codegen::Context,
     body: &MirBody,
     func_id: cranelift_module::FuncId,
-) -> Result<(), crate::layouts::CodegenError> {
+) -> Result<(), crate::CodegenError> {
     ctx.clear();
     
     ctx.func.signature.returns.push(AbiParam::new(types::I64));
@@ -259,7 +259,7 @@ fn translate_rvalue<M: Module>(
     context: &mut CodegenContext<M>,
     rvalue: &Rvalue,
     locals: &[Variable],
-) -> Result<Value, crate::layouts::CodegenError> {
+) -> Result<Value, crate::CodegenError> {
     match rvalue {
         Rvalue::Use(operand) => translate_operand(builder, context, operand, locals),
         Rvalue::BinaryOp(op, left, right) => {
@@ -327,7 +327,7 @@ fn translate_rvalue<M: Module>(
             
             Ok(env_ptr)
         }
-        Rvalue::Aggregate(pace_mir::AggregateKind::Class(class_name, class_size), operands) => {
+        Rvalue::Aggregate(pace_mir::AggregateKind::Class(_class_name, class_size), operands) => {
             let size_val = builder.ins().iconst(types::I64, *class_size as i64);
 
             let malloc_id = *context.funcs.get(&ustr::Ustr::from("__pace_malloc")).unwrap();
@@ -360,7 +360,7 @@ fn translate_operand<M: Module>(
     context: &mut CodegenContext<M>,
     operand: &Operand,
     locals: &[Variable],
-) -> Result<Value, crate::layouts::CodegenError> {
+) -> Result<Value, crate::CodegenError> {
     match operand {
         Operand::Copy(place) | Operand::Move(place) => {
             translate_place(builder, context, place, locals)
@@ -410,10 +410,10 @@ fn translate_operand<M: Module>(
 
 fn translate_place<M: Module>(
     builder: &mut FunctionBuilder,
-    context: &mut CodegenContext<M>,
+    _context: &mut CodegenContext<M>,
     place: &pace_mir::Place,
     locals: &[Variable],
-) -> Result<Value, crate::layouts::CodegenError> {
+) -> Result<Value, crate::CodegenError> {
     let mut val = builder.use_var(locals[place.local.index()]);
     for proj in &place.projection {
         match proj {
@@ -428,11 +428,11 @@ fn translate_place<M: Module>(
 
 fn store_to_place<M: Module>(
     builder: &mut FunctionBuilder,
-    context: &mut CodegenContext<M>,
+    _context: &mut CodegenContext<M>,
     place: &pace_mir::Place,
     locals: &[Variable],
     value: Value,
-) -> Result<(), crate::layouts::CodegenError> {
+) -> Result<(), crate::CodegenError> {
     if place.projection.is_empty() {
         builder.def_var(locals[place.local.index()], value);
     } else {
