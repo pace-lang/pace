@@ -20,6 +20,7 @@ impl<'a> TypeChecker<'a> {
                         *name,
                         ClassSignature {
                             generic_params: None,
+                            implements: None,
                             fields: HashMap::new(),
                             static_fields: HashMap::new(),
                             methods: HashMap::new(),
@@ -32,6 +33,7 @@ impl<'a> TypeChecker<'a> {
                         *name,
                         crate::env::ActorSignature {
                             generic_params: None,
+                            implements: None,
                             fields: HashMap::new(),
                             static_fields: HashMap::new(),
                             methods: HashMap::new(),
@@ -44,6 +46,7 @@ impl<'a> TypeChecker<'a> {
                         *name,
                         ClassSignature {
                             generic_params: None,
+                            implements: None,
                             fields: HashMap::new(),
                             static_fields: HashMap::new(),
                             methods: HashMap::new(),
@@ -114,7 +117,8 @@ impl<'a> TypeChecker<'a> {
                     };
                     self.env.register_function(*name, sig);
                 }
-                Stmt::ClassDecl { name, fields, methods, generic_params, .. } => {
+                Stmt::ClassDecl { name, fields, methods, generic_params, implements, .. } => {
+                    let implements_type = if let Some(i) = implements.as_ref() { Some(self.resolve_type_name(i)) } else { None };
                     if let Some(gp) = generic_params {
                         self.generic_params_in_scope.extend(gp.clone());
                     }
@@ -164,6 +168,7 @@ impl<'a> TypeChecker<'a> {
 
                     let sig = ClassSignature {
                         generic_params: generic_params.clone(),
+                        implements: implements_type,
                         fields: field_map,
                         static_fields: static_field_map,
                         methods: method_map,
@@ -177,7 +182,8 @@ impl<'a> TypeChecker<'a> {
                     self.env.register_class(*name, sig);
                     self.current_class = None;
                 }
-                Stmt::ActorDecl { name, fields, methods, generic_params, .. } => {
+                Stmt::ActorDecl { name, fields, methods, generic_params, implements, .. } => {
+                    let implements_type = if let Some(i) = implements.as_ref() { Some(self.resolve_type_name(i)) } else { None };
                     if let Some(gp) = generic_params {
                         self.generic_params_in_scope.extend(gp.clone());
                     }
@@ -227,6 +233,7 @@ impl<'a> TypeChecker<'a> {
 
                     let sig = crate::env::ActorSignature {
                         generic_params: generic_params.clone(),
+                        implements: implements_type,
                         fields: field_map,
                         static_fields: static_field_map,
                         methods: method_map,
@@ -262,6 +269,7 @@ impl<'a> TypeChecker<'a> {
                     }
                     let sig = ClassSignature {
                         generic_params: generic_params.clone(),
+                        implements: None,
                         fields: field_map,
                         static_fields: static_field_map,
                         methods: HashMap::new(),
@@ -345,13 +353,12 @@ impl<'a> TypeChecker<'a> {
                             self.generic_params_in_scope.pop();
                         }
                     }
-                    let sig = ClassSignature {
+                    let sig = crate::env::InterfaceSignature {
                         generic_params: generic_params.clone(),
-                        fields: HashMap::new(), static_fields: HashMap::new(),
                         methods: method_map,
                         span: pace_span::Span::default(),
                     };
-                    self.env.register_class(*name, sig);
+                    self.env.register_interface(*name, sig);
                     self.current_class = None;
                 }
                 Stmt::Import { path, .. }
@@ -359,13 +366,15 @@ impl<'a> TypeChecker<'a> {
                     // For now, if we import "std/collection", we mock registering `List` and `Set`
                     if path == "std/collection" => {
                         self.env.register_class("List".into(), ClassSignature {
-                            generic_params: Some(vec!["T".into()]),
+                            generic_params: Some(vec![pace_ast::GenericParam { name: "T".into(), bound: None }]),
+                            implements: None,
                             fields: HashMap::new(), static_fields: HashMap::new(),
                             methods: HashMap::new(),
                         span: pace_span::Span::default(),
 });
                         self.env.register_class("Set".into(), ClassSignature {
-                            generic_params: Some(vec!["T".into()]),
+                            generic_params: Some(vec![pace_ast::GenericParam { name: "T".into(), bound: None }]),
+                            implements: None,
                             fields: HashMap::new(), static_fields: HashMap::new(),
                             methods: HashMap::new(),
                         span: pace_span::Span::default(),

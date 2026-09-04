@@ -30,7 +30,7 @@ pub struct TypeChecker<'a> {
     current_return_type: Option<Type>,
     current_class: Option<ustr::Ustr>,
     current_module: ustr::Ustr,
-    generic_params_in_scope: Vec<ustr::Ustr>,
+    generic_params_in_scope: Vec<pace_ast::GenericParam>,
     pub warnings: Vec<pace_errors::SemanticWarning>,
     pub errors: Vec<TypeError>,
     pub current_span: pace_span::Span,
@@ -135,7 +135,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub(crate) fn resolve_type_name(&self, annotation: &pace_ast::TypeAnnotation) -> Type {
+    pub(crate) fn resolve_type_name(&mut self, annotation: &pace_ast::TypeAnnotation) -> Type {
         let base_name = &annotation.name;
 
         let mut base_type = match base_name.as_str() {
@@ -160,17 +160,25 @@ impl<'a> TypeChecker<'a> {
                 }
             }
             _ => {
-                let ty = if self
-                    .generic_params_in_scope
-                    .contains(&ustr::Ustr::from(base_name))
-                {
-                    Type::GenericParameter(ustr::Ustr::from(base_name))
+                let mut found_generic = None;
+                for gp in &self.generic_params_in_scope {
+                    if gp.name == ustr::Ustr::from(base_name) {
+                        found_generic = Some(gp.clone());
+                        break;
+                    }
+                }
+                
+                let ty = if let Some(gp) = found_generic {
+                    let bound = if let Some(b) = &gp.bound { Some(Box::new(self.resolve_type_name(b))) } else { None };
+                    Type::GenericParameter(ustr::Ustr::from(base_name), bound)
                 } else if self.env.structs.contains_key(&ustr::Ustr::from(base_name)) {
                     Type::Struct(ustr::Ustr::from(base_name))
                 } else if self.env.enums.contains_key(&ustr::Ustr::from(base_name)) {
                     Type::Enum(ustr::Ustr::from(base_name))
                 } else if self.env.actors.contains_key(&ustr::Ustr::from(base_name)) {
                     Type::Actor(ustr::Ustr::from(base_name))
+                } else if self.env.interfaces.contains_key(&ustr::Ustr::from(base_name)) {
+                    Type::Interface(ustr::Ustr::from(base_name))
                 } else {
                     Type::Class(ustr::Ustr::from(base_name))
                 };
@@ -184,6 +192,33 @@ impl<'a> TypeChecker<'a> {
             for arg in &annotation.args {
                 arg_types.push(self.resolve_type_name(arg));
             }
+            
+            let expected_params = match &base_type {
+                Type::Class(name) => self.env.classes.get(name).and_then(|s| s.generic_params.clone()),
+                Type::Struct(name) => self.env.structs.get(name).and_then(|s| s.generic_params.clone()),
+                Type::Enum(name) => self.env.enums.get(name).and_then(|s| s.generic_params.clone()),
+                Type::Interface(name) => self.env.interfaces.get(name).and_then(|s| s.generic_params.clone()),
+                Type::Actor(name) => self.env.actors.get(name).and_then(|s| s.generic_params.clone()),
+                _ => None,
+            };
+
+            if let Some(params) = expected_params {
+                if params.len() == arg_types.len() {
+                    for (param, arg_ty) in params.iter().zip(arg_types.iter()) {
+                        if let Some(bound_annotation) = &param.bound {
+                            let bound_ty = self.resolve_type_name(bound_annotation);
+                            if !self.is_assignable_to(arg_ty, &bound_ty) {
+                                self.errors.push(pace_errors::TypeError::Generic {
+                                    src: self.get_source(),
+                                    span: self.current_span, // we might not have a perfect span for the generic arg, so current_span is used
+                                    message: format!("Type '{:?}' does not satisfy bound '{:?}' for generic parameter '{}'", arg_ty, bound_ty, param.name),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
             base_type = Type::GenericInstance {
                 base: Box::new(base_type),
                 args: arg_types,
@@ -215,12 +250,46 @@ impl<'a> TypeChecker<'a> {
             base_type
         }
     }
+    pub fn is_assignable_to(&self, source: &Type, target: &Type) -> bool {
+        if source == target {
+            return true;
+        }
+        if matches!(source, Type::Unknown | Type::Any) || matches!(target, Type::Unknown | Type::Any) {
+            return true;
+        }
+        // Subtyping: Class/Actor implements Interface
+        if let Type::Interface(iface_name) = target {
+            if let Type::Class(class_name) = source {
+                if let Some(class_sig) = self.env.classes.get(class_name) {
+                    if let Some(Type::Interface(impl_name)) = &class_sig.implements {
+                        if impl_name == iface_name {
+                            return true;
+                        }
+                    }
+                }
+            } else if let Type::Actor(actor_name) = source {
+                if let Some(actor_sig) = self.env.actors.get(actor_name) {
+                    if let Some(Type::Interface(impl_name)) = &actor_sig.implements {
+                        if impl_name == iface_name {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        // Generic parameter bound subtyping
+        if let Type::GenericParameter(_, Some(bound)) = source {
+            return self.is_assignable_to(bound, target);
+        }
+        false
+    }
+
     pub fn check_pattern(&mut self, pattern: &pace_hir::Pattern, expected_type: &Type) {
         match pattern {
             pace_hir::Pattern::Wildcard => (),
             pace_hir::Pattern::Literal(expr) => {
                 let ty = self.check_expr(*expr);
-                if expected_type != &ty && expected_type != &Type::Unknown && ty != Type::Unknown {
+                if !self.is_assignable_to(&ty, expected_type) {
                     {
                         self.errors.push(TypeError::Generic {
                             src: self.get_source(),

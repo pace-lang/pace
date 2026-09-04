@@ -222,14 +222,10 @@ impl<'a> TypeChecker<'a> {
             let expected_type = self.resolve_type_name(annotation);
             let mut is_match = false;
 
-            if inferred_type == expected_type
-                || inferred_type == Type::Unknown
-                || expected_type == Type::Any
-                || inferred_type == Type::Any
-            {
+            if self.is_assignable_to(&inferred_type, &expected_type) {
                 is_match = true;
             } else if let Type::Nullable(inner) = &expected_type
-                && (inferred_type == Type::Null || inferred_type == **inner)
+                && (inferred_type == Type::Null || self.is_assignable_to(&inferred_type, inner))
             {
                 is_match = true;
             }
@@ -274,7 +270,7 @@ impl<'a> TypeChecker<'a> {
         params: &[pace_hir::Param],
         body: &[pace_hir::StmtId],
         return_type: Option<&pace_ast::TypeAnnotation>,
-        generic_params: Option<&[ustr::Ustr]>,
+        generic_params: Option<&[pace_ast::GenericParam]>,
         is_static: bool,
         span: pace_span::Span,
     ) {
@@ -330,7 +326,7 @@ impl<'a> TypeChecker<'a> {
         name: ustr::Ustr,
         methods: &[pace_hir::StmtId],
         implements: Option<&pace_ast::TypeAnnotation>,
-        generic_params: Option<&[ustr::Ustr]>,
+        generic_params: Option<&[pace_ast::GenericParam]>,
     ) {
         let prev_class = self.current_class;
         let prev_generics = self.generic_params_in_scope.clone();
@@ -344,7 +340,7 @@ impl<'a> TypeChecker<'a> {
         if let Some(iface_annotation) = implements {
             let iface_name = &iface_annotation.name;
             // Check if class actually implements the interface
-            if let Some(iface_sig) = self.env.classes.get(iface_name) {
+            if let Some(iface_sig) = self.env.interfaces.get(iface_name) {
                 let class_sig = self.env.classes.get(&name).unwrap().clone();
                 for m_name in iface_sig.methods.keys() {
                     if class_sig.methods.get(m_name).is_some() {

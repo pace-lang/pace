@@ -14,6 +14,8 @@ pub enum Type {
     Nullable(Box<Type>),
     /// A reference type (heap-allocated, ARC)
     Class(ustr::Ustr),
+    /// An interface type
+    Interface(ustr::Ustr),
     /// An actor type (isolated state, async messages)
     Actor(ustr::Ustr),
     /// A value type (stack-allocated)
@@ -22,14 +24,14 @@ pub enum Type {
     Enum(ustr::Ustr),
     /// A function type
     Function {
-        generic_params: Option<Vec<ustr::Ustr>>,
+        generic_params: Option<Vec<pace_ast::GenericParam>>,
         params: Vec<Type>,
         return_type: Box<Type>,
     },
     Unknown, // Used for auto-inference before resolution or error state
     Void,    // Used for functions that don't return anything
     Any,     // Used for built-ins like print that take multiple types
-    GenericParameter(ustr::Ustr),
+    GenericParameter(ustr::Ustr, Option<Box<Type>>),
     GenericInstance {
         base: Box<Type>,
         args: Vec<Type>,
@@ -42,11 +44,12 @@ pub enum Type {
 impl Type {
     pub fn resolve_generics(&self, substitutions: &HashMap<ustr::Ustr, Type>) -> Type {
         match self {
-            Type::GenericParameter(name) => {
+            Type::GenericParameter(name, bound) => {
                 if let Some(subst) = substitutions.get(name) {
                     subst.clone()
                 } else {
-                    self.clone()
+                    let new_bound = bound.as_ref().map(|b| Box::new(b.resolve_generics(substitutions)));
+                    Type::GenericParameter(*name, new_bound)
                 }
             }
             Type::GenericInstance { base, args } => Type::GenericInstance {
@@ -79,7 +82,7 @@ impl Type {
 
 #[derive(Debug, Clone)]
 pub struct EnumSignature {
-    pub generic_params: Option<Vec<ustr::Ustr>>,
+    pub generic_params: Option<Vec<pace_ast::GenericParam>>,
     pub variants: HashMap<ustr::Ustr, Option<Vec<Type>>>,
     pub span: pace_span::Span,
 }
@@ -101,13 +104,14 @@ pub struct FunctionSignature {
     pub is_used: bool,
     pub visibility: Visibility,
     pub module: ustr::Ustr,
-    pub generic_params: Option<Vec<ustr::Ustr>>,
+    pub generic_params: Option<Vec<pace_ast::GenericParam>>,
     pub is_static: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct ActorSignature {
-    pub generic_params: Option<Vec<ustr::Ustr>>,
+    pub generic_params: Option<Vec<pace_ast::GenericParam>>,
+    pub implements: Option<Type>,
     pub fields: HashMap<ustr::Ustr, Type>,
     pub static_fields: HashMap<ustr::Ustr, Type>,
     pub methods: HashMap<ustr::Ustr, FunctionSignature>,
@@ -116,9 +120,17 @@ pub struct ActorSignature {
 
 #[derive(Debug, Clone)]
 pub struct ClassSignature {
-    pub generic_params: Option<Vec<ustr::Ustr>>,
+    pub generic_params: Option<Vec<pace_ast::GenericParam>>,
+    pub implements: Option<Type>,
     pub fields: HashMap<ustr::Ustr, Type>,
     pub static_fields: HashMap<ustr::Ustr, Type>,
+    pub methods: HashMap<ustr::Ustr, FunctionSignature>,
+    pub span: pace_span::Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct InterfaceSignature {
+    pub generic_params: Option<Vec<pace_ast::GenericParam>>,
     pub methods: HashMap<ustr::Ustr, FunctionSignature>,
     pub span: pace_span::Span,
 }
@@ -136,6 +148,7 @@ pub struct Environment {
     scopes: Vec<HashMap<ustr::Ustr, VarInfo>>,
     pub functions: HashMap<ustr::Ustr, FunctionSignature>,
     pub classes: HashMap<ustr::Ustr, ClassSignature>,
+    pub interfaces: HashMap<ustr::Ustr, InterfaceSignature>,
     pub structs: HashMap<ustr::Ustr, ClassSignature>,
     pub enums: HashMap<ustr::Ustr, EnumSignature>,
     pub actors: HashMap<ustr::Ustr, ActorSignature>,
@@ -151,6 +164,7 @@ impl Environment {
             scopes: vec![HashMap::new()], // Start with a global scope
             functions: HashMap::new(),
             classes: HashMap::new(),
+            interfaces: HashMap::new(),
             structs: HashMap::new(),
             enums: HashMap::new(),
             actors: HashMap::new(),
@@ -240,7 +254,7 @@ impl Environment {
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
-                generic_params: Some(vec!["T".into()]),
+                generic_params: Some(vec![pace_ast::GenericParam { name: "T".into(), bound: None }]),
                 is_static: false,
             },
         );
@@ -253,7 +267,7 @@ impl Environment {
                 is_used: true,
                 visibility: Visibility::Public,
                 module: "std".into(),
-                generic_params: Some(vec!["T".into()]),
+                generic_params: Some(vec![pace_ast::GenericParam { name: "T".into(), bound: None }]),
                 is_static: false,
             },
         );
@@ -483,6 +497,11 @@ impl Environment {
     pub fn register_class(&mut self, name: ustr::Ustr, sig: ClassSignature) {
         self.classes.insert(name, sig);
         let _ = self.define(name, Type::Class(name), pace_span::Span::default(), false);
+    }
+
+    pub fn register_interface(&mut self, name: ustr::Ustr, sig: InterfaceSignature) {
+        self.interfaces.insert(name, sig);
+        let _ = self.define(name, Type::Interface(name), pace_span::Span::default(), false);
     }
 
     pub fn register_struct(&mut self, name: ustr::Ustr, sig: ClassSignature) {

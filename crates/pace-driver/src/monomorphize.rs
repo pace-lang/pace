@@ -536,7 +536,7 @@ impl Monomorphizer {
                 let mut type_mapping = std::collections::HashMap::new();
                 for (i, p) in params.iter().enumerate() {
                     if let Some(arg) = concrete_args.get(i) {
-                        type_mapping.insert(*p, arg.clone());
+                        type_mapping.insert(p.name, arg.clone());
                     }
                 }
 
@@ -630,7 +630,7 @@ impl Monomorphizer {
                 let mut type_mapping = std::collections::HashMap::new();
                 for (i, p) in params.iter().enumerate() {
                     if let Some(arg) = concrete_args.get(i) {
-                        type_mapping.insert(*p, arg.clone());
+                        type_mapping.insert(p.name, arg.clone());
                     }
                 }
                 let mut new_fields = Vec::new();
@@ -656,7 +656,7 @@ impl Monomorphizer {
                 let mut type_mapping = std::collections::HashMap::new();
                 for (i, p) in params.iter().enumerate() {
                     if let Some(arg) = concrete_args.get(i) {
-                        type_mapping.insert(*p, arg.clone());
+                        type_mapping.insert(p.name, arg.clone());
                     }
                 }
                 let mut new_variants = Vec::new();
@@ -694,7 +694,7 @@ impl Monomorphizer {
                 let mut type_mapping = std::collections::HashMap::new();
                 for (i, p) in params.iter().enumerate() {
                     if let Some(arg) = concrete_args.get(i) {
-                        type_mapping.insert(*p, arg.clone());
+                        type_mapping.insert(p.name, arg.clone());
                     }
                 }
                 let mut new_methods = Vec::new();
@@ -726,7 +726,7 @@ impl Monomorphizer {
                 let mut type_mapping = std::collections::HashMap::new();
                 for (i, p) in gen_params.iter().enumerate() {
                     if let Some(arg) = concrete_args.get(i) {
-                        type_mapping.insert(*p, arg.clone());
+                        type_mapping.insert(p.name, arg.clone());
                     }
                 }
 

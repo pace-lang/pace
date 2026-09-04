@@ -511,35 +511,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         };
         self.advance();
 
-        let generic_params = if self.match_token(Token::Less) {
-            let mut params = Vec::new();
-            while self.current_token != Token::Greater && self.current_token != Token::Eof {
-                if let Token::Ident(id) = &self.current_token {
-                    params.push((*id).into());
-                    self.advance();
-                } else {
-                    return Err(pace_errors::SyntaxError::Generic {
-                        message: "Expected generic parameter name".to_string(),
-                        src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
-                        span: self.current_span,
-                    });
-                }
-
-                if self.match_token(Token::Comma) {
-                    continue;
-                }
-            }
-            if !self.match_token(Token::Greater) {
-                return Err(pace_errors::SyntaxError::Generic {
-                    message: "Expected '>' after generic parameters".to_string(),
-                    src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()),
-                    span: self.current_span,
-                });
-            }
-            Some(params)
-        } else {
-            None
-        };
+        let generic_params = self.parse_generic_params()?;
 
         if !self.match_token(Token::LBrace) {
             return Err(pace_errors::SyntaxError::Generic {

@@ -89,13 +89,23 @@ impl<'a, 'b> Parser<'a, 'b> {
 
     pub(crate) fn parse_generic_params(
         &mut self,
-    ) -> Result<Option<Vec<ustr::Ustr>>, pace_errors::SyntaxError> {
+    ) -> Result<Option<Vec<pace_ast::GenericParam>>, pace_errors::SyntaxError> {
         if self.match_token(Token::Less) {
             let mut params = Vec::new();
             while self.current_token != Token::Greater && self.current_token != Token::Eof {
                 if let Token::Ident(id) = &self.current_token {
-                    params.push((*id).into());
+                    let name = *id;
                     self.advance();
+                    
+                    let mut bound = None;
+                    if self.match_token(Token::Colon) {
+                        bound = Some(self.parse_type_annotation()?);
+                    }
+                    
+                    params.push(pace_ast::GenericParam {
+                        name: name.into(),
+                        bound,
+                    });
                 } else {
                     return Err(pace_errors::SyntaxError::Generic {
                         message: "Expected generic parameter name".to_string(),

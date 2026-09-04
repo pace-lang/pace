@@ -29,7 +29,7 @@ pub enum Stmt {
     /// A function declaration
     FuncDecl {
         name: ustr::Ustr,
-        generic_params: Option<Vec<ustr::Ustr>>,
+        generic_params: Option<Vec<crate::GenericParam>>,
         params: Vec<Param>,
         return_type: Option<TypeAnnotation>,
         body: Vec<StmtId>,
@@ -41,7 +41,7 @@ pub enum Stmt {
     },
     ClassDecl {
         name: ustr::Ustr,
-        generic_params: Option<Vec<ustr::Ustr>>,
+        generic_params: Option<Vec<crate::GenericParam>>,
         fields: Vec<StmtId>,  // VarDecl
         methods: Vec<StmtId>, // FuncDecl
         implements: Option<TypeAnnotation>,
@@ -49,7 +49,7 @@ pub enum Stmt {
     /// An actor declaration
     ActorDecl {
         name: ustr::Ustr,
-        generic_params: Option<Vec<ustr::Ustr>>,
+        generic_params: Option<Vec<crate::GenericParam>>,
         fields: Vec<StmtId>,  // VarDecl
         methods: Vec<StmtId>, // FuncDecl
         implements: Option<TypeAnnotation>,
@@ -57,19 +57,19 @@ pub enum Stmt {
     /// An interface declaration
     InterfaceDecl {
         name: ustr::Ustr,
-        generic_params: Option<Vec<ustr::Ustr>>,
+        generic_params: Option<Vec<crate::GenericParam>>,
         methods: Vec<StmtId>, // FuncDecl without body
     },
     /// A struct declaration
     StructDecl {
         name: ustr::Ustr,
-        generic_params: Option<Vec<ustr::Ustr>>,
+        generic_params: Option<Vec<crate::GenericParam>>,
         fields: Vec<StmtId>, // VarDecl
     },
     /// An enum declaration
     EnumDecl {
         name: ustr::Ustr,
-        generic_params: Option<Vec<ustr::Ustr>>,
+        generic_params: Option<Vec<crate::GenericParam>>,
         variants: Vec<EnumVariant>,
     },
     /// A while loop

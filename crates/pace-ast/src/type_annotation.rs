@@ -9,3 +9,9 @@ pub struct TypeAnnotation {
     pub function_params: Option<Vec<TypeAnnotation>>,
     pub function_return: Option<Box<TypeAnnotation>>,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GenericParam {
+    pub name: ustr::Ustr,
+    pub bound: Option<TypeAnnotation>,
+}

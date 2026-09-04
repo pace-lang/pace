@@ -334,17 +334,12 @@ impl<'a> TypeChecker<'a> {
                     let mut err_msg = String::new();
                     let mut var_span = pace_span::Span::default();
 
-                    if let Some(var_info) = self.env.get_mut(*name) {
+                    if let Some(var_info) = self.env.get_var_info(*name).cloned() {
                         if !var_info.is_mutable {
                             is_err = true;
                             err_msg = format!("Cannot assign to immutable variable '{}'", name);
                             var_span = var_info.span;
-                        } else if var_info.ty != val_ty
-
-                            && var_info.ty != Type::Unknown
-                            && val_ty != Type::Unknown
-                            && var_info.ty != Type::Any
-                            && val_ty != Type::Any
+                        } else if !self.is_assignable_to(&val_ty, &var_info.ty)
                         {
                             is_err = true;
                             err_msg = format!(
@@ -353,20 +348,15 @@ impl<'a> TypeChecker<'a> {
                             );
                             var_span = var_info.span;
                         } else {
-                            var_info.is_used = true;
+                            if let Some(v) = self.env.get_mut(*name) { v.is_used = true; }
                         }
-                    } else if let Some(global) = self.env.global_vars.get(name) {
+                    } else if let Some(global) = self.env.global_vars.get(name).cloned() {
                         if !global.is_mutable {
                             is_err = true;
                             err_msg =
                                 format!("Cannot assign to immutable global variable '{}'", name);
                             var_span = global.span;
-                        } else if global.ty != val_ty
-
-                            && global.ty != Type::Unknown
-                            && val_ty != Type::Unknown
-                            && global.ty != Type::Any
-                            && val_ty != Type::Any
+                        } else if !self.is_assignable_to(&val_ty, &global.ty)
                         {
                             is_err = true;
                             err_msg = format!(
@@ -466,7 +456,7 @@ impl<'a> TypeChecker<'a> {
                         let mut substs = std::collections::HashMap::new();
                         if g_params.len() == gen_args.len() {
                             for (p, arg) in g_params.iter().zip(gen_args.iter()) {
-                                substs.insert(*p, arg.clone());
+                                substs.insert(p.name, arg.clone());
                             }
                             actual_callee_ty = Type::Function {
                                 generic_params: None,

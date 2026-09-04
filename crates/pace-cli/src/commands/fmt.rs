@@ -192,7 +192,7 @@ impl<'a> Formatter<'a> {
                 if *is_async { doc = doc.append(RcDoc::text("async ")); }
                 doc = doc.append(RcDoc::text("func ")).append(RcDoc::text(name.as_str().to_string()));
                 if let Some(gps) = generic_params {
-                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.as_str().to_string())).collect();
+                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.name.as_str().to_string())).collect();
                     doc = doc.append(RcDoc::text("<")).append(RcDoc::intersperse(gps_docs, RcDoc::text(", "))).append(RcDoc::text(">"));
                 }
                 let param_docs: Vec<_> = params.iter().map(|p| RcDoc::text(p.name.as_str().to_string()).append(RcDoc::text(": ")).append(self.format_type(&p.type_annotation))).collect();
@@ -212,7 +212,7 @@ impl<'a> Formatter<'a> {
             Stmt::ClassDecl { name, generic_params, fields, methods, implements } => {
                 let mut doc = RcDoc::text("class ").append(RcDoc::text(name.as_str().to_string()));
                 if let Some(gps) = generic_params {
-                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.as_str().to_string())).collect();
+                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.name.as_str().to_string())).collect();
                     doc = doc.append(RcDoc::text("<")).append(RcDoc::intersperse(gps_docs, RcDoc::text(", "))).append(RcDoc::text(">"));
                 }
                 if let Some(impls) = implements {
@@ -231,7 +231,7 @@ impl<'a> Formatter<'a> {
             Stmt::ActorDecl { name, generic_params, fields, methods, implements } => {
                 let mut doc = RcDoc::text("actor ").append(RcDoc::text(name.as_str().to_string()));
                 if let Some(gps) = generic_params {
-                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.as_str().to_string())).collect();
+                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.name.as_str().to_string())).collect();
                     doc = doc.append(RcDoc::text("<")).append(RcDoc::intersperse(gps_docs, RcDoc::text(", "))).append(RcDoc::text(">"));
                 }
                 if let Some(impls) = implements {
@@ -250,7 +250,7 @@ impl<'a> Formatter<'a> {
             Stmt::InterfaceDecl { name, generic_params, methods } => {
                 let mut doc = RcDoc::text("interface ").append(RcDoc::text(name.as_str().to_string()));
                 if let Some(gps) = generic_params {
-                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.as_str().to_string())).collect();
+                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.name.as_str().to_string())).collect();
                     doc = doc.append(RcDoc::text("<")).append(RcDoc::intersperse(gps_docs, RcDoc::text(", "))).append(RcDoc::text(">"));
                 }
                 let mut inner_docs = Vec::new();
@@ -263,7 +263,7 @@ impl<'a> Formatter<'a> {
             Stmt::StructDecl { name, generic_params, fields } => {
                 let mut doc = RcDoc::text("struct ").append(RcDoc::text(name.as_str().to_string()));
                 if let Some(gps) = generic_params {
-                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.as_str().to_string())).collect();
+                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.name.as_str().to_string())).collect();
                     doc = doc.append(RcDoc::text("<")).append(RcDoc::intersperse(gps_docs, RcDoc::text(", "))).append(RcDoc::text(">"));
                 }
                 let mut inner_docs = Vec::new();
@@ -276,7 +276,7 @@ impl<'a> Formatter<'a> {
             Stmt::EnumDecl { name, generic_params, variants } => {
                 let mut doc = RcDoc::text("enum ").append(RcDoc::text(name.as_str().to_string()));
                 if let Some(gps) = generic_params {
-                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.as_str().to_string())).collect();
+                    let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.name.as_str().to_string())).collect();
                     doc = doc.append(RcDoc::text("<")).append(RcDoc::intersperse(gps_docs, RcDoc::text(", "))).append(RcDoc::text(">"));
                 }
                 let mut inner_docs = Vec::new();
