@@ -111,16 +111,19 @@ impl Compiler {
                 let resolved_path = self.session.resolve_import_path(import_path.as_str(), &path_buf)?;
 
                 if resolved_path.exists() {
-                    let mod_name =
-                        if import_path.starts_with("./") || import_path.starts_with("../") {
-                            resolved_path
-                                .canonicalize()
-                                .unwrap_or_else(|_| resolved_path.clone())
-                                .to_string_lossy()
-                                .into_owned()
+                    let mod_name = if import_path.starts_with("pace:") || import_path.starts_with("pkg:pace:") {
+                        format!("pkg:{}", import_path.as_str().replace("pkg:", ""))
+                    } else {
+                        let resolved_canonical = resolved_path.canonicalize().unwrap_or_else(|_| resolved_path.clone());
+                        let rp_str = resolved_canonical.to_string_lossy();
+                        if let Some(idx) = rp_str.find("/stdlib/") {
+                            let sub_path = &rp_str[idx + 8..];
+                            let sub_path = sub_path.replace(".pace", "");
+                            format!("pkg:pace:{}", sub_path)
                         } else {
-                            format!("pkg:{}", import_path.as_str())
-                        };
+                            rp_str.into_owned()
+                        }
+                    };
                     resolved = Some((mod_name, resolved_path));
                 } else {
                     return Err(miette::miette!(

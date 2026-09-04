@@ -83,8 +83,12 @@ fn compile_mir_function<M: Module>(
     
     // Create Cranelift Variables for all Locals
     let mut locals = Vec::with_capacity(body.local_decls.len());
-    for _ in 0..body.local_decls.len() {
-        let var = builder.declare_var(types::I64);
+    for decl in &body.local_decls {
+        let cl_type = match decl.ty {
+            pace_ty::Type::Float => types::F64,
+            _ => types::I64,
+        };
+        let var = builder.declare_var(cl_type);
         locals.push(var);
     }
 
@@ -92,7 +96,14 @@ fn compile_mir_function<M: Module>(
     builder.switch_to_block(blocks[0]);
     
     // Initialize return value (Local 0) with 0 by default, for void functions
-    let default_ret = builder.ins().iconst(types::I64, 0);
+    let ret_type = match body.local_decls[0].ty {
+        pace_ty::Type::Float => types::F64,
+        _ => types::I64,
+    };
+    let default_ret = match body.local_decls[0].ty {
+        pace_ty::Type::Float => builder.ins().f64const(0.0),
+        _ => builder.ins().iconst(types::I64, 0),
+    };
     builder.def_var(locals[0], default_ret);
     
     // Map arguments to local variables
@@ -181,7 +192,8 @@ fn compile_mir_function<M: Module>(
                         }
                     } else {
                         // Indirect call (e.g., Closures or function pointers)
-                        // A closure evaluates to a pointer (env_ptr), the first 8 bytes of which is the function pointer.
+                        // A closure evaluates to a pointer (env_ptr). 
+                        // Offset 0 (8 bytes) is the RC, Offset 8 (8 bytes) is the function pointer.
                         let env_ptr = translate_operand(&mut builder, context, func, &locals)?;
                         let ptr_ty = context.module.target_config().pointer_type();
                         
@@ -189,7 +201,7 @@ fn compile_mir_function<M: Module>(
                             ptr_ty,
                             cranelift::prelude::MemFlagsData::new(),
                             env_ptr,
-                            0,
+                            8, // Load function pointer from offset 8
                         );
 
                         let mut sig = context.module.make_signature();
@@ -301,32 +313,7 @@ fn translate_rvalue<M: Module>(
             };
             Ok(val)
         }
-        Rvalue::Aggregate(pace_mir::AggregateKind::Closure(closure_name), _) => {
-            let size_val = builder.ins().iconst(types::I64, 16);
-            let malloc_id = *context.funcs.get(&ustr::Ustr::from("__pace_malloc")).unwrap();
-            let local_malloc = context.module.declare_func_in_func(malloc_id, builder.func);
-            let call = builder.ins().call(local_malloc, &[size_val]);
-            let env_ptr = builder.inst_results(call)[0];
-            
-            // Try to resolve the closure function or import it
-            let func_id = if let Some(id) = context.funcs.get(closure_name) {
-                *id
-            } else {
-                let mut sig = context.module.make_signature();
-                sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
-                // Signature is unknown at this point, but we know it's Fast
-                context.module.declare_function(closure_name.as_str(), cranelift_module::Linkage::Export, &sig).unwrap_or_else(|_| {
-                    panic!("Failed to declare closure function {}", closure_name);
-                })
-            };
-            
-            let func_ref = context.module.declare_func_in_func(func_id, builder.func);
-            let func_ptr = builder.ins().func_addr(context.module.target_config().pointer_type(), func_ref);
-            
-            builder.ins().store(cranelift::prelude::MemFlagsData::new(), func_ptr, env_ptr, 0);
-            
-            Ok(env_ptr)
-        }
+
         Rvalue::Aggregate(pace_mir::AggregateKind::Class(_class_name, class_size), operands) => {
             let size_val = builder.ins().iconst(types::I64, *class_size as i64);
 
@@ -350,6 +337,44 @@ fn translate_rvalue<M: Module>(
             }
 
             Ok(obj_ptr)
+        }
+        Rvalue::Aggregate(pace_mir::AggregateKind::Closure(closure_name), operands) => {
+            // Allocate 16 bytes for the environment struct (8 bytes RC, 8 bytes Function Pointer, plus whatever env variables)
+            let env_size = 16 + (operands.len() * 8); // Assuming all captured env variables are 8 bytes (pointers/i64)
+            let size_val = builder.ins().iconst(types::I64, env_size as i64);
+
+            let malloc_id = *context.funcs.get(&ustr::Ustr::from("__pace_malloc")).unwrap();
+            let local_malloc = context.module.declare_func_in_func(malloc_id, builder.func);
+            let call = builder.ins().call(local_malloc, &[size_val]);
+            let env_ptr = builder.inst_results(call)[0];
+
+            // Offset 0: ARC Reference Count = 1
+            let one = builder.ins().iconst(types::I64, 1);
+            builder.ins().store(cranelift::prelude::MemFlagsData::new(), one, env_ptr, 0);
+
+            // Offset 8: Function Pointer
+            let func_id = if let Some(id) = context.funcs.get(closure_name) {
+                *id
+            } else {
+                let mut sig = context.module.make_signature();
+                sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
+                let id = context.module.declare_function(closure_name.as_str(), cranelift_module::Linkage::Export, &sig).unwrap();
+                context.funcs.insert(*closure_name, id);
+                id
+            };
+            let local_func = context.module.declare_func_in_func(func_id, builder.func);
+            let ptr_ty = context.module.target_config().pointer_type();
+            let func_addr = builder.ins().func_addr(ptr_ty, local_func);
+            builder.ins().store(cranelift::prelude::MemFlagsData::new(), func_addr, env_ptr, 8);
+
+            let mut offset = 16;
+            for op in operands {
+                let val = translate_operand(builder, context, op, locals)?;
+                builder.ins().store(cranelift::prelude::MemFlagsData::new(), val, env_ptr, offset as i32);
+                offset += 8;
+            }
+
+            Ok(env_ptr)
         }
         _ => Ok(builder.ins().iconst(types::I64, 0)),
     }
@@ -403,6 +428,7 @@ fn translate_operand<M: Module>(
                     .declare_data_in_func(data_id, builder.func);
                 Ok(builder.ins().symbol_value(ptr_ty, local_data))
             }
+            Constant::Float(f) => Ok(builder.ins().f64const(*f)),
             _ => Ok(builder.ins().iconst(types::I64, 0)),
         },
     }

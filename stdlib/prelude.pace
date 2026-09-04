@@ -3,6 +3,7 @@
 
 import "pace:core";
 import "pace:io";
+import "./string-builder";
 
 // Re-export core types for global availability
 // (Note: Currently the Pace compiler resolves stdlib core types globally if imported,

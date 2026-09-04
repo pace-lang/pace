@@ -1243,6 +1243,7 @@ dependencies = [
  "pace-errors",
  "pace-mir",
  "pace-runtime",
+ "pace-ty",
  "thiserror",
  "ustr",
 ]

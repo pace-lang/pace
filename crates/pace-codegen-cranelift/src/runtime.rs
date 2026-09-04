@@ -49,13 +49,7 @@ pub fn declare_runtime_functions<M: Module>(
         .declare_function("__pace_release", Linkage::Import, &sig_release)
         .unwrap();
 
-    let mut sig_concat = module.make_signature();
-    sig_concat.params.push(AbiParam::new(ptr_ty));
-    sig_concat.params.push(AbiParam::new(ptr_ty));
-    sig_concat.returns.push(AbiParam::new(ptr_ty));
-    let concat_id = module
-        .declare_function("__pace_concat_strings", Linkage::Import, &sig_concat)
-        .unwrap();
+
 
     let mut sig_int_to_string = module.make_signature();
     sig_int_to_string.params.push(AbiParam::new(types::I64));
@@ -203,7 +197,7 @@ pub fn declare_runtime_functions<M: Module>(
     funcs.insert(ustr::Ustr::from("__pace_retain"), retain_id);
     funcs.insert(ustr::Ustr::from("__pace_release"), release_id);
     funcs.insert(ustr::Ustr::from("__pace_noop"), noop_id);
-    funcs.insert(ustr::Ustr::from("__pace_concat_strings"), concat_id);
+
     funcs.insert(ustr::Ustr::from("__pace_int_to_string"), int_to_str_id);
     funcs.insert(ustr::Ustr::from("__pace_float_to_string"), float_to_str_id);
     funcs.insert(ustr::Ustr::from("__pace_bool_to_string"), bool_to_str_id);

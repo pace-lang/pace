@@ -68,6 +68,12 @@ impl<'a> TypeChecker<'a> {
                     Type::Enum(*name)
                 } else if let Some(global) = self.env.global_vars.get(name) {
                     global.ty.clone()
+                } else if let Some(sig) = self.env.functions.get(name) {
+                    Type::Function {
+                        generic_params: sig.generic_params.clone(),
+                        params: sig.params.clone(),
+                        return_type: Box::new(sig.return_type.clone()),
+                    }
                 } else {
                     let suggestion = self.env.find_closest_variable(*name);
                     let help_text = if let Some(sug) = suggestion {
@@ -208,6 +214,19 @@ impl<'a> TypeChecker<'a> {
                     types_match = true;
                 }
 
+                if matches!(op, pace_ast::BinaryOp::Add) && (left_ty == Type::String || right_ty == Type::String) {
+                    let other_ty = if left_ty == Type::String { &right_ty } else { &left_ty };
+                    if !matches!(other_ty, Type::String | Type::Int | Type::Float | Type::Bool | Type::Unknown | Type::Any) {
+                        self.errors.push(TypeError::Generic {
+                            src: self.get_source(),
+                            span: self.current_span,
+                            message: format!("Cannot concatenate String with {:?}", other_ty),
+                        });
+                        return Type::Error;
+                    }
+                    types_match = true;
+                }
+
                 if !types_match
                     && left_ty != Type::Unknown
                     && right_ty != Type::Unknown
@@ -228,8 +247,30 @@ impl<'a> TypeChecker<'a> {
                 }
 
                 match op {
-                    BinaryOp::Add
-                    | BinaryOp::Sub
+                    BinaryOp::Add => {
+                        if left_ty == Type::String || right_ty == Type::String {
+                            Type::String
+                        } else if left_ty == Type::Int
+                            || left_ty == Type::Float
+                            || left_ty == Type::Unknown
+                            || left_ty == Type::Any
+                            || right_ty == Type::Unknown
+                            || right_ty == Type::Any
+                        {
+                            left_ty
+                        } else {
+                            {
+                                self.errors.push(TypeError::Generic {
+                                    src: self.get_source(),
+                                    span: self.current_span,
+                                    message: "Arithmetic operations require numeric types"
+                                        .to_string(),
+                                });
+                                Type::Error
+                            }
+                        }
+                    }
+                    BinaryOp::Sub
                     | BinaryOp::Mul
                     | BinaryOp::Div
                     | BinaryOp::Mod => {

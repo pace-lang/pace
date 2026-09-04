@@ -36,29 +36,6 @@ pub extern "C" fn __pace_print_string(val: *const std::ffi::c_char) {
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn __pace_concat_strings(
-    a: *const std::ffi::c_char,
-    b: *const std::ffi::c_char,
-) -> *mut std::ffi::c_char {
-    unsafe {
-        let str_a = if a.is_null() {
-            ""
-        } else {
-            std::ffi::CStr::from_ptr(a).to_str().unwrap_or("")
-        };
-        let str_b = if b.is_null() {
-            ""
-        } else {
-            std::ffi::CStr::from_ptr(b).to_str().unwrap_or("")
-        };
-        let mut combined = String::with_capacity(str_a.len() + str_b.len());
-        combined.push_str(str_a);
-        combined.push_str(str_b);
-        let c_string = std::ffi::CString::new(combined).unwrap();
-        c_string.into_raw()
-    }
-}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_int_to_string(val: i64) -> *mut std::ffi::c_char {

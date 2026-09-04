@@ -26,10 +26,7 @@ impl RuntimeBindings {
             "print",
             pace_runtime::__pace_print_string as *const u8,
         );
-        builder.symbol(
-            "__pace_concat_strings",
-            pace_runtime::__pace_concat_strings as *const u8,
-        );
+
         builder.symbol(
             "__pace_int_to_string",
             pace_runtime::__pace_int_to_string as *const u8,

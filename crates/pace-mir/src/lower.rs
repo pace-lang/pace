@@ -199,7 +199,12 @@ impl<'a> FuncMirBuilder<'a> {
                 let _ = self.lower_expr(*expr_id);
             }
             Stmt::VarDecl { name, initializer, .. } => {
-                let local = self.new_local(Type::Unknown, Mutability::Mut, LocalKind::User(*name), span);
+                let ty = if let Some(init_id) = initializer {
+                    self.env.node_types.get(init_id).unwrap_or(&Type::Unknown).clone()
+                } else {
+                    Type::Unknown
+                };
+                let local = self.new_local(ty, Mutability::Mut, LocalKind::User(*name), span);
                 self.var_map.insert(*name, local);
                 
                 if let Some(init_id) = initializer {
@@ -287,7 +292,26 @@ impl<'a> FuncMirBuilder<'a> {
                     return Operand::Constant(Constant::String("".to_string()));
                 }
                 
-                let mut current_str_op = None;
+                // let sb = StringBuilder()
+                let sb_temp = self.new_temp(Type::Class(ustr::Ustr::from("StringBuilder")));
+                let class_name = ustr::Ustr::from("StringBuilder");
+                // StringBuilder has 3 fields (buffer, capacity, length), so size is 16 + 3*8 = 40
+                self.push_statement(Statement::Assign(
+                    Place::new_local(sb_temp),
+                    Rvalue::Aggregate(AggregateKind::Class(class_name, 40), vec![])
+                ));
+                
+                // sb.init()
+                let init_temp = self.new_temp(Type::Unknown);
+                let init_block = self.new_block();
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                    func: Operand::Constant(Constant::Function(ustr::Ustr::from("StringBuilder_init"))),
+                    args: vec![Operand::Copy(Place::new_local(sb_temp))],
+                    destination: Place::new_local(init_temp),
+                    target: Some(init_block),
+                    cleanup: None,
+                });
+                self.current_block = init_block;
                 
                 for &part_id in parts {
                     let mut part_op = self.lower_expr(part_id);
@@ -336,24 +360,32 @@ impl<'a> FuncMirBuilder<'a> {
                         _ => part_op,
                     };
                     
-                    if let Some(prev_op) = current_str_op {
-                        let temp = self.new_temp(Type::Unknown);
-                        let next_block = self.new_block();
-                        self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
-                            func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_concat_strings"))),
-                            args: vec![prev_op, part_op],
-                            destination: Place::new_local(temp),
-                            target: Some(next_block),
-                            cleanup: None,
-                        });
-                        self.current_block = next_block;
-                        current_str_op = Some(Operand::Copy(Place::new_local(temp)));
-                    } else {
-                        current_str_op = Some(part_op);
-                    }
+                    // sb.append(part_op)
+                    let append_temp = self.new_temp(Type::Unknown);
+                    let append_block = self.new_block();
+                    self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                        func: Operand::Constant(Constant::Function(ustr::Ustr::from("StringBuilder_append"))),
+                        args: vec![Operand::Copy(Place::new_local(sb_temp)), part_op],
+                        destination: Place::new_local(append_temp),
+                        target: Some(append_block),
+                        cleanup: None,
+                    });
+                    self.current_block = append_block;
                 }
                 
-                current_str_op.unwrap()
+                // sb.build()
+                let build_temp = self.new_temp(Type::String);
+                let build_block = self.new_block();
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                    func: Operand::Constant(Constant::Function(ustr::Ustr::from("StringBuilder_build"))),
+                    args: vec![Operand::Copy(Place::new_local(sb_temp))],
+                    destination: Place::new_local(build_temp),
+                    target: Some(build_block),
+                    cleanup: None,
+                });
+                self.current_block = build_block;
+                
+                Operand::Copy(Place::new_local(build_temp))
             }
             Expr::Identifier(name) => {
                 if let Some(&local) = self.var_map.get(name) {
@@ -366,12 +398,108 @@ impl<'a> FuncMirBuilder<'a> {
                 let left_op = self.lower_expr(*left);
                 let right_op = self.lower_expr(*right);
                 
-                let temp = self.new_temp(Type::Unknown);
-                self.push_statement(Statement::Assign(
-                    Place::new_local(temp),
-                    Rvalue::BinaryOp(op.clone(), left_op, right_op)
-                ));
-                Operand::Copy(Place::new_local(temp))
+                let left_ty = self.env.node_types.get(left).unwrap_or(&Type::Unknown);
+                let right_ty = self.env.node_types.get(right).unwrap_or(&Type::Unknown);
+                
+                if matches!(op, pace_ast::BinaryOp::Add) && (left_ty == &Type::String || right_ty == &Type::String) {
+                    let sb_temp = self.new_temp(Type::Class(ustr::Ustr::from("StringBuilder")));
+                    let class_name = ustr::Ustr::from("StringBuilder");
+                    
+                    self.push_statement(Statement::Assign(
+                        Place::new_local(sb_temp),
+                        Rvalue::Aggregate(AggregateKind::Class(class_name, 40), vec![])
+                    ));
+                    
+                    let init_temp = self.new_temp(Type::Unknown);
+                    let init_block = self.new_block();
+                    self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                        func: Operand::Constant(Constant::Function(ustr::Ustr::from("StringBuilder_init"))),
+                        args: vec![Operand::Copy(Place::new_local(sb_temp))],
+                        destination: Place::new_local(init_temp),
+                        target: Some(init_block),
+                        cleanup: None,
+                    });
+                    self.current_block = init_block;
+                    
+                    let mut append_part = |mut part_op: Operand, ty: &Type| {
+                        part_op = match ty {
+                            Type::Int => {
+                                let temp = self.new_temp(Type::Unknown);
+                                let next_block = self.new_block();
+                                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                                    func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_int_to_string"))),
+                                    args: vec![part_op],
+                                    destination: Place::new_local(temp),
+                                    target: Some(next_block),
+                                    cleanup: None,
+                                });
+                                self.current_block = next_block;
+                                Operand::Copy(Place::new_local(temp))
+                            }
+                            Type::Float => {
+                                let temp = self.new_temp(Type::Unknown);
+                                let next_block = self.new_block();
+                                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                                    func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_float_to_string"))),
+                                    args: vec![part_op],
+                                    destination: Place::new_local(temp),
+                                    target: Some(next_block),
+                                    cleanup: None,
+                                });
+                                self.current_block = next_block;
+                                Operand::Copy(Place::new_local(temp))
+                            }
+                            Type::Bool => {
+                                let temp = self.new_temp(Type::Unknown);
+                                let next_block = self.new_block();
+                                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                                    func: Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_bool_to_string"))),
+                                    args: vec![part_op],
+                                    destination: Place::new_local(temp),
+                                    target: Some(next_block),
+                                    cleanup: None,
+                                });
+                                self.current_block = next_block;
+                                Operand::Copy(Place::new_local(temp))
+                            }
+                            _ => part_op,
+                        };
+                        
+                        let append_temp = self.new_temp(Type::Unknown);
+                        let append_block = self.new_block();
+                        self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                            func: Operand::Constant(Constant::Function(ustr::Ustr::from("StringBuilder_append"))),
+                            args: vec![Operand::Copy(Place::new_local(sb_temp)), part_op],
+                            destination: Place::new_local(append_temp),
+                            target: Some(append_block),
+                            cleanup: None,
+                        });
+                        self.current_block = append_block;
+                    };
+                    
+                    append_part(left_op, left_ty);
+                    append_part(right_op, right_ty);
+                    
+                    let build_temp = self.new_temp(Type::String);
+                    let build_block = self.new_block();
+                    self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                        func: Operand::Constant(Constant::Function(ustr::Ustr::from("StringBuilder_build"))),
+                        args: vec![Operand::Copy(Place::new_local(sb_temp))],
+                        destination: Place::new_local(build_temp),
+                        target: Some(build_block),
+                        cleanup: None,
+                    });
+                    self.current_block = build_block;
+                    
+                    Operand::Copy(Place::new_local(build_temp))
+                } else {
+                    let temp = self.new_temp(Type::Unknown);
+                    self.push_statement(Statement::Assign(
+                        Place::new_local(temp),
+                        Rvalue::BinaryOp(op.clone(), left_op, right_op)
+                    ));
+                    Operand::Copy(Place::new_local(temp))
+                }
             }
             Expr::Assign { target, value } => {
                 let val_op = self.lower_expr(*value);
@@ -531,7 +659,7 @@ impl<'a> FuncMirBuilder<'a> {
                         "hash" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_hash"))),
                         "retain" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_retain"))),
                         "release" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_release"))),
-                        "concat_strings" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_concat_strings"))),
+
                         "int_to_string" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_int_to_string"))),
                         "float_to_string" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_float_to_string"))),
                         "bool_to_string" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_bool_to_string"))),
@@ -674,6 +802,19 @@ impl<'a> FuncMirBuilder<'a> {
                 Operand::Copy(Place::new_local(temp))
             }
 
+            Expr::Block(stmts) => {
+                let mut last_op = Operand::Constant(Constant::Null);
+                for (i, stmt_id) in stmts.iter().enumerate() {
+                    if i == stmts.len() - 1 {
+                        if let Stmt::Expr(expr_id) = self.arena.get_stmt(*stmt_id) {
+                            last_op = self.lower_expr(*expr_id);
+                            continue;
+                        }
+                    }
+                    self.lower_stmt(*stmt_id);
+                }
+                last_op
+            }
             _ => {
                 Operand::Constant(Constant::Null)
             }

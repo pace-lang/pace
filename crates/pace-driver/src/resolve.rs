@@ -111,7 +111,7 @@ impl SymbolResolver {
                             .replace(":", "_");
                         let mangled_name = if clean_name == "pace_core" {
                             original_name.clone()
-                        } else if original_name == "main" || item_is_extern {
+                        } else if original_name == "main" || original_name == "StringBuilder" || item_is_extern {
                             original_name.clone()
                         } else {
                             format!("{}__{}", clean_name, original_name)

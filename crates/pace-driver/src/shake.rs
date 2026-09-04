@@ -23,15 +23,19 @@ impl TreeShaker {
         ast: Vec<pace_ast::arena::StmtId>,
     ) -> Vec<pace_ast::arena::StmtId> {
         let mut shaker = Self::new();
-        // Start from main
+        // Start from main and compiler-injected types
         shaker.reachable.insert(ustr::Ustr::from("main"));
+        shaker.reachable.insert(ustr::Ustr::from("StringBuilder"));
+        shaker.reachable.insert(ustr::Ustr::from("String"));
+        shaker.reachable.insert(ustr::Ustr::from("Int"));
+        shaker.reachable.insert(ustr::Ustr::from("Float"));
+        shaker.reachable.insert(ustr::Ustr::from("Bool"));
 
         // Build an index of all declarations
         let mut decls = std::collections::HashMap::new();
         shaker.index_decls(arena, &ast, &mut decls);
 
-        // Iteratively trace reachable symbols until fixed point
-        let mut queue: Vec<ustr::Ustr> = vec![ustr::Ustr::from("main")];
+        let mut queue: Vec<ustr::Ustr> = shaker.reachable.iter().copied().collect();
 
         while let Some(current) = queue.pop() {
             if let Some(&stmt_id) = decls.get(&current) {
