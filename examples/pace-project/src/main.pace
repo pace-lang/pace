@@ -16,6 +16,7 @@ import "./test-os";
 import "self:test-process";
 import "package:pace-package";
 import "./test-advanced";
+import "./test-encapsulation";
 
 func main() {
     print("⚡ Running Pace Test Suite...");
@@ -36,6 +37,7 @@ func main() {
     runOsTest();
     runProcessTest();
     runAdvancedTest();
+    runEncapsulationTest();
     print("--- Testing External Package ---");
     greet();
     print("✅ All tests executed.");

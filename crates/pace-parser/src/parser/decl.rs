@@ -6,7 +6,6 @@ impl<'a, 'b> Parser<'a, 'b> {
     pub(crate) fn parse_func_decl(
         &mut self,
         is_async: bool,
-        visibility: Visibility,
         is_static: bool,
         is_extern: bool,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
@@ -23,6 +22,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 });
             }
         };
+        let visibility = if name.starts_with('_') { Visibility::Private } else { Visibility::Public };
         self.advance();
 
         let generic_params = self.parse_generic_params()?;
@@ -157,6 +157,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 });
             }
         };
+        let visibility = if name.starts_with('_') { pace_ast::Visibility::Private } else { pace_ast::Visibility::Public };
         self.advance();
 
         let generic_params = self.parse_generic_params()?;
@@ -235,6 +236,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             fields,
             methods,
             implements,
+            visibility,
         }))
     }
 
@@ -252,6 +254,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 });
             }
         };
+        let visibility = if name.starts_with('_') { pace_ast::Visibility::Private } else { pace_ast::Visibility::Public };
         self.advance();
 
         let generic_params = self.parse_generic_params()?;
@@ -330,6 +333,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             fields,
             methods,
             implements,
+            visibility,
         }))
     }
 
@@ -348,6 +352,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 });
             }
         };
+        let visibility = if name.starts_with('_') { pace_ast::Visibility::Private } else { pace_ast::Visibility::Public };
         self.advance();
 
         let generic_params = self.parse_generic_params()?;
@@ -491,6 +496,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             name: name.into(),
             generic_params,
             methods,
+            visibility,
         }))
     }
 
@@ -509,6 +515,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 });
             }
         };
+        let visibility = if name.starts_with('_') { pace_ast::Visibility::Private } else { pace_ast::Visibility::Public };
         self.advance();
 
         let generic_params = self.parse_generic_params()?;
@@ -577,6 +584,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             name: name.into(),
             generic_params,
             variants,
+            visibility,
         }))
     }
 
@@ -595,6 +603,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 });
             }
         };
+        let visibility = if name.starts_with('_') { pace_ast::Visibility::Private } else { pace_ast::Visibility::Public };
         self.advance();
 
         let generic_params = self.parse_generic_params()?;
@@ -634,6 +643,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             name: name.into(),
             generic_params,
             fields,
+            visibility,
         }))
     }
 
@@ -642,7 +652,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         is_mutable: bool,
         is_static: bool,
         is_weak: bool,
-        visibility: Visibility,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         let start_pos = self.current_span.start;
         self.advance(); // consume let/var
@@ -656,6 +665,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 });
             }
         };
+        let visibility = if name.starts_with('_') { Visibility::Private } else { Visibility::Public };
         self.advance();
 
         let mut type_annotation = None;

@@ -15,7 +15,7 @@ impl<'a> TypeChecker<'a> {
                     self.register_types(body);
                     self.current_module = old_module;
                 }
-                Stmt::ClassDecl { name, .. } | Stmt::InterfaceDecl { name, .. } => {
+                Stmt::ClassDecl { name, visibility, .. } | Stmt::InterfaceDecl { name, visibility, .. } => {
                     self.env.register_class(
                         *name,
                         ClassSignature {
@@ -24,11 +24,13 @@ impl<'a> TypeChecker<'a> {
                             fields: HashMap::new(),
                             static_fields: HashMap::new(),
                             methods: HashMap::new(),
-                        span: pace_span::Span::default(),
-},
+                            visibility: visibility.clone(),
+                            module: self.current_module,
+                            span: pace_span::Span::default(),
+                        },
                     );
                 }
-                Stmt::ActorDecl { name, .. } => {
+                Stmt::ActorDecl { name, visibility, .. } => {
                     self.env.register_actor(
                         *name,
                         crate::env::ActorSignature {
@@ -37,11 +39,13 @@ impl<'a> TypeChecker<'a> {
                             fields: HashMap::new(),
                             static_fields: HashMap::new(),
                             methods: HashMap::new(),
-                        span: pace_span::Span::default(),
-},
+                            visibility: visibility.clone(),
+                            module: self.current_module,
+                            span: pace_span::Span::default(),
+                        },
                     );
                 }
-                Stmt::StructDecl { name, .. } => {
+                Stmt::StructDecl { name, visibility, .. } => {
                     self.env.register_struct(
                         *name,
                         ClassSignature {
@@ -50,18 +54,22 @@ impl<'a> TypeChecker<'a> {
                             fields: HashMap::new(),
                             static_fields: HashMap::new(),
                             methods: HashMap::new(),
-                        span: pace_span::Span::default(),
-},
+                            visibility: visibility.clone(),
+                            module: self.current_module,
+                            span: pace_span::Span::default(),
+                        },
                     );
                 }
-                Stmt::EnumDecl { name, .. } => {
+                Stmt::EnumDecl { name, visibility, .. } => {
                     self.env.register_enum(
                         *name,
                         EnumSignature {
                             generic_params: None,
                             variants: HashMap::new(),
-                        span: pace_span::Span::default(),
-},
+                            visibility: visibility.clone(),
+                            module: self.current_module,
+                            span: pace_span::Span::default(),
+                        },
                     );
                 }
                 _ => {}
@@ -117,7 +125,7 @@ impl<'a> TypeChecker<'a> {
                     };
                     self.env.register_function(*name, sig);
                 }
-                Stmt::ClassDecl { name, fields, methods, generic_params, implements, .. } => {
+                Stmt::ClassDecl { name, fields, methods, generic_params, implements, visibility, .. } => {
                     let implements_type = if let Some(i) = implements.as_ref() { Some(self.resolve_type_name(i)) } else { None };
                     if let Some(gp) = generic_params {
                         self.generic_params_in_scope.extend(gp.clone());
@@ -126,16 +134,18 @@ impl<'a> TypeChecker<'a> {
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
                     for f in fields {
-                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, .. } = self.arena.get_stmt(*f) {
+                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, visibility, is_mutable, .. } = self.arena.get_stmt(*f) {
+                            let span = self.arena.get_stmt_span(*f);
                             let f_ty = if let Some(ty_str) = type_annotation {
                                 self.resolve_type_name(ty_str)
                             } else {
                                 Type::Unknown
                             };
+                            let field_sig = crate::env::FieldSignature { ty: f_ty, visibility: visibility.clone(), is_mutable: *is_mutable, span };
                             if *is_static {
-                                static_field_map.insert(*f_name, f_ty);
+                                static_field_map.insert(*f_name, field_sig);
                             } else {
-                                field_map.insert(*f_name, f_ty);
+                                field_map.insert(*f_name, field_sig);
                             }
                         }
                     }
@@ -172,6 +182,8 @@ impl<'a> TypeChecker<'a> {
                         fields: field_map,
                         static_fields: static_field_map,
                         methods: method_map,
+                        visibility: visibility.clone(),
+                        module: self.current_module,
                         span: pace_span::Span::default(),
                     };
                     if let Some(gp) = generic_params {
@@ -182,7 +194,7 @@ impl<'a> TypeChecker<'a> {
                     self.env.register_class(*name, sig);
                     self.current_class = None;
                 }
-                Stmt::ActorDecl { name, fields, methods, generic_params, implements, .. } => {
+                Stmt::ActorDecl { name, fields, methods, generic_params, implements, visibility, .. } => {
                     let implements_type = if let Some(i) = implements.as_ref() { Some(self.resolve_type_name(i)) } else { None };
                     if let Some(gp) = generic_params {
                         self.generic_params_in_scope.extend(gp.clone());
@@ -191,16 +203,18 @@ impl<'a> TypeChecker<'a> {
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
                     for f in fields {
-                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, .. } = self.arena.get_stmt(*f) {
+                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, visibility, is_mutable, .. } = self.arena.get_stmt(*f) {
+                            let span = self.arena.get_stmt_span(*f);
                             let f_ty = if let Some(ty_str) = type_annotation {
                                 self.resolve_type_name(ty_str)
                             } else {
                                 Type::Unknown
                             };
+                            let field_sig = crate::env::FieldSignature { ty: f_ty, visibility: visibility.clone(), is_mutable: *is_mutable, span };
                             if *is_static {
-                                static_field_map.insert(*f_name, f_ty);
+                                static_field_map.insert(*f_name, field_sig);
                             } else {
-                                field_map.insert(*f_name, f_ty);
+                                field_map.insert(*f_name, field_sig);
                             }
                         }
                     }
@@ -237,6 +251,8 @@ impl<'a> TypeChecker<'a> {
                         fields: field_map,
                         static_fields: static_field_map,
                         methods: method_map,
+                        visibility: visibility.clone(),
+                        module: self.current_module,
                         span: pace_span::Span::default(),
                     };
                     if let Some(gp) = generic_params {
@@ -247,23 +263,25 @@ impl<'a> TypeChecker<'a> {
                     self.env.register_actor(*name, sig);
                     self.current_class = None;
                 }
-                Stmt::StructDecl { name, fields, generic_params, .. } => {
+                Stmt::StructDecl { name, fields, generic_params, visibility, .. } => {
                     if let Some(gp) = generic_params {
                         self.generic_params_in_scope.extend(gp.clone());
                     }
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
                     for f in fields {
-                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, .. } = self.arena.get_stmt(*f) {
+                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, visibility, is_mutable, .. } = self.arena.get_stmt(*f) {
+                            let span = self.arena.get_stmt_span(*f);
                             let f_ty = if let Some(ty_str) = type_annotation {
                                 self.resolve_type_name(ty_str)
                             } else {
                                 Type::Unknown
                             };
+                            let field_sig = crate::env::FieldSignature { ty: f_ty, visibility: visibility.clone(), is_mutable: *is_mutable, span };
                             if *is_static {
-                                static_field_map.insert(*f_name, f_ty);
+                                static_field_map.insert(*f_name, field_sig);
                             } else {
-                                field_map.insert(*f_name, f_ty);
+                                field_map.insert(*f_name, field_sig);
                             }
                         }
                     }
@@ -273,8 +291,10 @@ impl<'a> TypeChecker<'a> {
                         fields: field_map,
                         static_fields: static_field_map,
                         methods: HashMap::new(),
-                    span: pace_span::Span::default(),
-};
+                        visibility: visibility.clone(),
+                        module: self.current_module,
+                        span: pace_span::Span::default(),
+                    };
                     if let Some(gp) = generic_params {
                         for _ in gp {
                             self.generic_params_in_scope.pop();
@@ -282,7 +302,7 @@ impl<'a> TypeChecker<'a> {
                     }
                     self.env.register_struct(*name, sig);
                 }
-                Stmt::EnumDecl { name, variants, generic_params, .. } => {
+                Stmt::EnumDecl { name, variants, generic_params, visibility, .. } => {
                     let mut variant_map = HashMap::new();
                     self.current_class = Some(*name);
 
@@ -314,11 +334,13 @@ impl<'a> TypeChecker<'a> {
                     let sig = EnumSignature {
                         generic_params: generic_params.clone(),
                         variants: variant_map,
+                        visibility: visibility.clone(),
+                        module: self.current_module,
                         span: pace_span::Span::default(),
                     };
                     self.env.register_enum(*name, sig);
                 }
-                Stmt::InterfaceDecl { name, methods, generic_params, .. } => {
+                Stmt::InterfaceDecl { name, methods, generic_params, visibility, .. } => {
                     if let Some(gp) = generic_params {
                         self.generic_params_in_scope.extend(gp.clone());
                     }
@@ -356,6 +378,8 @@ impl<'a> TypeChecker<'a> {
                     let sig = crate::env::InterfaceSignature {
                         generic_params: generic_params.clone(),
                         methods: method_map,
+                        visibility: visibility.clone(),
+                        module: self.current_module,
                         span: pace_span::Span::default(),
                     };
                     self.env.register_interface(*name, sig);
@@ -370,15 +394,19 @@ impl<'a> TypeChecker<'a> {
                             implements: None,
                             fields: HashMap::new(), static_fields: HashMap::new(),
                             methods: HashMap::new(),
-                        span: pace_span::Span::default(),
-});
+                            visibility: pace_ast::Visibility::Public,
+                            module: "std/collection".into(),
+                            span: pace_span::Span::default(),
+                        });
                         self.env.register_class("Set".into(), ClassSignature {
                             generic_params: Some(vec![pace_ast::GenericParam { name: "T".into(), bound: None }]),
                             implements: None,
                             fields: HashMap::new(), static_fields: HashMap::new(),
                             methods: HashMap::new(),
-                        span: pace_span::Span::default(),
-});
+                            visibility: pace_ast::Visibility::Public,
+                            module: "std/collection".into(),
+                            span: pace_span::Span::default(),
+                        });
                     }
                 Stmt::VarDecl { name, type_annotation, is_mutable, visibility, .. } => {
                     let span = self.arena.get_stmt_span(*stmt_id);

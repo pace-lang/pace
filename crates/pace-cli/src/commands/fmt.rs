@@ -209,7 +209,7 @@ impl<'a> Formatter<'a> {
                 
                 c.append(doc).append(body_doc)
             }
-            Stmt::ClassDecl { name, generic_params, fields, methods, implements } => {
+            Stmt::ClassDecl { name, generic_params, fields, methods, implements, visibility: _ } => {
                 let mut doc = RcDoc::text("class ").append(RcDoc::text(name.as_str().to_string()));
                 if let Some(gps) = generic_params {
                     let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.name.as_str().to_string())).collect();
@@ -228,7 +228,7 @@ impl<'a> Formatter<'a> {
                    .append(RcDoc::hardline())
                    .append(RcDoc::text("}"))
             }
-            Stmt::ActorDecl { name, generic_params, fields, methods, implements } => {
+            Stmt::ActorDecl { name, generic_params, fields, methods, implements, visibility: _ } => {
                 let mut doc = RcDoc::text("actor ").append(RcDoc::text(name.as_str().to_string()));
                 if let Some(gps) = generic_params {
                     let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.name.as_str().to_string())).collect();
@@ -247,7 +247,7 @@ impl<'a> Formatter<'a> {
                    .append(RcDoc::hardline())
                    .append(RcDoc::text("}"))
             }
-            Stmt::InterfaceDecl { name, generic_params, methods } => {
+            Stmt::InterfaceDecl { name, generic_params, methods, visibility: _ } => {
                 let mut doc = RcDoc::text("interface ").append(RcDoc::text(name.as_str().to_string()));
                 if let Some(gps) = generic_params {
                     let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.name.as_str().to_string())).collect();
@@ -260,7 +260,7 @@ impl<'a> Formatter<'a> {
                    .append(RcDoc::hardline())
                    .append(RcDoc::text("}"))
             }
-            Stmt::StructDecl { name, generic_params, fields } => {
+            Stmt::StructDecl { name, generic_params, fields, visibility: _ } => {
                 let mut doc = RcDoc::text("struct ").append(RcDoc::text(name.as_str().to_string()));
                 if let Some(gps) = generic_params {
                     let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.name.as_str().to_string())).collect();
@@ -273,7 +273,7 @@ impl<'a> Formatter<'a> {
                    .append(RcDoc::hardline())
                    .append(RcDoc::text("}"))
             }
-            Stmt::EnumDecl { name, generic_params, variants } => {
+            Stmt::EnumDecl { name, generic_params, variants, visibility: _ } => {
                 let mut doc = RcDoc::text("enum ").append(RcDoc::text(name.as_str().to_string()));
                 if let Some(gps) = generic_params {
                     let gps_docs: Vec<_> = gps.iter().map(|g| RcDoc::text(g.name.as_str().to_string())).collect();

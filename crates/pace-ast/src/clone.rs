@@ -207,6 +207,7 @@ impl AstArena {
                 fields,
                 methods,
                 implements,
+                visibility,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -222,6 +223,7 @@ impl AstArena {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
+                    visibility,
                 }
             }
             Stmt::ActorDecl {
@@ -230,6 +232,7 @@ impl AstArena {
                 fields,
                 methods,
                 implements,
+                visibility,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -245,12 +248,14 @@ impl AstArena {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
+                    visibility,
                 }
             }
             Stmt::InterfaceDecl {
                 name,
                 generic_params,
                 methods,
+                visibility,
             } => {
                 let new_methods = methods
                     .into_iter()
@@ -260,12 +265,14 @@ impl AstArena {
                     name,
                     generic_params,
                     methods: new_methods,
+                    visibility,
                 }
             }
             Stmt::StructDecl {
                 name,
                 generic_params,
                 fields,
+                visibility,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -275,6 +282,7 @@ impl AstArena {
                     name,
                     generic_params,
                     fields: new_fields,
+                    visibility,
                 }
             }
             Stmt::Module { name, body } => {

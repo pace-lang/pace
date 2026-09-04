@@ -84,6 +84,16 @@ impl Type {
 pub struct EnumSignature {
     pub generic_params: Option<Vec<pace_ast::GenericParam>>,
     pub variants: HashMap<ustr::Ustr, Option<Vec<Type>>>,
+    pub visibility: Visibility,
+    pub module: ustr::Ustr,
+    pub span: pace_span::Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct FieldSignature {
+    pub ty: Type,
+    pub visibility: Visibility,
+    pub is_mutable: bool,
     pub span: pace_span::Span,
 }
 
@@ -112,9 +122,11 @@ pub struct FunctionSignature {
 pub struct ActorSignature {
     pub generic_params: Option<Vec<pace_ast::GenericParam>>,
     pub implements: Option<Type>,
-    pub fields: HashMap<ustr::Ustr, Type>,
-    pub static_fields: HashMap<ustr::Ustr, Type>,
+    pub fields: HashMap<ustr::Ustr, FieldSignature>,
+    pub static_fields: HashMap<ustr::Ustr, FieldSignature>,
     pub methods: HashMap<ustr::Ustr, FunctionSignature>,
+    pub visibility: Visibility,
+    pub module: ustr::Ustr,
     pub span: pace_span::Span,
 }
 
@@ -122,9 +134,11 @@ pub struct ActorSignature {
 pub struct ClassSignature {
     pub generic_params: Option<Vec<pace_ast::GenericParam>>,
     pub implements: Option<Type>,
-    pub fields: HashMap<ustr::Ustr, Type>,
-    pub static_fields: HashMap<ustr::Ustr, Type>,
+    pub fields: HashMap<ustr::Ustr, FieldSignature>,
+    pub static_fields: HashMap<ustr::Ustr, FieldSignature>,
     pub methods: HashMap<ustr::Ustr, FunctionSignature>,
+    pub visibility: Visibility,
+    pub module: ustr::Ustr,
     pub span: pace_span::Span,
 }
 
@@ -132,6 +146,8 @@ pub struct ClassSignature {
 pub struct InterfaceSignature {
     pub generic_params: Option<Vec<pace_ast::GenericParam>>,
     pub methods: HashMap<ustr::Ustr, FunctionSignature>,
+    pub visibility: Visibility,
+    pub module: ustr::Ustr,
     pub span: pace_span::Span,
 }
 

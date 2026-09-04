@@ -18,7 +18,7 @@ pub enum Token<'a> {
     Interface,
     Enum,
     Implement,
-    Private,
+
     Extern,
     Async,
     Await,
@@ -280,7 +280,7 @@ impl<'a> Lexer<'a> {
             "class" => Token::Class,
             "interface" => Token::Interface,
             "implement" => Token::Implement,
-            "private" => Token::Private,
+
             "extern" => Token::Extern,
             "async" => Token::Async,
             "await" => Token::Await,

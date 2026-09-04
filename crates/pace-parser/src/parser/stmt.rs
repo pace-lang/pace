@@ -5,11 +5,7 @@ use pace_ast::{Expr, Stmt, TypeAnnotation, Visibility};
 impl<'a, 'b> Parser<'a, 'b> {
     pub(crate) fn parse_stmt(
         &mut self,
-    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {        let visibility = if self.match_token(Token::Private) {
-            Visibility::Private
-        } else {
-            Visibility::Public // Default is public
-        };
+    ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
 
         let is_async = self.match_token(Token::Async);
         let is_static = self.match_token(Token::Static);
@@ -17,11 +13,10 @@ impl<'a, 'b> Parser<'a, 'b> {
         let is_extern = self.match_token(Token::Extern);
 
         match self.current_token {
-            Token::Let => self.parse_var_decl(false, is_static, is_weak, visibility), // doc_comments on vars omitted for now
-            Token::Var => self.parse_var_decl(true, is_static, is_weak, visibility),
+            Token::Let => self.parse_var_decl(false, is_static, is_weak), // doc_comments on vars omitted for now
+            Token::Var => self.parse_var_decl(true, is_static, is_weak),
             Token::Func => self.parse_func_decl(
                 is_async,
-                visibility,
                 is_static,
                 is_extern,
             ),

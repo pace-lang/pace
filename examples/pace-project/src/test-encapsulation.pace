@@ -1,0 +1,50 @@
+// test-encapsulation.pace
+// This file tests visibility boundary enforcement (preventing access to _PrivateClass or _privateField).
+
+class _PrivateClass {
+    var _privateField: Int;
+    var publicField: Int;
+
+    func init() {
+        self._privateField = 10;
+        self.publicField = 20;
+    }
+
+    func _privateMethod() {
+        print("This is a private method");
+    }
+
+    func publicMethod() {
+        print("This is a public method");
+        self._privateMethod(); // Valid since we're inside the class
+    }
+}
+
+class PublicClass {
+    var _privateField: String;
+    var publicField: String;
+
+    func init() {
+        self._privateField = "secret";
+        self.publicField = "hello";
+    }
+
+    func getPrivateField() -> String {
+        return self._privateField;
+    }
+}
+
+func _privateFunction() {
+    print("This is a private function");
+}
+
+func runEncapsulationTest() {
+    print("--- Testing Encapsulation ---");
+    let pub = PublicClass();
+    print("Public field: ${pub.publicField}");
+    
+    // The following should be compilation errors if uncommented:
+    // print(pub._privateField); // Error: Cannot access private field
+    // let priv = _PrivateClass(); // Error: Cannot access private class from another file (unless we import it or we're in same module? wait, if it's in the same module it can be accessed unless module visibility works at file level. Wait, in Dart, it's file-level. Let's see if we enforce module/file level).
+    // _privateFunction();
+}

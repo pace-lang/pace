@@ -43,6 +43,7 @@ pub enum Stmt {
         fields: Vec<StmtId>,  // VarDecl
         methods: Vec<StmtId>, // FuncDecl
         implements: Option<TypeAnnotation>,
+        visibility: Visibility,
     },
     /// An actor declaration
     ActorDecl {
@@ -51,24 +52,28 @@ pub enum Stmt {
         fields: Vec<StmtId>,  // VarDecl
         methods: Vec<StmtId>, // FuncDecl
         implements: Option<TypeAnnotation>,
+        visibility: Visibility,
     },
     /// An interface declaration
     InterfaceDecl {
         name: Ustr,
         generic_params: Option<Vec<pace_ast::GenericParam>>,
         methods: Vec<StmtId>, // FuncDecl without body
+        visibility: Visibility,
     },
     /// A struct declaration
     StructDecl {
         name: Ustr,
         generic_params: Option<Vec<pace_ast::GenericParam>>,
         fields: Vec<StmtId>, // VarDecl
+        visibility: Visibility,
     },
     /// An enum declaration
     EnumDecl {
         name: Ustr,
         generic_params: Option<Vec<pace_ast::GenericParam>>,
         variants: Vec<EnumVariant>,
+        visibility: Visibility,
     },
     /// A while loop
     While { condition: ExprId, body: StmtId },

@@ -239,6 +239,7 @@ impl<'a> HirBuilder<'a> {
                 fields,
                 methods,
                 implements,
+                visibility,
             } => {
                 let field_ids = self.lower_stmts(fields);
                 let method_ids = self.lower_stmts(methods);
@@ -248,6 +249,7 @@ impl<'a> HirBuilder<'a> {
                     fields: field_ids,
                     methods: method_ids,
                     implements: implements.clone(),
+                    visibility: visibility.clone(),
                 }
             }
             pace_ast::Stmt::ActorDecl {
@@ -256,6 +258,7 @@ impl<'a> HirBuilder<'a> {
                 fields,
                 methods,
                 implements,
+                visibility,
             } => {
                 let field_ids = self.lower_stmts(fields);
                 let method_ids = self.lower_stmts(methods);
@@ -265,36 +268,42 @@ impl<'a> HirBuilder<'a> {
                     fields: field_ids,
                     methods: method_ids,
                     implements: implements.clone(),
+                    visibility: visibility.clone(),
                 }
             }
             pace_ast::Stmt::InterfaceDecl {
                 name,
                 generic_params,
                 methods,
+                visibility,
             } => {
                 let method_ids = self.lower_stmts(methods);
                 Stmt::InterfaceDecl {
                     name: *name,
                     generic_params: generic_params.clone(),
                     methods: method_ids,
+                    visibility: visibility.clone(),
                 }
             }
             pace_ast::Stmt::StructDecl {
                 name,
                 generic_params,
                 fields,
+                visibility,
             } => {
                 let field_ids = self.lower_stmts(fields);
                 Stmt::StructDecl {
                     name: *name,
                     generic_params: generic_params.clone(),
                     fields: field_ids,
+                    visibility: visibility.clone(),
                 }
             }
             pace_ast::Stmt::EnumDecl {
                 name,
                 generic_params,
                 variants,
+                visibility,
             } => {
                 let hir_variants = variants
                     .iter()
@@ -307,6 +316,7 @@ impl<'a> HirBuilder<'a> {
                     name: *name,
                     generic_params: generic_params.clone(),
                     variants: hir_variants,
+                    visibility: visibility.clone(),
                 }
             }
             pace_ast::Stmt::While { condition, body } => {

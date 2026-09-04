@@ -38,7 +38,7 @@ impl<'a> TypeChecker<'a> {
             // We consider direct references to other classes (or self). 
             // In a real scenario, this could also include Option<Class> or List<Class>.
             // For now, let's just do direct class references.
-            let target_class_opt = match field_ty {
+            let target_class_opt = match field_ty.ty {
                 Type::Class(name) => Some(name),
                 Type::Nullable(inner) => {
                     if let Type::Class(name) = *inner {

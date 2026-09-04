@@ -77,6 +77,7 @@ impl ConstantFolder {
                 fields,
                 methods,
                 implements,
+                visibility,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -92,6 +93,7 @@ impl ConstantFolder {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
+                    visibility,
                 }
             }
             Stmt::ActorDecl {
@@ -100,6 +102,7 @@ impl ConstantFolder {
                 fields,
                 methods,
                 implements,
+                visibility,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -115,6 +118,7 @@ impl ConstantFolder {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
+                    visibility,
                 }
             }
             Stmt::VarDecl {

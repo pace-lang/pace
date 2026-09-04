@@ -1,11 +1,16 @@
-# Pace Language
+<div align="center">
+  <img src="banner.png" alt="Pace Language Banner" width="100%" />
 
-Pace is a fast, memory-safe, statically typed programming language.
+  # Pace Language
+  *A fast, memory-safe, statically typed programming language.*
+</div>
 
-## Overview
-This repository contains the completely Pace compiler and standard library.
+---
 
-## Syntax Example
+## ⚡ Overview
+This repository contains the complete Pace compiler, standard library, and tooling ecosystem.
+
+## 💻 Syntax Example
 
 ```pace
 interface Counter {
@@ -37,13 +42,13 @@ async func main() {
 }
 ```
 
-## Core Features
+## 🚀 Core Features
 - **Variables**: `let` (immutable), `var` (mutable), `const` (compile-time constant).
 - **Concurrency**: First-class support for `async`, `await`, `actor`, and `spawn`.
 - **Null Safety**: Optional types `T?` with explicit `null` checking.
 - **Classes & Interfaces**: Full object-oriented features with `class`, `struct`, and `interface`.
 
-## Benchmarks
+## 📊 Benchmarks
 
 Pace is built for speed, generating highly optimized native code via Cranelift. Below are the benchmark results comparing Pace to other popular languages.
 

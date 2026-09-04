@@ -261,6 +261,7 @@ impl Monomorphizer {
                 fields,
                 methods,
                 implements,
+                visibility,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -276,6 +277,7 @@ impl Monomorphizer {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
+                    visibility,
                 }
             }
             Stmt::ActorDecl {
@@ -284,6 +286,7 @@ impl Monomorphizer {
                 fields,
                 methods,
                 implements,
+                visibility,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -299,12 +302,14 @@ impl Monomorphizer {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
+                    visibility,
                 }
             }
             Stmt::StructDecl {
                 name,
                 generic_params,
                 fields,
+                visibility,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -314,21 +319,25 @@ impl Monomorphizer {
                     name,
                     generic_params,
                     fields: new_fields,
+                    visibility,
                 }
             }
             Stmt::EnumDecl {
                 name,
                 generic_params,
                 variants,
+                visibility,
             } => Stmt::EnumDecl {
                 name,
                 generic_params,
                 variants,
+                visibility,
             },
             Stmt::InterfaceDecl {
                 name,
                 generic_params,
                 methods,
+                visibility,
             } => {
                 let new_methods = methods
                     .into_iter()
@@ -338,6 +347,7 @@ impl Monomorphizer {
                     name,
                     generic_params,
                     methods: new_methods,
+                    visibility,
                 }
             }
             Stmt::VarDecl {
@@ -608,6 +618,7 @@ impl Monomorphizer {
                         fields: new_fields,
                         methods: new_methods,
                         implements: new_implements,
+                        visibility: pace_ast::Visibility::Public,
                     }
                 } else {
                     Stmt::ClassDecl {
@@ -616,6 +627,7 @@ impl Monomorphizer {
                         fields: new_fields,
                         methods: new_methods,
                         implements: new_implements,
+                        visibility: pace_ast::Visibility::Public,
                     }
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
@@ -643,6 +655,7 @@ impl Monomorphizer {
                     name: concrete_name.clone().into(),
                     generic_params: None,
                     fields: new_fields,
+                    visibility: pace_ast::Visibility::Public,
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
             }
@@ -681,6 +694,7 @@ impl Monomorphizer {
                     name: concrete_name.clone().into(),
                     generic_params: None,
                     variants: new_variants,
+                    visibility: pace_ast::Visibility::Public,
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
             }
@@ -707,6 +721,7 @@ impl Monomorphizer {
                     name: concrete_name.clone().into(),
                     generic_params: None,
                     methods: new_methods,
+                    visibility: pace_ast::Visibility::Public,
                 };
                 *arena.get_stmt_mut(dummy_id) = instantiated;
             }

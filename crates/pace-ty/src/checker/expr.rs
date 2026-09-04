@@ -58,13 +58,29 @@ impl<'a> TypeChecker<'a> {
             None => {
                 // Check if it's a class/struct for instantiation
                 // Check if it's a module item
-                if self.env.classes.contains_key(name) {
+                if let Some(sig) = self.env.classes.get(name) {
+                    if sig.visibility == pace_ast::Visibility::Private && sig.module != self.current_module {
+                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: format!("Class '{}' is private", name.split("__").last().unwrap_or(name)) });
+                        return Type::Error;
+                    }
                     Type::Class(*name)
-                } else if self.env.actors.contains_key(name) {
+                } else if let Some(sig) = self.env.actors.get(name) {
+                    if sig.visibility == pace_ast::Visibility::Private && sig.module != self.current_module {
+                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: format!("Actor '{}' is private", name.split("__").last().unwrap_or(name)) });
+                        return Type::Error;
+                    }
                     Type::Actor(*name)
-                } else if self.env.structs.contains_key(name) {
+                } else if let Some(sig) = self.env.structs.get(name) {
+                    if sig.visibility == pace_ast::Visibility::Private && sig.module != self.current_module {
+                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: format!("Struct '{}' is private", name.split("__").last().unwrap_or(name)) });
+                        return Type::Error;
+                    }
                     Type::Struct(*name)
-                } else if self.env.enums.contains_key(name) {
+                } else if let Some(sig) = self.env.enums.get(name) {
+                    if sig.visibility == pace_ast::Visibility::Private && sig.module != self.current_module {
+                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span, message: format!("Enum '{}' is private", name.split("__").last().unwrap_or(name)) });
+                        return Type::Error;
+                    }
                     Type::Enum(*name)
                 } else if let Some(global) = self.env.global_vars.get(name) {
                     global.ty.clone()
@@ -718,7 +734,17 @@ impl<'a> TypeChecker<'a> {
                 };
 
                 if let Some(ty) = static_fields.get(&ustr::Ustr::from(property)) {
-                    return ty.clone();
+                    if ty.visibility == pace_ast::Visibility::Private
+                        && self.current_class.as_deref() != Some(&*class_name)
+                    {
+                        {
+                            self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
+                                message: format!("Static field '{}' is private and cannot be accessed from outside class/actor '{}'", property, class_name.split("__").last().unwrap_or(&class_name))
+                            });
+                            return Type::Error;
+                        };
+                    }
+                    return ty.ty.clone();
                 }
                 if let Some(ty) = fields.get(&ustr::Ustr::from(property)) {
                     if let Type::Actor(ref a_name) = obj_ty
@@ -731,7 +757,17 @@ impl<'a> TypeChecker<'a> {
                             return Type::Error;
                         };
                     }
-                    return ty.clone();
+                    if ty.visibility == pace_ast::Visibility::Private
+                        && self.current_class.as_deref() != Some(&*class_name)
+                    {
+                        {
+                            self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
+                                message: format!("Field '{}' is private and cannot be accessed from outside class/actor '{}'", property, class_name.split("__").last().unwrap_or(&class_name))
+                            });
+                            return Type::Error;
+                        };
+                    }
+                    return ty.ty.clone();
                 }
                 if let Some(m_sig) = methods.get(&ustr::Ustr::from(property)) {
                     if m_sig.visibility == Visibility::Private
@@ -900,7 +936,7 @@ impl<'a> TypeChecker<'a> {
                     };
 
                     if let Some(f_ty) = sig.fields.get(&ustr::Ustr::from(property)) {
-                        return Type::Nullable(Box::new(f_ty.clone()));
+                        return Type::Nullable(Box::new(f_ty.ty.clone()));
                     }
                     if let Some(m_sig) = sig.methods.get(&ustr::Ustr::from(property)) {
                         return Type::Nullable(Box::new(m_sig.return_type.clone()));

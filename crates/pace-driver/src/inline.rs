@@ -125,6 +125,7 @@ impl Inliner {
                 fields,
                 methods,
                 implements,
+                visibility,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -140,6 +141,7 @@ impl Inliner {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
+                    visibility,
                 }
             }
             Stmt::ActorDecl {
@@ -148,6 +150,7 @@ impl Inliner {
                 fields,
                 methods,
                 implements,
+                visibility,
             } => {
                 let new_fields = fields
                     .into_iter()
@@ -163,6 +166,7 @@ impl Inliner {
                     fields: new_fields,
                     methods: new_methods,
                     implements,
+                    visibility,
                 }
             }
             Stmt::VarDecl {

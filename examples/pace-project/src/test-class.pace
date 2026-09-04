@@ -13,7 +13,7 @@ class Person {
         print("Hello, my name is ${self.name} and I am ${self.age} years old");
     }
 
-    private func unusedMethod() {
+    func _unusedMethod() {
     }
 
     // Intentionally unused to trigger linter
