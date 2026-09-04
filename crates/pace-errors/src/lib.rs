@@ -136,4 +136,14 @@ pub enum SemanticWarning {
         #[label("This is never used")]
         span: pace_span::Span,
     },
+
+    #[error("Potential memory leak: Class '{class_name}' participates in a reference cycle. Consider using a 'weak' field.")]
+    #[diagnostic(code(W1003::cycle_detected), severity(warning))]
+    CycleDetected {
+        class_name: String,
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("This class is part of a cycle")]
+        span: pace_span::Span,
+    },
 }

@@ -123,11 +123,12 @@ impl<'a> Formatter<'a> {
         let stmt = self.arena.get_stmt(stmt_id);
         match stmt {
             Stmt::Expr(e) => self.format_expr(*e).append(RcDoc::text(";")),
-            Stmt::VarDecl { name, is_mutable, type_annotation, is_static, visibility, initializer, span } => {
+            Stmt::VarDecl { name, is_mutable, type_annotation, is_static, is_weak, visibility, initializer, span } => {
                 let c = self.check_comments(span.start);
                 let mut doc = RcDoc::nil();
                 if *visibility == Visibility::Private { doc = doc.append(RcDoc::text("private ")); }
                 if *is_static { doc = doc.append(RcDoc::text("static ")); }
+                if *is_weak { doc = doc.append(RcDoc::text("weak ")); }
                 doc = doc.append(RcDoc::text(if *is_mutable { "var " } else { "let " })).append(RcDoc::text(name.as_str().to_string()));
                 if let Some(ty) = type_annotation {
                     doc = doc.append(RcDoc::text(": ")).append(self.format_type(ty));

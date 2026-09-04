@@ -13,11 +13,12 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let is_async = self.match_token(Token::Async);
         let is_static = self.match_token(Token::Static);
+        let is_weak = self.match_token(Token::Weak);
         let is_extern = self.match_token(Token::Extern);
 
         match self.current_token {
-            Token::Let => self.parse_var_decl(false, is_static, visibility), // doc_comments on vars omitted for now
-            Token::Var => self.parse_var_decl(true, is_static, visibility),
+            Token::Let => self.parse_var_decl(false, is_static, is_weak, visibility), // doc_comments on vars omitted for now
+            Token::Var => self.parse_var_decl(true, is_static, is_weak, visibility),
             Token::Func => self.parse_func_decl(
                 is_async,
                 visibility,

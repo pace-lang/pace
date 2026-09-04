@@ -279,6 +279,17 @@ fn map_warning(
             span.len(),
             s.name(),
         ),
+        CycleDetected {
+            class_name,
+            span,
+            src: s,
+            ..
+        } => (
+            format!("Potential memory leak: Class '{}' participates in a reference cycle. Consider using a 'weak' field.", class_name),
+            span.start,
+            span.len(),
+            s.name(),
+        ),
     };
 
     if warn_src != active_file {

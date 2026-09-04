@@ -1,3 +1,4 @@
+pub mod arc_elision;
 pub mod constant_fold;
 pub mod dce;
 pub mod escape;
@@ -33,7 +34,10 @@ pub fn optimize(program: &mut MirProgram) {
             // 2. Escape Analysis
             changed |= escape::optimize(body);
             
-            // 3. Dead Code Elimination
+            // 3. ARC Optimization
+            changed |= arc_elision::optimize(body);
+            
+            // 4. Dead Code Elimination
             changed |= dce::optimize(body);
             
             iterations += 1;

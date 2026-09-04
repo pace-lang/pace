@@ -11,6 +11,7 @@ pub enum Stmt {
         is_mutable: bool,
         type_annotation: Option<TypeAnnotation>,
         is_static: bool,
+        is_weak: bool,
         visibility: Visibility,
         initializer: Option<ExprId>,
         span: Span,

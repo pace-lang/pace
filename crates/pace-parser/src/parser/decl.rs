@@ -669,6 +669,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         &mut self,
         is_mutable: bool,
         is_static: bool,
+        is_weak: bool,
         visibility: Visibility,
     ) -> Result<pace_ast::arena::StmtId, pace_errors::SyntaxError> {
         let start_pos = self.current_span.start;
@@ -708,6 +709,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             is_mutable,
             type_annotation,
             is_static,
+            is_weak,
             visibility,
             initializer,
             span: pace_ast::Span::new(

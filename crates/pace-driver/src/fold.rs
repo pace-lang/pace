@@ -123,6 +123,7 @@ impl ConstantFolder {
                 type_annotation,
                 is_static,
                 visibility,
+                is_weak,
                 initializer,
                 span,
             } => {
@@ -133,6 +134,7 @@ impl ConstantFolder {
                     type_annotation,
                     is_static,
                     visibility,
+                    is_weak,
                     initializer: new_initializer,
                     span,
                 }

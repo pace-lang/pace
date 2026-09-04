@@ -98,9 +98,9 @@ pub extern "C" fn __pace_retain(obj: *mut u8) {
     if obj.is_null() {
         return;
     }
-    let rc_ptr = obj as *const std::sync::atomic::AtomicI64;
+    let strong_ptr = obj as *const std::sync::atomic::AtomicI32;
     unsafe {
-        (*rc_ptr).fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        (*strong_ptr).fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -109,9 +109,11 @@ pub extern "C" fn __pace_release(obj: *mut u8) {
     if obj.is_null() {
         return;
     }
-    let rc_ptr = obj as *const std::sync::atomic::AtomicI64;
+    let strong_ptr = obj as *const std::sync::atomic::AtomicI32;
+    let weak_ptr = unsafe { obj.add(4) } as *const std::sync::atomic::AtomicI32;
+    
     unsafe {
-        if (*rc_ptr).fetch_sub(1, std::sync::atomic::Ordering::Release) == 1 {
+        if (*strong_ptr).fetch_sub(1, std::sync::atomic::Ordering::Release) == 1 {
             std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire);
 
             // Load vtable pointer from Offset 8
@@ -126,12 +128,75 @@ pub extern "C" fn __pace_release(obj: *mut u8) {
                     drop_fn(obj);
                 }
 
-                // Load size from VTable Offset 8
-                let size_addr = vtable_ptr.add(8) as *const i64;
-                let size = *size_addr as usize;
+                // If there are no weak references, we can free the memory
+                if (*weak_ptr).load(std::sync::atomic::Ordering::Acquire) == 0 {
+                    let size_addr = vtable_ptr.add(8) as *const i64;
+                    let size = *size_addr as usize;
+                    std::alloc::dealloc(obj, std::alloc::Layout::from_size_align(size, 8).unwrap());
+                }
+            }
+        }
+    }
+}
 
-                // Deallocate the memory
-                std::alloc::dealloc(obj, std::alloc::Layout::from_size_align(size, 8).unwrap());
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_weak_retain(obj: *mut u8) {
+    if obj.is_null() {
+        return;
+    }
+    let weak_ptr = unsafe { obj.add(4) } as *const std::sync::atomic::AtomicI32;
+    unsafe {
+        (*weak_ptr).fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_weak_release(obj: *mut u8) {
+    if obj.is_null() {
+        return;
+    }
+    let strong_ptr = obj as *const std::sync::atomic::AtomicI32;
+    let weak_ptr = unsafe { obj.add(4) } as *const std::sync::atomic::AtomicI32;
+    
+    unsafe {
+        if (*weak_ptr).fetch_sub(1, std::sync::atomic::Ordering::Release) == 1 {
+            std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire);
+            
+            // If strong count is also 0, free the memory
+            if (*strong_ptr).load(std::sync::atomic::Ordering::Acquire) == 0 {
+                let vtable_ptr_addr = obj.add(8) as *const *const u8;
+                let vtable_ptr = *vtable_ptr_addr;
+                
+                if !vtable_ptr.is_null() {
+                    let size_addr = vtable_ptr.add(8) as *const i64;
+                    let size = *size_addr as usize;
+                    std::alloc::dealloc(obj, std::alloc::Layout::from_size_align(size, 8).unwrap());
+                }
+            }
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_upgrade_weak(obj: *mut u8) -> *mut u8 {
+    if obj.is_null() {
+        return std::ptr::null_mut();
+    }
+    let strong_ptr = obj as *const std::sync::atomic::AtomicI32;
+    unsafe {
+        let mut current = (*strong_ptr).load(std::sync::atomic::Ordering::Relaxed);
+        loop {
+            if current == 0 {
+                return std::ptr::null_mut();
+            }
+            match (*strong_ptr).compare_exchange_weak(
+                current,
+                current + 1,
+                std::sync::atomic::Ordering::Acquire,
+                std::sync::atomic::Ordering::Relaxed,
+            ) {
+                Ok(_) => return obj,
+                Err(v) => current = v,
             }
         }
     }

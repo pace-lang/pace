@@ -165,6 +165,7 @@ impl<'a> HirBuilder<'a> {
                 type_annotation,
                 is_static,
                 visibility,
+                is_weak: _,
                 initializer,
                 span: _decl_span,
             } => {

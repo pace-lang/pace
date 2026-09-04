@@ -5,6 +5,8 @@ use std::collections::HashMap;
 pub mod decl;
 pub mod expr;
 pub mod stmt;
+pub mod cycle;
+
 impl<'a> TypeChecker<'a> {
     pub fn get_span_for(&self, token: &str) -> pace_span::Span {
         if let Some(src) = self.sources.get(&self.current_module)
@@ -98,7 +100,10 @@ impl<'a> TypeChecker<'a> {
         // Pass 2: Resolve all signatures
         self.resolve_signatures(stmts);
 
-        // Pass 2: Checking bodies
+        // Pass 3: Detect potential cycles
+        self.detect_cycles();
+
+        // Pass 4: Checking bodies
         for stmt_id in stmts {
             self.check_stmt(*stmt_id);
         }

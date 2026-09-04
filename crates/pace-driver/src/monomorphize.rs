@@ -346,6 +346,7 @@ impl Monomorphizer {
                 type_annotation,
                 is_static,
                 visibility,
+                is_weak,
                 initializer,
                 span,
             } => {
@@ -355,6 +356,7 @@ impl Monomorphizer {
                     is_mutable,
                     type_annotation,
                     is_static,
+                    is_weak,
                     visibility,
                     initializer: new_initializer,
                     span,
