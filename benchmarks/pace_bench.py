@@ -154,6 +154,7 @@ def main():
             
             compile_ms = None
             if build_cmd:
+                print(f"Building {name} for {lang}", flush=True)
                 t0 = time.perf_counter()
                 p = subprocess.run(build_cmd, shell=True, cwd=d, capture_output=True, text=True)
                 t1 = time.perf_counter()

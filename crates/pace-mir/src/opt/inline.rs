@@ -6,10 +6,11 @@ pub fn optimize(program: &mut MirProgram) -> bool {
     let function_names: Vec<Ustr> = program.functions.keys().copied().collect();
 
     for caller_name in function_names {
+        let mut inlined_count: std::collections::HashMap<Ustr, usize> = std::collections::HashMap::new();
         loop {
             // Find an inline candidate
             let candidate = if let Some(caller_body) = program.functions.get(&caller_name) {
-                find_inline_candidate(caller_body, program)
+                find_inline_candidate(caller_body, program, &mut inlined_count)
             } else {
                 None
             };
@@ -29,17 +30,32 @@ pub fn optimize(program: &mut MirProgram) -> bool {
     changed
 }
 
-fn find_inline_candidate(caller_body: &MirBody, program: &MirProgram) -> Option<(BasicBlock, Ustr)> {
+fn find_inline_candidate(
+    caller_body: &MirBody,
+    program: &MirProgram,
+    inlined_count: &mut std::collections::HashMap<Ustr, usize>,
+) -> Option<(BasicBlock, Ustr)> {
+    // Prevent exponential code bloat: stop inlining if the caller is already too large
+    if caller_body.basic_blocks.len() > 100 {
+        return None;
+    }
+
     for (bb_idx, bb_data) in caller_body.basic_blocks.iter().enumerate() {
         if let Some(Terminator::Call { func, .. }) = &bb_data.terminator {
             if let Operand::Constant(crate::statement::Constant::Function(callee_name)) = func {
-                // Prevent recursive inlining
+                // Prevent direct recursive inlining into itself
                 if *callee_name == caller_body.name {
+                    continue;
+                }
+                
+                let count = inlined_count.get(callee_name).copied().unwrap_or(0);
+                if count >= 3 {
                     continue;
                 }
                 
                 if let Some(callee_body) = program.functions.get(callee_name) {
                     if is_inlinable(callee_body) {
+                        *inlined_count.entry(*callee_name).or_insert(0) += 1;
                         return Some((BasicBlock(bb_idx), *callee_name));
                     }
                 }
@@ -59,9 +75,6 @@ fn is_inlinable(callee_body: &MirBody) -> bool {
         return false;
     }
     
-    // Do not inline functions that have loops or recursive calls for now
-    // A simple proxy for loops is backward branches, which we won't check yet,
-    // just rely on block count.
     true
 }
 

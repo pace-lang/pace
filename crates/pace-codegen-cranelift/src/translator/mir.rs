@@ -176,19 +176,44 @@ fn compile_mir_function<M: Module>(
                             arg_vals.push(translate_operand(&mut builder, context, arg, &locals)?);
                         }
                         
-                        let inst = builder.ins().call(callee_ref, &arg_vals);
-                        let results = builder.inst_results(inst);
-                        let result_val = if results.is_empty() {
-                            builder.ins().iconst(cranelift::prelude::types::I64, 0)
+                        if func_name.as_str() == "__pace_hash" && arg_vals.len() == 1 {
+                            let mut x = arg_vals[0];
+                            let thirty = builder.ins().iconst(cranelift::prelude::types::I64, 30);
+                            let x_shifted = builder.ins().ushr(x, thirty);
+                            x = builder.ins().bxor(x, x_shifted);
+                            let m1 = builder.ins().iconst(cranelift::prelude::types::I64, 0xbf58476d1ce4e5b9u64 as i64);
+                            x = builder.ins().imul(x, m1);
+                            let twenty_seven = builder.ins().iconst(cranelift::prelude::types::I64, 27);
+                            let x_shifted2 = builder.ins().ushr(x, twenty_seven);
+                            x = builder.ins().bxor(x, x_shifted2);
+                            let m2 = builder.ins().iconst(cranelift::prelude::types::I64, 0x94d049bb133111ebu64 as i64);
+                            x = builder.ins().imul(x, m2);
+                            let thirty_one = builder.ins().iconst(cranelift::prelude::types::I64, 31);
+                            let x_shifted3 = builder.ins().ushr(x, thirty_one);
+                            let result_val = builder.ins().bxor(x, x_shifted3);
+                            
+                            store_to_place(&mut builder, context, destination, &locals, result_val)?;
+                            
+                            if let Some(next_block) = target {
+                                builder.ins().jump(blocks[next_block.index()], &[]);
+                            } else {
+                                builder.ins().trap(cranelift::prelude::TrapCode::user(1).unwrap());
+                            }
                         } else {
-                            results[0]
-                        };
-                        store_to_place(&mut builder, context, destination, &locals, result_val)?;
-                        
-                        if let Some(next_block) = target {
-                            builder.ins().jump(blocks[next_block.index()], &[]);
-                        } else {
-                            builder.ins().trap(cranelift::prelude::TrapCode::user(1).unwrap());
+                            let inst = builder.ins().call(callee_ref, &arg_vals);
+                            let results = builder.inst_results(inst);
+                            let result_val = if results.is_empty() {
+                                builder.ins().iconst(cranelift::prelude::types::I64, 0)
+                            } else {
+                                results[0]
+                            };
+                            store_to_place(&mut builder, context, destination, &locals, result_val)?;
+                            
+                            if let Some(next_block) = target {
+                                builder.ins().jump(blocks[next_block.index()], &[]);
+                            } else {
+                                builder.ins().trap(cranelift::prelude::TrapCode::user(1).unwrap());
+                            }
                         }
                     } else {
                         // Indirect call (e.g., Closures or function pointers)
@@ -314,6 +339,24 @@ fn translate_rvalue<M: Module>(
             Ok(val)
         }
 
+        Rvalue::Aggregate(pace_mir::AggregateKind::StackClass(_class_name, class_size), operands) => {
+            let slot = builder.create_sized_stack_slot(cranelift::prelude::StackSlotData::new(
+                cranelift::prelude::StackSlotKind::ExplicitSlot,
+                *class_size as u32,
+                3, // 8-byte alignment
+            ));
+            let obj_ptr = builder.ins().stack_addr(context.module.target_config().pointer_type(), slot, 0);
+            
+            let immortal = builder.ins().iconst(types::I64, 4611686018427387904);
+            builder.ins().store(cranelift::prelude::MemFlagsData::new(), immortal, obj_ptr, 0);
+            
+            for (i, op) in operands.iter().enumerate() {
+                let val = translate_operand(builder, context, op, &locals)?;
+                let offset = (16 + i * 8) as i32;
+                builder.ins().store(cranelift::prelude::MemFlagsData::new(), val, obj_ptr, offset);
+            }
+            Ok(obj_ptr)
+        }
         Rvalue::Aggregate(pace_mir::AggregateKind::Class(_class_name, class_size), operands) => {
             let size_val = builder.ins().iconst(types::I64, *class_size as i64);
 

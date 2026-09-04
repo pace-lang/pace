@@ -37,6 +37,7 @@ pub enum AggregateKind {
     Array,
     Tuple,
     Class(Ustr, usize),
+    StackClass(Ustr, usize),
     Closure(Ustr),
     EnumVariant(Ustr, Ustr, usize),
 }
