@@ -1,6 +1,9 @@
 import "../string-builder";
 import "pace:core/iterator";
 
+extern func __pace_realloc(ptr: Int, old_size: Int, new_size: Int) -> Int;
+extern func __pace_memmove(dst: Int, src: Int, size: Int);
+
 class List<T> implement Iterable<T> {
     // Backed by raw memory allocation for high performance and no leaks (ARC drop)
     var _ptr: Int;
@@ -24,15 +27,7 @@ class List<T> implement Iterable<T> {
         } else if self._len >= self._cap {
             // 8 bytes per i64
             let newCap = self._cap * 2;
-            let newPtr = malloc(newCap * 8); // Copy old data
-            var i = 0;
-            while i < self._len {
-                let v = ptrLoad(self._ptr, i * 8);
-                ptrStore(newPtr, i * 8, v);
-                i = i + 1;
-            }
-            free(self._ptr, self._cap * 8);
-            self._ptr = newPtr;
+            self._ptr = __pace_realloc(self._ptr, self._cap * 8, newCap * 8);
             self._cap = newCap;
         }
         __pace_retain_generic<T>(val);
@@ -65,11 +60,9 @@ class List<T> implement Iterable<T> {
         // Ensure capacity
         // This ensures capacity and increments len
         // Shift elements to the right
-        var i = self._len - 1;
-        while i > idx {
-            let prev = ptrLoad(self._ptr, (i - 1) * 8);
-            ptrStore(self._ptr, i * 8, prev);
-            i = i - 1;
+        let count = self._len - 1 - idx;
+        if count > 0 {
+            __pace_memmove(self._ptr + (idx + 1) * 8, self._ptr + idx * 8, count * 8);
         }
         __pace_retain_generic<T>(val);
         ptrStore(self._ptr, idx * 8, val);
@@ -80,11 +73,9 @@ class List<T> implement Iterable<T> {
             return ptrLoad(self._ptr, 0); // fallback
         }
         let _oldVal = ptrLoad(self._ptr, idx * 8);
-        var i = idx;
-        while i < self._len - 1 {
-            let next = ptrLoad(self._ptr, (i + 1) * 8);
-            ptrStore(self._ptr, i * 8, next);
-            i = i + 1;
+        let count = self._len - 1 - idx;
+        if count > 0 {
+            __pace_memmove(self._ptr + idx * 8, self._ptr + (idx + 1) * 8, count * 8);
         }
         self._len = self._len - 1;
         return _oldVal;

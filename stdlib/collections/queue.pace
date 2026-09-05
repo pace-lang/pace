@@ -1,0 +1,149 @@
+import "../string-builder";
+import "pace:core/iterator";
+
+extern func __pace_malloc(size: Int) -> Int;
+extern func __pace_free(ptr: Int, size: Int);
+extern func __pace_retain_generic<T>(val: T);
+extern func __pace_release_generic<T>(val: T);
+extern func __pace_ptr_load8(ptr: Int, offset: Int) -> Int;
+extern func __pace_ptr_store8(ptr: Int, offset: Int, val: Int);
+
+class Queue<T> implement Iterable<T> {
+    var _ptr: Int;
+    var _cap: Int;
+    var _head: Int;
+    var _tail: Int;
+    var _count: Int;
+
+    func init() {
+        self._cap = 16;
+        self._ptr = __pace_malloc(self._cap * 8);
+        self._head = 0;
+        self._tail = 0;
+        self._count = 0;
+    }
+
+    func enqueue(val: T) {
+        if self._count == self._cap {
+            self._resize();
+        }
+        __pace_retain_generic<T>(val);
+        __pace_ptr_store8(self._ptr, self._tail, val);
+        self._tail = (self._tail + 1) % self._cap;
+        self._count = self._count + 1;
+    }
+
+    func dequeue() -> T {
+        if self._count == 0 {
+            // Panic/Abort behavior: returning uninitialized or crashing.
+            // For now, pace bounds check would ideally catch this, but we'll let it read garbage or crash.
+        }
+        let val = __pace_ptr_load8(self._ptr, self._head);
+        self._head = (self._head + 1) % self._cap;
+        self._count = self._count - 1;
+        // Notice we don't release here because ownership transfers to the caller
+        return val;
+    }
+
+    func peek() -> T {
+        return __pace_ptr_load8(self._ptr, self._head);
+    }
+
+    func get(index: Int) -> T {
+        let idx = (self._head + index) % self._cap;
+        return __pace_ptr_load8(self._ptr, idx);
+    }
+
+    func _resize() {
+        let oldCap = self._cap;
+        self._cap = self._cap * 2;
+        let newPtr = __pace_malloc(self._cap * 8);
+        
+        var i = 0;
+        while i < self._count {
+            let idx = (self._head + i) % oldCap;
+            let val = __pace_ptr_load8(self._ptr, idx);
+            __pace_ptr_store8(newPtr, i, val);
+            i = i + 1;
+        }
+
+        __pace_free(self._ptr, oldCap * 8);
+        self._ptr = newPtr;
+        self._head = 0;
+        self._tail = self._count;
+    }
+
+    func clear() {
+        var i = 0;
+        while i < self._count {
+            let idx = (self._head + i) % self._cap;
+            __pace_release_generic<T>(__pace_ptr_load8(self._ptr, idx));
+            i = i + 1;
+        }
+        self._head = 0;
+        self._tail = 0;
+        self._count = 0;
+    }
+
+    func length() -> Int {
+        return self._count;
+    }
+
+    func isEmpty() -> Bool {
+        return self._count == 0;
+    }
+
+    func isNotEmpty() -> Bool {
+        return self._count > 0;
+    }
+
+    func drop() {
+        if self._ptr != 0 {
+            self.clear();
+            __pace_free(self._ptr, self._cap * 8);
+            self._ptr = 0;
+        }
+    }
+
+    func iterator() -> Iterator<T> {
+        return QueueIterator<T>(self);
+    }
+
+    func toString() -> String {
+        let sb = StringBuilder();
+        sb.init();
+        sb.append("Queue(");
+        var i = 0;
+        while i < self._count {
+            let idx = (self._head + i) % self._cap;
+            let item = __pace_ptr_load8(self._ptr, idx);
+            sb.append(item.toString());
+            if i < self._count - 1 {
+                sb.append(", ");
+            }
+            i = i + 1;
+        }
+        sb.append(")");
+        return sb.build();
+    }
+}
+
+class QueueIterator<T> implement Iterator<T> {
+    var queue: Queue<T>;
+    var index: Int;
+
+    func init(q: Queue<T>) {
+        self.queue = q;
+        self.index = 0;
+    }
+
+    func hasNext() -> Bool {
+        return self.index < self.queue.length();
+    }
+
+    func next() -> T {
+        let val = self.queue.get(self.index);
+        self.index = self.index + 1;
+        return val;
+    }
+}

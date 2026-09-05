@@ -1,19 +1,45 @@
 import "pace:collections";
 func runMapTest() {
     print("--- Testing Maps ---");
-    let map = Map<String, Int>();
-    map.put("Alice", 25);
-    map.put("Bob", 30);
-    map.put("Alice", 26);
+    let map = {"Alice": 25, "Bob": 30};
+    map.set("Alice", 26);
     print("Map size: ${map.length()}");
+    
     // Override
     let aliceAge = map.get("Alice");
     print("Alice's age: ${aliceAge}");
-    if map.contains("Bob") {
+    
+    if map.containsKey("Bob") {
         print("Map contains Bob");
     }
-    if map.contains("Charlie") == false {
+    if map.containsKey("Charlie") == false {
         print("Map does not contain Charlie");
     }
+    
+    print("Map contains value 30: ${map.containsValue(30)}");
+    print("Map contains value 100: ${map.containsValue(100)}");
+    
+    map.set("Charlie", 40);
+    print("Map keys: ${map.keys().toString()}");
+    print("Map values: ${map.values().toString()}");
+    
+    let removed = map.remove("Bob");
+    print("Removed Bob: ${removed}, Size: ${map.length()}");
+    print("Map toString: ${map.toString()}");
+    
+    print("Is empty: ${map.isEmpty()}, Is not empty: ${map.isNotEmpty()}");
+    
+    let otherMap = Map<String, Int>();
+    otherMap.set("David", 50);
+    otherMap.set("Eve", 60);
+    map.addAll(otherMap);
+    print("After addAll: ${map.toString()}");
+    
+    map.clear();
+    print("After clear, size: ${map.length()}");
+    
+    map.drop();
+    otherMap.drop();
+    print("Dropped maps");
 }
 

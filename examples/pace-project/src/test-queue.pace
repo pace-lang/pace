@@ -1,0 +1,24 @@
+import "pace:collections";
+func runQueueTest() {
+    print("--- Testing Queue ---");
+    let queue: Queue<Int> = [10, 20, 30];
+    
+    print("Queue size: ${queue.length()}"); // Should be 3
+    print("Peek: ${queue.peek()}"); // Should be 10
+    
+    print("Queue toString: ${queue.toString()}");
+    
+    let first = queue.dequeue();
+    print("Dequeued: ${first}, size: ${queue.length()}");
+    
+    queue.enqueue(40);
+    queue.enqueue(50);
+    
+    print("Queue toString after enqueues: ${queue.toString()}"); 
+    
+    queue.clear();
+    print("After clear, size: ${queue.length()}");
+    
+    queue.drop();
+    print("Dropped queue");
+}

@@ -76,6 +76,32 @@ pub extern "C" fn __pace_malloc(size: usize) -> *mut u8 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn __pace_realloc(ptr: *mut u8, old_size: usize, new_size: usize) -> *mut u8 {
+    unsafe {
+        let old_layout = std::alloc::Layout::from_size_align(old_size, 8).unwrap();
+        let new_ptr = std::alloc::realloc(ptr, old_layout, new_size);
+        if new_ptr.is_null() {
+            std::alloc::handle_alloc_error(std::alloc::Layout::from_size_align(new_size, 8).unwrap());
+        }
+        new_ptr
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_memcpy(dst: *mut u8, src: *const u8, size: usize) {
+    unsafe {
+        std::ptr::copy_nonoverlapping(src, dst, size);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __pace_memmove(dst: *mut u8, src: *const u8, size: usize) {
+    unsafe {
+        std::ptr::copy(src, dst, size);
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn __pace_hash(val: i64) -> i64 {
     // A simple integer hash function (e.g. FNV-1a or splitmix64 style)
     let mut x = val as u64;

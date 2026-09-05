@@ -1,0 +1,184 @@
+import "./list";
+import "../string-builder";
+
+class TreeMapNode<K, V> {
+    var key: K;
+    var value: V;
+    var has_left: Bool;
+    var has_right: Bool;
+    var left: TreeMapNode<K, V>;
+    var right: TreeMapNode<K, V>;
+
+    func init(k: K, v: V) {
+        self.key = k;
+        self.value = v;
+        self.has_left = false;
+        self.has_right = false;
+    }
+}
+
+class TreeMap<K, V> {
+    // Unbalanced BST-based Map for Ordered Iteration
+    var root: TreeMapNode<K, V>;
+    var has_root: Bool;
+    var _count: Int;
+
+    func init() {
+        self.has_root = false;
+        self._count = 0;
+    }
+
+    func set(k: K, v: V) {
+        if self.has_root == false {
+            self.root = TreeMapNode<K, V>(k, v);
+            self.has_root = true;
+            self._count = 1;
+            return;
+        }
+        var current = self.root;
+        while true {
+            if k == current.key {
+                current.value = v;
+                return;
+            }
+            if k < current.key {
+                if current.has_left {
+                    current = current.left;
+                } else {
+                    current.left = TreeMapNode<K, V>(k, v);
+                    current.has_left = true;
+                    self._count = self._count + 1;
+                    return;
+                }
+            } else {
+                if current.has_right {
+                    current = current.right;
+                } else {
+                    current.right = TreeMapNode<K, V>(k, v);
+                    current.has_right = true;
+                    self._count = self._count + 1;
+                    return;
+                }
+            }
+        }
+    }
+
+    func get(k: K) -> V {
+        if self.has_root == false {
+            // Should ideally return an Option or panic, 
+            // returning uninitialized memory/crashing if not found for now.
+        }
+        var current = self.root;
+        while true {
+            if k == current.key {
+                return current.value;
+            }
+            if k < current.key {
+                if current.has_left {
+                    current = current.left;
+                } else {
+                    // Not found panic
+                }
+            } else {
+                if current.has_right {
+                    current = current.right;
+                } else {
+                    // Not found panic
+                }
+            }
+        }
+        return current.value; // Unreachable
+    }
+
+    func containsKey(k: K) -> Bool {
+        if self.has_root == false {
+            return false;
+        }
+        var current = self.root;
+        while true {
+            if k == current.key {
+                return true;
+            }
+            if k < current.key {
+                if current.has_left {
+                    current = current.left;
+                } else {
+                    return false;
+                }
+            } else {
+                if current.has_right {
+                    current = current.right;
+                } else {
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
+    func length() -> Int {
+        return self._count;
+    }
+
+    func isEmpty() -> Bool {
+        return self._count == 0;
+    }
+    
+    // In-order traversal to get keys in sorted order
+    func keys() -> List<K> {
+        let result = List<K>();
+        if self.has_root {
+            self._inOrderKeys(self.root, result);
+        }
+        return result;
+    }
+
+    func _inOrderKeys(node: TreeMapNode<K, V>, list: List<K>) {
+        if node.has_left {
+            self._inOrderKeys(node.left, list);
+        }
+        list.add(node.key);
+        if node.has_right {
+            self._inOrderKeys(node.right, list);
+        }
+    }
+
+    func values() -> List<V> {
+        let result = List<V>();
+        if self.has_root {
+            self._inOrderValues(self.root, result);
+        }
+        return result;
+    }
+
+    func _inOrderValues(node: TreeMapNode<K, V>, list: List<V>) {
+        if node.has_left {
+            self._inOrderValues(node.left, list);
+        }
+        list.add(node.value);
+        if node.has_right {
+            self._inOrderValues(node.right, list);
+        }
+    }
+
+    func toString() -> String {
+        let sb = StringBuilder();
+        sb.init();
+        sb.append("{");
+        
+        let kList = self.keys();
+        let vList = self.values();
+        var i = 0;
+        while i < kList.length() {
+            sb.append(kList.get(i).toString());
+            sb.append(": ");
+            sb.append(vList.get(i).toString());
+            if i < kList.length() - 1 {
+                sb.append(", ");
+            }
+            i = i + 1;
+        }
+        sb.append("}");
+        return sb.build();
+    }
+}

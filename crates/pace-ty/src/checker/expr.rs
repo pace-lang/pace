@@ -1171,7 +1171,7 @@ impl<'a> TypeChecker<'a> {
         let expected_str = format!("{:?}", expected);
         let actual_str = format!("{:?}", actual);
         
-        if actual_str.contains("List") && expected_str.contains("Set") {
+        if actual_str.contains("List") && (expected_str.contains("Set") || expected_str.contains("Queue") || expected_str.contains("TreeSet")) {
             if matches!(self.arena.get_expr(expr_id), Expr::ArrayLiteral(_)) {
                 self.env.node_types.insert(expr_id, expected.clone());
             }

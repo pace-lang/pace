@@ -40,6 +40,9 @@ impl RuntimeBindings {
             pace_runtime::__pace_bool_to_string as *const u8,
         );
         builder.symbol("__pace_malloc", pace_runtime::__pace_malloc as *const u8);
+        builder.symbol("__pace_realloc", pace_runtime::__pace_realloc as *const u8);
+        builder.symbol("__pace_memcpy", pace_runtime::__pace_memcpy as *const u8);
+        builder.symbol("__pace_memmove", pace_runtime::__pace_memmove as *const u8);
         builder.symbol("__pace_noop", pace_runtime::__pace_noop as *const u8);
         builder.symbol("__pace_retain", pace_runtime::__pace_retain as *const u8);
         builder.symbol("__pace_release", pace_runtime::__pace_release as *const u8);

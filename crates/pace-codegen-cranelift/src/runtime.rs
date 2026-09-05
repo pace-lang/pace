@@ -31,6 +31,31 @@ pub fn declare_runtime_functions<M: Module>(
         .declare_function("__pace_malloc", Linkage::Import, &sig_malloc)
         .unwrap();
 
+    let mut sig_realloc = module.make_signature();
+    sig_realloc.params.push(AbiParam::new(ptr_ty));
+    sig_realloc.params.push(AbiParam::new(types::I64));
+    sig_realloc.params.push(AbiParam::new(types::I64));
+    sig_realloc.returns.push(AbiParam::new(ptr_ty));
+    let realloc_id = module
+        .declare_function("__pace_realloc", Linkage::Import, &sig_realloc)
+        .unwrap();
+
+    let mut sig_memcpy = module.make_signature();
+    sig_memcpy.params.push(AbiParam::new(ptr_ty));
+    sig_memcpy.params.push(AbiParam::new(ptr_ty));
+    sig_memcpy.params.push(AbiParam::new(types::I64));
+    let memcpy_id = module
+        .declare_function("__pace_memcpy", Linkage::Import, &sig_memcpy)
+        .unwrap();
+
+    let mut sig_memmove = module.make_signature();
+    sig_memmove.params.push(AbiParam::new(ptr_ty));
+    sig_memmove.params.push(AbiParam::new(ptr_ty));
+    sig_memmove.params.push(AbiParam::new(types::I64));
+    let memmove_id = module
+        .declare_function("__pace_memmove", Linkage::Import, &sig_memmove)
+        .unwrap();
+
     let mut sig_noop = module.make_signature();
     sig_noop.params.push(AbiParam::new(ptr_ty));
     let noop_id = module
@@ -199,6 +224,9 @@ pub fn declare_runtime_functions<M: Module>(
     funcs.insert(ustr::Ustr::from("__pace_print_float"), print_float_id);
     funcs.insert(ustr::Ustr::from("__pace_print_string"), print_string_id);
     funcs.insert(ustr::Ustr::from("__pace_malloc"), malloc_id);
+    funcs.insert(ustr::Ustr::from("__pace_realloc"), realloc_id);
+    funcs.insert(ustr::Ustr::from("__pace_memcpy"), memcpy_id);
+    funcs.insert(ustr::Ustr::from("__pace_memmove"), memmove_id);
     funcs.insert(ustr::Ustr::from("__pace_retain"), retain_id);
     funcs.insert(ustr::Ustr::from("__pace_release"), release_id);
     funcs.insert(ustr::Ustr::from("__pace_noop"), noop_id);

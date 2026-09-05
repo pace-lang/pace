@@ -1,0 +1,29 @@
+import "pace:collections";
+func runSetTest() {
+    print("--- Testing Sets ---");
+    let set: Set<Int> = [10,20,30,20];
+    
+    print("Set size: ${set.length()}"); // Should be 3
+    print("Set contains 20: ${set.contains(20)}");
+    print("Set contains 50: ${set.contains(50)}");
+    
+    print("Set toString: ${set.toString()}");
+    
+    set.remove(20);
+    print("After remove 20, size: ${set.length()}");
+    
+    let otherSet = Set<Int>();
+    otherSet.add(30);
+    otherSet.add(40);
+    otherSet.add(50);
+    
+    set.addAll(otherSet);
+    print("After addAll: ${set.toString()}"); // Should contain 10, 30, 40, 50
+    
+    set.clear();
+    print("After clear, size: ${set.length()}");
+    
+    set.drop();
+    otherSet.drop();
+    print("Dropped sets");
+}

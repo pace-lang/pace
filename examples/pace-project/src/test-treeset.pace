@@ -1,0 +1,12 @@
+import "pace:collections";
+func runTreeSetTest() {
+    print("--- Testing TreeSet ---");
+    let set: TreeSet<Int> = [50, 20, 80, 10, 30, 70, 90, 50];
+    
+    print("TreeSet length: ${set.length()}");
+    print("Contains 30: ${set.contains(30)}");
+    print("Contains 100: ${set.contains(100)}");
+
+    // toString uses in-order traversal, so it should be sorted!
+    print("TreeSet toString: ${set.toString()}");
+}

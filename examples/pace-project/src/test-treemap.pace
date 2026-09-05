@@ -1,0 +1,22 @@
+import "pace:collections";
+func runTreeMapTest() {
+    print("--- Testing TreeMap ---");
+    let map = TreeMap<Int, String>();
+    map.init();
+    
+    // Insert out of order
+    map.set(50, "Fifty");
+    map.set(20, "Twenty");
+    map.set(80, "Eighty");
+    map.set(10, "Ten");
+    map.set(30, "Thirty");
+    map.set(70, "Seventy");
+    map.set(90, "Ninety");
+
+    print("TreeMap length: ${map.length()}");
+    print("Contains 30: ${map.containsKey(30)}");
+    print("Contains 100: ${map.containsKey(100)}");
+
+    // toString uses in-order traversal, so it should be sorted by key!
+    print("TreeMap toString: ${map.toString()}");
+}

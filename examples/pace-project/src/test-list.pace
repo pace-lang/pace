@@ -1,15 +1,41 @@
 import "pace:collections";
 func runListTest() {
     print("--- Testing Lists ---");
-    let list = List<Int>();
-    list.add(10);
-    list.add(20);
-    list.add(30);
+    let list = [10, 20, 30];
     print("List size: ${list.length()}");
-    print("First element: ${list.get(0)}");
+    print("First element: ${list.first()}");
     print("Second element: ${list.get(1)}");
-    print("Third element: ${list.get(2)}");
+    print("Last element: ${list.last()}");
+    
+    list.insert(1, 15);
+    print("After insert at 1: ${list.toString()}");
+    
+    let removed = list.removeAt(2);
+    print("Removed at 2: ${removed}, List: ${list.toString()}");
+    
+    list.removeLast();
+    print("After removeLast: ${list.toString()}");
+    
+    list.add(40);
+    list.add(50);
+    let removedVal = list.remove(40);
+    print("Removed 40: ${removedVal}, List: ${list.toString()}");
+    
+    print("Index of 50: ${list.indexOf(50)}");
+    print("Contains 15: ${list.contains(15)}");
+    print("Is empty: ${list.isEmpty()}, Is not empty: ${list.isNotEmpty()}");
+    
+    let otherList = List<Int>();
+    otherList.add(100);
+    otherList.add(200);
+    list.addAll(otherList);
+    print("After addAll: ${list.toString()}");
+    
+    list.clear();
+    print("After clear, size: ${list.length()}");
+    
     list.drop();
-    print("Dropped list");
+    otherList.drop();
+    print("Dropped lists");
 }
 

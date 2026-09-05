@@ -1,6 +1,7 @@
 export "./collections/list";
 export "./collections/set";
-export "./collections/queue";
 export "./collections/map";
+export "./collections/queue";
+export "./collections/tree-map";
 export "./collections/tree-set";
 // Standard Collections Module

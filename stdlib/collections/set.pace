@@ -1,15 +1,16 @@
 import "./list";
+import "./map";
 import "../string-builder";
 import "pace:core/iterator";
 
 class Set<T> implement Iterable<T> {
     // Standard Dynamic Set Implementation
-    // Uses a List internally and deduplicates on insert
-    var _list: List<T>;
+    // Uses a Map internally for O(1) deduplication
+    var _map: Map<T, Bool>;
 
     func init() {
-        self._list = List<T>();
-        self._list.init();
+        self._map = Map<T, Bool>();
+        self._map.init();
     }
 
     func iterator() -> Iterator<T> {
@@ -17,10 +18,10 @@ class Set<T> implement Iterable<T> {
     }
 
     func add(val: T) -> Bool {
-        if self._list.contains(val) {
+        if self._map.containsKey(val) {
             return false;
         }
-        self._list.add(val);
+        self._map.set(val, true);
         return true;
     }
 
@@ -32,66 +33,54 @@ class Set<T> implement Iterable<T> {
     }
 
     func getList() -> List<T> {
-        return self._list;
+        return self._map.keys();
     }
 
     func remove(val: T) -> Bool {
-        let idx = self._list.indexOf(val);
-        if idx >= 0 {
-            self._list.removeAt(idx);
-            return true;
-        }
-        return false;
+        return self._map.remove(val);
     }
 
     func clear() {
-        self._list.clear();
+        self._map.clear();
     }
 
     func contains(val: T) -> Bool {
-        return self._list.contains(val);
+        return self._map.containsKey(val);
     }
 
     func length() -> Int {
-        return self._list.length();
+        return self._map.length();
     }
 
     func isEmpty() -> Bool {
-        return self._list.isEmpty();
+        return self._map.isEmpty();
     }
 
     func isNotEmpty() -> Bool {
-        return self._list.isNotEmpty();
+        return self._map.isNotEmpty();
     }
 
     func first() -> T {
-        return self._list.first();
+        return self._map.keys().first();
     }
 
     func last() -> T {
-        return self._list.last();
+        return self._map.keys().last();
     }
 
     func union(other: Set<T>) -> Set<T> {
         let newSet = Set<T>();
-        var i = 0;
-        while i < self.length() {
-            newSet.add(self._list.get(i));
-            i = i + 1;
-        }
-        var j = 0;
-        while j < other.length() {
-            newSet.add(other._list.get(j));
-            j = j + 1;
-        }
+        newSet.addAll(self);
+        newSet.addAll(other);
         return newSet;
     }
 
     func intersection(other: Set<T>) -> Set<T> {
         let newSet = Set<T>();
+        let keys = self._map.keys();
         var i = 0;
-        while i < self.length() {
-            let item = self._list.get(i);
+        while i < keys.length() {
+            let item = keys.get(i);
             if other.contains(item) {
                 newSet.add(item);
             }
@@ -104,16 +93,21 @@ class Set<T> implement Iterable<T> {
         let sb = StringBuilder();
         sb.init();
         sb.append("[");
+        let keys = self._map.keys();
         var i = 0;
-        while i < self.length() {
-            sb.append(self._list.get(i).toString());
-            if i < self.length() - 1 {
+        while i < keys.length() {
+            sb.append(keys.get(i).toString());
+            if i < keys.length() - 1 {
                 sb.append(", ");
             }
             i = i + 1;
         }
         sb.append("]");
         return sb.build();
+    }
+
+    func drop() {
+        self._map.drop();
     }
 }
 

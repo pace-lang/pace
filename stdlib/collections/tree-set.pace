@@ -1,96 +1,74 @@
-class TreeNode<T> {
-    // Standard Binary Search Tree Implementation
-    var value: T; // Pace currently lacks nullables natively, so we represent empty child nodes via a boolean flag.
-    var has_left: Bool;
-    var has_right: Bool;
-    var left: TreeNode<T>;
-    var right: TreeNode<T>;
-
-    func init(val: T) {
-        self.value = val;
-        self.has_left = false;
-        self.has_right = false;
-    }
-
-}
+import "./tree-map";
+import "./list";
+import "../string-builder";
+import "pace:core/iterator";
 
 class TreeSet<T> implement Iterable<T> {
     // A TreeSet stores elements in sorted order.
-    // Note: T must implement Comparable, but we currently rely on the compiler's intrinsic `<` and `>` 
-    // or custom implementations relying on the typechecker.
-    var root: TreeNode<T>;
-    var has_root: Bool;
-    var size: Int;
+    // Uses a TreeMap internally for O(log N) (on average) deduplication and ordered iteration
+    var _map: TreeMap<T, Bool>;
 
     func init() {
-        self.has_root = false;
-        self.size = 0;
+        self._map = TreeMap<T, Bool>();
+        self._map.init();
     }
 
     func add(val: T) {
-        if self.has_root == false {
-            self.root = TreeNode<T>(val);
-            self.has_root = true;
-            self.size = 1;
-            return;
-        }
-        var current = self.root;
-        while true {
-            if val == current.value {
-                return;
-            }
-            if val < current.value {
-                if current.has_left {
-                    current = current.left;
-                } else {
-                    current.left = TreeNode<T>(val);
-                    current.has_left = true;
-                    self.size = self.size + 1;
-                    return;
-                }
-            } else {
-                if current.has_right {
-                    current = current.right;
-                } else {
-                    current.right = TreeNode<T>(val);
-                    current.has_right = true;
-                    self.size = self.size + 1;
-                    return;
-                }
-            }
-        }
+        self._map.set(val, true);
     }
 
-    // Element already exists, TreeSet guarantees uniqueness
     func contains(val: T) -> Bool {
-        if self.has_root == false {
-            return false;
-        }
-        var current = self.root;
-        while true {
-            if val == current.value {
-                return true;
-            }
-            if val < current.value {
-                if current.has_left {
-                    current = current.left;
-                } else {
-                    return false;
-                }
-            } else {
-                if current.has_right {
-                    current = current.right;
-                } else {
-                    return false;
-                }
-            }
-        }
-        return false;
+        return self._map.containsKey(val);
     }
 
     func length() -> Int {
-        return self.size;
+        return self._map.length();
     }
 
+    func isEmpty() -> Bool {
+        return self._map.isEmpty();
+    }
+
+    func getList() -> List<T> {
+        return self._map.keys();
+    }
+
+    func toString() -> String {
+        let sb = StringBuilder();
+        sb.init();
+        sb.append("[");
+        let keys = self._map.keys();
+        var i = 0;
+        while i < keys.length() {
+            sb.append(keys.get(i).toString());
+            if i < keys.length() - 1 {
+                sb.append(", ");
+            }
+            i = i + 1;
+        }
+        sb.append("]");
+        return sb.build();
+    }
+
+    func iterator() -> Iterator<T> {
+        return TreeSetIterator<T>(self);
+    }
 }
 
+class TreeSetIterator<T> implement Iterator<T> {
+    var set: TreeSet<T>;
+    var listIterator: Iterator<T>;
+
+    func init(set: TreeSet<T>) {
+        self.set = set;
+        self.listIterator = set.getList().iterator();
+    }
+
+    func hasNext() -> Bool {
+        return self.listIterator.hasNext();
+    }
+
+    func next() -> T {
+        return self.listIterator.next();
+    }
+}

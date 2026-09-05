@@ -44,6 +44,9 @@ impl<'a> MirBuilder<'a> {
                     }
                 }
             }
+            while vtable.last() == Some(&None) {
+                vtable.pop();
+            }
             program.vtables.insert(*class_name, vtable);
         }
         
@@ -318,9 +321,19 @@ impl<'a> FuncMirBuilder<'a> {
             Expr::ArrayLiteral(elements) => {
                 let ty = self.env.node_types.get(&expr_id).unwrap_or(&Type::Unknown).clone();
                 let ty_str = format!("{:?}", ty);
-                let is_set = ty_str.contains("Set");
+                let is_set = ty_str.contains("Set") && !ty_str.contains("TreeSet");
+                let is_treeset = ty_str.contains("TreeSet");
+                let is_queue = ty_str.contains("Queue");
                 
-                let mut base_name = if is_set { "pace_collections_set__Set".to_string() } else { "pace_collections_list__List".to_string() };
+                let mut base_name = if is_set { 
+                    "pace_collections_set__Set".to_string() 
+                } else if is_treeset {
+                    "pace_collections_tree_set__TreeSet".to_string()
+                } else if is_queue {
+                    "pace_collections_queue__Queue".to_string()
+                } else { 
+                    "pace_collections_list__List".to_string() 
+                };
                 if let Type::GenericInstance { args, .. } = &ty {
                     for arg in args {
                         let arg_name = format!("{:?}", arg);
@@ -333,13 +346,21 @@ impl<'a> FuncMirBuilder<'a> {
                 
                 let class_name = ustr::Ustr::from(base_name.as_str());
                 let init_name = ustr::Ustr::from(format!("{}_init", base_name).as_str());
-                let add_name = ustr::Ustr::from(format!("{}_addAll", base_name).as_str());
-                let add_single_name = ustr::Ustr::from(format!("{}_add", base_name).as_str());
+                let add_single_name = if is_queue {
+                    ustr::Ustr::from(format!("{}_enqueue", base_name).as_str())
+                } else {
+                    ustr::Ustr::from(format!("{}_add", base_name).as_str())
+                };
                 
                 let col_temp = self.new_temp(ty.clone());
-                // Size: List has 3 Int fields (ptr, len, cap) = 16 + 24 = 40.
-                // Set has 1 field (list) = 16 + 8 = 24.
-                let size = if is_set { 24 } else { 40 };
+                // Size calculations for stack allocation
+                let size = if is_set || is_treeset { 
+                    24 // 1 field
+                } else if is_queue {
+                    56 // 5 fields
+                } else { 
+                    40 // List has 3 fields
+                };
                 
                 self.push_statement(Statement::Assign(
                     Place::new_local(col_temp),
@@ -704,33 +725,40 @@ impl<'a> FuncMirBuilder<'a> {
                     }
 
                     let mut is_interface = false;
-                    let class_name = match obj_ty {
-                        Some(Type::Class(name)) | Some(Type::Actor(name)) | Some(Type::Struct(name)) => *name,
-                        Some(Type::Interface(name)) => { is_interface = true; *name },
-                        Some(Type::GenericInstance { base, .. }) => {
-                            if let Type::Interface(name) = &**base {
+                    let class_name_str = match obj_ty {
+                        Some(Type::Class(name)) | Some(Type::Actor(name)) | Some(Type::Struct(name)) => name.to_string(),
+                        Some(Type::Interface(name)) => { is_interface = true; name.to_string() },
+                        Some(Type::GenericInstance { base, args }) => {
+                            let mut base_name = if let Type::Interface(name) = &**base {
                                 is_interface = true;
-                                *name
+                                name.to_string()
                             } else if let Type::Class(name) | Type::Struct(name) | Type::Actor(name) = &**base {
-                                *name
+                                name.to_string()
                             } else {
-                                ustr::Ustr::from("Unknown")
+                                "Unknown".to_string()
+                            };
+                            for arg in args {
+                                let arg_name = format!("{:?}", arg);
+                                base_name.push('_');
+                                base_name.push_str(&arg_name.replace(" ", "_"));
                             }
+                            base_name
                         }
                         _ => {
                             if *is_static_operator {
                                 if let Expr::Identifier(name) = self.arena.get_expr(*object) {
-                                    *name
+                                    name.to_string()
                                 } else {
-                                    ustr::Ustr::from("Unknown")
+                                    "Unknown".to_string()
                                 }
                             } else {
-                                ustr::Ustr::from("Unknown")
+                                "Unknown".to_string()
                             }
                         }
                     };
                     
-                    let method_name = format!("{}_{}", class_name, property);
+                    let method_name = format!("{}_{}", class_name_str, property);
+                    let class_name = ustr::Ustr::from(class_name_str.as_str());
                     
                     let temp = self.new_temp(Type::Unknown);
                     let next_block = self.new_block();
