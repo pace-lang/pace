@@ -9,6 +9,8 @@ use ustr::Ustr;
 
 pub struct MirProgram {
     pub functions: HashMap<Ustr, MirBody>,
+    // Maps a concrete Class name (e.g. SetIterator_Int) to a flat array of method function names, indexed by the global interface method index
+    pub vtables: HashMap<Ustr, Vec<Option<Ustr>>>,
 }
 
 pub struct MirBuilder<'a> {
@@ -23,7 +25,27 @@ impl<'a> MirBuilder<'a> {
     }
 
     pub fn build(mut self, stmts: &[StmtId]) -> MirProgram {
-        let mut program = MirProgram { functions: HashMap::new() };
+        let mut program = MirProgram { functions: HashMap::new(), vtables: HashMap::new() };
+        
+        // Compute VTables for every class
+        let vtable_size = self.env.interface_method_count;
+        for (class_name, sig) in &self.env.classes {
+            let mut vtable = vec![None; vtable_size];
+            if let Some(Type::Interface(iface_name)) = &sig.implements {
+                if let Some(iface_sig) = self.env.interfaces.get(iface_name) {
+                    for (method_name, _) in &iface_sig.methods {
+                        let global_name = format!("{}_{}", iface_name.as_str(), method_name.as_str());
+                        if let Some(index) = self.env.get_global_interface_method_index(&ustr::Ustr::from(global_name.as_str())) {
+                            if sig.methods.contains_key(method_name) {
+                                let class_method_name = format!("{}_{}", class_name.as_str(), method_name.as_str());
+                                vtable[index] = Some(ustr::Ustr::from(class_method_name.as_str()));
+                            }
+                        }
+                    }
+                }
+            }
+            program.vtables.insert(*class_name, vtable);
+        }
         
         // First pass: collect class layouts (including nested modules)
         for &stmt_id in stmts {
@@ -63,14 +85,20 @@ impl<'a> MirBuilder<'a> {
             for &item_id in body {
                 self.lower_item(item_id, program);
             }
-        } else if let Stmt::FuncDecl { name, body: func_body, params, is_extern, .. } = stmt {
+        } else if let Stmt::FuncDecl { name, body: func_body, params, is_extern, generic_params, .. } = stmt {
+            if generic_params.is_some() && !generic_params.as_ref().unwrap().is_empty() {
+                return;
+            }
             let func_builder = FuncMirBuilder::new(self.arena, self.env, &self.class_layouts, *name, params, *is_extern);
             let (mir_body, closures) = func_builder.build(func_body);
             program.functions.insert(*name, mir_body);
             for closure in closures {
                 program.functions.insert(closure.name, closure);
             }
-        } else if let Stmt::ClassDecl { name: class_name, methods, .. } | Stmt::ActorDecl { name: class_name, methods, .. } = stmt {
+        } else if let Stmt::ClassDecl { name: class_name, methods, generic_params, .. } | Stmt::ActorDecl { name: class_name, methods, generic_params, .. } = stmt {
+            if generic_params.is_some() && !generic_params.as_ref().unwrap().is_empty() {
+                return;
+            }
             for &method_id in methods {
                 if let Stmt::FuncDecl { name, body: func_body, params, is_extern, is_static, .. } = self.arena.get_stmt(method_id) {
                     let mut method_params = Vec::new();
@@ -287,6 +315,117 @@ impl<'a> FuncMirBuilder<'a> {
             Expr::FloatLiteral(v) => Operand::Constant(Constant::Float(*v)),
             Expr::BoolLiteral(v) => Operand::Constant(Constant::Bool(*v)),
             Expr::StringLiteral(v) => Operand::Constant(Constant::String(v.to_string())),
+            Expr::ArrayLiteral(elements) => {
+                let ty = self.env.node_types.get(&expr_id).unwrap_or(&Type::Unknown).clone();
+                let ty_str = format!("{:?}", ty);
+                let is_set = ty_str.contains("Set");
+                
+                let mut base_name = if is_set { "pace_collections_set__Set".to_string() } else { "pace_collections_list__List".to_string() };
+                if let Type::GenericInstance { args, .. } = &ty {
+                    for arg in args {
+                        let arg_name = format!("{:?}", arg);
+                        base_name.push('_');
+                        base_name.push_str(&arg_name.replace(" ", "_"));
+                    }
+                } else if let Type::Class(name) = &ty {
+                    base_name = name.as_str().to_string();
+                }
+                
+                let class_name = ustr::Ustr::from(base_name.as_str());
+                let init_name = ustr::Ustr::from(format!("{}_init", base_name).as_str());
+                let add_name = ustr::Ustr::from(format!("{}_addAll", base_name).as_str());
+                let add_single_name = ustr::Ustr::from(format!("{}_add", base_name).as_str());
+                
+                let col_temp = self.new_temp(ty.clone());
+                // Size: List has 3 Int fields (ptr, len, cap) = 16 + 24 = 40.
+                // Set has 1 field (list) = 16 + 8 = 24.
+                let size = if is_set { 24 } else { 40 };
+                
+                self.push_statement(Statement::Assign(
+                    Place::new_local(col_temp),
+                    Rvalue::Aggregate(AggregateKind::Class(class_name, size), vec![])
+                ));
+                
+                let init_temp = self.new_temp(Type::Unknown);
+                let init_block = self.new_block();
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                    func: Operand::Constant(Constant::Function(init_name)),
+                    args: vec![Operand::Copy(Place::new_local(col_temp))],
+                    destination: Place::new_local(init_temp),
+                    target: Some(init_block),
+                    cleanup: None,
+                });
+                self.current_block = init_block;
+                
+                for elem_id in elements {
+                    let elem_op = self.lower_expr(*elem_id);
+                    let add_temp = self.new_temp(Type::Unknown);
+                    let add_block = self.new_block();
+                    self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                        func: Operand::Constant(Constant::Function(add_single_name)),
+                        args: vec![Operand::Copy(Place::new_local(col_temp)), elem_op],
+                        destination: Place::new_local(add_temp),
+                        target: Some(add_block),
+                        cleanup: None,
+                    });
+                    self.current_block = add_block;
+                }
+                
+                Operand::Copy(Place::new_local(col_temp))
+            }
+            Expr::MapLiteral(elements) => {
+                let ty = self.env.node_types.get(&expr_id).unwrap_or(&Type::Unknown).clone();
+                let mut base_name = "pace_collections_map__Map".to_string();
+                if let Type::GenericInstance { args, .. } = &ty {
+                    for arg in args {
+                        let arg_name = format!("{:?}", arg);
+                        base_name.push('_');
+                        base_name.push_str(&arg_name.replace(" ", "_"));
+                    }
+                } else if let Type::Class(name) = &ty {
+                    base_name = name.as_str().to_string();
+                }
+                
+                let class_name = ustr::Ustr::from(base_name.as_str());
+                let init_name = ustr::Ustr::from(format!("{}_init", base_name).as_str());
+                let set_name = ustr::Ustr::from(format!("{}_set", base_name).as_str());
+                let col_temp = self.new_temp(ty.clone());
+                // Map has 5 Int fields (keysPtr, valsPtr, statesPtr, count, cap) = 16 + 40 = 56.
+                let size = 56;
+                
+                self.push_statement(Statement::Assign(
+                    Place::new_local(col_temp),
+                    Rvalue::Aggregate(AggregateKind::Class(class_name, size), vec![])
+                ));
+                
+                let init_temp = self.new_temp(Type::Unknown);
+                let init_block = self.new_block();
+                self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                    func: Operand::Constant(Constant::Function(init_name)),
+                    args: vec![Operand::Copy(Place::new_local(col_temp))],
+                    destination: Place::new_local(init_temp),
+                    target: Some(init_block),
+                    cleanup: None,
+                });
+                self.current_block = init_block;
+                
+                for (k_id, v_id) in elements {
+                    let k_op = self.lower_expr(*k_id);
+                    let v_op = self.lower_expr(*v_id);
+                    let add_temp = self.new_temp(Type::Unknown);
+                    let add_block = self.new_block();
+                    self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                        func: Operand::Constant(Constant::Function(set_name)),
+                        args: vec![Operand::Copy(Place::new_local(col_temp)), k_op, v_op],
+                        destination: Place::new_local(add_temp),
+                        target: Some(add_block),
+                        cleanup: None,
+                    });
+                    self.current_block = add_block;
+                }
+                
+                Operand::Copy(Place::new_local(col_temp))
+            }
             Expr::InterpolatedString(parts) => {
                 if parts.is_empty() {
                     return Operand::Constant(Constant::String("".to_string()));
@@ -536,8 +675,48 @@ impl<'a> FuncMirBuilder<'a> {
                         return Operand::Copy(Place::new_local(temp));
                     }
 
+                    if property.as_str() == "toString" {
+                        let primitive_to_string = match obj_ty {
+                            Some(Type::Int) => Some("__pace_int_to_string"),
+                            Some(Type::Float) => Some("__pace_float_to_string"),
+                            Some(Type::Bool) => Some("__pace_bool_to_string"),
+                            _ => None,
+                        };
+                        
+                        if let Some(func_name) = primitive_to_string {
+                            let obj_op = self.lower_expr(*object);
+                            let func_op = Operand::Constant(Constant::Function(ustr::Ustr::from(func_name)));
+                            
+                            let temp = self.new_temp(Type::String);
+                            let next_block = self.new_block();
+                            self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                                func: func_op,
+                                args: vec![obj_op],
+                                destination: Place::new_local(temp),
+                                target: Some(next_block),
+                                cleanup: None,
+                            });
+                            self.current_block = next_block;
+                            return Operand::Copy(Place::new_local(temp));
+                        } else if let Some(Type::String) = obj_ty {
+                            return self.lower_expr(*object); // String.toString() is just the string itself
+                        }
+                    }
+
+                    let mut is_interface = false;
                     let class_name = match obj_ty {
                         Some(Type::Class(name)) | Some(Type::Actor(name)) | Some(Type::Struct(name)) => *name,
+                        Some(Type::Interface(name)) => { is_interface = true; *name },
+                        Some(Type::GenericInstance { base, .. }) => {
+                            if let Type::Interface(name) = &**base {
+                                is_interface = true;
+                                *name
+                            } else if let Type::Class(name) | Type::Struct(name) | Type::Actor(name) = &**base {
+                                *name
+                            } else {
+                                ustr::Ustr::from("Unknown")
+                            }
+                        }
                         _ => {
                             if *is_static_operator {
                                 if let Expr::Identifier(name) = self.arena.get_expr(*object) {
@@ -552,23 +731,43 @@ impl<'a> FuncMirBuilder<'a> {
                     };
                     
                     let method_name = format!("{}_{}", class_name, property);
-                    let func_op = Operand::Constant(Constant::Function(ustr::Ustr::from(&method_name)));
-                    
-                    // If it's not a static call, the first argument must be the object (self)!
-                    if !is_static_operator {
-                        let obj_op = self.lower_expr(*object);
-                        arg_ops.insert(0, obj_op);
-                    }
                     
                     let temp = self.new_temp(Type::Unknown);
                     let next_block = self.new_block();
-                    self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
-                        func: func_op,
-                        args: arg_ops,
-                        destination: Place::new_local(temp),
-                        target: Some(next_block),
-                        cleanup: None,
-                    });
+
+                    if is_interface && !is_static_operator {
+                        let method_ustr = ustr::Ustr::from(&method_name);
+                        let method_index = self.env.get_global_interface_method_index(&method_ustr).unwrap_or(0);
+                        
+                        let obj_op = self.lower_expr(*object);
+                        arg_ops.insert(0, obj_op.clone());
+                        
+                        self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::InterfaceCall {
+                            obj: obj_op,
+                            method_index,
+                            args: arg_ops,
+                            destination: Place::new_local(temp),
+                            target: Some(next_block),
+                            cleanup: None,
+                        });
+                    } else {
+                        let func_op = Operand::Constant(Constant::Function(ustr::Ustr::from(&method_name)));
+                        
+                        // If it's not a static call, the first argument must be the object (self)!
+                        if !is_static_operator {
+                            let obj_op = self.lower_expr(*object);
+                            arg_ops.insert(0, obj_op);
+                        }
+                        
+                        self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                            func: func_op,
+                            args: arg_ops,
+                            destination: Place::new_local(temp),
+                            target: Some(next_block),
+                            cleanup: None,
+                        });
+                    }
+                    
                     self.current_block = next_block;
                     return Operand::Copy(Place::new_local(temp));
                 }
@@ -644,7 +843,65 @@ impl<'a> FuncMirBuilder<'a> {
                                     Type::Int => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_int"))); },
                                     Type::Float => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_float"))); },
                                     Type::Bool => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_bool"))); },
-                                    _ => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_string"))); }
+                                    Type::String => { callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_string"))); },
+                                    _ => {
+                                        let mut base_name_opt = None;
+                                        if let Type::Class(name) | Type::Struct(name) | Type::Actor(name) = arg_ty {
+                                            base_name_opt = Some(*name);
+                                        } else if let Type::GenericInstance { base, .. } = arg_ty {
+                                            if let Type::Class(name) | Type::Struct(name) | Type::Actor(name) = &**base {
+                                                base_name_opt = Some(*name);
+                                            }
+                                        }
+
+                                        let mut has_to_string = false;
+                                        if let Some(name) = base_name_opt {
+                                            has_to_string = if let Some(sig) = self.env.classes.get(&name) {
+                                                sig.methods.contains_key(&ustr::Ustr::from("toString"))
+                                            } else if let Some(sig) = self.env.structs.get(&name) {
+                                                sig.methods.contains_key(&ustr::Ustr::from("toString"))
+                                            } else if let Some(sig) = self.env.actors.get(&name) {
+                                                sig.methods.contains_key(&ustr::Ustr::from("toString"))
+                                            } else {
+                                                false
+                                            };
+                                        }
+
+                                        if has_to_string {
+                                            let name = base_name_opt.unwrap();
+                                            let method_name = format!("{}_toString", name);
+                                            let method_op = Operand::Constant(Constant::Function(ustr::Ustr::from(&method_name)));
+                                            
+                                            let to_string_temp = self.new_temp(Type::String);
+                                            let next_block = self.new_block();
+                                            
+                                            self.body.basic_blocks[self.current_block.0].terminator = Some(Terminator::Call {
+                                                func: method_op,
+                                                args: arg_ops.clone(),
+                                                destination: Place::new_local(to_string_temp),
+                                                target: Some(next_block),
+                                                cleanup: None,
+                                            });
+                                            
+                                            self.current_block = next_block;
+                                            
+                                            arg_ops = vec![Operand::Copy(Place::new_local(to_string_temp))];
+                                            callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_string")));
+                                        } else if let Some(name) = base_name_opt {
+                                            // Fallback for classes without toString
+                                            let fallback_str = format!("<{} instance>", name);
+                                            let temp = self.new_temp(Type::String);
+                                            self.push_statement(Statement::Assign(
+                                                Place::new_local(temp),
+                                                Rvalue::Use(Operand::Constant(Constant::String(fallback_str)))
+                                            ));
+                                            arg_ops = vec![Operand::Copy(Place::new_local(temp))];
+                                            callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_string")));
+                                        } else {
+                                            // Fallback for GenericParameter / Unknown
+                                            callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_print_string")));
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -847,7 +1104,7 @@ impl<'a> FuncMirBuilder<'a> {
                         let mut class_name = computed_class.unwrap_or(ustr::Ustr::from("Unknown"));
                         if class_name.as_str() == "Unknown" {
                             if let Some(obj_ty) = self.env.node_types.get(object) {
-                                if let pace_ty::Type::Class(name) | pace_ty::Type::Struct(name) | pace_ty::Type::Actor(name) = obj_ty {
+                                if let pace_ty::Type::Class(name) | pace_ty::Type::Struct(name) | pace_ty::Type::Actor(name) | pace_ty::Type::Interface(name) = obj_ty {
                                     class_name = *name;
                                 }
                             }

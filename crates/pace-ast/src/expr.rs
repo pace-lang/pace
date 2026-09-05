@@ -15,6 +15,10 @@ pub enum Expr {
     BoolLiteral(bool),
     /// A null literal
     Null,
+    /// An array literal (e.g., [1, 2, 3])
+    ArrayLiteral(Vec<ExprId>),
+    /// A map literal (e.g., {"a": 1, "b": 2})
+    MapLiteral(Vec<(ExprId, ExprId)>),
     /// An identifier (e.g., my_var)
     Identifier(ustr::Ustr, Span),
     /// A generic instantiation (e.g., Box<Int> or first<String>)

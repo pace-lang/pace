@@ -1,0 +1,14 @@
+// Core Primitive Types
+// These structs are backed by native compiler representations (I64, F64, etc.)
+// They exist here so developers can attach methods to them.
+
+struct Int {}
+struct Float {}
+struct Bool {}
+struct String {}
+struct Char {}
+struct Byte {}
+struct Void {}
+struct Any {}
+struct Never {}
+struct Error {}

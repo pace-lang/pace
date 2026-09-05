@@ -1,0 +1,4 @@
+interface Iterator<T> {
+    func hasNext() -> Bool {}
+    func next() -> T {}
+}

@@ -1,14 +1,16 @@
+import "../string-builder";
+import "pace:core/iterator";
+
 class List<T> implement Iterable<T> {
-    // Standard Dynamic List Implementation
     // Backed by raw memory allocation for high performance and no leaks (ARC drop)
-    var ptr: Int;
-    var len: Int;
-    var cap: Int;
+    var _ptr: Int;
+    var _len: Int;
+    var _cap: Int;
 
     func init() {
-        self.ptr = 0;
-        self.len = 0;
-        self.cap = 0;
+        self._ptr = 0;
+        self._len = 0;
+        self._cap = 0;
     }
 
     func iterator() -> ListIterator<T> {
@@ -16,50 +18,46 @@ class List<T> implement Iterable<T> {
     }
 
     func add(val: T) {
-        if self.cap == 0 {
-            self.cap = 16;
-            self.ptr = malloc(self.cap * 8);
-        } else if self.len >= self.cap {
+        if self._cap == 0 {
+            self._cap = 16;
+            self._ptr = malloc(self._cap * 8);
+        } else if self._len >= self._cap {
             // 8 bytes per i64
-            let newCap = self.cap * 2;
+            let newCap = self._cap * 2;
             let newPtr = malloc(newCap * 8); // Copy old data
             var i = 0;
-            while i < self.len {
-                let v = ptrLoad(self.ptr, i * 8);
+            while i < self._len {
+                let v = ptrLoad(self._ptr, i * 8);
                 ptrStore(newPtr, i * 8, v);
                 i = i + 1;
             }
-            free(self.ptr, self.cap * 8);
-            self.ptr = newPtr;
-            self.cap = newCap;
+            free(self._ptr, self._cap * 8);
+            self._ptr = newPtr;
+            self._cap = newCap;
         }
         __pace_retain_generic<T>(val);
-        ptrStore(self.ptr, self.len * 8, val);
-        self.len = self.len + 1;
+        ptrStore(self._ptr, self._len * 8, val);
+        self._len = self._len + 1;
     }
 
-    // Adds all elements from another List to this List.
-    // Note: We currently take a `List<T>` rather than an `Iterable<T>`
-    // because `Iterable` does not yet define an `iterator()` or `get()` method.
-    func addAllList(other: List<T>) {
-        var i = 0;
-        let l = other.length();
-        while i < l {
-            self.add(other.get(i));
-            i = i + 1;
+    // Adds all elements from another Iterable to this List.
+    func addAll(other: Iterable<T>) {
+        let it = other.iterator();
+        while it.hasNext() {
+            self.add(it.next());
         }
     }
 
     func get(idx: Int) -> T {
-        if idx >= self.len {
-            return ptrLoad(self.ptr, 0);
+        if idx >= self._len {
+            return ptrLoad(self._ptr, 0);
         }
-        return ptrLoad(self.ptr, idx * 8);
+        return ptrLoad(self._ptr, idx * 8);
     }
 
     // Out of bounds fallback
     func insert(idx: Int, val: T) {
-        if idx >= self.len {
+        if idx >= self._len {
             self.add(val);
             return;
         }
@@ -67,44 +65,58 @@ class List<T> implement Iterable<T> {
         // Ensure capacity
         // This ensures capacity and increments len
         // Shift elements to the right
-        var i = self.len - 1;
+        var i = self._len - 1;
         while i > idx {
-            let prev = ptrLoad(self.ptr, (i - 1) * 8);
-            ptrStore(self.ptr, i * 8, prev);
+            let prev = ptrLoad(self._ptr, (i - 1) * 8);
+            ptrStore(self._ptr, i * 8, prev);
             i = i - 1;
         }
         __pace_retain_generic<T>(val);
-        ptrStore(self.ptr, idx * 8, val);
+        ptrStore(self._ptr, idx * 8, val);
     }
 
-    func remove(idx: Int) {
-        if idx >= self.len {
-            return;
+    func removeAt(idx: Int) -> T {
+        if idx >= self._len {
+            return ptrLoad(self._ptr, 0); // fallback
         }
-        let _oldVal = ptrLoad(self.ptr, idx * 8);
-        __pace_release_generic<T>(_oldVal);
+        let _oldVal = ptrLoad(self._ptr, idx * 8);
         var i = idx;
-        while i < self.len - 1 {
-            let next = ptrLoad(self.ptr, (i + 1) * 8);
-            ptrStore(self.ptr, i * 8, next);
+        while i < self._len - 1 {
+            let next = ptrLoad(self._ptr, (i + 1) * 8);
+            ptrStore(self._ptr, i * 8, next);
             i = i + 1;
         }
-        self.len = self.len - 1;
+        self._len = self._len - 1;
+        return _oldVal;
+    }
+
+    func remove(val: T) -> Bool {
+        let idx = self.indexOf(val);
+        if idx >= 0 {
+            let removed = self.removeAt(idx);
+            __pace_release_generic<T>(removed);
+            return true;
+        }
+        return false;
+    }
+
+    func removeLast() -> T {
+        return self.removeAt(self._len - 1);
     }
 
     func clear() {
         var i = 0;
-        while i < self.len {
-            __pace_release_generic<T>(ptrLoad(self.ptr, i * 8));
+        while i < self._len {
+            __pace_release_generic<T>(ptrLoad(self._ptr, i * 8));
             i = i + 1;
         }
-        self.len = 0;
+        self._len = 0;
     }
 
     func indexOf(val: T) -> Int {
         var i = 0;
-        while i < self.len {
-            if ptrLoad(self.ptr, i * 8) == val {
+        while i < self._len {
+            if ptrLoad(self._ptr, i * 8) == val {
                 return i;
             }
             i = i + 1;
@@ -117,20 +129,55 @@ class List<T> implement Iterable<T> {
     }
 
     func length() -> Int {
-        return self.len;
+        return self._len;
+    }
+
+    func isEmpty() -> Bool {
+        return self._len == 0;
+    }
+
+    func isNotEmpty() -> Bool {
+        return self._len > 0;
+    }
+
+    func first() -> T {
+        return self.get(0);
+    }
+
+    func last() -> T {
+        if self._len == 0 {
+            return self.get(0);
+        }
+        return self.get(self._len - 1);
+    }
+
+    func toString() -> String {
+        let sb = StringBuilder();
+        sb.init();
+        sb.append("[");
+        var i = 0;
+        while i < self._len {
+            sb.append(self.get(i).toString());
+            if i < self._len - 1 {
+                sb.append(", ");
+            }
+            i = i + 1;
+        }
+        sb.append("]");
+        return sb.build();
     }
 
     func drop() {
-        if self.ptr != 0 {
+        if self._ptr != 0 {
             self.clear();
-            free(self.ptr, self.cap * 8);
-            self.ptr = 0;
+            free(self._ptr, self._cap * 8);
+            self._ptr = 0;
         }
     }
 
 }
 
-class ListIterator<T> {
+class ListIterator<T> implement Iterator<T> {
     var list: List<T>;
     var idx: Int;
 

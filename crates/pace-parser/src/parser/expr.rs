@@ -370,6 +370,51 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.advance();
                 Ok(self.alloc_expr(Expr::Identifier(v.into(), span)))
             }
+            Token::LBracket => {
+                self.advance();
+                let mut elements = vec![];
+                if self.current_token != Token::RBracket {
+                    loop {
+                        elements.push(self.parse_expr()?);
+                        if self.match_token(Token::Comma) {
+                            if self.current_token == Token::RBracket {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                if !self.match_token(Token::RBracket) {
+                    return Err(pace_errors::SyntaxError::Generic { message: "Expected ']'".to_string(), span: self.current_span, src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()) });
+                }
+                Ok(self.alloc_expr(Expr::ArrayLiteral(elements)))
+            }
+            Token::LBrace => {
+                self.advance();
+                let mut elements = vec![];
+                if self.current_token != Token::RBrace {
+                    loop {
+                        let key = self.parse_expr()?;
+                        if !self.match_token(Token::Colon) {
+                            return Err(pace_errors::SyntaxError::Generic { message: "Expected ':' after map key".to_string(), span: self.current_span, src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()) });
+                        }
+                        let val = self.parse_expr()?;
+                        elements.push((key, val));
+                        if self.match_token(Token::Comma) {
+                            if self.current_token == Token::RBrace {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                if !self.match_token(Token::RBrace) {
+                    return Err(pace_errors::SyntaxError::Generic { message: "Expected '}'".to_string(), span: self.current_span, src: miette::NamedSource::new(self.file_name.clone(), self.src.to_string()) });
+                }
+                Ok(self.alloc_expr(Expr::MapLiteral(elements)))
+            }
             Token::LParen => {
                 let _start_span = self.current_span;
 

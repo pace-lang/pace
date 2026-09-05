@@ -50,6 +50,15 @@ pub fn optimize(body: &mut MirBody) -> bool {
                         used_places.insert(destination.base.clone());
                     }
                 }
+                Terminator::InterfaceCall { obj, args, destination, .. } => {
+                    mark_operand_uses(obj, &mut used_places);
+                    for arg in args {
+                        mark_operand_uses(arg, &mut used_places);
+                    }
+                    if !destination.projection.is_empty() {
+                        used_places.insert(destination.base.clone());
+                    }
+                }
             }
         }
     }
@@ -86,7 +95,7 @@ pub fn optimize(body: &mut MirBody) -> bool {
                 Terminator::Goto { target } => vec![*target],
                 Terminator::SwitchInt { targets, .. } => targets.all_targets().to_vec(),
                 Terminator::Return | Terminator::Unreachable => vec![],
-                Terminator::Call { target, .. } => {
+                Terminator::Call { target, .. } | Terminator::InterfaceCall { target, .. } => {
                     if let Some(t) = target {
                         vec![*t]
                     } else {

@@ -51,6 +51,16 @@ pub enum Terminator {
         cleanup: Option<BasicBlock>,
     },
     
+    /// Calls a method dynamically on an Interface type using the global vtable method index.
+    InterfaceCall {
+        obj: Operand,
+        method_index: usize,
+        args: Vec<Operand>,
+        destination: Place,
+        target: Option<BasicBlock>,
+        cleanup: Option<BasicBlock>,
+    },
+    
     /// Unreachable code terminator.
     Unreachable,
 }

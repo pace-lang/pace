@@ -18,7 +18,7 @@ pub fn optimize(body: &mut MirBody) -> bool {
                         pred_counts[target.0] += 1;
                     }
                 }
-                Terminator::Call { target, cleanup, .. } => {
+                Terminator::Call { target, cleanup, .. } | Terminator::InterfaceCall { target, cleanup, .. } => {
                     if let Some(t) = target { pred_counts[t.0] += 1; }
                     if let Some(c) = cleanup { pred_counts[c.0] += 1; }
                 }

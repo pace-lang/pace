@@ -7,6 +7,7 @@ pub struct CodegenContext<M: Module> {
     pub string_cache: HashMap<ustr::Ustr, String>,
     pub string_id: usize,
     pub global_vars: HashMap<ustr::Ustr, cranelift_module::DataId>,
+    pub vtables: HashMap<ustr::Ustr, cranelift_module::DataId>,
     pub closure_id: usize,
 }
 
@@ -21,6 +22,7 @@ impl<M: Module> CodegenContext<M> {
             string_cache: HashMap::new(),
             string_id: 0,
             global_vars: HashMap::new(),
+            vtables: HashMap::new(),
             closure_id: 0,
         }
     }

@@ -15,7 +15,7 @@ impl<'a> TypeChecker<'a> {
                     self.register_types(body);
                     self.current_module = old_module;
                 }
-                Stmt::ClassDecl { name, visibility, .. } | Stmt::InterfaceDecl { name, visibility, .. } => {
+                Stmt::ClassDecl { name, visibility, .. } => {
                     self.env.register_class(
                         *name,
                         ClassSignature {
@@ -23,6 +23,18 @@ impl<'a> TypeChecker<'a> {
                             implements: None,
                             fields: HashMap::new(),
                             static_fields: HashMap::new(),
+                            methods: HashMap::new(),
+                            visibility: visibility.clone(),
+                            module: self.current_module,
+                            span: pace_span::Span::default(),
+                        },
+                    );
+                }
+                Stmt::InterfaceDecl { name, visibility, .. } => {
+                    self.env.register_interface(
+                        *name,
+                        crate::env::InterfaceSignature {
+                            generic_params: None,
                             methods: HashMap::new(),
                             visibility: visibility.clone(),
                             module: self.current_module,
@@ -368,6 +380,10 @@ impl<'a> TypeChecker<'a> {
                                 is_static: *is_static,
                             };
                             method_map.insert(*m_name, sig);
+                            
+                            // Assign global vtable method index
+                            let global_method_name = format!("{}_{}", name, m_name);
+                            self.env.assign_global_interface_method_index(ustr::Ustr::from(global_method_name.as_str()));
                         }
                     }
                     if let Some(gp) = generic_params {

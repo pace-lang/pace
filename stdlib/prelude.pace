@@ -1,7 +1,12 @@
 // Pace Standard Library Prelude
 // This file is automatically imported into every Pace program.
 
-import "pace:core";
+import "pace:core/primitives";
+import "pace:core/option";
+import "pace:core/result";
+import "pace:core/clone";
+import "pace:core/iterator";
+import "pace:core/iterable";
 import "pace:io";
 import "./string-builder";
 

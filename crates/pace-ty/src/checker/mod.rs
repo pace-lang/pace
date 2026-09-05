@@ -257,29 +257,99 @@ impl<'a> TypeChecker<'a> {
         if matches!(source, Type::Unknown | Type::Any) || matches!(target, Type::Unknown | Type::Any) {
             return true;
         }
+
+        // Generic parameter bound subtyping
+        if let Type::GenericParameter(_, Some(bound)) = source {
+            return self.is_assignable_to(bound, target);
+        }
+        
+        let to_concrete = |ty: &Type| -> Option<Type> {
+            if let Type::GenericInstance { base, args } = ty {
+                if let Type::Class(name) = &**base {
+                    let mut concrete_name = name.as_str().to_string();
+                    for arg in args {
+                        let arg_name = format!("{:?}", arg);
+                        concrete_name.push('_');
+                        concrete_name.push_str(&arg_name.replace(" ", "_"));
+                    }
+                    return Some(Type::Class(ustr::Ustr::from(concrete_name.as_str())));
+                } else if let Type::Interface(name) = &**base {
+                    let mut concrete_name = name.as_str().to_string();
+                    for arg in args {
+                        let arg_name = format!("{:?}", arg);
+                        concrete_name.push('_');
+                        concrete_name.push_str(&arg_name.replace(" ", "_"));
+                    }
+                    return Some(Type::Interface(ustr::Ustr::from(concrete_name.as_str())));
+                }
+            }
+            None
+        };
+        
+        let src_eff = to_concrete(source).unwrap_or_else(|| source.clone());
+        let tgt_eff = to_concrete(target).unwrap_or_else(|| target.clone());
+        
+        if src_eff == tgt_eff {
+            return true;
+        }
+        
         // Subtyping: Class/Actor implements Interface
-        if let Type::Interface(iface_name) = target {
-            if let Type::Class(class_name) = source {
+        if let Type::Interface(iface_name) = &tgt_eff {
+            if let Type::Class(class_name) = &src_eff {
                 if let Some(class_sig) = self.env.classes.get(class_name) {
-                    if let Some(Type::Interface(impl_name)) = &class_sig.implements {
-                        if impl_name == iface_name {
+                    let impl_eff = if let Some(impl_ty) = &class_sig.implements {
+                        to_concrete(impl_ty).unwrap_or_else(|| impl_ty.clone())
+                    } else {
+                        Type::Unknown
+                    };
+                    if let Type::Interface(impl_name) = impl_eff {
+                        if &impl_name == iface_name {
                             return true;
                         }
                     }
                 }
-            } else if let Type::Actor(actor_name) = source {
+            } else if let Type::Actor(actor_name) = &src_eff {
                 if let Some(actor_sig) = self.env.actors.get(actor_name) {
-                    if let Some(Type::Interface(impl_name)) = &actor_sig.implements {
-                        if impl_name == iface_name {
+                    let impl_eff = if let Some(impl_ty) = &actor_sig.implements {
+                        to_concrete(impl_ty).unwrap_or_else(|| impl_ty.clone())
+                    } else {
+                        Type::Unknown
+                    };
+                    if let Type::Interface(impl_name) = impl_eff {
+                        if &impl_name == iface_name {
                             return true;
                         }
                     }
                 }
             }
         }
-        // Generic parameter bound subtyping
-        if let Type::GenericParameter(_, Some(bound)) = source {
-            return self.is_assignable_to(bound, target);
+        
+        // List -> Set coercion (mainly for Array Literals)
+        if let Type::Class(src_name) = &src_eff {
+            if let Type::Class(tgt_name) = &tgt_eff {
+                let src_str = src_name.as_str();
+                let tgt_str = tgt_name.as_str();
+                
+                if (src_str.starts_with("pace_collections_list__List_") || src_str.starts_with("List_")) &&
+                   (tgt_str.starts_with("pace_collections_set__Set_") || tgt_str.starts_with("Set_")) {
+                    
+                    let src_suffix = if src_str.starts_with("pace_collections_list__List_") {
+                        &src_str["pace_collections_list__List_".len()..]
+                    } else {
+                        &src_str["List_".len()..]
+                    };
+                    
+                    let tgt_suffix = if tgt_str.starts_with("pace_collections_set__Set_") {
+                        &tgt_str["pace_collections_set__Set_".len()..]
+                    } else {
+                        &tgt_str["Set_".len()..]
+                    };
+                    
+                    if src_suffix == tgt_suffix {
+                        return true;
+                    }
+                }
+            }
         }
         false
     }

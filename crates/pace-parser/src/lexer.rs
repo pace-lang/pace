@@ -18,7 +18,6 @@ pub enum Token<'a> {
     Interface,
     Enum,
     Implement,
-
     Extern,
     Async,
     Await,
@@ -62,6 +61,8 @@ pub enum Token<'a> {
     RParen,
     LBrace,
     RBrace,
+    LBracket,
+    RBracket,
     Question,
     Bang,
     BitNot,
@@ -247,6 +248,8 @@ impl<'a> Lexer<'a> {
             ')' => Token::RParen,
             '{' => Token::LBrace,
             '}' => Token::RBrace,
+            '[' => Token::LBracket,
+            ']' => Token::RBracket,
             ',' => Token::Comma,
             '"' => self.string_inner(),
             _ => {

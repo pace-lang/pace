@@ -52,7 +52,7 @@ impl<'a> TypeChecker<'a> {
                 if let Some(expected) = &self.current_return_type {
                     let mut is_match = false;
 
-                    if expected == &ret_ty
+                    if self.is_assignable_to(&ret_ty, expected)
                         || expected == &Type::Unknown
                         || ret_ty == Type::Unknown
                         || expected == &Type::Any
@@ -60,7 +60,7 @@ impl<'a> TypeChecker<'a> {
                     {
                         is_match = true;
                     } else if let Type::Nullable(inner) = expected
-                        && (ret_ty == Type::Null || ret_ty == **inner)
+                        && (ret_ty == Type::Null || self.is_assignable_to(&ret_ty, inner))
                     {
                         is_match = true;
                     }
@@ -214,8 +214,10 @@ impl<'a> TypeChecker<'a> {
         self.current_span = span;
         let mut inferred_type = Type::Unknown;
 
+        let mut val_ty_copy = Type::Unknown;
         if let Some(init_expr) = initializer {
             inferred_type = self.check_expr(init_expr);
+            val_ty_copy = inferred_type.clone();
         }
 
         if let Some(annotation) = type_annotation {
@@ -242,7 +244,11 @@ impl<'a> TypeChecker<'a> {
                 });
                 return;
             }
-            inferred_type = expected_type;
+            inferred_type = expected_type.clone();
+            
+            if let Some(init_expr) = initializer {
+                self.coerce_expr_if_needed(&expected_type, &val_ty_copy, init_expr);
+            }
         }
 
         if inferred_type == Type::Unknown {

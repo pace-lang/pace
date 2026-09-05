@@ -506,6 +506,18 @@ impl Monomorphizer {
             | Expr::StringLiteral(..)
             | Expr::BoolLiteral(..)
             | Expr::Null => expr,
+            Expr::ArrayLiteral(elements) => Expr::ArrayLiteral(
+                elements
+                    .into_iter()
+                    .map(|e| self.clone_expr(arena, e))
+                    .collect(),
+            ),
+            Expr::MapLiteral(elements) => Expr::MapLiteral(
+                elements
+                    .into_iter()
+                    .map(|(k, v)| (self.clone_expr(arena, k), self.clone_expr(arena, v)))
+                    .collect(),
+            ),
         };
         arena.alloc_expr(new_expr, pace_ast::Span::default())
     }

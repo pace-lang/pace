@@ -335,6 +335,25 @@ impl SymbolResolver {
                     self.resolve_stmt(arena, *body, scope, aliases)?;
                 }
             }
+            Stmt::InterfaceDecl { methods, .. } => {
+                for m in methods {
+                    self.resolve_stmt(arena, *m, scope, aliases)?;
+                }
+            }
+            Stmt::StructDecl { fields, .. } => {
+                for f in fields {
+                    self.resolve_stmt(arena, *f, scope, aliases)?;
+                }
+            }
+            Stmt::EnumDecl { variants, .. } => {
+                for v in variants {
+                    if let Some(flds) = &mut v.fields {
+                        for f in flds {
+                            self.resolve_type(f, scope, aliases)?;
+                        }
+                    }
+                }
+            }
             _ => {}
         }
         *arena.get_stmt_mut(stmt_id) = stmt;

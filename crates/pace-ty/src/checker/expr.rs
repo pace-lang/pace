@@ -157,6 +157,67 @@ impl<'a> TypeChecker<'a> {
             }
             Expr::BoolLiteral(_) => Type::Bool,
             Expr::Null => Type::Null,
+            Expr::ArrayLiteral(elements) => {
+                let list_class = ustr::Ustr::from("pace_collections_list__List");
+                if elements.is_empty() {
+                    Type::GenericInstance {
+                        base: Box::new(Type::Class(list_class)),
+                        args: vec![Type::Unknown],
+                    }
+                } else {
+                    let first_ty = self.check_expr(elements[0]);
+                    for elem in elements.iter().skip(1) {
+                        let ty = self.check_expr(*elem);
+                        if !self.is_assignable_to(&ty, &first_ty) {
+                            self.errors.push(TypeError::Generic {
+                                src: self.get_source(),
+                                span: self.current_span,
+                                message: format!("Array literal contains mismatched types: expected {:?}, found {:?}", first_ty, ty),
+                            });
+                        }
+                    }
+                    Type::GenericInstance {
+                        base: Box::new(Type::Class(list_class)),
+                        args: vec![first_ty],
+                    }
+                }
+            }
+            Expr::MapLiteral(elements) => {
+                let map_class = ustr::Ustr::from("pace_collections_map__Map");
+                if elements.is_empty() {
+                    Type::GenericInstance {
+                        base: Box::new(Type::Class(map_class)),
+                        args: vec![Type::Unknown, Type::Unknown],
+                    }
+                } else {
+                    let (first_k_id, first_v_id) = &elements[0];
+                    let first_k_ty = self.check_expr(*first_k_id);
+                    let first_v_ty = self.check_expr(*first_v_id);
+                    
+                    for (k, v) in elements.iter().skip(1) {
+                        let k_ty = self.check_expr(*k);
+                        let v_ty = self.check_expr(*v);
+                        if !self.is_assignable_to(&k_ty, &first_k_ty) {
+                            self.errors.push(TypeError::Generic {
+                                src: self.get_source(),
+                                span: self.current_span,
+                                message: format!("Map literal contains mismatched key types: expected {:?}, found {:?}", first_k_ty, k_ty),
+                            });
+                        }
+                        if !self.is_assignable_to(&v_ty, &first_v_ty) {
+                            self.errors.push(TypeError::Generic {
+                                src: self.get_source(),
+                                span: self.current_span,
+                                message: format!("Map literal contains mismatched value types: expected {:?}, found {:?}", first_v_ty, v_ty),
+                            });
+                        }
+                    }
+                    Type::GenericInstance {
+                        base: Box::new(Type::Class(map_class)),
+                        args: vec![first_k_ty, first_v_ty],
+                    }
+                }
+            }
             Expr::Closure {
                 params,
                 return_type,
@@ -365,6 +426,7 @@ impl<'a> TypeChecker<'a> {
                             var_span = var_info.span;
                         } else {
                             if let Some(v) = self.env.get_mut(*name) { v.is_used = true; }
+                            self.coerce_expr_if_needed(&var_info.ty, &val_ty, *value);
                         }
                     } else if let Some(global) = self.env.global_vars.get(name).cloned() {
                         if !global.is_mutable {
@@ -636,6 +698,15 @@ impl<'a> TypeChecker<'a> {
 
                 let obj_ty = self.check_expr(*object);
 
+                // Universal toString() contract
+                if property == "toString" {
+                    return Type::Function {
+                        generic_params: None,
+                        params: vec![],
+                        return_type: Box::new(Type::String),
+                    };
+                }
+
                 let (class_name, fields, static_fields, methods) = match obj_ty {
                     Type::Class(ref name) => {
                         let sig = match self.env.classes.get(name) {
@@ -655,6 +726,117 @@ impl<'a> TypeChecker<'a> {
                             sig.static_fields.clone(),
                             sig.methods.clone(),
                         )
+                    }
+                    Type::GenericInstance { ref base, ref args } => {
+                        if let Type::Class(ref name) = **base {
+                            if let Some(sig) = self.env.classes.get(name) {
+                                // Substitute class generics in methods/fields
+                                let mut substs = std::collections::HashMap::new();
+                                if let Some(g_params) = &sig.generic_params {
+                                    for (p, arg) in g_params.iter().zip(args.iter()) {
+                                        substs.insert(p.name, arg.clone());
+                                    }
+                                }
+                                
+                                let mut resolved_methods = sig.methods.clone();
+                                for (_, m_sig) in resolved_methods.iter_mut() {
+                                    for p in m_sig.params.iter_mut() {
+                                        *p = p.resolve_generics(&substs);
+                                    }
+                                    m_sig.return_type = m_sig.return_type.resolve_generics(&substs);
+                                }
+                                
+                                let mut resolved_fields = sig.fields.clone();
+                                for (_, f_sig) in resolved_fields.iter_mut() {
+                                    f_sig.ty = f_sig.ty.resolve_generics(&substs);
+                                }
+                                
+                                (
+                                    *name,
+                                    resolved_fields,
+                                    sig.static_fields.clone(), // statics usually don't depend on instance generics
+                                    resolved_methods,
+                                )
+                            } else {
+                                // if it's already monomorphized, we might find the concrete class
+                                let mut concrete_name = name.as_str().to_string();
+                                for arg in args {
+                                    let arg_name = format!("{:?}", arg);
+                                    concrete_name.push('_');
+                                    concrete_name.push_str(&arg_name.replace(" ", "_"));
+                                }
+                                
+                                if let Some(s) = self.env.classes.get(&ustr::Ustr::from(concrete_name.as_str())) {
+                                    (
+                                        ustr::Ustr::from(concrete_name.as_str()),
+                                        s.fields.clone(),
+                                        s.static_fields.clone(),
+                                        s.methods.clone(),
+                                    )
+                                } else {
+                                    self.errors.push(TypeError::Generic {
+                                        src: self.get_source(),
+                                        span: self.current_span,
+                                        message: format!("Type '{}' is not defined", name),
+                                    });
+                                    return Type::Error;
+                                }
+                            }
+                        } else if let Type::Interface(ref name) = **base {
+                            if let Some(sig) = self.env.interfaces.get(name) {
+                                let mut substs = std::collections::HashMap::new();
+                                if let Some(g_params) = &sig.generic_params {
+                                    for (p, arg) in g_params.iter().zip(args.iter()) {
+                                        substs.insert(p.name, arg.clone());
+                                    }
+                                }
+                                
+                                let mut resolved_methods = sig.methods.clone();
+                                for (_, m_sig) in resolved_methods.iter_mut() {
+                                    for p in m_sig.params.iter_mut() {
+                                        *p = p.resolve_generics(&substs);
+                                    }
+                                    m_sig.return_type = m_sig.return_type.resolve_generics(&substs);
+                                }
+                                
+                                (
+                                    *name,
+                                    std::collections::HashMap::new(),
+                                    std::collections::HashMap::new(),
+                                    resolved_methods,
+                                )
+                            } else {
+                                let mut concrete_name = name.as_str().to_string();
+                                for arg in args {
+                                    let arg_name = format!("{:?}", arg);
+                                    concrete_name.push('_');
+                                    concrete_name.push_str(&arg_name.replace(" ", "_"));
+                                }
+                                
+                                if let Some(s) = self.env.interfaces.get(&ustr::Ustr::from(concrete_name.as_str())) {
+                                    (
+                                        ustr::Ustr::from(concrete_name.as_str()),
+                                        std::collections::HashMap::new(),
+                                        std::collections::HashMap::new(),
+                                        s.methods.clone(),
+                                    )
+                                } else {
+                                    self.errors.push(TypeError::Generic {
+                                        src: self.get_source(),
+                                        span: self.current_span,
+                                        message: format!("Interface '{}' is not defined", name),
+                                    });
+                                    return Type::Error;
+                                }
+                            }
+                        } else {
+                            self.errors.push(TypeError::Generic {
+                                src: self.get_source(),
+                                span: self.current_span,
+                                message: "Cannot access property on non-class/interface generic instance".into(),
+                            });
+                            return Type::Error;
+                        }
                     }
                     Type::Actor(ref name) => {
                         let sig = match self.env.actors.get(name) {
@@ -717,6 +899,25 @@ impl<'a> TypeChecker<'a> {
                             });
                             return Type::Error;
                         };
+                    }
+                    Type::Interface(ref name) => {
+                        let sig = match self.env.interfaces.get(name) {
+                            Some(s) => s,
+                            None => {
+                                self.errors.push(TypeError::Generic {
+                                    src: self.get_source(),
+                                    span: self.current_span,
+                                    message: format!("Interface '{}' is not defined", name),
+                                });
+                                return Type::Error;
+                            }
+                        };
+                        (
+                            *name,
+                            std::collections::HashMap::new(),
+                            std::collections::HashMap::new(),
+                            sig.methods.clone(),
+                        )
                     }
                     _ => {
                         {
@@ -962,6 +1163,22 @@ impl<'a> TypeChecker<'a> {
                         Type::Error
                     }
                 }
+            }
+        }
+    }
+
+    pub(crate) fn coerce_expr_if_needed(&mut self, expected: &Type, actual: &Type, expr_id: pace_hir::ExprId) {
+        let expected_str = format!("{:?}", expected);
+        let actual_str = format!("{:?}", actual);
+        
+        if actual_str.contains("List") && expected_str.contains("Set") {
+            if matches!(self.arena.get_expr(expr_id), Expr::ArrayLiteral(_)) {
+                self.env.node_types.insert(expr_id, expected.clone());
+            }
+        }
+        if actual_str.contains("Map") && expected_str.contains("Map") {
+            if matches!(self.arena.get_expr(expr_id), Expr::MapLiteral(_)) {
+                self.env.node_types.insert(expr_id, expected.clone());
             }
         }
     }

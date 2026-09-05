@@ -1,41 +1,43 @@
 import "./list";
+import "../string-builder";
+import "pace:core/iterator";
 
 class Map<K, V> implement Iterable<K> {
     // True Hash-based Map Implementation with Linear Probing
-    var keysPtr: Int;
-    var valsPtr: Int;
-    var statesPtr: Int;
-    var count: Int;
-    var cap: Int;
+    var _keysPtr: Int;
+    var _valsPtr: Int;
+    var _statesPtr: Int;
+    var _count: Int;
+    var _cap: Int;
 
     func init() {
-        self.cap = 16;
-        self.count = 0;
-        self.keysPtr = malloc(self.cap * 8);
-        self.valsPtr = malloc(self.cap * 8);
-        self.statesPtr = malloc(self.cap * 8);
+        self._cap = 16;
+        self._count = 0;
+        self._keysPtr = malloc(self._cap * 8);
+        self._valsPtr = malloc(self._cap * 8);
+        self._statesPtr = malloc(self._cap * 8);
 
         var i = 0;
-        while i < self.cap {
-            ptrStore(self.statesPtr, i * 8, 0);
+        while i < self._cap {
+            ptrStore(self._statesPtr, i * 8, 0);
             i = i + 1;
         }
     }
 
     func _resize() {
-        let oldCap = self.cap;
-        let oldKeys = self.keysPtr;
-        let oldVals = self.valsPtr;
-        let oldStates = self.statesPtr;
+        let oldCap = self._cap;
+        let oldKeys = self._keysPtr;
+        let oldVals = self._valsPtr;
+        let oldStates = self._statesPtr;
 
-        self.cap = self.cap * 2;
-        self.keysPtr = malloc(self.cap * 8);
-        self.valsPtr = malloc(self.cap * 8);
-        self.statesPtr = malloc(self.cap * 8);
+        self._cap = self._cap * 2;
+        self._keysPtr = malloc(self._cap * 8);
+        self._valsPtr = malloc(self._cap * 8);
+        self._statesPtr = malloc(self._cap * 8);
 
         var i = 0;
-        while i < self.cap {
-            ptrStore(self.statesPtr, i * 8, 0);
+        while i < self._cap {
+            ptrStore(self._statesPtr, i * 8, 0);
             i = i + 1;
         }
 
@@ -44,16 +46,16 @@ class Map<K, V> implement Iterable<K> {
             if ptrLoad(oldStates, i * 8) == 1 {
                 let k = ptrLoad(oldKeys, i * 8);
                 let v = ptrLoad(oldVals, i * 8);
-                var index = hash(k) % self.cap;
+                var index = hash(k) % self._cap;
                 if index < 0 {
                     index = index * (0 - 1);
                 }
-                while ptrLoad(self.statesPtr, index * 8) == 1 {
-                    index = (index + 1) % self.cap;
+                while ptrLoad(self._statesPtr, index * 8) == 1 {
+                    index = (index + 1) % self._cap;
                 }
-                ptrStore(self.keysPtr, index * 8, k);
-                ptrStore(self.valsPtr, index * 8, v);
-                ptrStore(self.statesPtr, index * 8, 1);
+                ptrStore(self._keysPtr, index * 8, k);
+                ptrStore(self._valsPtr, index * 8, v);
+                ptrStore(self._statesPtr, index * 8, 1);
             }
             i = i + 1;
         }
@@ -63,12 +65,12 @@ class Map<K, V> implement Iterable<K> {
         free(oldStates, oldCap * 8);
     }
 
-    func put(key: K, val: V) {
-        if self.count * 2 >= self.cap {
+    func set(key: K, val: V) {
+        if self._count * 2 >= self._cap {
             self._resize();
         }
 
-        var index = hash(key) % self.cap;
+        var index = hash(key) % self._cap;
         if index < 0 {
             index = index * (0 - 1);
         }
@@ -76,7 +78,7 @@ class Map<K, V> implement Iterable<K> {
         var firstDeleted = 0 - 1;
 
         while true {
-            let state = ptrLoad(self.statesPtr, index * 8);
+            let state = ptrLoad(self._statesPtr, index * 8);
             if state == 0 {
                 // Empty slot found
                 var targetIdx = index;
@@ -85,20 +87,20 @@ class Map<K, V> implement Iterable<K> {
                 }
                 __pace_retain_generic<K>(key);
                 __pace_retain_generic<V>(val);
-                ptrStore(self.keysPtr, targetIdx * 8, key);
-                ptrStore(self.valsPtr, targetIdx * 8, val);
-                ptrStore(self.statesPtr, targetIdx * 8, 1);
-                self.count = self.count + 1;
+                ptrStore(self._keysPtr, targetIdx * 8, key);
+                ptrStore(self._valsPtr, targetIdx * 8, val);
+                ptrStore(self._statesPtr, targetIdx * 8, 1);
+                self._count = self._count + 1;
                 return;
             }
             if state == 1 {
-                let k = ptrLoad(self.keysPtr, index * 8);
+                let k = ptrLoad(self._keysPtr, index * 8);
                 if k == key {
                     // Overwrite existing
-                    let _oldVal = ptrLoad(self.valsPtr, index * 8);
+                    let _oldVal = ptrLoad(self._valsPtr, index * 8);
                     __pace_release_generic<V>(_oldVal);
                     __pace_retain_generic<V>(val);
-                    ptrStore(self.valsPtr, index * 8, val);
+                    ptrStore(self._valsPtr, index * 8, val);
                     return;
                 }
             }
@@ -107,92 +109,92 @@ class Map<K, V> implement Iterable<K> {
                     firstDeleted = index;
                 }
             }
-            index = (index + 1) % self.cap;
+            index = (index + 1) % self._cap;
         }
     }
 
-    func putAll(other: Map<K, V>) {
+    func addAll(other: Map<K, V>) {
         let keys = other.keys();
         var i = 0;
         let l = keys.length();
         while i < l {
             let k = keys.get(i);
-            self.put(k, other.get(k));
+            self.set(k, other.get(k));
             i = i + 1;
         }
     }
 
     func remove(key: K) -> Bool {
-        if self.cap == 0 { return false; }
-        var index = hash(key) % self.cap;
+        if self._cap == 0 { return false; }
+        var index = hash(key) % self._cap;
         if index < 0 {
             index = index * (0 - 1);
         }
 
         while true {
-            let state = ptrLoad(self.statesPtr, index * 8);
+            let state = ptrLoad(self._statesPtr, index * 8);
             if state == 0 {
                 return false;
             }
             if state == 1 {
-                let k = ptrLoad(self.keysPtr, index * 8);
+                let k = ptrLoad(self._keysPtr, index * 8);
                 if k == key {
-                    ptrStore(self.statesPtr, index * 8, 2); // Mark deleted
-                    __pace_release_generic<K>(ptrLoad(self.keysPtr, index * 8));
-                    __pace_release_generic<V>(ptrLoad(self.valsPtr, index * 8));
-                    self.count = self.count - 1;
+                    ptrStore(self._statesPtr, index * 8, 2); // Mark deleted
+                    __pace_release_generic<K>(ptrLoad(self._keysPtr, index * 8));
+                    __pace_release_generic<V>(ptrLoad(self._valsPtr, index * 8));
+                    self._count = self._count - 1;
                     return true;
                 }
             }
-            index = (index + 1) % self.cap;
+            index = (index + 1) % self._cap;
         }
         return false;
     }
 
     func get(k: K) -> V {
-        if self.cap == 0 {
-            return ptrLoad(self.valsPtr, 0); // Null/default fallback
+        if self._cap == 0 {
+            return ptrLoad(self._valsPtr, 0); // Null/default fallback
         }
-        var index = hash(k) % self.cap;
+        var index = hash(k) % self._cap;
         if index < 0 {
             index = index * (0 - 1);
         }
 
         while true {
-            let state = ptrLoad(self.statesPtr, index * 8);
+            let state = ptrLoad(self._statesPtr, index * 8);
             if state == 0 {
-                return ptrLoad(self.valsPtr, 0); // Null/default fallback
+                return ptrLoad(self._valsPtr, 0); // Null/default fallback
             }
             if state == 1 {
-                let currentK = ptrLoad(self.keysPtr, index * 8);
+                let currentK = ptrLoad(self._keysPtr, index * 8);
                 if currentK == k {
-                    return ptrLoad(self.valsPtr, index * 8);
+                    return ptrLoad(self._valsPtr, index * 8);
                 }
             }
-            index = (index + 1) % self.cap;
+            index = (index + 1) % self._cap;
         }
-        return ptrLoad(self.valsPtr, 0);
+        return ptrLoad(self._valsPtr, 0);
     }
 
-    func contains(k: K) -> Bool {
-        if self.cap == 0 { return false; }
-        var index = hash(k) % self.cap;
+    func containsKey(k: K) -> Bool {
+        if self._cap == 0 { return false; }
+        var index = hash(k) % self._cap;
         if index < 0 {
             index = index * (0 - 1);
         }
 
         while true {
-            let state = ptrLoad(self.statesPtr, index * 8);
+            let state = ptrLoad(self._statesPtr, index * 8);
             if state == 0 {
                 return false;
             }
             if state == 1 {
-                let currentK = ptrLoad(self.keysPtr, index * 8);
+                let currentK = ptrLoad(self._keysPtr, index * 8);
                 if currentK == k {
                     return true;
                 }
             }
-            index = (index + 1) % self.cap;
+            index = (index + 1) % self._cap;
         }
         return false;
     }
@@ -200,9 +202,9 @@ class Map<K, V> implement Iterable<K> {
     func keys() -> List<K> {
         let list = List<K>();
         var i = 0;
-        while i < self.cap {
-            if ptrLoad(self.statesPtr, i * 8) == 1 {
-                list.add(ptrLoad(self.keysPtr, i * 8));
+        while i < self._cap {
+            if ptrLoad(self._statesPtr, i * 8) == 1 {
+                list.add(ptrLoad(self._keysPtr, i * 8));
             }
             i = i + 1;
         }
@@ -212,9 +214,9 @@ class Map<K, V> implement Iterable<K> {
     func values() -> List<V> {
         let list = List<V>();
         var i = 0;
-        while i < self.cap {
-            if ptrLoad(self.statesPtr, i * 8) == 1 {
-                list.add(ptrLoad(self.valsPtr, i * 8));
+        while i < self._cap {
+            if ptrLoad(self._statesPtr, i * 8) == 1 {
+                list.add(ptrLoad(self._valsPtr, i * 8));
             }
             i = i + 1;
         }
@@ -223,28 +225,126 @@ class Map<K, V> implement Iterable<K> {
 
     func clear() {
         var i = 0;
-        while i < self.cap {
-            if ptrLoad(self.statesPtr, i * 8) == 1 {
-                __pace_release_generic<K>(ptrLoad(self.keysPtr, i * 8));
-                __pace_release_generic<V>(ptrLoad(self.valsPtr, i * 8));
+        while i < self._cap {
+            if ptrLoad(self._statesPtr, i * 8) == 1 {
+                __pace_release_generic<K>(ptrLoad(self._keysPtr, i * 8));
+                __pace_release_generic<V>(ptrLoad(self._valsPtr, i * 8));
             }
-            ptrStore(self.statesPtr, i * 8, 0);
+            ptrStore(self._statesPtr, i * 8, 0);
             i = i + 1;
         }
-        self.count = 0;
+        self._count = 0;
     }
 
     func length() -> Int {
-        return self.count;
+        return self._count;
+    }
+
+    func isEmpty() -> Bool {
+        return self._count == 0;
+    }
+
+    func isNotEmpty() -> Bool {
+        return self._count > 0;
+    }
+
+    func containsValue(v: V) -> Bool {
+        if self._cap == 0 { return false; }
+        var i = 0;
+        while i < self._cap {
+            if ptrLoad(self._statesPtr, i * 8) == 1 {
+                let currentV = ptrLoad(self._valsPtr, i * 8);
+                if currentV == v {
+                    return true;
+                }
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    func getKey(index: Int) -> K {
+        return ptrLoad(self._keysPtr, index * 8);
+    }
+
+    func getCap() -> Int {
+        return self._cap;
+    }
+
+    func getStatesPtr() -> Int {
+        return self._statesPtr;
+    }
+
+    func _getVal(index: Int) -> V {
+        return ptrLoad(self._valsPtr, index * 8);
+    }
+
+    func iterator() -> Iterator<K> {
+        return MapKeyIterator<K, V>(self);
+    }
+
+    func toString() -> String {
+        let sb = StringBuilder();
+        sb.init();
+        sb.append("{");
+        var first = true;
+        var i = 0;
+        while i < self._cap {
+            if ptrLoad(self._statesPtr, i * 8) == 1 {
+                if first == false {
+                    sb.append(", ");
+                }
+                first = false;
+                let k = self.getKey(i);
+                let v = self._getVal(i);
+                sb.append(k.toString());
+                sb.append(": ");
+                sb.append(v.toString());
+            }
+            i = i + 1;
+        }
+        sb.append("}");
+        return sb.build();
     }
 
     func drop() {
-        if self.cap != 0 {
+        if self._cap != 0 {
             self.clear();
-            free(self.keysPtr, self.cap * 8);
-            free(self.valsPtr, self.cap * 8);
-            free(self.statesPtr, self.cap * 8);
-            self.cap = 0;
+            free(self._keysPtr, self._cap * 8);
+            free(self._valsPtr, self._cap * 8);
+            free(self._statesPtr, self._cap * 8);
+            self._cap = 0;
         }
+    }
+}
+
+class MapKeyIterator<K, V> implement Iterator<K> {
+    var map: Map<K, V>;
+    var idx: Int;
+
+    func init(map: Map<K, V>) {
+        self.map = map;
+        self.idx = 0;
+        self._advanceToValid();
+    }
+
+    func _advanceToValid() {
+        while self.idx < self.map.getCap() {
+            if ptrLoad(self.map.getStatesPtr(), self.idx * 8) == 1 {
+                return;
+            }
+            self.idx = self.idx + 1;
+        }
+    }
+
+    func hasNext() -> Bool {
+        return self.idx < self.map.getCap();
+    }
+
+    func next() -> K {
+        let val = self.map.getKey(self.idx);
+        self.idx = self.idx + 1;
+        self._advanceToValid();
+        return val;
     }
 }

@@ -1,0 +1,4 @@
+interface Clone {
+    func clone() -> Self {
+    }
+}

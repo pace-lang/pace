@@ -1,61 +1,87 @@
 import "./list";
+import "../string-builder";
+import "pace:core/iterator";
+
 class Set<T> implement Iterable<T> {
     // Standard Dynamic Set Implementation
     // Uses a List internally and deduplicates on insert
-    var list: List<T>;
+    var _list: List<T>;
 
     func init() {
-        self.list = List<T>();
+        self._list = List<T>();
+        self._list.init();
+    }
+
+    func iterator() -> Iterator<T> {
+        return SetIterator<T>(self);
     }
 
     func add(val: T) -> Bool {
-        if self.list.contains(val) {
+        if self._list.contains(val) {
             return false;
         }
-        self.list.add(val);
+        self._list.add(val);
         return true;
     }
 
-    func addAll(other: List<T>) {
-        var i = 0;
-        let l = other.length();
-        while i < l {
-            self.add(other.get(i));
-            i = i + 1;
+    func addAll(other: Iterable<T>) {
+        let it = other.iterator();
+        while it.hasNext() {
+            self.add(it.next());
         }
     }
 
+    func getList() -> List<T> {
+        return self._list;
+    }
+
     func remove(val: T) -> Bool {
-        let idx = self.list.indexOf(val);
+        let idx = self._list.indexOf(val);
         if idx >= 0 {
-            self.list.remove(idx);
+            self._list.removeAt(idx);
             return true;
         }
         return false;
     }
 
     func clear() {
-        self.list.clear();
+        self._list.clear();
     }
 
     func contains(val: T) -> Bool {
-        return self.list.contains(val);
+        return self._list.contains(val);
     }
 
     func length() -> Int {
-        return self.list.length();
+        return self._list.length();
+    }
+
+    func isEmpty() -> Bool {
+        return self._list.isEmpty();
+    }
+
+    func isNotEmpty() -> Bool {
+        return self._list.isNotEmpty();
+    }
+
+    func first() -> T {
+        return self._list.first();
+    }
+
+    func last() -> T {
+        return self._list.last();
     }
 
     func union(other: Set<T>) -> Set<T> {
         let newSet = Set<T>();
         var i = 0;
         while i < self.length() {
-            newSet.add(self.list.get(i));
+            newSet.add(self._list.get(i));
             i = i + 1;
         }
         var j = 0;
         while j < other.length() {
-            newSet.add(other.list.get(j));
+            newSet.add(other._list.get(j));
             j = j + 1;
         }
         return newSet;
@@ -65,7 +91,7 @@ class Set<T> implement Iterable<T> {
         let newSet = Set<T>();
         var i = 0;
         while i < self.length() {
-            let item = self.list.get(i);
+            let item = self._list.get(i);
             if other.contains(item) {
                 newSet.add(item);
             }
@@ -74,5 +100,38 @@ class Set<T> implement Iterable<T> {
         return newSet;
     }
 
+    func toString() -> String {
+        let sb = StringBuilder();
+        sb.init();
+        sb.append("[");
+        var i = 0;
+        while i < self.length() {
+            sb.append(self._list.get(i).toString());
+            if i < self.length() - 1 {
+                sb.append(", ");
+            }
+            i = i + 1;
+        }
+        sb.append("]");
+        return sb.build();
+    }
+}
+
+class SetIterator<T> implement Iterator<T> {
+    var set: Set<T>;
+    var listIterator: Iterator<T>;
+
+    func init(set: Set<T>) {
+        self.set = set;
+        self.listIterator = set.getList().iterator();
+    }
+
+    func hasNext() -> Bool {
+        return self.listIterator.hasNext();
+    }
+
+    func next() -> T {
+        return self.listIterator.next();
+    }
 }
 

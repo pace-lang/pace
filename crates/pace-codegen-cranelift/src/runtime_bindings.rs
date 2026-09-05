@@ -74,6 +74,7 @@ impl RuntimeBindings {
             pace_runtime::__pace_get_year as *const u8,
         );
         builder.symbol("__pace_hash", pace_runtime::__pace_hash as *const u8);
+        builder.symbol("__pace_trap", pace_runtime::__pace_trap as *const u8);
         builder.symbol("__pace_sb_new", pace_runtime::__pace_sb_new as *const u8);
         builder.symbol(
             "__pace_sb_append",

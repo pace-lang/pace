@@ -49,6 +49,11 @@ pub fn declare_runtime_functions<M: Module>(
         .declare_function("__pace_release", Linkage::Import, &sig_release)
         .unwrap();
 
+    let mut sig_trap = module.make_signature();
+    let trap_id = module
+        .declare_function("__pace_trap", Linkage::Import, &sig_trap)
+        .unwrap();
+
 
 
     let mut sig_int_to_string = module.make_signature();
@@ -209,6 +214,7 @@ pub fn declare_runtime_functions<M: Module>(
     funcs.insert(ustr::Ustr::from("__pace_time"), time_id);
     funcs.insert(ustr::Ustr::from("__pace_get_year"), get_year_id);
     funcs.insert(ustr::Ustr::from("__pace_hash"), hash_id);
+    funcs.insert(ustr::Ustr::from("__pace_trap"), trap_id);
 
     funcs.insert(ustr::Ustr::from("__pace_mailbox_create"), mb_create_id);
     funcs.insert(ustr::Ustr::from("__pace_mailbox_send"), mb_send_id);

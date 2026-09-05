@@ -238,6 +238,20 @@ fn translate_terminator(
                 cleanup: cleanup.map(|bb| map_bb(bb)),
             }
         }
+        Terminator::InterfaceCall { obj, method_index, args, destination, target, cleanup } => {
+            let mut translated_args = Vec::with_capacity(args.len());
+            for arg in args {
+                translated_args.push(translate_operand(arg, map_local));
+            }
+            Terminator::InterfaceCall {
+                obj: translate_operand(obj, map_local),
+                method_index: *method_index,
+                args: translated_args,
+                destination: translate_place(destination, map_local),
+                target: target.map(|bb| map_bb(bb)),
+                cleanup: cleanup.map(|bb| map_bb(bb)),
+            }
+        }
         Terminator::SwitchInt { discr, targets } => {
             let mut translated_targets = Vec::with_capacity(targets.targets.len());
             for t in &targets.targets {

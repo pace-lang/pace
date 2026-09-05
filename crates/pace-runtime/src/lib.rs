@@ -94,6 +94,11 @@ pub extern "C" fn __pace_noop(_obj: *mut u8) {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn __pace_trap() {
+    panic!("Pace Runtime Trap: Hit an unimplemented VTable method or unreachable code.");
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn __pace_retain(obj: *mut u8) {
     if obj.is_null() {
         return;

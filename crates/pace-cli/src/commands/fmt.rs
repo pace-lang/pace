@@ -332,6 +332,16 @@ impl<'a> Formatter<'a> {
             }
             Expr::BoolLiteral(b) => RcDoc::text(if *b { "true" } else { "false" }),
             Expr::Null => RcDoc::text("null"),
+            Expr::ArrayLiteral(elements) => {
+                let docs: Vec<_> = elements.iter().map(|e| self.format_expr(*e)).collect();
+                RcDoc::text("[").append(RcDoc::intersperse(docs, RcDoc::text(", "))).append(RcDoc::text("]"))
+            }
+            Expr::MapLiteral(elements) => {
+                let docs: Vec<_> = elements.iter().map(|(k, v)| {
+                    self.format_expr(*k).append(RcDoc::text(": ")).append(self.format_expr(*v))
+                }).collect();
+                RcDoc::text("{").append(RcDoc::intersperse(docs, RcDoc::text(", "))).append(RcDoc::text("}"))
+            }
             Expr::Identifier(name, _) => RcDoc::text(name.as_str().to_string()),
             Expr::GenericInstantiation { callee, generic_args } => {
                 let c = self.format_expr(*callee);

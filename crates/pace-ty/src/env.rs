@@ -172,6 +172,10 @@ pub struct Environment {
     pub global_vars: HashMap<ustr::Ustr, GlobalVariableSignature>,
     pub node_types: HashMap<pace_hir::arena::ExprId, Type>,
     pub node_definitions: HashMap<pace_hir::arena::ExprId, pace_span::Span>,
+    
+    // Virtual Method Table layout mapping
+    pub global_interface_methods: HashMap<ustr::Ustr, usize>,
+    pub interface_method_count: usize,
 }
 
 impl Environment {
@@ -188,6 +192,8 @@ impl Environment {
             global_vars: HashMap::new(),
             node_types: HashMap::new(),
             node_definitions: HashMap::new(),
+            global_interface_methods: HashMap::new(),
+            interface_method_count: 0,
         };
         e.inject_prelude();
         e
@@ -515,10 +521,29 @@ impl Environment {
         let _ = self.define(name, Type::Class(name), pace_span::Span::default(), false);
     }
 
-    pub fn register_interface(&mut self, name: ustr::Ustr, sig: InterfaceSignature) {
-        self.interfaces.insert(name, sig);
-        let _ = self.define(name, Type::Interface(name), pace_span::Span::default(), false);
+    pub fn register_interface(
+        &mut self,
+        name: ustr::Ustr,
+        signature: InterfaceSignature,
+    ) {
+        self.interfaces.insert(name, signature);
     }
+
+    pub fn assign_global_interface_method_index(&mut self, method_name: ustr::Ustr) -> usize {
+        if let Some(&index) = self.global_interface_methods.get(&method_name) {
+            index
+        } else {
+            let index = self.interface_method_count;
+            self.global_interface_methods.insert(method_name, index);
+            self.interface_method_count += 1;
+            index
+        }
+    }
+
+    pub fn get_global_interface_method_index(&self, method_name: &ustr::Ustr) -> Option<usize> {
+        self.global_interface_methods.get(method_name).copied()
+    }
+
 
     pub fn register_struct(&mut self, name: ustr::Ustr, sig: ClassSignature) {
         self.structs.insert(name, sig);

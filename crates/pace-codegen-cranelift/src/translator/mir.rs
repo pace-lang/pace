@@ -43,8 +43,48 @@ pub fn compile_mir_program<M: Module>(
             .map_err(|e| crate::CodegenError {
                 message: e.to_string(),
             })?;
-        
         context.funcs.insert(*name, id);
+    }
+    
+    // Pass 1.5: Define VTables
+    let mut trap_sig = context.module.make_signature();
+    trap_sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
+    let trap_id = match context.funcs.get(&ustr::Ustr::from("__pace_trap")) {
+        Some(id) => *id,
+        None => {
+            let id = context.module.declare_function("__pace_trap", Linkage::Import, &trap_sig).unwrap();
+            context.funcs.insert(ustr::Ustr::from("__pace_trap"), id);
+            id
+        }
+    };
+
+    for (class_name, vtable) in &program.vtables {
+        let vtable_name = format!("{}_vtable", class_name.as_str());
+        let data_id = context
+            .module
+            .declare_data(&vtable_name, Linkage::Export, true, false)
+            .map_err(|e| crate::CodegenError { message: e.to_string() })?;
+        context.vtables.insert(*class_name, data_id);
+
+        let mut data_ctx = cranelift_module::DataDescription::new();
+        // Allocate space for the vtable (8 bytes per entry)
+        data_ctx.define(Box::from(vec![0; vtable.len() * 8]));
+
+        for (index, method_opt) in vtable.iter().enumerate() {
+            let func_id = if let Some(method_name) = method_opt {
+                *context.funcs.get(method_name).unwrap_or(&trap_id)
+            } else {
+                trap_id
+            };
+            
+            let func_ref = context.module.declare_func_in_data(func_id, &mut data_ctx);
+            data_ctx.write_function_addr((index * 8) as u32, func_ref);
+        }
+
+        context
+            .module
+            .define_data(data_id, &data_ctx)
+            .map_err(|e| crate::CodegenError { message: e.to_string() })?;
     }
 
     // Pass 2: Define all functions
@@ -263,8 +303,56 @@ fn compile_mir_function<M: Module>(
                         }
                     }
                 }
+                Terminator::InterfaceCall { obj, method_index, args, destination, target, cleanup: _ } => {
+                    let obj_ptr = translate_operand(&mut builder, context, obj, &locals)?;
+                    let ptr_ty = context.module.target_config().pointer_type();
+                    
+                    // Load vtable pointer from offset 8
+                    let vtable_ptr = builder.ins().load(
+                        ptr_ty,
+                        cranelift::prelude::MemFlagsData::new(),
+                        obj_ptr,
+                        8,
+                    );
+                    
+                    // Load function pointer from vtable_ptr + method_index * 8
+                    let func_ptr = builder.ins().load(
+                        ptr_ty,
+                        cranelift::prelude::MemFlagsData::new(),
+                        vtable_ptr,
+                        (*method_index * 8) as i32,
+                    );
+                    
+                    let mut sig = context.module.make_signature();
+                    sig.call_conv = cranelift::prelude::isa::CallConv::Fast;
+                    sig.returns.push(cranelift::prelude::AbiParam::new(cranelift::prelude::types::I64));
+                    for _ in 0..args.len() {
+                        sig.params.push(cranelift::prelude::AbiParam::new(cranelift::prelude::types::I64));
+                    }
+                    let sig_ref = builder.import_signature(sig);
+                    
+                    let mut arg_vals = Vec::new();
+                    for arg in args {
+                        arg_vals.push(translate_operand(&mut builder, context, arg, &locals)?);
+                    }
+                    
+                    let inst = builder.ins().call_indirect(sig_ref, func_ptr, &arg_vals);
+                    let results = builder.inst_results(inst);
+                    let result_val = if results.is_empty() {
+                        builder.ins().iconst(cranelift::prelude::types::I64, 0)
+                    } else {
+                        results[0]
+                    };
+                    store_to_place(&mut builder, context, destination, &locals, result_val)?;
+                    
+                    if let Some(next_block) = target {
+                        builder.ins().jump(blocks[next_block.index()], &[]);
+                    } else {
+                        builder.ins().trap(cranelift::prelude::TrapCode::user(1).unwrap());
+                    }
+                }
                 Terminator::Unreachable => {
-                    builder.ins().trap(cranelift::prelude::TrapCode::user(1).unwrap());
+                    builder.ins().trap(cranelift::prelude::TrapCode::user(0).unwrap());
                 }
             }
         } else {
@@ -339,7 +427,7 @@ fn translate_rvalue<M: Module>(
             Ok(val)
         }
 
-        Rvalue::Aggregate(pace_mir::AggregateKind::StackClass(_class_name, class_size), operands) => {
+        Rvalue::Aggregate(pace_mir::AggregateKind::StackClass(class_name, class_size), operands) => {
             let slot = builder.create_sized_stack_slot(cranelift::prelude::StackSlotData::new(
                 cranelift::prelude::StackSlotKind::ExplicitSlot,
                 *class_size as u32,
@@ -350,6 +438,15 @@ fn translate_rvalue<M: Module>(
             let immortal = builder.ins().iconst(types::I64, 4611686018427387904);
             builder.ins().store(cranelift::prelude::MemFlagsData::new(), immortal, obj_ptr, 0);
             
+            // Store VTable pointer for stack classes too
+            let vtable_val = if let Some(&data_id) = context.vtables.get(class_name) {
+                let local_data_id = context.module.declare_data_in_func(data_id, builder.func);
+                builder.ins().symbol_value(context.module.target_config().pointer_type(), local_data_id)
+            } else {
+                builder.ins().iconst(types::I64, 0)
+            };
+            builder.ins().store(cranelift::prelude::MemFlagsData::new(), vtable_val, obj_ptr, 8);
+            
             for (i, op) in operands.iter().enumerate() {
                 let val = translate_operand(builder, context, op, &locals)?;
                 let offset = (16 + i * 8) as i32;
@@ -357,7 +454,7 @@ fn translate_rvalue<M: Module>(
             }
             Ok(obj_ptr)
         }
-        Rvalue::Aggregate(pace_mir::AggregateKind::Class(_class_name, class_size), operands) => {
+        Rvalue::Aggregate(pace_mir::AggregateKind::Class(class_name, class_size), operands) => {
             let size_val = builder.ins().iconst(types::I64, *class_size as i64);
 
             let malloc_id = *context.funcs.get(&ustr::Ustr::from("__pace_malloc")).unwrap();
@@ -368,9 +465,14 @@ fn translate_rvalue<M: Module>(
             let one = builder.ins().iconst(types::I64, 1);
             builder.ins().store(cranelift::prelude::MemFlagsData::new(), one, obj_ptr, 0);
 
-            // Null VTable pointer since MIR dynamic dispatch is not implemented
-            let null_vtable = builder.ins().iconst(types::I64, 0);
-            builder.ins().store(cranelift::prelude::MemFlagsData::new(), null_vtable, obj_ptr, 8);
+            // Store VTable pointer
+            let vtable_val = if let Some(&data_id) = context.vtables.get(class_name) {
+                let local_data_id = context.module.declare_data_in_func(data_id, builder.func);
+                builder.ins().symbol_value(context.module.target_config().pointer_type(), local_data_id)
+            } else {
+                builder.ins().iconst(types::I64, 0)
+            };
+            builder.ins().store(cranelift::prelude::MemFlagsData::new(), vtable_val, obj_ptr, 8);
 
             let mut offset = 16;
             for op in operands {

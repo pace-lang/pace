@@ -1,0 +1,11 @@
+import "./iterator";
+
+interface Iterable<T> {
+    func length() -> Int {}
+
+    func isEmpty() -> Bool {
+        return self.length() == 0;
+    }
+
+    func iterator() -> Iterator<T> {}
+}

@@ -48,6 +48,17 @@ impl<'a> HirBuilder<'a> {
             }
             pace_ast::Expr::BoolLiteral(val) => Expr::BoolLiteral(*val),
             pace_ast::Expr::Null => Expr::Null,
+            pace_ast::Expr::ArrayLiteral(elements) => {
+                let hir_elements = self.lower_exprs(elements);
+                Expr::ArrayLiteral(hir_elements)
+            }
+            pace_ast::Expr::MapLiteral(elements) => {
+                let hir_elements = elements
+                    .iter()
+                    .map(|(k, v)| (self.lower_expr(*k), self.lower_expr(*v)))
+                    .collect();
+                Expr::MapLiteral(hir_elements)
+            }
             pace_ast::Expr::Identifier(name, _span) => Expr::Identifier(*name),
             pace_ast::Expr::GenericInstantiation {
                 callee,
