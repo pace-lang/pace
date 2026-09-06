@@ -497,23 +497,124 @@ impl<'a> TypeChecker<'a> {
                     arg_types.push(self.check_expr(*arg));
                 }
 
-                // If callee is a known class/struct, it's a constructor call
-                if let Type::Class(name) = &callee_ty {
-                    if let Some(_sig) = self.env.classes.get(name) {
-                        return Type::Class(*name);
+                // If callee is a known class/struct/actor, it's a constructor call
+                let mut is_instantiation = false;
+                let mut class_name = None;
+                let mut generic_args = None;
+                let mut is_actor = false;
+                
+                match &callee_ty {
+                    Type::Class(name) => {
+                        is_instantiation = true;
+                        class_name = Some(*name);
                     }
-                } else if let Type::Actor(name) = &callee_ty
-                    && let Some(_sig) = self.env.actors.get(name)
-                {
-                    return Type::Actor(*name);
-                } else if let Type::Struct(name) = &callee_ty
-                    && let Some(_sig) = self.env.structs.get(name)
-                {
-                    return Type::Struct(*name);
-                } else if let Type::Enum(name) = &callee_ty
-                    && let Some(_sig) = self.env.enums.get(name)
-                {
-                    return Type::Enum(*name);
+                    Type::Actor(name) => {
+                        is_instantiation = true;
+                        class_name = Some(*name);
+                        is_actor = true;
+                    }
+                    Type::Struct(name) => {
+                        is_instantiation = true;
+                        class_name = Some(*name);
+                    }
+                    Type::GenericInstance { base, args: g_args } => {
+                        if let Type::Class(name) | Type::Struct(name) | Type::Actor(name) = &**base {
+                            is_instantiation = true;
+                            class_name = Some(*name);
+                            generic_args = Some(g_args.clone());
+                            if let Type::Actor(_) = &**base {
+                                is_actor = true;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                if is_instantiation {
+                    if let Some(name) = class_name {
+                        let init_sig = if let Some(sig) = self.env.classes.get(&name) {
+                            sig.methods.get(&ustr::Ustr::from("init")).cloned()
+                        } else if let Some(sig) = self.env.structs.get(&name) {
+                            sig.methods.get(&ustr::Ustr::from("init")).cloned()
+                        } else if let Some(sig) = self.env.actors.get(&name) {
+                            sig.methods.get(&ustr::Ustr::from("init")).cloned()
+                        } else {
+                            None
+                        };
+
+                        if let Some(mut sig) = init_sig {
+                            // Substitute generics if necessary
+                            if let Some(g_args) = &generic_args {
+                                let g_params = if is_actor {
+                                    self.env.actors.get(&name).and_then(|def| def.generic_params.as_ref())
+                                } else if self.env.classes.contains_key(&name) {
+                                    self.env.classes.get(&name).and_then(|def| def.generic_params.as_ref())
+                                } else {
+                                    self.env.structs.get(&name).and_then(|def| def.generic_params.as_ref())
+                                };
+                                
+                                if let Some(g_params) = g_params {
+                                    let mut substs = std::collections::HashMap::new();
+                                    if g_params.len() == g_args.len() {
+                                        for (p, arg) in g_params.iter().zip(g_args.iter()) {
+                                            substs.insert(p.name, arg.clone());
+                                        }
+                                        for p in sig.params.iter_mut() {
+                                            *p = p.resolve_generics(&substs);
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if sig.params.len() != args.len() {
+                                self.errors.push(TypeError::Generic {
+                                    src: self.get_source(),
+                                    span: self.current_span,
+                                    message: format!(
+                                        "Constructor for '{}' expects {} arguments, got {}",
+                                        name,
+                                        sig.params.len(),
+                                        args.len()
+                                    ),
+                                });
+                                return Type::Error;
+                            }
+                            
+                            for (i, arg_ty) in arg_types.iter().enumerate() {
+                                let expected_ty = &sig.params[i];
+                                if expected_ty != &Type::Any && !self.is_assignable_to(arg_ty, expected_ty) && arg_ty != &Type::Unknown {
+                                    self.errors.push(TypeError::Generic {
+                                        src: self.get_source(),
+                                        span: self.current_span,
+                                        message: format!(
+                                            "Type mismatch in argument {}: expected {:?}, got {:?}",
+                                            i + 1,
+                                            expected_ty,
+                                            arg_ty
+                                        ),
+                                    });
+                                    return Type::Error;
+                                }
+                            }
+                        } else {
+                            if !args.is_empty() {
+                                self.errors.push(TypeError::Generic {
+                                    src: self.get_source(),
+                                    span: self.current_span,
+                                    message: format!(
+                                        "Type '{}' has no init() method, so it must be instantiated with 0 arguments",
+                                        name
+                                    ),
+                                });
+                                return Type::Error;
+                            }
+                        }
+                    }
+                    return callee_ty;
+                } else if let Type::Enum(name) = &callee_ty {
+                    if let Some(_sig) = self.env.enums.get(name) {
+                        return Type::Enum(*name);
+                    }
                 }
 
                 // If it's a function or method, we need its signature
@@ -582,7 +683,7 @@ impl<'a> TypeChecker<'a> {
 
                     for (i, arg_ty) in arg_types.iter().enumerate() {
                         let expected_ty = &params[i];
-                        if expected_ty != &Type::Any && expected_ty != arg_ty && arg_ty != &Type::Unknown {
+                        if expected_ty != &Type::Any && !self.is_assignable_to(arg_ty, expected_ty) && arg_ty != &Type::Unknown {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
                                     span: self.current_span,
@@ -629,7 +730,7 @@ impl<'a> TypeChecker<'a> {
 
                     for (i, arg_ty) in arg_types.iter().enumerate() {
                         let expected_ty = &sig.params[i];
-                        if expected_ty != &Type::Any && expected_ty != arg_ty {
+                        if expected_ty != &Type::Any && !self.is_assignable_to(arg_ty, expected_ty) && arg_ty != &Type::Unknown {
                             {
                                 self.errors.push(TypeError::Generic {
                                     src: self.get_source(),
@@ -981,10 +1082,15 @@ impl<'a> TypeChecker<'a> {
                             return Type::Error;
                         };
                     }
-                    if matches!(obj_ty, Type::Actor(_)) {
-                        return Type::Promise(Box::new(m_sig.return_type.clone()));
-                    }
-                    return m_sig.return_type.clone();
+                    return Type::Function {
+                        generic_params: m_sig.generic_params.clone(),
+                        params: m_sig.params.clone(),
+                        return_type: Box::new(if matches!(obj_ty, Type::Actor(_)) {
+                            Type::Promise(Box::new(m_sig.return_type.clone()))
+                        } else {
+                            m_sig.return_type.clone()
+                        }),
+                    };
                 }
                 {
                     self.errors.push(TypeError::Generic {

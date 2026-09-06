@@ -1,5 +1,8 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[unsafe(no_mangle)]
 pub extern "C" fn __pace_print_int(val: i64) {
     println!("{}", val);

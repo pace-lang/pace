@@ -292,31 +292,38 @@ impl Compiler {
     pub fn run_file(&self, path: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
         let (_ast, mir) = self.check_file(&mut arena, path)?;
-        let mut compiler = pace_codegen_cranelift::JITCompiler::new(if self.session.options.release_mode {
-            "speed_and_size".to_string()
-        } else {
-            "none".to_string()
-        });
-
-        compiler
-            .compile_and_run_mir(&mir)
-            .map_err(Report::new)?;
-
-        Ok(())
+        self.run_from_mir(&mir)
     }
 
     pub fn run_source(&self, src: &str) -> Result<()> {
         let mut arena = pace_ast::arena::AstArena::new();
         let (_ast, mir) = self.check_source(&mut arena, src)?;
-        let mut compiler = pace_codegen_cranelift::JITCompiler::new(if self.session.options.release_mode {
-            "speed_and_size".to_string()
-        } else {
-            "none".to_string()
-        });
+        self.run_from_mir(&mir)
+    }
 
-        compiler
-            .compile_and_run_mir(&mir)
-            .map_err(Report::new)?;
+    fn run_from_mir(&self, mir: &pace_mir::MirProgram) -> Result<()> {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_micros();
+        let output_name = format!("pace_run_{}_{}", std::process::id(), timestamp);
+        let output_path = std::env::temp_dir().join(&output_name);
+        let output_str = output_path.to_string_lossy().into_owned();
+
+        self.build_from_mir(mir, &output_str)?;
+
+        let status = std::process::Command::new(&output_path)
+            .status()
+            .into_diagnostic()?;
+
+        if !status.success() {
+            // Depending on design, we could propagate the error code or just return
+            // a miette error. We'll return an error if it exits non-zero,
+            // though the output is already piped to the user.
+            return Err(miette::miette!("Program exited with status: {}", status));
+        }
+
+        let _ = std::fs::remove_file(output_path);
 
         Ok(())
     }
@@ -396,7 +403,7 @@ impl Compiler {
         }
 
         let mut cmd = std::process::Command::new("gcc");
-        cmd.arg(&obj_path).arg("-o").arg(output);
+        cmd.arg(&obj_path).arg("-o").arg(output).arg("-O3").arg("-flto");
 
         if let Some(rp) = runtime_path {
             cmd.arg(&rp);

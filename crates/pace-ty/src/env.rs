@@ -94,6 +94,7 @@ pub struct FieldSignature {
     pub ty: Type,
     pub visibility: Visibility,
     pub is_mutable: bool,
+    pub is_weak: bool,
     pub span: pace_span::Span,
 }
 

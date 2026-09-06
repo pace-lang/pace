@@ -3,7 +3,7 @@ func map_test() -> Int {
     let map = Map<Int, Int>();
     var i = 0;
     while i < 10000 {
-        map.put(i, i * 2);
+        map.set(i, i * 2);
         i = i + 1;
     }
     var sum = 0;

@@ -51,11 +51,16 @@ impl<'a> TypeChecker<'a> {
             };
 
             if let Some(target_class) = target_class_opt {
-                // If it's a weak reference, we wouldn't follow it.
-                // However, 'weak' modifier parsing is in Phase 2. 
-                // Once we have weak fields, we can skip them here.
+                if field_ty.is_weak {
+                    continue;
+                }
 
                 if in_path.contains(&target_class) {
+                    // Skip self-referential length-1 cycles (like Trees and Linked Lists)
+                    if target_class == current {
+                        continue;
+                    }
+
                     // Cycle detected!
                     if !cycle_found.contains(&target_class) {
                         let span = self.env.classes.get(&target_class).map(|s| s.span).unwrap_or_default();

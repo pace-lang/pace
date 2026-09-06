@@ -1,7 +1,15 @@
 import "pace:collections";
 func runTreeSetTest() {
     print("--- Testing TreeSet ---");
-    let set: TreeSet<Int> = [50, 20, 80, 10, 30, 70, 90, 50];
+    let set: TreeSet<Int> = TreeSet<Int>();
+    set.add(50);
+    set.add(20);
+    set.add(80);
+    set.add(10);
+    set.add(30);
+    set.add(70);
+    set.add(90);
+    set.add(50);
     
     print("TreeSet length: ${set.length()}");
     print("Contains 30: ${set.contains(30)}");

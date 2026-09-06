@@ -74,7 +74,7 @@ pub fn declare_runtime_functions<M: Module>(
         .declare_function("__pace_release", Linkage::Import, &sig_release)
         .unwrap();
 
-    let mut sig_trap = module.make_signature();
+    let sig_trap = module.make_signature();
     let trap_id = module
         .declare_function("__pace_trap", Linkage::Import, &sig_trap)
         .unwrap();

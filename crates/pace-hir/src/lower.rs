@@ -176,7 +176,7 @@ impl<'a> HirBuilder<'a> {
                 type_annotation,
                 is_static,
                 visibility,
-                is_weak: _,
+                is_weak,
                 initializer,
                 span: _decl_span,
             } => {
@@ -186,6 +186,7 @@ impl<'a> HirBuilder<'a> {
                     is_mutable: *is_mutable,
                     type_annotation: type_annotation.clone(),
                     is_static: *is_static,
+                    is_weak: *is_weak,
                     visibility: visibility.clone(),
                     initializer: init_id,
                 }
@@ -366,6 +367,7 @@ impl<'a> HirBuilder<'a> {
                     is_mutable: false,
                     type_annotation: None,
                     is_static: false,
+                    is_weak: false,
                     visibility: pace_ast::Visibility::Private,
                     initializer: Some(iterator_call),
                 }, pace_span::Span::default());
@@ -399,6 +401,7 @@ impl<'a> HirBuilder<'a> {
                     is_mutable: false,
                     type_annotation: None,
                     is_static: false,
+                    is_weak: false,
                     visibility: pace_ast::Visibility::Private,
                     initializer: Some(next_call),
                 }, pace_span::Span::default());

@@ -10,8 +10,7 @@ license.workspace = true
 pace-ast = { workspace = true }
 pace-errors = { workspace = true }
 cranelift = { workspace = true }
-cranelift-module = { workspace = true }
-cranelift-jit = { workspace = true }
+    cranelift-module = { workspace = true }
 cranelift-native = { workspace = true }
 cranelift-object = { workspace = true }
 object = { workspace = true }

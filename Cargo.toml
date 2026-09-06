@@ -44,8 +44,7 @@ pace-middle = { path = "crates/pace-middle" }
 pace-span = { path = "crates/pace-span" }
 pace-session = { path = "crates/pace-session" }
 cranelift = "0.135.0"
-cranelift-module = "0.135.0"
-cranelift-jit = "0.135.0"
+    cranelift-module = "0.135.0"
 cranelift-native = "0.135.0"
 cranelift-object = "0.135.0"
 object = { version = "0.40", default-features = false }

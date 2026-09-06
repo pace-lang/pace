@@ -1,4 +1,4 @@
-use crate::{Constant, Local, MirBody, Operand, Rvalue, Statement, Terminator, UnaryOp};
+use crate::{Constant, MirBody, Operand, Rvalue, Statement, Terminator, UnaryOp};
 use pace_ast::BinaryOp;
 use std::collections::HashMap;
 

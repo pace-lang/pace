@@ -146,14 +146,14 @@ impl<'a> TypeChecker<'a> {
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
                     for f in fields {
-                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, visibility, is_mutable, .. } = self.arena.get_stmt(*f) {
+                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, visibility, is_mutable, is_weak, .. } = self.arena.get_stmt(*f) {
                             let span = self.arena.get_stmt_span(*f);
                             let f_ty = if let Some(ty_str) = type_annotation {
                                 self.resolve_type_name(ty_str)
                             } else {
                                 Type::Unknown
                             };
-                            let field_sig = crate::env::FieldSignature { ty: f_ty, visibility: visibility.clone(), is_mutable: *is_mutable, span };
+                            let field_sig = crate::env::FieldSignature { ty: f_ty, visibility: visibility.clone(), is_mutable: *is_mutable, is_weak: *is_weak, span };
                             if *is_static {
                                 static_field_map.insert(*f_name, field_sig);
                             } else {
@@ -215,14 +215,14 @@ impl<'a> TypeChecker<'a> {
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
                     for f in fields {
-                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, visibility, is_mutable, .. } = self.arena.get_stmt(*f) {
+                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, visibility, is_mutable, is_weak, .. } = self.arena.get_stmt(*f) {
                             let span = self.arena.get_stmt_span(*f);
                             let f_ty = if let Some(ty_str) = type_annotation {
                                 self.resolve_type_name(ty_str)
                             } else {
                                 Type::Unknown
                             };
-                            let field_sig = crate::env::FieldSignature { ty: f_ty, visibility: visibility.clone(), is_mutable: *is_mutable, span };
+                            let field_sig = crate::env::FieldSignature { ty: f_ty, visibility: visibility.clone(), is_mutable: *is_mutable, is_weak: *is_weak, span };
                             if *is_static {
                                 static_field_map.insert(*f_name, field_sig);
                             } else {
@@ -282,14 +282,14 @@ impl<'a> TypeChecker<'a> {
                     let mut field_map = HashMap::new();
                     let mut static_field_map = HashMap::new();
                     for f in fields {
-                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, visibility, is_mutable, .. } = self.arena.get_stmt(*f) {
+                        if let Stmt::VarDecl { name: f_name, type_annotation, is_static, visibility, is_mutable, is_weak, .. } = self.arena.get_stmt(*f) {
                             let span = self.arena.get_stmt_span(*f);
                             let f_ty = if let Some(ty_str) = type_annotation {
                                 self.resolve_type_name(ty_str)
                             } else {
                                 Type::Unknown
                             };
-                            let field_sig = crate::env::FieldSignature { ty: f_ty, visibility: visibility.clone(), is_mutable: *is_mutable, span };
+                            let field_sig = crate::env::FieldSignature { ty: f_ty, visibility: visibility.clone(), is_mutable: *is_mutable, is_weak: *is_weak, span };
                             if *is_static {
                                 static_field_map.insert(*f_name, field_sig);
                             } else {

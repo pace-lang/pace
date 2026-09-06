@@ -136,7 +136,7 @@ fn compile_mir_function<M: Module>(
     builder.switch_to_block(blocks[0]);
     
     // Initialize return value (Local 0) with 0 by default, for void functions
-    let ret_type = match body.local_decls[0].ty {
+    let _ret_type = match body.local_decls[0].ty {
         pace_ty::Type::Float => types::F64,
         _ => types::I64,
     };

@@ -1,6 +1,6 @@
 use super::Parser;
 use crate::lexer::Token;
-use pace_ast::{Expr, Stmt, TypeAnnotation, Visibility};
+use pace_ast::{Expr, Stmt, TypeAnnotation};
 
 impl<'a, 'b> Parser<'a, 'b> {
     pub(crate) fn parse_stmt(

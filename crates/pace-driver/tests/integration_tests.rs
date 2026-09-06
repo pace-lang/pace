@@ -42,7 +42,7 @@ fn test_run_simple_program() {
     // release = false (none optimization)
     assert!(
         session.run_source(src).is_ok(),
-        "Failed to JIT run simple program"
+        "Failed to run simple program"
     );
 }
 
@@ -71,7 +71,7 @@ fn test_pattern_matching() {
     let session = Compiler::new(pace_session::Session::new(pace_session::Options::default()));
     if let Err(e) = session.run_source(source) {
         println!("{:?}", e);
-        panic!("Failed to JIT run pattern matching");
+        panic!("Failed to run pattern matching");
     }
 }
 
@@ -86,7 +86,7 @@ fn test_run_examples_suite() {
 
     let main_path_str = main_pace_path.to_str().unwrap();
 
-    // Parse, typecheck, compile, and JIT run the whole examples suite
+    // Parse, typecheck, compile, and run the whole examples suite
     let result = session.run_file(main_path_str);
     assert!(
         result.is_ok(),
@@ -111,7 +111,7 @@ fn test_run_logical_operations() {
         }
     }";
     if let Err(e) = session.run_source(src) {
-        panic!("Failed to JIT run logical operations program: {:?}", e);
+        panic!("Failed to run logical operations program: {:?}", e);
     }
 }
 
@@ -129,6 +129,6 @@ fn test_run_string_manipulation() {
         }
     }";
     if let Err(e) = session.run_source(src) {
-        panic!("Failed to JIT run string manipulation program: {:?}", e);
+        panic!("Failed to run string manipulation program: {:?}", e);
     }
 }

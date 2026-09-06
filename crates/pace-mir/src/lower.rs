@@ -758,7 +758,7 @@ impl<'a> FuncMirBuilder<'a> {
                     };
                     
                     let method_name = format!("{}_{}", class_name_str, property);
-                    let class_name = ustr::Ustr::from(class_name_str.as_str());
+                    let _class_name = ustr::Ustr::from(class_name_str.as_str());
                     
                     let temp = self.new_temp(Type::Unknown);
                     let next_block = self.new_block();
@@ -801,9 +801,26 @@ impl<'a> FuncMirBuilder<'a> {
                 }
 
                 // Check if it's a Class/Actor/Struct initialization
-                if let Expr::Identifier(_name) = self.arena.get_expr(*callee) {
-                    let callee_ty = self.env.node_types.get(callee).unwrap_or(&Type::Unknown);
-                    if let Type::Class(class_name) | Type::Struct(class_name) | Type::Actor(class_name) = callee_ty {
+                let mut is_instantiation = false;
+                let mut base_class_name = None;
+                
+                let callee_ty = self.env.node_types.get(callee).unwrap_or(&Type::Unknown);
+                match callee_ty {
+                    Type::Class(name) | Type::Struct(name) | Type::Actor(name) => {
+                        is_instantiation = true;
+                        base_class_name = Some(name);
+                    }
+                    Type::GenericInstance { base, args: _ } => {
+                        if let Type::Class(name) | Type::Struct(name) | Type::Actor(name) = &**base {
+                            is_instantiation = true;
+                            base_class_name = Some(name);
+                        }
+                    }
+                    _ => {}
+                }
+
+                if is_instantiation {
+                    if let Some(class_name) = base_class_name {
                         let field_count = if let Some(sig) = self.env.classes.get(class_name) {
                             sig.fields.len()
                         } else if let Some(sig) = self.env.actors.get(class_name) {
