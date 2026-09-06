@@ -2,29 +2,29 @@ import "pace:io";
 func runIoTest() -> Result<Bool, String> {
     print("--- Testing IO ---");
     let dirPath = "test_output_dir";
-    let dirExRes = Directory::exists(dirPath);
+    let dirExRes = Directory.exists(dirPath);
     let dirExVal = dirExRes?;
     if dirExVal == false {
         print("Directory does not exist, creating it...");
-        let dirRes = Directory::make(dirPath);
+        let dirRes = Directory.make(dirPath);
         let _ = dirRes?;
         print("Directory created.");
     } else {
         print("Directory already exists.");
     }
     let filePath = "test_output_dir/test_output.txt";
-    let writeRes = File::writeText(filePath, "Hello from Pace FS inside dir!");
+    let writeRes = File.writeText(filePath, "Hello from Pace FS inside dir!");
     let wVal = writeRes?;
     print("Write result: ");
     print(wVal);
-    let existsRes = File::exists(filePath);
+    let existsRes = File.exists(filePath);
     let eVal = existsRes?;
     print("Exists result: ");
     print(eVal);
-    let readRes = File::readText(filePath);
+    let readRes = File.readText(filePath);
     let readVal = readRes?;
     print("Read result:");
     print(readVal);
-    return Result<Bool, String>::Ok(true);
+    return Result<Bool, String>.Ok(true);
 }
 

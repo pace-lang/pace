@@ -3,13 +3,13 @@ func runHttpTest() -> Result<Bool, String> {
     print("--- Testing HTTP ---");
     // We just test if it returns a Result, the actual URL doesn't matter much
     // because it uses native FFI which might fail locally but we just want to test compilation
-    let getRes = Http::get("https://jsonplaceholder.typicode.com/users/1");
+    let getRes = Http.get("https://jsonplaceholder.typicode.com/users/1");
     let getBody = getRes?;
     print(getBody);
-    print("Http::post result:");
-    let postRes = Http::post("https://jsonplaceholder.typicode.com/posts", "{\"title\": \"foo\"}");
+    print("Http.post result:");
+    let postRes = Http.post("https://jsonplaceholder.typicode.com/posts", "{\"title\": \"foo\"}");
     let postBody = postRes?;
     print(postBody);
-    return Result<Bool, String>::Ok(true);
+    return Result<Bool, String>.Ok(true);
 }
 

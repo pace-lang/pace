@@ -7,9 +7,9 @@ class Process {
     static func run(command: String) -> Result<String, String> {
         let ptr = processRun(command);
         if ptr == null {
-            return Result<String, String>::Err(getLastError());
+            return Result<String, String>.Err(getLastError());
         }
-        return Result<String, String>::Ok(ptr);
+        return Result<String, String>.Ok(ptr);
     }
 
     static func exit(code: Int) -> Never {

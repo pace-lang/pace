@@ -472,7 +472,6 @@ impl<'a> TypeChecker<'a> {
                     object,
                     property: _,
                     computed_class: _,
-                    is_static_operator: _,
                 } = self.arena.get_expr(*target)
                 {
                     let _obj_ty = self.check_expr(*object);
@@ -757,46 +756,7 @@ impl<'a> TypeChecker<'a> {
                 object,
                 property,
                 computed_class: _,
-                is_static_operator,
             } => {
-                let mut is_namespace_access = false;
-                let mut base_ident = None;
-                if let Expr::Identifier(name) = self.arena.get_expr(*object) {
-                    base_ident = Some(*name);
-                } else if let Expr::GenericInstantiation { callee, .. } =
-                    self.arena.get_expr(*object)
-                    && let Expr::Identifier(name) = self.arena.get_expr(*callee)
-                {
-                    base_ident = Some(*name);
-                }
-                if let Some(ref name) = base_ident
-                    && (self.env.classes.contains_key(name)
-                        || self.env.structs.contains_key(name)
-                        || self.env.enums.contains_key(name)
-                        || self.env.actors.contains_key(name))
-                {
-                    is_namespace_access = !self.env.is_local(*name);
-                }
-
-                // Allow :: ONLY on namespaces, and . ONLY on instances.
-                // Exception: allow . on namespaces ONLY if it's NOT an enum variant (for backwards compatibility while we transition)
-                if *is_static_operator && !is_namespace_access {
-                    {
-                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
-                        message: format!("The '::' operator can only be used for static or namespace access (object was {:?}, base_ident {:?}, classes={:?})", object, base_ident, self.env.classes.keys())
-                    });
-                        return Type::Error;
-                    };
-                }
-                if !*is_static_operator && is_namespace_access {
-                    {
-                        self.errors.push(TypeError::Generic { src: self.get_source(), span: self.current_span,
-                        message: "The '.' operator can only be used for instance access. Use '::' for static/namespace access.".into()
-                    });
-                        return Type::Error;
-                    };
-                }
-
                 let obj_ty = self.check_expr(*object);
 
                 // Universal toString() contract

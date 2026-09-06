@@ -238,15 +238,8 @@ impl TreeShaker {
                 self.trace_expr(arena, *target, queue);
                 self.trace_expr(arena, *value, queue);
             }
-            Expr::MemberAccess {
-                object,
-                property: _,
-                computed_class: _,
-                is_static_operator: _,
-            } => {
-                self.trace_expr(arena, *object, queue);
-            }
-            Expr::OptionalMemberAccess { object, .. } => {
+            Expr::MemberAccess { object, .. }
+            | Expr::OptionalMemberAccess { object, .. } => {
                 self.trace_expr(arena, *object, queue);
             }
             Expr::GenericInstantiation {

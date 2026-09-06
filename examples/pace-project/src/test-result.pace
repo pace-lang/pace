@@ -1,8 +1,8 @@
 func divide(a: Int, b: Int) -> Result<Int, String> {
     if b == 0 {
-        return Result<Int, String>::Err("Division by zero");
+        return Result<Int, String>.Err("Division by zero");
     }
-    return Result<Int, String>::Ok(a / b);
+    return Result<Int, String>.Ok(a / b);
 }
 
 
@@ -11,7 +11,7 @@ func runResultReturnTest() -> Result<Int, String> {
     let val = res?;
     print("10 / 2 result: ");
     print(val);
-    return Result<Int, String>::Ok(val);
+    return Result<Int, String>.Ok(val);
 }
 
 func runResultTest() {
@@ -21,11 +21,11 @@ func runResultTest() {
 
     let res1 = divide(10, 2);
     match res1 {
-        Result::Ok(v) => {
+        Result.Ok(v) => {
             print("First result: ");
             print(v);
         }
-        Result::Err(e) => {
+        Result.Err(e) => {
             print("First error: ");
             print(e);
         }
@@ -33,11 +33,11 @@ func runResultTest() {
     
     let res2 = divide(10, 0);
     match res2 {
-        Result::Ok(v) => {
+        Result.Ok(v) => {
             print("Second result: ");
             print(v);
         }
-        Result::Err(e) => {
+        Result.Err(e) => {
             print("Second error: ");
             print(e);
         }

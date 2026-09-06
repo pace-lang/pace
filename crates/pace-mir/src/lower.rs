@@ -684,7 +684,7 @@ impl<'a> FuncMirBuilder<'a> {
                 }
 
                 // Check if callee is a MemberAccess (method call)
-                if let Expr::MemberAccess { object, property, is_static_operator, .. } = self.arena.get_expr(*callee) {
+                if let Expr::MemberAccess { object, property, computed_class: _, .. } = self.arena.get_expr(*callee) {
                     let obj_ty = self.env.node_types.get(object);
                     
                     if let Some(Type::Enum(enum_name)) = obj_ty {
@@ -745,7 +745,13 @@ impl<'a> FuncMirBuilder<'a> {
                             base_name
                         }
                         _ => {
-                            if *is_static_operator {
+                            let mut is_static = false;
+                            if let Expr::Identifier(name) = self.arena.get_expr(*object) {
+                                if self.env.classes.contains_key(name) || self.env.structs.contains_key(name) || self.env.enums.contains_key(name) || self.env.actors.contains_key(name) {
+                                    is_static = !self.env.is_local(*name);
+                                }
+                            }
+                            if is_static {
                                 if let Expr::Identifier(name) = self.arena.get_expr(*object) {
                                     name.to_string()
                                 } else {
@@ -762,6 +768,21 @@ impl<'a> FuncMirBuilder<'a> {
                     
                     let temp = self.new_temp(Type::Unknown);
                     let next_block = self.new_block();
+
+                    let mut is_static_operator = false;
+                    let mut base_ident = None;
+                    if let Expr::Identifier(name) = self.arena.get_expr(*object) {
+                        base_ident = Some(*name);
+                    } else if let Expr::GenericInstantiation { callee, .. } = self.arena.get_expr(*object) {
+                        if let Expr::Identifier(name) = self.arena.get_expr(*callee) {
+                            base_ident = Some(*name);
+                        }
+                    }
+                    if let Some(name) = base_ident {
+                        if self.env.classes.contains_key(&name) || self.env.structs.contains_key(&name) || self.env.enums.contains_key(&name) || self.env.actors.contains_key(&name) {
+                            is_static_operator = !self.env.is_local(name);
+                        }
+                    }
 
                     if is_interface && !is_static_operator {
                         let method_ustr = ustr::Ustr::from(&method_name);
@@ -961,7 +982,6 @@ impl<'a> FuncMirBuilder<'a> {
                         "hash" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_hash"))),
                         "retain" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_retain"))),
                         "release" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_release"))),
-
                         "int_to_string" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_int_to_string"))),
                         "float_to_string" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_float_to_string"))),
                         "bool_to_string" => callee_op = Operand::Constant(Constant::Function(ustr::Ustr::from("__pace_bool_to_string"))),
@@ -1133,8 +1153,23 @@ impl<'a> FuncMirBuilder<'a> {
                     None
                 }
             }
-            Expr::MemberAccess { object, property, computed_class, is_static_operator, .. } => {
-                if *is_static_operator {
+            Expr::MemberAccess { object, property, computed_class, .. } => {
+                let mut is_static_operator = false;
+                let mut base_ident = None;
+                if let Expr::Identifier(name) = self.arena.get_expr(*object) {
+                    base_ident = Some(*name);
+                } else if let Expr::GenericInstantiation { callee, .. } = self.arena.get_expr(*object) {
+                    if let Expr::Identifier(name) = self.arena.get_expr(*callee) {
+                        base_ident = Some(*name);
+                    }
+                }
+                if let Some(name) = base_ident {
+                    if self.env.classes.contains_key(&name) || self.env.structs.contains_key(&name) || self.env.enums.contains_key(&name) || self.env.actors.contains_key(&name) {
+                        is_static_operator = !self.env.is_local(name);
+                    }
+                }
+
+                if is_static_operator {
                     let mut class_name = computed_class.unwrap_or(ustr::Ustr::from("Unknown"));
                     if class_name.as_str() == "Unknown" {
                         if let Expr::Identifier(name) = self.arena.get_expr(*object) {

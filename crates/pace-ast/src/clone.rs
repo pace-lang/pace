@@ -54,14 +54,12 @@ impl AstArena {
                 object,
                 property,
                 computed_class,
-                is_static_operator,
             } => {
                 let new_object = self.deep_clone_expr(object);
                 Expr::MemberAccess {
                     object: new_object,
                     property,
                     computed_class,
-                    is_static_operator,
                 }
             }
             Expr::Unwrap(expr) => Expr::Unwrap(self.deep_clone_expr(expr)),

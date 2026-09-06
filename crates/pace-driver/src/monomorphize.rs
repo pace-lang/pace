@@ -454,12 +454,10 @@ impl Monomorphizer {
                 object,
                 property,
                 computed_class,
-                is_static_operator,
             } => Expr::MemberAccess {
                 object: self.clone_expr(arena, object),
                 property,
                 computed_class,
-                is_static_operator,
             },
             Expr::OptionalMemberAccess { object, property } => Expr::OptionalMemberAccess {
                 object: self.clone_expr(arena, object),
@@ -984,7 +982,6 @@ impl Monomorphizer {
                 object,
                 property: _,
                 computed_class: _,
-                is_static_operator: _,
             } => {
                 self.substitute_expr_types(arena, *object, mapping)?;
             }
@@ -1299,7 +1296,6 @@ impl Monomorphizer {
                 object,
                 property: _,
                 computed_class: _,
-                is_static_operator: _,
             } => {
                 self.rewrite_expr(arena, *object)?;
             }

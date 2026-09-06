@@ -1,7 +1,7 @@
 import "pace:datetime";
 func runDateTimeTest() {
     print("--- Testing DateTime ---");
-    let now = DateTime::now();
+    let now = DateTime.now();
     print("Current Year: ${now.getYear()}");
     // Test Duration
     let dur = Duration(120);

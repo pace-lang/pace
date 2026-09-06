@@ -9,33 +9,33 @@ class Http {
     static func get(url: String) -> Result<String, String> {
         let ptr = httpGet(url);
         if ptr == null {
-            return Result<String, String>::Err(getLastError());
+            return Result<String, String>.Err(getLastError());
         }
-        return Result<String, String>::Ok(ptr);
+        return Result<String, String>.Ok(ptr);
     }
 
     static func post(url: String, body: String) -> Result<String, String> {
         let ptr = httpPost(url, body);
         if ptr == null {
-            return Result<String, String>::Err(getLastError());
+            return Result<String, String>.Err(getLastError());
         }
-        return Result<String, String>::Ok(ptr);
+        return Result<String, String>.Ok(ptr);
     }
 
     static func put(url: String, body: String) -> Result<String, String> {
         let ptr = httpPut(url, body);
         if ptr == null {
-            return Result<String, String>::Err(getLastError());
+            return Result<String, String>.Err(getLastError());
         }
-        return Result<String, String>::Ok(ptr);
+        return Result<String, String>.Ok(ptr);
     }
 
     static func delete(url: String) -> Result<String, String> {
         let ptr = httpDelete(url);
         if ptr == null {
-            return Result<String, String>::Err(getLastError());
+            return Result<String, String>.Err(getLastError());
         }
-        return Result<String, String>::Ok(ptr);
+        return Result<String, String>.Ok(ptr);
     }
 
 }

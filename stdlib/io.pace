@@ -10,28 +10,28 @@ class File {
     // IO module for File and Directory operations
     static func writeText(path: String, content: String) -> Result<Bool, String> {
         if fsWriteText(path, content) != 0 {
-            return Result<Bool, String>::Ok(true);
+            return Result<Bool, String>.Ok(true);
         }
-        return Result<Bool, String>::Err(getLastError());
+        return Result<Bool, String>.Err(getLastError());
     }
 
     static func exists(path: String) -> Result<Bool, String> {
-        return Result<Bool, String>::Ok(fsExists(path) != 0);
+        return Result<Bool, String>.Ok(fsExists(path) != 0);
     }
 
     static func readText(path: String) -> Result<String, String> {
         let ptr = fsReadText(path);
         if ptr == null {
-            return Result<String, String>::Err(getLastError());
+            return Result<String, String>.Err(getLastError());
         }
-        return Result<String, String>::Ok(ptr);
+        return Result<String, String>.Ok(ptr);
     }
 
     static func delete(path: String) -> Result<Bool, String> {
         if fsDeleteFile(path) != 0 {
-            return Result<Bool, String>::Ok(true);
+            return Result<Bool, String>.Ok(true);
         }
-        return Result<Bool, String>::Err(getLastError());
+        return Result<Bool, String>.Err(getLastError());
     }
 
 }
@@ -39,13 +39,13 @@ class File {
 class Directory {
     static func make(path: String) -> Result<Bool, String> {
         if fsMakeDir(path) != 0 {
-            return Result<Bool, String>::Ok(true);
+            return Result<Bool, String>.Ok(true);
         }
-        return Result<Bool, String>::Err(getLastError());
+        return Result<Bool, String>.Err(getLastError());
     }
 
     static func exists(path: String) -> Result<Bool, String> {
-        return Result<Bool, String>::Ok(fsDirExists(path) != 0);
+        return Result<Bool, String>.Ok(fsDirExists(path) != 0);
     }
 
 }

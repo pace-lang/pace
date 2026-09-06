@@ -40,7 +40,6 @@ pub enum Token<'a> {
     FatArrow,
     Comma,
     Colon,
-    ColonColon,
     Dot,
     Eq,
     Semi,
@@ -181,10 +180,6 @@ impl<'a> Lexer<'a> {
         }
 
         // Multi-character operators
-        if tail.starts_with("::") {
-            self.byte_pos += 2;
-            return Token::ColonColon;
-        }
         if tail.starts_with("==") {
             self.byte_pos += 2;
             return Token::EqEq;

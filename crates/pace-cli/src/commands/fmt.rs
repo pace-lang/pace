@@ -385,10 +385,8 @@ impl<'a> Formatter<'a> {
             Expr::Assign { target, value } => {
                 self.format_expr(*target).append(RcDoc::text(" = ")).append(self.format_expr(*value))
             }
-            Expr::MemberAccess { object, property, is_static_operator, .. } => {
-                let o = self.format_expr(*object);
-                let op = if *is_static_operator { "::" } else { "." };
-                o.append(RcDoc::text(op)).append(RcDoc::text(property.as_str().to_string()))
+            Expr::MemberAccess { object, property, .. } => {
+                self.format_expr(*object).append(RcDoc::text(".")).append(RcDoc::text(property.as_str().to_string()))
             }
             Expr::OptionalMemberAccess { object, property } => {
                 self.format_expr(*object).append(RcDoc::text("?.")).append(RcDoc::text(property.as_str().to_string()))

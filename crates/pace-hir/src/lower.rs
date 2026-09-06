@@ -103,14 +103,14 @@ impl<'a> HirBuilder<'a> {
                 object,
                 property,
                 computed_class,
-                is_static_operator,
+                
             } => {
                 let object_id = self.lower_expr(*object);
                 Expr::MemberAccess {
                     object: object_id,
                     property: *property,
                     computed_class: computed_class.clone(),
-                    is_static_operator: *is_static_operator,
+                    
                 }
             }
             pace_ast::Expr::Unwrap(expr) => {
@@ -355,7 +355,7 @@ impl<'a> HirBuilder<'a> {
                     object: iter_expr_id,
                     property: ustr::Ustr::from("iterator"),
                     computed_class: None,
-                    is_static_operator: false,
+                    
                 }, pace_span::Span::default());
                 let iterator_call = self.hir_arena.alloc_expr(Expr::Call {
                     callee: iterator_prop,
@@ -378,7 +378,7 @@ impl<'a> HirBuilder<'a> {
                     object: iter_ident,
                     property: ustr::Ustr::from("hasNext"),
                     computed_class: None,
-                    is_static_operator: false,
+                    
                 }, pace_span::Span::default());
                 let condition = self.hir_arena.alloc_expr(Expr::Call {
                     callee: has_next_prop,
@@ -389,7 +389,7 @@ impl<'a> HirBuilder<'a> {
                     object: iter_ident,
                     property: ustr::Ustr::from("next"),
                     computed_class: None,
-                    is_static_operator: false,
+                    
                 }, pace_span::Span::default());
                 let next_call = self.hir_arena.alloc_expr(Expr::Call {
                     callee: next_prop,

@@ -350,12 +350,12 @@ impl<'a, 'b> Parser<'a, 'b> {
                     generic_args = Some(args);
                 }
 
-                // Could be a variable, or an Enum variant like `Some(x)` or `Option::Some(x)`
-                // Let's check for `::`
+                // Could be a variable, or an Enum variant like `Some(x)` or `Option.Some(x)`
+                // Let's check for `.`
                 let mut enum_name = None;
                 let mut variant_name = name;
 
-                if self.current_token == Token::ColonColon {
+                if self.current_token == Token::Dot {
                     self.advance();
                     if let Token::Ident(v_name) = self.current_token.clone() {
                         self.advance();
@@ -363,7 +363,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         variant_name = v_name;
                     } else {
                         return Err(pace_errors::SyntaxError::Generic {
-                            message: "Expected variant name after :: in pattern".to_string(),
+                            message: "Expected variant name after . in pattern".to_string(),
                             src: miette::NamedSource::new(
                                 self.file_name.clone(),
                                 self.src.to_string(),

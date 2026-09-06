@@ -28,7 +28,7 @@ func runAdvancedTest() {
     print(intId);
     
     // 4. Pattern Matching
-    let shape = Shape::Rectangle(10.0, 5.0);
+    let shape = Shape.Rectangle(10.0, 5.0);
     match shape {
         Circle(radius) => {
             print("Circle with radius: ${radius}");

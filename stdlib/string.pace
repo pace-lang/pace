@@ -45,8 +45,8 @@ class StringUtil {
     }
 
     static func indexOf(s: String, search: String) -> Int {
-        let lenS = StringUtil::length(s);
-        let lenSearch = StringUtil::length(search);
+        let lenS = StringUtil.length(s);
+        let lenSearch = StringUtil.length(search);
         if lenSearch == 0 { return 0; }
         if lenS < lenSearch { return -1; }
 
@@ -78,8 +78,8 @@ class StringUtil {
 
     static func split(s: String, delim: String) -> List<String> {
         let list = List<String>();
-        let lenS = StringUtil::length(s);
-        let lenDelim = StringUtil::length(delim);
+        let lenS = StringUtil.length(s);
+        let lenDelim = StringUtil.length(delim);
         if lenDelim == 0 {
             // Can't split by empty string, just return original
             list.add(s);
@@ -107,7 +107,7 @@ class StringUtil {
                 }
             }
             if matchFound {
-                list.add(StringUtil::substring(s, start, i));
+                list.add(StringUtil.substring(s, start, i));
                 i = i + lenDelim;
                 start = i;
             } else {
@@ -115,19 +115,19 @@ class StringUtil {
             }
         }
         if start <= lenS {
-            list.add(StringUtil::substring(s, start, lenS));
+            list.add(StringUtil.substring(s, start, lenS));
         }
         return list;
     }
 
     static func replace(s: String, old: String, newStr: String) -> String {
-        let parts = StringUtil::split(s, old);
-        return StringUtil::join(parts, newStr);
+        let parts = StringUtil.split(s, old);
+        return StringUtil.join(parts, newStr);
     }
 
     static func trim(s: String) -> String {
         let ptr = __pace_string_to_ptr(s);
-        let len = StringUtil::length(s);
+        let len = StringUtil.length(s);
         var start = 0;
         var end = len - 1;
 
@@ -165,7 +165,7 @@ class StringUtil {
             __pace_ptr_store8(emptyPtr, 0, 0);
             return __pace_ptr_to_string(emptyPtr);
         }
-        return StringUtil::substring(s, start, end + 1);
+        return StringUtil.substring(s, start, end + 1);
     }
 
     static func join(list: List<String>, delim: String) -> String {
@@ -185,6 +185,6 @@ class StringUtil {
     }
 
     static func startsWith(s: String, search: String) -> Bool {
-        return StringUtil::indexOf(s, search) == 0;
+        return StringUtil.indexOf(s, search) == 0;
     }
 }

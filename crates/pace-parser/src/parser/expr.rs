@@ -225,28 +225,6 @@ impl<'a, 'b> Parser<'a, 'b> {
                     object: expr,
                     property: property.into(),
                     computed_class: None,
-                    is_static_operator: false,
-                });
-            } else if self.match_token(Token::ColonColon) {
-                let property = match &self.current_token {
-                    Token::Ident(id) => *id,
-                    _ => {
-                        return Err(pace_errors::SyntaxError::Generic {
-                            message: "Expected variant name after '::'".to_string(),
-                            src: miette::NamedSource::new(
-                                self.file_name.clone(),
-                                self.src.to_string(),
-                            ),
-                            span: self.current_span,
-                        });
-                    }
-                };
-                self.advance();
-                expr = self.alloc_expr(Expr::MemberAccess {
-                    object: expr,
-                    property: property.into(),
-                    computed_class: None,
-                    is_static_operator: true,
                 });
             } else if self.match_token(Token::QuestionDot) {
                 let property = match &self.current_token {

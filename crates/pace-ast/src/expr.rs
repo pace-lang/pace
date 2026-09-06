@@ -51,7 +51,6 @@ pub enum Expr {
         object: ExprId,
         property: ustr::Ustr,
         computed_class: Option<ustr::Ustr>,
-        is_static_operator: bool,
     },
     /// A forced unwrap (e.g., foo!)
     Unwrap(ExprId),

@@ -282,12 +282,10 @@ impl Inliner {
                 object,
                 property,
                 computed_class,
-                is_static_operator,
             } => Expr::MemberAccess {
                 object: self.rewrite_expr(arena, object),
                 property,
                 computed_class,
-                is_static_operator,
             },
             Expr::OptionalMemberAccess { object, property } => Expr::OptionalMemberAccess {
                 object: self.rewrite_expr(arena, object),
