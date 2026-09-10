@@ -18,6 +18,16 @@ pub enum Decl {
         value: Expr,
         span: Span,
     },
+    Struct {
+        id: HirId,
+        name: String,
+        span: Span,
+    },
+    Class {
+        id: HirId,
+        name: String,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,6 +41,11 @@ pub enum Expr {
         right: Box<Expr>,
         span: Span,
     },
+    MemberAccess {
+        object: Box<Expr>,
+        member: String,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -40,6 +55,7 @@ impl Expr {
             Expr::StringLiteral(_, s) => *s,
             Expr::Ident(_, s) => *s,
             Expr::Binary { span, .. } => *span,
+            Expr::MemberAccess { span, .. } => *span,
         }
     }
 }

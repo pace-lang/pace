@@ -4,4 +4,6 @@ pub enum Ty {
     Float,
     String,
     Error,
+    Struct(pace_hir::HirId),
+    Class(pace_hir::HirId),
 }

@@ -40,7 +40,17 @@ impl LoweringContext {
                 self.scope.insert(name.name.clone(), id);
                 Ok(Some(Decl::Let { id, name: name.name, value: lowered_val, span }))
             }
-            _ => Ok(None), // Skipping functions/classes for the core HIR test
+            ast::Decl::Struct { name, span, .. } => {
+                let id = self.generate_id();
+                self.scope.insert(name.name.clone(), id);
+                Ok(Some(Decl::Struct { id, name: name.name, span }))
+            }
+            ast::Decl::Class { name, span, .. } => {
+                let id = self.generate_id();
+                self.scope.insert(name.name.clone(), id);
+                Ok(Some(Decl::Class { id, name: name.name, span }))
+            }
+            _ => Ok(None),
         }
     }
 
@@ -57,6 +67,13 @@ impl LoweringContext {
                     left: Box::new(self.lower_expr(*left)?),
                     op,
                     right: Box::new(self.lower_expr(*right)?),
+                    span,
+                })
+            }
+            ast::Expr::MemberAccess { object, member, span } => {
+                Ok(Expr::MemberAccess {
+                    object: Box::new(self.lower_expr(*object)?),
+                    member: member.name,
                     span,
                 })
             }

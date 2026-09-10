@@ -39,6 +39,6 @@ mod tests {
         let result = tc.check_program(&hir);
         
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Type mismatch: cannot add String and Int"));
+        assert!(result.unwrap_err().contains("Type mismatch in binary operation: String and Int"));
     }
 }

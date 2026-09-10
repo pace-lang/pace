@@ -60,4 +60,24 @@ mod tests {
             _ => panic!("Expected Function declaration"),
         }
     }
+
+    #[test]
+    fn test_parse_class() {
+        let source = "class User { name: string }";
+        let lexer = Lexer::new(source);
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program().unwrap();
+        assert_eq!(program.declarations.len(), 1);
+
+        match &program.declarations[0] {
+            Decl::Class { name, fields, methods, .. } => {
+                assert_eq!(name.name, "User");
+                assert_eq!(fields.len(), 1);
+                assert_eq!(fields[0].0.name, "name");
+                assert_eq!(methods.len(), 0);
+            }
+            _ => panic!("Expected Class declaration"),
+        }
+    }
 }

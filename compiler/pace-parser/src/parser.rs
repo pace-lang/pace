@@ -43,6 +43,8 @@ impl<'a> Parser<'a> {
             Decl::Let { span, .. } => *span,
             Decl::Const { span, .. } => *span,
             Decl::Function { span, .. } => *span,
+            Decl::Struct { span, .. } => *span,
+            Decl::Class { span, .. } => *span,
         }).unwrap_or(start_span);
 
         Ok(Program {
@@ -75,9 +77,105 @@ impl<'a> Parser<'a> {
             })
         } else if self.check(&TokenKind::Fn) {
             self.parse_fn_decl()
+        } else if self.check(&TokenKind::Struct) {
+            self.parse_struct_decl()
+        } else if self.check(&TokenKind::Class) {
+            self.parse_class_decl()
         } else {
             Err("Unsupported declaration in early parser".to_string())
         }
+    }
+
+    fn parse_struct_decl(&mut self) -> Result<Decl, String> {
+        let start_tok = self.expect(TokenKind::Struct)?;
+        
+        let name_tok = match &self.current {
+            Some(Token { kind: TokenKind::Ident(name), span }) => {
+                let ident = Ident { name: name.to_string(), span: *span };
+                self.advance();
+                ident
+            }
+            _ => return Err("Expected identifier after 'struct'".to_string()),
+        };
+
+        self.expect(TokenKind::LBrace)?;
+        let mut fields = Vec::new();
+
+        while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            let field_name = match &self.current {
+                Some(Token { kind: TokenKind::Ident(name), span }) => {
+                    let ident = Ident { name: name.to_string(), span: *span };
+                    self.advance();
+                    ident
+                }
+                _ => return Err("Expected field name".to_string()),
+            };
+
+            self.expect(TokenKind::Colon)?;
+            let field_type = self.parse_type()?;
+            fields.push((field_name, field_type));
+            
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            }
+        }
+        
+        let end_tok = self.expect(TokenKind::RBrace)?;
+
+        Ok(Decl::Struct {
+            name: name_tok,
+            fields,
+            span: start_tok.span.merge(end_tok.span),
+        })
+    }
+
+    fn parse_class_decl(&mut self) -> Result<Decl, String> {
+        let start_tok = self.expect(TokenKind::Class)?;
+        
+        let name_tok = match &self.current {
+            Some(Token { kind: TokenKind::Ident(name), span }) => {
+                let ident = Ident { name: name.to_string(), span: *span };
+                self.advance();
+                ident
+            }
+            _ => return Err("Expected identifier after 'class'".to_string()),
+        };
+
+        self.expect(TokenKind::LBrace)?;
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+
+        while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            if self.check(&TokenKind::Fn) {
+                methods.push(self.parse_fn_decl()?);
+            } else {
+                let field_name = match &self.current {
+                    Some(Token { kind: TokenKind::Ident(name), span }) => {
+                        let ident = Ident { name: name.to_string(), span: *span };
+                        self.advance();
+                        ident
+                    }
+                    _ => return Err("Expected field or method in class".to_string()),
+                };
+
+                self.expect(TokenKind::Colon)?;
+                let field_type = self.parse_type()?;
+                fields.push((field_name, field_type));
+
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                }
+            }
+        }
+        
+        let end_tok = self.expect(TokenKind::RBrace)?;
+
+        Ok(Decl::Class {
+            name: name_tok,
+            fields,
+            methods,
+            span: start_tok.span.merge(end_tok.span),
+        })
     }
 
     fn parse_fn_decl(&mut self) -> Result<Decl, String> {
@@ -193,11 +291,30 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, String> {
-        let left = self.parse_primary()?;
+        let mut left = self.parse_primary()?;
         
+        while self.check(&TokenKind::Dot) {
+            self.advance();
+            let member_name = match &self.current {
+                Some(Token { kind: TokenKind::Ident(name), span }) => {
+                    let ident = Ident { name: name.to_string(), span: *span };
+                    self.advance();
+                    ident
+                }
+                _ => return Err("Expected member name after '.'".to_string()),
+            };
+            
+            let span = left.span().merge(member_name.span);
+            left = Expr::MemberAccess {
+                span,
+                object: Box::new(left),
+                member: member_name,
+            };
+        }
+
         if self.check(&TokenKind::Plus) {
             self.advance();
-            let right = self.parse_primary()?;
+            let right = self.parse_expr()?; // simple right recursion
             
             return Ok(Expr::Binary {
                 span: left.span().merge(right.span()),

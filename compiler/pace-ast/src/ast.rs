@@ -31,6 +31,17 @@ pub enum Decl {
         body: Block,
         span: Span,
     },
+    Struct {
+        name: Ident,
+        fields: Vec<(Ident, Type)>,
+        span: Span,
+    },
+    Class {
+        name: Ident,
+        fields: Vec<(Ident, Type)>,
+        methods: Vec<Decl>, // Expects Decl::Function
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -72,6 +83,11 @@ pub enum Expr {
         right: Box<Expr>,
         span: Span,
     },
+    MemberAccess {
+        object: Box<Expr>,
+        member: Ident,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,6 +108,7 @@ impl Expr {
             Expr::StringLiteral(_, s) => *s,
             Expr::Ident(id) => id.span,
             Expr::Binary { span, .. } => *span,
+            Expr::MemberAccess { span, .. } => *span,
         }
     }
 }

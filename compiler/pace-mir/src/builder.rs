@@ -65,6 +65,9 @@ impl MirBuilder {
                 self.push_stmt(Statement::Assign(temp, Rvalue::BinaryOp(*op, lhs, rhs)));
                 temp
             }
+            Expr::MemberAccess { .. } => {
+                self.new_local() // Mocked for MVP v0.1
+            }
         }
     }
 
@@ -78,6 +81,9 @@ impl MirBuilder {
                     self.hir_to_local.insert(*id, var_local);
                     self.push_stmt(Statement::Assign(var_local, Rvalue::Use(rval_local)));
                     last_local = var_local;
+                }
+                pace_hir::Decl::Struct { .. } | pace_hir::Decl::Class { .. } => {
+                    // Type definitions emit no executable instructions at the top level
                 }
             }
         }
