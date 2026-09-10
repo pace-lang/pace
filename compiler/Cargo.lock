@@ -324,6 +324,10 @@ version = "0.1.0"
 [[package]]
 name = "pace-hir"
 version = "0.1.0"
+dependencies = [
+ "pace-ast",
+ "pace-span",
+]
 
 [[package]]
 name = "pace-lexer"
@@ -365,6 +369,13 @@ dependencies = [
 [[package]]
 name = "pace-ty"
 version = "0.1.0"
+dependencies = [
+ "pace-ast",
+ "pace-hir",
+ "pace-lexer",
+ "pace-parser",
+ "pace-span",
+]
 
 [[package]]
 name = "potential_utf"

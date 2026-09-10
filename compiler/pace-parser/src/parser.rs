@@ -193,6 +193,24 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, String> {
+        let left = self.parse_primary()?;
+        
+        if self.check(&TokenKind::Plus) {
+            self.advance();
+            let right = self.parse_primary()?;
+            
+            return Ok(Expr::Binary {
+                span: left.span().merge(right.span()),
+                left: Box::new(left),
+                op: pace_ast::BinaryOp::Add,
+                right: Box::new(right),
+            });
+        }
+        
+        Ok(left)
+    }
+
+    fn parse_primary(&mut self) -> Result<Expr, String> {
         let tok = self.current.clone().ok_or("Expected expression")?;
         self.advance();
 
@@ -201,8 +219,7 @@ impl<'a> Parser<'a> {
             TokenKind::Float(val) => Ok(Expr::FloatLiteral(val.to_string(), tok.span)),
             TokenKind::String(val) => Ok(Expr::StringLiteral(val.to_string(), tok.span)),
             TokenKind::Ident(name) => Ok(Expr::Ident(Ident { name: name.to_string(), span: tok.span })),
-            TokenKind::Plus => Err("Unexpected token +".to_string()),
-            _ => Err("Unexpected token in expression".to_string()),
+            _ => Err(format!("Unexpected token in expression: {:?}", tok.kind)),
         }
     }
 }
