@@ -68,6 +68,22 @@ impl MirBuilder {
         }
     }
 
+    pub fn build_program(mut self, program: &pace_hir::Program) -> MirBody {
+        let mut last_local = Local(0); 
+        for decl in &program.declarations {
+            match decl {
+                pace_hir::Decl::Let { id, value, .. } => {
+                    let rval_local = self.build_expr(value);
+                    let var_local = self.new_local();
+                    self.hir_to_local.insert(*id, var_local);
+                    self.push_stmt(Statement::Assign(var_local, Rvalue::Use(rval_local)));
+                    last_local = var_local;
+                }
+            }
+        }
+        self.finish(last_local)
+    }
+
     pub fn finish(mut self, return_val: Local) -> MirBody {
         let idx = self.current_block.0 as usize;
         self.blocks[idx].terminator = Some(Terminator::Return(return_val));

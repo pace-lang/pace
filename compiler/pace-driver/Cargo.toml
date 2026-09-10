@@ -4,3 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+pace-lexer = { path = "../pace-lexer" }
+pace-parser = { path = "../pace-parser" }
+pace-ast = { path = "../pace-ast" }
+pace-hir = { path = "../pace-hir" }
+pace-ty = { path = "../pace-ty" }
+pace-mir = { path = "../pace-mir" }
+pace-codegen = { path = "../pace-codegen" }

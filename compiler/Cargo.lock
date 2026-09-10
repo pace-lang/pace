@@ -320,6 +320,15 @@ dependencies = [
 [[package]]
 name = "pace-driver"
 version = "0.1.0"
+dependencies = [
+ "pace-ast",
+ "pace-codegen",
+ "pace-hir",
+ "pace-lexer",
+ "pace-mir",
+ "pace-parser",
+ "pace-ty",
+]
 
 [[package]]
 name = "pace-errors"
