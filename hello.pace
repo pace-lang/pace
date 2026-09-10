@@ -1,4 +1,9 @@
-let x = 40
-let y = 2
-let z = x + y
-print(z)
+let x = 10
+while x > 0 {
+    if x == 5 {
+        print(500)
+    } else {
+        print(x)
+    }
+    x = x - 1
+}

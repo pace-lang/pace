@@ -257,7 +257,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_block(&mut self) -> Result<Block, String> {
-        let start_tok = self.expect(TokenKind::LBrace)?;
+        let start_tok = self.expect(TokenKind::LBrace).map_err(|e| format!("{} (found {:?})", e, self.current))?;
         let mut statements = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
@@ -273,7 +273,19 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, String> {
-        if self.check(&TokenKind::Return) {
+        if self.check(&TokenKind::Let) {
+            let start_tok = self.expect(TokenKind::Let)?;
+            let name_tok = self.current.take().ok_or("Expected identifier after 'let'".to_string())?;
+            let name = match name_tok.kind {
+                TokenKind::Ident(n) => Ident { name: n.to_string(), span: name_tok.span },
+                _ => return Err("Expected identifier after 'let'".to_string()),
+            };
+            self.advance();
+            self.expect(TokenKind::Eq)?;
+            let value = self.parse_expr()?;
+            let span = start_tok.span.merge(value.span());
+            Ok(Stmt::Let { name, value, span })
+        } else if self.check(&TokenKind::Return) {
             let start_tok = self.expect(TokenKind::Return)?;
             
             let mut expr = None;
@@ -293,7 +305,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, String> {
+    fn parse_postfix_expr(&mut self) -> Result<Expr, String> {
         let mut left = self.parse_primary()?;
         
         loop {
@@ -334,24 +346,85 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
+        Ok(left)
+    }
 
-        if self.check(&TokenKind::Plus) {
+    fn parse_expr(&mut self) -> Result<Expr, String> {
+        let mut left = self.parse_postfix_expr()?;
+
+        if self.check(&TokenKind::Eq) {
             self.advance();
-            let right = self.parse_expr()?; // simple right recursion
-            
-            return Ok(Expr::Binary {
-                span: left.span().merge(right.span()),
-                left: Box::new(left),
-                op: pace_ast::BinaryOp::Add,
-                right: Box::new(right),
-            });
+            let right = self.parse_expr()?;
+            if let Expr::Ident(id) = left {
+                let span = id.span.merge(right.span());
+                return Ok(Expr::Assign { target: id, value: Box::new(right), span });
+            } else {
+                return Err("Invalid assignment target".to_string());
+            }
+        }
+
+        loop {
+            let op = if self.check(&TokenKind::Plus) { Some(pace_ast::BinaryOp::Add) }
+            else if self.check(&TokenKind::Minus) { Some(pace_ast::BinaryOp::Sub) }
+            else if self.check(&TokenKind::Star) { Some(pace_ast::BinaryOp::Mul) }
+            else if self.check(&TokenKind::Slash) { Some(pace_ast::BinaryOp::Div) }
+            else if self.check(&TokenKind::EqEq) { Some(pace_ast::BinaryOp::EqEq) }
+            else if self.check(&TokenKind::NotEq) { Some(pace_ast::BinaryOp::NotEq) }
+            else if self.check(&TokenKind::Gt) { Some(pace_ast::BinaryOp::Gt) }
+            else if self.check(&TokenKind::Lt) { Some(pace_ast::BinaryOp::Lt) }
+            else if self.check(&TokenKind::GtEq) { Some(pace_ast::BinaryOp::GtEq) }
+            else if self.check(&TokenKind::LtEq) { Some(pace_ast::BinaryOp::LtEq) }
+            else { None };
+
+            if let Some(op) = op {
+                self.advance();
+                let right = self.parse_postfix_expr()?;
+                left = Expr::Binary {
+                    span: left.span().merge(right.span()),
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
+            }
         }
         
         Ok(left)
     }
 
     fn parse_primary(&mut self) -> Result<Expr, String> {
-        let tok = self.current.clone().ok_or("Expected expression")?;
+        if self.check(&TokenKind::If) {
+            let start_tok = self.expect(TokenKind::If)?;
+            let cond = self.parse_expr()?;
+            let then_block = self.parse_block()?;
+            let mut else_block = None;
+            let mut end_span = then_block.span;
+            if self.check(&TokenKind::Else) {
+                self.advance();
+                let b = self.parse_block()?;
+                end_span = b.span;
+                else_block = Some(b);
+            }
+            return Ok(Expr::If {
+                cond: Box::new(cond),
+                then_block,
+                else_block,
+                span: start_tok.span.merge(end_span),
+            });
+        }
+        if self.check(&TokenKind::While) {
+            let start_tok = self.expect(TokenKind::While)?;
+            let cond = self.parse_expr()?;
+            let body = self.parse_block()?;
+            return Ok(Expr::While {
+                cond: Box::new(cond),
+                span: start_tok.span.merge(body.span),
+                body,
+            });
+        }
+
+        let tok = self.current.take().ok_or("Expected expression, found EOF".to_string())?;
         self.advance();
 
         match tok.kind {

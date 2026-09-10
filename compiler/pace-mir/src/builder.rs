@@ -29,6 +29,34 @@ impl MirBuilder {
         l
     }
 
+    pub fn new_block(&mut self) -> BasicBlockId {
+        let id = BasicBlockId(self.blocks.len() as u32);
+        self.blocks.push(BasicBlock {
+            statements: Vec::new(),
+            terminator: None,
+        });
+        id
+    }
+
+    pub fn build_block(&mut self, block: &pace_hir::Block) {
+        for stmt in &block.statements {
+            match stmt {
+                pace_hir::Stmt::Let { id, value, .. } => {
+                    let rval_local = self.build_expr(value);
+                    let var_local = self.new_local();
+                    self.hir_to_local.insert(*id, var_local);
+                    self.push_stmt(Statement::Assign(var_local, Rvalue::Use(rval_local)));
+                }
+                pace_hir::Stmt::ExprStmt(expr, _) => {
+                    self.build_expr(expr);
+                }
+                pace_hir::Stmt::Return(_, _) => {
+                    // Ignored for MVP v0.1 since we only have `main` block
+                }
+            }
+        }
+    }
+
     fn push_stmt(&mut self, stmt: Statement) {
         let idx = self.current_block.0 as usize;
         self.blocks[idx].statements.push(stmt);
@@ -86,6 +114,61 @@ impl MirBuilder {
                 let temp = self.new_local();
                 self.push_stmt(Statement::Assign(temp, Rvalue::BuiltinCall(name.clone(), arg_locals)));
                 temp
+            }
+            Expr::If { cond, then_block, else_block, .. } => {
+                let cond_local = self.build_expr(cond);
+                let then_bb = self.new_block();
+                let else_bb = self.new_block();
+                let merge_bb = self.new_block();
+
+                let current_bb = self.current_block;
+                self.blocks[current_bb.0 as usize].terminator = Some(Terminator::Branch {
+                    cond: cond_local,
+                    then_block: then_bb,
+                    else_block: else_bb,
+                });
+
+                self.current_block = then_bb;
+                self.build_block(then_block);
+                self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(merge_bb));
+
+                self.current_block = else_bb;
+                if let Some(eb) = else_block {
+                    self.build_block(eb);
+                }
+                self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(merge_bb));
+
+                self.current_block = merge_bb;
+                self.new_local()
+            }
+            Expr::While { cond, body, .. } => {
+                let cond_bb = self.new_block();
+                let body_bb = self.new_block();
+                let merge_bb = self.new_block();
+
+                let current_bb = self.current_block;
+                self.blocks[current_bb.0 as usize].terminator = Some(Terminator::Goto(cond_bb));
+
+                self.current_block = cond_bb;
+                let cond_local = self.build_expr(cond);
+                self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Branch {
+                    cond: cond_local,
+                    then_block: body_bb,
+                    else_block: merge_bb,
+                });
+
+                self.current_block = body_bb;
+                self.build_block(body);
+                self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(cond_bb));
+
+                self.current_block = merge_bb;
+                self.new_local()
+            }
+            Expr::Assign { target, value, .. } => {
+                let rval = self.build_expr(value);
+                let target_local = *self.hir_to_local.get(target).unwrap();
+                self.push_stmt(Statement::Assign(target_local, Rvalue::Use(rval)));
+                target_local
             }
         }
     }

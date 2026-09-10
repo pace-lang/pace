@@ -32,6 +32,33 @@ impl LoweringContext {
         Ok(Program { declarations })
     }
 
+    pub fn lower_block(&mut self, block: ast::Block) -> Result<Block, String> {
+        let mut statements = Vec::new();
+        let outer_scope = self.scope.clone();
+        for stmt in block.statements {
+            match stmt {
+                ast::Stmt::Let { name, value, span } => {
+                    let id = self.generate_id();
+                    let lowered_val = self.lower_expr(value)?;
+                    self.scope.insert(name.name.clone(), id);
+                    statements.push(Stmt::Let { id, name: name.name, value: lowered_val, span });
+                }
+                ast::Stmt::ExprStmt(expr, span) => {
+                    statements.push(Stmt::ExprStmt(self.lower_expr(expr)?, span));
+                }
+                ast::Stmt::Return(expr, span) => {
+                    let lowered_expr = match expr {
+                        Some(e) => Some(self.lower_expr(e)?),
+                        None => None,
+                    };
+                    statements.push(Stmt::Return(lowered_expr, span));
+                }
+            }
+        }
+        self.scope = outer_scope;
+        Ok(Block { statements, span: block.span })
+    }
+
     fn lower_decl(&mut self, decl: ast::Decl) -> Result<Option<Decl>, String> {
         match decl {
             ast::Decl::Let { name, value, span } => {
@@ -99,6 +126,38 @@ impl LoweringContext {
                 Ok(Expr::Call {
                     callee: Box::new(self.lower_expr(*callee)?),
                     args: lowered_args,
+                    span,
+                })
+            }
+            ast::Expr::If { cond, then_block, else_block, span } => {
+                let lowered_cond = self.lower_expr(*cond)?;
+                let lowered_then = self.lower_block(then_block)?;
+                let lowered_else = match else_block {
+                    Some(b) => Some(self.lower_block(b)?),
+                    None => None,
+                };
+                Ok(Expr::If {
+                    cond: Box::new(lowered_cond),
+                    then_block: lowered_then,
+                    else_block: lowered_else,
+                    span,
+                })
+            }
+            ast::Expr::While { cond, body, span } => {
+                let lowered_cond = self.lower_expr(*cond)?;
+                let lowered_body = self.lower_block(body)?;
+                Ok(Expr::While {
+                    cond: Box::new(lowered_cond),
+                    body: lowered_body,
+                    span,
+                })
+            }
+            ast::Expr::Assign { target, value, span } => {
+                let id = *self.scope.get(&target.name).ok_or(format!("Cannot reassign unbound variable '{}'", target.name))?;
+                let lowered_val = self.lower_expr(*value)?;
+                Ok(Expr::Assign {
+                    target: id,
+                    value: Box::new(lowered_val),
                     span,
                 })
             }

@@ -68,6 +68,11 @@ pub struct Block {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
+    Let {
+        name: Ident,
+        value: Expr,
+        span: Span,
+    },
     ExprStmt(Expr, Span),
     Return(Option<Expr>, Span),
 }
@@ -94,6 +99,22 @@ pub enum Expr {
         args: Vec<Expr>,
         span: Span,
     },
+    If {
+        cond: Box<Expr>,
+        then_block: Block,
+        else_block: Option<Block>,
+        span: Span,
+    },
+    While {
+        cond: Box<Expr>,
+        body: Block,
+        span: Span,
+    },
+    Assign {
+        target: Ident,
+        value: Box<Expr>,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,6 +125,10 @@ pub enum BinaryOp {
     Div,
     EqEq,
     NotEq,
+    Gt,
+    Lt,
+    GtEq,
+    LtEq,
 }
 
 impl Expr {
@@ -116,6 +141,9 @@ impl Expr {
             Expr::Binary { span, .. } => *span,
             Expr::MemberAccess { span, .. } => *span,
             Expr::Call { span, .. } => *span,
+            Expr::If { span, .. } => *span,
+            Expr::While { span, .. } => *span,
+            Expr::Assign { span, .. } => *span,
         }
     }
 }

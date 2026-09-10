@@ -33,6 +33,11 @@ pub enum Rvalue {
 pub enum Terminator {
     Return(Local),
     Goto(BasicBlockId),
+    Branch {
+        cond: Local,
+        then_block: BasicBlockId,
+        else_block: BasicBlockId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

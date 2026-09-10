@@ -21,6 +21,28 @@ impl TypeChecker {
         Ok(())
     }
 
+    pub fn check_block(&mut self, block: &pace_hir::Block) -> Result<(), String> {
+        let outer_env = self.env.clone();
+        for stmt in &block.statements {
+            match stmt {
+                pace_hir::Stmt::Let { id, value, .. } => {
+                    let ty = self.check_expr(value)?;
+                    self.env.insert(*id, ty);
+                }
+                pace_hir::Stmt::ExprStmt(expr, _) => {
+                    self.check_expr(expr)?;
+                }
+                pace_hir::Stmt::Return(expr, _) => {
+                    if let Some(e) = expr {
+                        self.check_expr(e)?;
+                    }
+                }
+            }
+        }
+        self.env = outer_env;
+        Ok(())
+    }
+
     pub fn check_decl(&mut self, decl: &Decl) -> Result<(), String> {
         match decl {
             Decl::Let { id, value, .. } => {
@@ -65,7 +87,11 @@ impl TypeChecker {
                             Err(format!("Type mismatch in binary operation: {:?} and {:?}", left_ty, right_ty))
                         }
                     }
-                    _ => Ok(Ty::Int), // Simplified for MVP
+                    pace_ast::BinaryOp::EqEq | pace_ast::BinaryOp::NotEq |
+                    pace_ast::BinaryOp::Gt | pace_ast::BinaryOp::Lt |
+                    pace_ast::BinaryOp::GtEq | pace_ast::BinaryOp::LtEq => {
+                        Ok(Ty::Int) // Boolean represented as Int in MVP
+                    }
                 }
             }
             Expr::MemberAccess { object, member, .. } => {
@@ -77,11 +103,12 @@ impl TypeChecker {
                     _ => Err(format!("Cannot access member '{}' on type {:?}", member, obj_ty)),
                 }
             }
-            Expr::Call { args, .. } => {
+            Expr::Call { callee, args, .. } => {
+                self.check_expr(callee)?;
                 for arg in args {
                     self.check_expr(arg)?;
                 }
-                Ok(Ty::Int) // Mocked for v0.1 MVP
+                Ok(Ty::Int) // Assume int return for now
             }
             Expr::BuiltinCall(name, args, _) => {
                 let mut arg_types = Vec::new();
@@ -97,6 +124,27 @@ impl TypeChecker {
                 } else {
                     Err(format!("Unknown builtin: {}", name))
                 }
+            }
+            Expr::If { cond, then_block, else_block, .. } => {
+                self.check_expr(cond)?;
+                self.check_block(then_block)?;
+                if let Some(else_b) = else_block {
+                    self.check_block(else_b)?;
+                }
+                Ok(Ty::Int)
+            }
+            Expr::While { cond, body, .. } => {
+                self.check_expr(cond)?;
+                self.check_block(body)?;
+                Ok(Ty::Int)
+            }
+            Expr::Assign { target, value, .. } => {
+                let target_ty = self.env.get(target).cloned().ok_or("Cannot reassign unbound variable")?;
+                let val_ty = self.check_expr(value)?;
+                if target_ty != val_ty {
+                    return Err(format!("Type mismatch in assignment: expected {:?}, got {:?}", target_ty, val_ty));
+                }
+                Ok(target_ty)
             }
         }
     }
