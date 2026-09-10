@@ -312,6 +312,10 @@ dependencies = [
 [[package]]
 name = "pace-codegen"
 version = "0.1.0"
+dependencies = [
+ "pace-ast",
+ "pace-mir",
+]
 
 [[package]]
 name = "pace-driver"
