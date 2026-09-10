@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "pace-span",
+    "pace-errors",
+    "pace-lexer",
+    "pace-ast",
+    "pace-parser",
+    "pace-hir",
+    "pace-ty",
+    "pace-mir",
+    "pace-codegen",
+    "pace-pkg",
+    "pace-lsp",
+    "pace-driver"
+]
