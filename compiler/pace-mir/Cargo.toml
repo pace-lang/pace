@@ -4,3 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+pace-hir = { path = "../pace-hir" }
+pace-ast = { path = "../pace-ast" }
+pace-span = { path = "../pace-span" }

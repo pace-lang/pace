@@ -344,6 +344,11 @@ version = "0.1.0"
 [[package]]
 name = "pace-mir"
 version = "0.1.0"
+dependencies = [
+ "pace-ast",
+ "pace-hir",
+ "pace-span",
+]
 
 [[package]]
 name = "pace-parser"
