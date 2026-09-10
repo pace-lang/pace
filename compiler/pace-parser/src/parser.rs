@@ -45,6 +45,7 @@ impl<'a> Parser<'a> {
             Decl::Function { span, .. } => *span,
             Decl::Struct { span, .. } => *span,
             Decl::Class { span, .. } => *span,
+            Decl::Expr(_, span) => *span,
         }).unwrap_or(start_span);
 
         Ok(Program {
@@ -82,7 +83,9 @@ impl<'a> Parser<'a> {
         } else if self.check(&TokenKind::Class) {
             self.parse_class_decl()
         } else {
-            Err("Unsupported declaration in early parser".to_string())
+            let expr = self.parse_expr()?;
+            let span = expr.span();
+            Ok(Decl::Expr(expr, span))
         }
     }
 
@@ -293,23 +296,43 @@ impl<'a> Parser<'a> {
     fn parse_expr(&mut self) -> Result<Expr, String> {
         let mut left = self.parse_primary()?;
         
-        while self.check(&TokenKind::Dot) {
-            self.advance();
-            let member_name = match &self.current {
-                Some(Token { kind: TokenKind::Ident(name), span }) => {
-                    let ident = Ident { name: name.to_string(), span: *span };
-                    self.advance();
-                    ident
+        loop {
+            if self.check(&TokenKind::Dot) {
+                self.advance();
+                let member_name = match &self.current {
+                    Some(Token { kind: TokenKind::Ident(name), span }) => {
+                        let ident = Ident { name: name.to_string(), span: *span };
+                        self.advance();
+                        ident
+                    }
+                    _ => return Err("Expected member name after '.'".to_string()),
+                };
+                
+                let span = left.span().merge(member_name.span);
+                left = Expr::MemberAccess {
+                    span,
+                    object: Box::new(left),
+                    member: member_name,
+                };
+            } else if self.check(&TokenKind::LParen) {
+                self.advance();
+                let mut args = Vec::new();
+                while !self.check(&TokenKind::RParen) && self.current.is_some() {
+                    args.push(self.parse_expr()?);
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    }
                 }
-                _ => return Err("Expected member name after '.'".to_string()),
-            };
-            
-            let span = left.span().merge(member_name.span);
-            left = Expr::MemberAccess {
-                span,
-                object: Box::new(left),
-                member: member_name,
-            };
+                let end_tok = self.expect(TokenKind::RParen)?;
+                let span = left.span().merge(end_tok.span);
+                left = Expr::Call {
+                    span,
+                    callee: Box::new(left),
+                    args,
+                };
+            } else {
+                break;
+            }
         }
 
         if self.check(&TokenKind::Plus) {

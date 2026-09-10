@@ -14,12 +14,10 @@ impl CGenerator {
     }
 
     pub fn generate(&mut self, body: &MirBody) -> String {
-        // Emit headers and ARC stubs
+        // Emit headers and runtime include
         self.output.push_str("#include <stdio.h>\n");
         self.output.push_str("#include <stdlib.h>\n");
-        self.output.push_str("\n// ARC Runtime Stubs (To be linked later)\n");
-        self.output.push_str("#define PACE_RETAIN(obj)\n");
-        self.output.push_str("#define PACE_RELEASE(obj)\n\n");
+        self.output.push_str("#include \"pace_runtime.h\"\n\n");
 
         self.output.push_str("int main() {\n");
         
@@ -44,9 +42,21 @@ impl CGenerator {
     fn generate_block(&mut self, block: &BasicBlock) {
         for stmt in &block.statements {
             match stmt {
-                Statement::Assign(local, rvalue) => {
-                    write!(&mut self.output, "    _{} = ", local.0).unwrap();
-                    self.generate_rvalue(rvalue);
+                Statement::Assign(local, rval) => {
+                    self.output.push_str("    ");
+                    
+                    let mut is_void = false;
+                    if let Rvalue::BuiltinCall(name, _) = rval {
+                        if name == "print" || name == "println" {
+                            is_void = true;
+                        }
+                    }
+                    
+                    if !is_void {
+                        write!(&mut self.output, "_{} = ", local.0).unwrap();
+                    }
+                    
+                    self.generate_rvalue(rval);
                     self.output.push_str(";\n");
                 }
                 Statement::Retain(local) => {
@@ -86,6 +96,27 @@ impl CGenerator {
                     _ => "+",
                 };
                 write!(&mut self.output, "_{} {} _{}", lhs.0, op_str, rhs.0).unwrap();
+            }
+            Rvalue::Call(callee, args) => {
+                write!(&mut self.output, "_{}(", callee.0).unwrap();
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 { self.output.push_str(", "); }
+                    write!(&mut self.output, "_{}", arg.0).unwrap();
+                }
+                self.output.push_str(")");
+            }
+            Rvalue::BuiltinCall(name, args) => {
+                let c_name = if name == "print" || name == "println" {
+                    "pace_print_int"
+                } else {
+                    name.as_str()
+                };
+                write!(&mut self.output, "{}(", c_name).unwrap();
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 { self.output.push_str(", "); }
+                    write!(&mut self.output, "_{}", arg.0).unwrap();
+                }
+                self.output.push_str(")");
             }
         }
     }

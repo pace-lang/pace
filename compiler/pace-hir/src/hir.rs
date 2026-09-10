@@ -28,6 +28,7 @@ pub enum Decl {
         name: String,
         span: Span,
     },
+    Expr(Expr, Span),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,6 +47,12 @@ pub enum Expr {
         member: String,
         span: Span,
     },
+    Call {
+        callee: Box<Expr>,
+        args: Vec<Expr>,
+        span: Span,
+    },
+    BuiltinCall(String, Vec<Expr>, Span),
 }
 
 impl Expr {
@@ -56,6 +63,8 @@ impl Expr {
             Expr::Ident(_, s) => *s,
             Expr::Binary { span, .. } => *span,
             Expr::MemberAccess { span, .. } => *span,
+            Expr::Call { span, .. } => *span,
+            Expr::BuiltinCall(_, _, span) => *span,
         }
     }
 }

@@ -50,6 +50,10 @@ impl LoweringContext {
                 self.scope.insert(name.name.clone(), id);
                 Ok(Some(Decl::Class { id, name: name.name, span }))
             }
+            ast::Decl::Expr(expr, span) => {
+                let lowered = self.lower_expr(expr)?;
+                Ok(Some(Decl::Expr(lowered, span)))
+            }
             _ => Ok(None),
         }
     }
@@ -74,6 +78,27 @@ impl LoweringContext {
                 Ok(Expr::MemberAccess {
                     object: Box::new(self.lower_expr(*object)?),
                     member: member.name,
+                    span,
+                })
+            }
+            ast::Expr::Call { callee, args, span } => {
+                if let ast::Expr::Ident(ident) = &*callee {
+                    if ident.name == "print" || ident.name == "println" {
+                        let mut lowered_args = Vec::new();
+                        for arg in args {
+                            lowered_args.push(self.lower_expr(arg)?);
+                        }
+                        return Ok(Expr::BuiltinCall(ident.name.clone(), lowered_args, span));
+                    }
+                }
+                
+                let mut lowered_args = Vec::new();
+                for arg in args {
+                    lowered_args.push(self.lower_expr(arg)?);
+                }
+                Ok(Expr::Call {
+                    callee: Box::new(self.lower_expr(*callee)?),
+                    args: lowered_args,
                     span,
                 })
             }

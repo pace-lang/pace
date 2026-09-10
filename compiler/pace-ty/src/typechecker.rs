@@ -36,6 +36,10 @@ impl TypeChecker {
                 self.env.insert(*id, Ty::Class(*id));
                 Ok(())
             }
+            Decl::Expr(expr, _) => {
+                self.check_expr(expr)?;
+                Ok(())
+            }
         }
     }
 
@@ -68,11 +72,30 @@ impl TypeChecker {
                 let obj_ty = self.check_expr(object)?;
                 match obj_ty {
                     Ty::Struct(_) | Ty::Class(_) => {
-                        // For v0.1 we don't store fields in Type Env, so we mock it.
-                        // We just assume the member access is an Int for now.
                         Ok(Ty::Int)
                     }
                     _ => Err(format!("Cannot access member '{}' on type {:?}", member, obj_ty)),
+                }
+            }
+            Expr::Call { args, .. } => {
+                for arg in args {
+                    self.check_expr(arg)?;
+                }
+                Ok(Ty::Int) // Mocked for v0.1 MVP
+            }
+            Expr::BuiltinCall(name, args, _) => {
+                let mut arg_types = Vec::new();
+                for arg in args {
+                    arg_types.push(self.check_expr(arg)?);
+                }
+                
+                if name == "print" || name == "println" {
+                    if arg_types.len() != 1 {
+                        return Err(format!("{} takes exactly 1 argument", name));
+                    }
+                    Ok(Ty::Int)
+                } else {
+                    Err(format!("Unknown builtin: {}", name))
                 }
             }
         }

@@ -42,6 +42,7 @@ pub enum Decl {
         methods: Vec<Decl>, // Expects Decl::Function
         span: Span,
     },
+    Expr(Expr, Span),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -88,6 +89,11 @@ pub enum Expr {
         member: Ident,
         span: Span,
     },
+    Call {
+        callee: Box<Expr>,
+        args: Vec<Expr>,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,6 +115,20 @@ impl Expr {
             Expr::Ident(id) => id.span,
             Expr::Binary { span, .. } => *span,
             Expr::MemberAccess { span, .. } => *span,
+            Expr::Call { span, .. } => *span,
+        }
+    }
+}
+
+impl Decl {
+    pub fn span(&self) -> Span {
+        match self {
+            Decl::Let { span, .. } => *span,
+            Decl::Const { span, .. } => *span,
+            Decl::Function { span, .. } => *span,
+            Decl::Struct { span, .. } => *span,
+            Decl::Class { span, .. } => *span,
+            Decl::Expr(_, span) => *span,
         }
     }
 }

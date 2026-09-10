@@ -57,6 +57,8 @@ fn main() {
     println!("Compiling {}...", file_path);
     let status = Command::new("gcc")
         .arg(c_file)
+        .arg("../runtime/pace_runtime.c")
+        .arg("-I../runtime")
         .arg("-o")
         .arg(bin_file)
         .status()

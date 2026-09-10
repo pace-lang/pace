@@ -25,6 +25,8 @@ pub enum Rvalue {
     BinaryOp(BinaryOp, Local, Local),
     IntConstant(String),
     StringConstant(String),
+    Call(Local, Vec<Local>),
+    BuiltinCall(String, Vec<Local>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

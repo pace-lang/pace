@@ -68,6 +68,25 @@ impl MirBuilder {
             Expr::MemberAccess { .. } => {
                 self.new_local() // Mocked for MVP v0.1
             }
+            Expr::Call { callee, args, .. } => {
+                let callee_local = self.build_expr(callee);
+                let mut arg_locals = Vec::new();
+                for arg in args {
+                    arg_locals.push(self.build_expr(arg));
+                }
+                let temp = self.new_local();
+                self.push_stmt(Statement::Assign(temp, Rvalue::Call(callee_local, arg_locals)));
+                temp
+            }
+            Expr::BuiltinCall(name, args, _) => {
+                let mut arg_locals = Vec::new();
+                for arg in args {
+                    arg_locals.push(self.build_expr(arg));
+                }
+                let temp = self.new_local();
+                self.push_stmt(Statement::Assign(temp, Rvalue::BuiltinCall(name.clone(), arg_locals)));
+                temp
+            }
         }
     }
 
@@ -84,6 +103,10 @@ impl MirBuilder {
                 }
                 pace_hir::Decl::Struct { .. } | pace_hir::Decl::Class { .. } => {
                     // Type definitions emit no executable instructions at the top level
+                }
+                pace_hir::Decl::Expr(expr, _) => {
+                    let rval_local = self.build_expr(expr);
+                    last_local = rval_local;
                 }
             }
         }
