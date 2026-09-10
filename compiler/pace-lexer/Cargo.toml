@@ -4,3 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+logos = "0.14.0"
+pace-span = { path = "../pace-span" }
