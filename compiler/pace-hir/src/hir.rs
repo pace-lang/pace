@@ -1,4 +1,4 @@
-use pace_ast::BinaryOp;
+use pace_ast::{BinaryOp, Type};
 use pace_span::Span;
 
 /// A unique ID for variables and definitions across the entire program.
@@ -44,6 +44,14 @@ pub enum Decl {
     Class {
         id: HirId,
         name: String,
+        span: Span,
+    },
+    Function {
+        id: HirId,
+        name: String,
+        params: Vec<(HirId, String, Type)>,
+        return_type: Option<Type>,
+        body: Block,
         span: Span,
     },
     Expr(Expr, Span),

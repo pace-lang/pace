@@ -41,8 +41,7 @@ fn main() {
     tc.check_program(&hir).expect("Typecheck failed");
 
     // 5. Build MIR
-    let builder = MirBuilder::new();
-    let mir = builder.build_program(&hir);
+    let mir = MirBuilder::build_program(&hir);
 
     // 6. Generate C Code
     let mut codegen = CGenerator::new();

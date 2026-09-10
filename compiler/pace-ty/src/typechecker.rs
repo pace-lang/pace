@@ -16,6 +16,16 @@ impl TypeChecker {
 
     pub fn check_program(&mut self, program: &Program) -> Result<(), String> {
         for decl in &program.declarations {
+            if let Decl::Function { id, params, .. } = decl {
+                let mut param_tys = Vec::new();
+                for _ in params {
+                    param_tys.push(Ty::Int); 
+                }
+                self.env.insert(*id, Ty::Function(param_tys, Box::new(Ty::Int)));
+            }
+        }
+
+        for decl in &program.declarations {
             self.check_decl(decl)?;
         }
         Ok(())
@@ -60,6 +70,15 @@ impl TypeChecker {
             }
             Decl::Expr(expr, _) => {
                 self.check_expr(expr)?;
+                Ok(())
+            }
+            Decl::Function { params, body, .. } => {
+                let outer_env = self.env.clone();
+                for (param_id, _, _) in params {
+                    self.env.insert(*param_id, Ty::Int);
+                }
+                self.check_block(body)?;
+                self.env = outer_env;
                 Ok(())
             }
         }

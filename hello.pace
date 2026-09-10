@@ -1,9 +1,9 @@
-let x = 10
-while x > 0 {
-    if x == 5 {
-        print(500)
-    } else {
-        print(x)
+fn fib(n: Int) -> Int {
+    if n <= 1 {
+        return n
     }
-    x = x - 1
+    return fib(n - 1) + fib(n - 2)
 }
+
+let result = fib(10)
+print(result)

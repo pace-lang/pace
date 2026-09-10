@@ -3,7 +3,8 @@ pub enum Ty {
     Int,
     Float,
     String,
-    Error,
+    Bool,
     Struct(pace_hir::HirId),
     Class(pace_hir::HirId),
+    Function(Vec<Ty>, Box<Ty>),
 }

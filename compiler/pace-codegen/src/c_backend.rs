@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use pace_mir::{BasicBlock, MirBody, Rvalue, Statement, Terminator};
+use pace_mir::{BasicBlock, MirProgram, MirFunction, MirBody, Rvalue, Statement, Terminator};
 use pace_ast::BinaryOp;
 
 pub struct CGenerator {
@@ -13,24 +13,29 @@ impl CGenerator {
         }
     }
 
-    pub fn generate(&mut self, body: &MirBody) -> String {
+    pub fn generate(&mut self, program: &MirProgram) -> String {
         // Emit headers and runtime include
         self.output.push_str("#include <stdio.h>\n");
         self.output.push_str("#include <stdlib.h>\n");
         self.output.push_str("#include \"pace_runtime.h\"\n\n");
 
+        for func in &program.functions {
+            self.generate_function(func);
+            self.output.push_str("\n");
+        }
+
         self.output.push_str("int main() {\n");
         
         let mut locals = Vec::new();
-        for i in 0..body.locals {
+        for i in 0..program.main_body.locals {
             locals.push(format!("    long long _{} = 0;", i));
         }
         self.output.push_str(&locals.join("\n"));
         self.output.push_str("\n\n");
 
-        for (i, block) in body.blocks.iter().enumerate() {
+        for (i, block) in program.main_body.blocks.iter().enumerate() {
             write!(&mut self.output, "bb_{}:\n", i).unwrap();
-            self.generate_block(block);
+            self.generate_block(block, "");
             match &block.terminator {
                 Some(Terminator::Return(_local)) => {
                     self.output.push_str("    return 0;\n");
@@ -51,7 +56,46 @@ impl CGenerator {
         self.output.clone()
     }
 
-    fn generate_block(&mut self, block: &BasicBlock) {
+    fn generate_function(&mut self, func: &MirFunction) {
+        self.output.push_str(&format!("long long {}(", func.name));
+        for (i, param) in func.params.iter().enumerate() {
+            if i > 0 { self.output.push_str(", "); }
+            write!(&mut self.output, "long long _{}", param.0).unwrap();
+        }
+        self.output.push_str(") {\n");
+        
+        let mut locals = Vec::new();
+        for i in 0..func.body.locals {
+            // don't redeclare parameters
+            if !func.params.iter().any(|p| p.0 == i) {
+                locals.push(format!("    long long _{} = 0;", i));
+            }
+        }
+        self.output.push_str(&locals.join("\n"));
+        self.output.push_str("\n\n");
+
+        for (i, block) in func.body.blocks.iter().enumerate() {
+            write!(&mut self.output, "{}_bb_{}:\n", func.name, i).unwrap();
+            self.generate_block(block, &func.name);
+            match &block.terminator {
+                Some(Terminator::Return(local)) => {
+                    write!(&mut self.output, "    return _{};\n", local.0).unwrap();
+                }
+                Some(Terminator::Goto(bb)) => {
+                    write!(&mut self.output, "    goto {}_bb_{};\n", func.name, bb.0).unwrap();
+                }
+                Some(Terminator::Branch { cond, then_block, else_block }) => {
+                    write!(&mut self.output, "    if (_{}) goto {}_bb_{}; else goto {}_bb_{};\n", cond.0, func.name, then_block.0, func.name, else_block.0).unwrap();
+                }
+                None => {
+                    self.output.push_str("    return 0;\n");
+                }
+            }
+        }
+        self.output.push_str("}\n");
+    }
+
+    fn generate_block(&mut self, block: &BasicBlock, prefix: &str) {
         for stmt in &block.statements {
             match stmt {
                 Statement::Assign(local, rval) => {
@@ -116,6 +160,14 @@ impl CGenerator {
                     name.as_str()
                 };
                 write!(&mut self.output, "{}(", c_name).unwrap();
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 { self.output.push_str(", "); }
+                    write!(&mut self.output, "_{}", arg.0).unwrap();
+                }
+                self.output.push_str(")");
+            }
+            Rvalue::GlobalCall(name, args) => {
+                write!(&mut self.output, "{}(", name).unwrap();
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 { self.output.push_str(", "); }
                     write!(&mut self.output, "_{}", arg.0).unwrap();

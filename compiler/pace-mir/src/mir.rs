@@ -27,6 +27,7 @@ pub enum Rvalue {
     StringConstant(String),
     Call(Local, Vec<Local>),
     BuiltinCall(String, Vec<Local>),
+    GlobalCall(String, Vec<Local>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,4 +45,17 @@ pub enum Terminator {
 pub struct MirBody {
     pub blocks: Vec<BasicBlock>,
     pub locals: u32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MirFunction {
+    pub name: String,
+    pub params: Vec<Local>,
+    pub body: MirBody,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MirProgram {
+    pub functions: Vec<MirFunction>,
+    pub main_body: MirBody,
 }

@@ -7,10 +7,11 @@ pub struct MirBuilder {
     current_block: BasicBlockId,
     next_local: u32,
     hir_to_local: HashMap<HirId, Local>,
+    global_fns: HashMap<HirId, String>,
 }
 
 impl MirBuilder {
-    pub fn new() -> Self {
+    pub fn new(global_fns: HashMap<HirId, String>) -> Self {
         let initial_block = BasicBlock {
             statements: Vec::new(),
             terminator: None,
@@ -20,6 +21,7 @@ impl MirBuilder {
             current_block: BasicBlockId(0),
             next_local: 0,
             hir_to_local: HashMap::new(),
+            global_fns,
         }
     }
 
@@ -50,8 +52,19 @@ impl MirBuilder {
                 pace_hir::Stmt::ExprStmt(expr, _) => {
                     self.build_expr(expr);
                 }
-                pace_hir::Stmt::Return(_, _) => {
-                    // Ignored for MVP v0.1 since we only have `main` block
+                pace_hir::Stmt::Return(expr, _) => {
+                    let local = match expr {
+                        Some(e) => self.build_expr(e),
+                        None => {
+                            let temp = self.new_local();
+                            self.push_stmt(Statement::Assign(temp, Rvalue::IntConstant("0".to_string())));
+                            temp
+                        }
+                    };
+                    
+                    let current_bb = self.current_block.0 as usize;
+                    self.blocks[current_bb].terminator = Some(Terminator::Return(local));
+                    break;
                 }
             }
         }
@@ -97,6 +110,19 @@ impl MirBuilder {
                 self.new_local() // Mocked for MVP v0.1
             }
             Expr::Call { callee, args, .. } => {
+                if let Expr::Ident(id, _) = &**callee {
+                    let maybe_func_name = self.global_fns.get(id).cloned();
+                    if let Some(func_name) = maybe_func_name {
+                        let mut arg_locals = Vec::new();
+                        for arg in args {
+                            arg_locals.push(self.build_expr(arg));
+                        }
+                        let temp = self.new_local();
+                        self.push_stmt(Statement::Assign(temp, Rvalue::GlobalCall(func_name, arg_locals)));
+                        return temp;
+                    }
+                }
+                
                 let callee_local = self.build_expr(callee);
                 let mut arg_locals = Vec::new();
                 for arg in args {
@@ -130,13 +156,17 @@ impl MirBuilder {
 
                 self.current_block = then_bb;
                 self.build_block(then_block);
-                self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(merge_bb));
+                if self.blocks[self.current_block.0 as usize].terminator.is_none() {
+                    self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(merge_bb));
+                }
 
                 self.current_block = else_bb;
                 if let Some(eb) = else_block {
                     self.build_block(eb);
                 }
-                self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(merge_bb));
+                if self.blocks[self.current_block.0 as usize].terminator.is_none() {
+                    self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(merge_bb));
+                }
 
                 self.current_block = merge_bb;
                 self.new_local()
@@ -159,7 +189,9 @@ impl MirBuilder {
 
                 self.current_block = body_bb;
                 self.build_block(body);
-                self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(cond_bb));
+                if self.blocks[self.current_block.0 as usize].terminator.is_none() {
+                    self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(cond_bb));
+                }
 
                 self.current_block = merge_bb;
                 self.new_local()
@@ -173,32 +205,63 @@ impl MirBuilder {
         }
     }
 
-    pub fn build_program(mut self, program: &pace_hir::Program) -> MirBody {
-        let mut last_local = Local(0); 
+    pub fn build_program(program: &pace_hir::Program) -> MirProgram {
+        let mut global_fns = HashMap::new();
+        for decl in &program.declarations {
+            if let pace_hir::Decl::Function { id, name, .. } = decl {
+                global_fns.insert(*id, name.clone());
+            }
+        }
+
+        let mut functions = Vec::new();
+        let mut main_builder = MirBuilder::new(global_fns.clone());
+        let mut main_last_local = Local(0); 
+
         for decl in &program.declarations {
             match decl {
                 pace_hir::Decl::Let { id, value, .. } => {
-                    let rval_local = self.build_expr(value);
-                    let var_local = self.new_local();
-                    self.hir_to_local.insert(*id, var_local);
-                    self.push_stmt(Statement::Assign(var_local, Rvalue::Use(rval_local)));
-                    last_local = var_local;
+                    let rval_local = main_builder.build_expr(value);
+                    let var_local = main_builder.new_local();
+                    main_builder.hir_to_local.insert(*id, var_local);
+                    main_builder.push_stmt(Statement::Assign(var_local, Rvalue::Use(rval_local)));
+                    main_last_local = var_local;
                 }
                 pace_hir::Decl::Struct { .. } | pace_hir::Decl::Class { .. } => {
-                    // Type definitions emit no executable instructions at the top level
                 }
                 pace_hir::Decl::Expr(expr, _) => {
-                    let rval_local = self.build_expr(expr);
-                    last_local = rval_local;
+                    let rval_local = main_builder.build_expr(expr);
+                    main_last_local = rval_local;
+                }
+                pace_hir::Decl::Function { params, body, name, .. } => {
+                    let mut fn_builder = MirBuilder::new(global_fns.clone());
+                    let mut mir_params = Vec::new();
+                    for (param_id, _, _) in params {
+                        let local = fn_builder.new_local();
+                        fn_builder.hir_to_local.insert(*param_id, local);
+                        mir_params.push(local);
+                    }
+                    
+                    fn_builder.build_block(body);
+                    let fn_body = fn_builder.finish(Local(0));
+                    functions.push(MirFunction {
+                        name: name.clone(),
+                        params: mir_params,
+                        body: fn_body,
+                    });
                 }
             }
         }
-        self.finish(last_local)
+        MirProgram {
+            functions,
+            main_body: main_builder.finish(main_last_local),
+        }
     }
 
     pub fn finish(mut self, return_val: Local) -> MirBody {
         let idx = self.current_block.0 as usize;
-        self.blocks[idx].terminator = Some(Terminator::Return(return_val));
+        if self.blocks[idx].terminator.is_none() {
+            self.blocks[idx].terminator = Some(Terminator::Return(return_val));
+        }
 
         MirBody {
             blocks: self.blocks,

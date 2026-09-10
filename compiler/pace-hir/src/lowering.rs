@@ -81,6 +81,30 @@ impl LoweringContext {
                 let lowered = self.lower_expr(expr)?;
                 Ok(Some(Decl::Expr(lowered, span)))
             }
+            ast::Decl::Function { name, params, return_type, body, span } => {
+                let id = self.generate_id();
+                self.scope.insert(name.name.clone(), id);
+                
+                let outer_scope = self.scope.clone();
+                let mut lowered_params = Vec::new();
+                for (param_name, param_ty) in params {
+                    let param_id = self.generate_id();
+                    self.scope.insert(param_name.name.clone(), param_id);
+                    lowered_params.push((param_id, param_name.name, param_ty));
+                }
+                
+                let lowered_body = self.lower_block(body)?;
+                self.scope = outer_scope;
+                
+                Ok(Some(Decl::Function {
+                    id,
+                    name: name.name,
+                    params: lowered_params,
+                    return_type,
+                    body: lowered_body,
+                    span,
+                }))
+            }
             _ => Ok(None),
         }
     }
