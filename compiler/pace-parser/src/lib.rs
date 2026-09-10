@@ -6,7 +6,7 @@ pub use parser::Parser;
 mod tests {
     use super::*;
     use pace_lexer::Lexer;
-    use pace_ast::{Decl, Expr};
+    use pace_ast::{Decl, Expr, Type, Stmt};
 
     #[test]
     fn test_parse_let_binding() {
@@ -26,6 +26,38 @@ mod tests {
                 }
             }
             _ => panic!("Expected Let declaration"),
+        }
+    }
+
+    #[test]
+    fn test_parse_function() {
+        let source = "fn identity(a: int) -> int { return a }";
+        let lexer = Lexer::new(source);
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program().unwrap();
+        assert_eq!(program.declarations.len(), 1);
+
+        match &program.declarations[0] {
+            Decl::Function { name, params, return_type, body, .. } => {
+                assert_eq!(name.name, "identity");
+                assert_eq!(params.len(), 1);
+                assert_eq!(params[0].0.name, "a");
+                match &params[0].1 {
+                    Type::Named(id) => assert_eq!(id.name, "int"),
+                    _ => panic!("Expected Named type"),
+                }
+                match return_type.as_ref().unwrap() {
+                    Type::Named(id) => assert_eq!(id.name, "int"),
+                    _ => panic!("Expected Named return type"),
+                }
+                assert_eq!(body.statements.len(), 1);
+                match &body.statements[0] {
+                    Stmt::Return(Some(Expr::Ident(id)), _) => assert_eq!(id.name, "a"),
+                    _ => panic!("Expected Return statement with Ident"),
+                }
+            }
+            _ => panic!("Expected Function declaration"),
         }
     }
 }

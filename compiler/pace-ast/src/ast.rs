@@ -24,7 +24,40 @@ pub enum Decl {
         value: Expr,
         span: Span,
     },
-    // Further declarations (Function, Class) will be added as we expand the parser.
+    Function {
+        name: Ident,
+        params: Vec<(Ident, Type)>,
+        return_type: Option<Type>,
+        body: Block,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Type {
+    Named(Ident),
+    Optional(Box<Type>, Span),
+}
+
+impl Type {
+    pub fn span(&self) -> Span {
+        match self {
+            Type::Named(ident) => ident.span,
+            Type::Optional(_, span) => *span,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Block {
+    pub statements: Vec<Stmt>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Stmt {
+    ExprStmt(Expr, Span),
+    Return(Option<Expr>, Span),
 }
 
 #[derive(Debug, Clone, PartialEq)]

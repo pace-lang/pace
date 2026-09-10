@@ -1,4 +1,4 @@
-use pace_ast::{Decl, Expr, Ident, Program};
+use pace_ast::{Block, Decl, Expr, Ident, Program, Stmt, Type};
 use pace_lexer::{Lexer, Token, TokenKind};
 use pace_span::Span;
 
@@ -42,6 +42,7 @@ impl<'a> Parser<'a> {
         let end_span = declarations.last().map(|d| match d {
             Decl::Let { span, .. } => *span,
             Decl::Const { span, .. } => *span,
+            Decl::Function { span, .. } => *span,
         }).unwrap_or(start_span);
 
         Ok(Program {
@@ -72,13 +73,126 @@ impl<'a> Parser<'a> {
                 value,
                 span: start_tok.span.merge(end_span),
             })
+        } else if self.check(&TokenKind::Fn) {
+            self.parse_fn_decl()
         } else {
             Err("Unsupported declaration in early parser".to_string())
         }
     }
 
+    fn parse_fn_decl(&mut self) -> Result<Decl, String> {
+        let start_tok = self.expect(TokenKind::Fn)?;
+        
+        let name_tok = match &self.current {
+            Some(Token { kind: TokenKind::Ident(name), span }) => {
+                let ident = Ident { name: name.to_string(), span: *span };
+                self.advance();
+                ident
+            }
+            _ => return Err("Expected identifier after 'fn'".to_string()),
+        };
+
+        self.expect(TokenKind::LParen)?;
+        
+        let mut params = Vec::new();
+        while !self.check(&TokenKind::RParen) {
+            let param_name = match &self.current {
+                Some(Token { kind: TokenKind::Ident(name), span }) => {
+                    let ident = Ident { name: name.to_string(), span: *span };
+                    self.advance();
+                    ident
+                }
+                _ => return Err("Expected parameter name".to_string()),
+            };
+
+            self.expect(TokenKind::Colon)?;
+            let param_type = self.parse_type()?;
+            
+            params.push((param_name, param_type));
+
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        self.expect(TokenKind::RParen)?;
+
+        let mut return_type = None;
+        if self.check(&TokenKind::Arrow) {
+            self.advance();
+            return_type = Some(self.parse_type()?);
+        }
+
+        let body = self.parse_block()?;
+        let end_span = body.span;
+
+        Ok(Decl::Function {
+            name: name_tok,
+            params,
+            return_type,
+            body,
+            span: start_tok.span.merge(end_span),
+        })
+    }
+
+    fn parse_type(&mut self) -> Result<Type, String> {
+        let mut base_type = match &self.current {
+            Some(Token { kind: TokenKind::Ident(name), span }) => {
+                let ident = Ident { name: name.to_string(), span: *span };
+                self.advance();
+                Type::Named(ident)
+            }
+            _ => return Err("Expected type name".to_string()),
+        };
+
+        if self.check(&TokenKind::Question) {
+            let span = base_type.span().merge(self.current.as_ref().unwrap().span);
+            self.advance();
+            base_type = Type::Optional(Box::new(base_type), span);
+        }
+
+        Ok(base_type)
+    }
+
+    fn parse_block(&mut self) -> Result<Block, String> {
+        let start_tok = self.expect(TokenKind::LBrace)?;
+        let mut statements = Vec::new();
+
+        while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            statements.push(self.parse_stmt()?);
+        }
+
+        let end_tok = self.expect(TokenKind::RBrace)?;
+
+        Ok(Block {
+            statements,
+            span: start_tok.span.merge(end_tok.span),
+        })
+    }
+
+    fn parse_stmt(&mut self) -> Result<Stmt, String> {
+        if self.check(&TokenKind::Return) {
+            let start_tok = self.expect(TokenKind::Return)?;
+            
+            let mut expr = None;
+            let mut end_span = start_tok.span;
+            
+            if !self.check(&TokenKind::RBrace) {
+                let e = self.parse_expr()?;
+                end_span = end_span.merge(e.span());
+                expr = Some(e);
+            }
+
+            Ok(Stmt::Return(expr, start_tok.span.merge(end_span)))
+        } else {
+            let expr = self.parse_expr()?;
+            let span = expr.span();
+            Ok(Stmt::ExprStmt(expr, span))
+        }
+    }
+
     fn parse_expr(&mut self) -> Result<Expr, String> {
-        // Basic primary expression parsing
         let tok = self.current.clone().ok_or("Expected expression")?;
         self.advance();
 
@@ -87,6 +201,7 @@ impl<'a> Parser<'a> {
             TokenKind::Float(val) => Ok(Expr::FloatLiteral(val.to_string(), tok.span)),
             TokenKind::String(val) => Ok(Expr::StringLiteral(val.to_string(), tok.span)),
             TokenKind::Ident(name) => Ok(Expr::Ident(Ident { name: name.to_string(), span: tok.span })),
+            TokenKind::Plus => Err("Unexpected token +".to_string()),
             _ => Err("Unexpected token in expression".to_string()),
         }
     }
