@@ -80,15 +80,25 @@ impl<'a> Parser<'a> {
                 None
             };
 
-            self.expect(TokenKind::Eq)?;
-            let value = self.parse_expr()?;
-            let end_span = value.span();
+            let mut value = None;
+            let span_end = if self.check(&TokenKind::Eq) {
+                self.advance();
+                let expr = self.parse_expr()?;
+                let end = expr.span();
+                value = Some(expr);
+                end
+            } else {
+                if ty.is_none() {
+                    return Err(Diagnostic::error("Type annotation is required when an initializer is omitted").with_span(self.current_span()));
+                }
+                start_tok.span
+            };
 
             Ok(Decl::Let {
                 name: name_tok,
                 ty,
                 value,
-                span: start_tok.span.merge(end_span),
+                span: start_tok.span.merge(span_end),
             })
         } else if self.check(&TokenKind::Var) {
             let start_tok = self.expect(TokenKind::Var)?;
@@ -109,11 +119,50 @@ impl<'a> Parser<'a> {
                 None
             };
 
+            let mut value = None;
+            let span_end = if self.check(&TokenKind::Eq) {
+                self.advance();
+                let expr = self.parse_expr()?;
+                let end = expr.span();
+                value = Some(expr);
+                end
+            } else {
+                if ty.is_none() {
+                    return Err(Diagnostic::error("Type annotation is required when an initializer is omitted").with_span(self.current_span()));
+                }
+                start_tok.span
+            };
+
+            Ok(Decl::Var {
+                name: name_tok,
+                ty,
+                value,
+                span: start_tok.span.merge(span_end),
+            })
+        } else if self.check(&TokenKind::Const) {
+            let start_tok = self.expect(TokenKind::Const)?;
+            
+            let name_tok = match &self.current {
+                Some(Token { kind: TokenKind::Ident(name), span }) => {
+                    let ident = Ident { name: name.to_string(), span: *span };
+                    self.advance();
+                    ident
+                }
+                _ => return Err(Diagnostic::error("Expected identifier after 'const'").with_span(self.current_span())),
+            };
+
+            let ty = if self.check(&TokenKind::Colon) {
+                self.advance();
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
+
             self.expect(TokenKind::Eq)?;
             let value = self.parse_expr()?;
             let end_span = value.span();
 
-            Ok(Decl::Var {
+            Ok(Decl::Const {
                 name: name_tok,
                 ty,
                 value,
@@ -146,10 +195,59 @@ impl<'a> Parser<'a> {
 
         self.expect(TokenKind::LBrace)?;
         let mut fields = Vec::new();
+        let mut static_fields = Vec::new();
+        let mut const_fields = Vec::new();
         let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
-            if self.check(&TokenKind::Fn) {
+            if self.check(&TokenKind::Const) {
+                self.advance();
+                if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
+                    let field_name = Ident { name: name.to_string(), span: *span };
+                    self.advance();
+                    
+                    self.expect(TokenKind::Colon)?;
+                    let field_type = self.parse_type()?;
+                    
+                    self.expect(TokenKind::Eq)?;
+                    let field_value = self.parse_expr()?;
+                    
+                    const_fields.push((field_name, field_type, field_value));
+                    
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    }
+                } else {
+                    return Err(Diagnostic::error("Expected identifier after 'const'").with_span(self.current_span()));
+                }
+            } else if self.check(&TokenKind::Static) {
+                self.advance();
+                
+                if self.check(&TokenKind::Fn) {
+                    let mut func = self.parse_fn_decl()?;
+                    if let Decl::Function { ref mut is_static, .. } = func {
+                        *is_static = true;
+                    }
+                    methods.push(func);
+                } else if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
+                    let field_name = Ident { name: name.to_string(), span: *span };
+                    self.advance();
+                    
+                    self.expect(TokenKind::Colon)?;
+                    let field_type = self.parse_type()?;
+                    
+                    self.expect(TokenKind::Eq)?;
+                    let field_value = self.parse_expr()?;
+                    
+                    static_fields.push((field_name, field_type, field_value));
+                    
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    }
+                } else {
+                    return Err(Diagnostic::error("Expected function or identifier after 'static'").with_span(self.current_span()));
+                }
+            } else if self.check(&TokenKind::Fn) {
                 methods.push(self.parse_fn_decl()?);
             } else if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
                 if *name == "init" {
@@ -180,6 +278,7 @@ impl<'a> Parser<'a> {
                         params,
                         return_type: None,
                         body: body.clone(),
+                        is_static: false,
                         span: init_span_start.merge(body.span),
                     });
                     continue;
@@ -190,7 +289,14 @@ impl<'a> Parser<'a> {
                 
                 self.expect(TokenKind::Colon)?;
                 let field_type = self.parse_type()?;
-                fields.push((field_name, field_type));
+                
+                let mut field_value = None;
+                if self.check(&TokenKind::Eq) {
+                    self.advance();
+                    field_value = Some(self.parse_expr()?);
+                }
+                
+                fields.push((field_name, field_type, field_value));
                 
                 if self.check(&TokenKind::Comma) {
                     self.advance();
@@ -205,6 +311,8 @@ impl<'a> Parser<'a> {
         Ok(Decl::Struct {
             name: name_tok,
             fields,
+            static_fields,
+            const_fields,
             methods,
             span: start_tok.span.merge(end_tok.span),
         })
@@ -224,10 +332,59 @@ impl<'a> Parser<'a> {
 
         self.expect(TokenKind::LBrace)?;
         let mut fields = Vec::new();
+        let mut static_fields = Vec::new();
+        let mut const_fields = Vec::new();
         let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
-            if self.check(&TokenKind::Fn) {
+            if self.check(&TokenKind::Const) {
+                self.advance();
+                if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
+                    let field_name = Ident { name: name.to_string(), span: *span };
+                    self.advance();
+                    
+                    self.expect(TokenKind::Colon)?;
+                    let field_type = self.parse_type()?;
+                    
+                    self.expect(TokenKind::Eq)?;
+                    let field_value = self.parse_expr()?;
+                    
+                    const_fields.push((field_name, field_type, field_value));
+                    
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    }
+                } else {
+                    return Err(Diagnostic::error("Expected identifier after 'const'").with_span(self.current_span()));
+                }
+            } else if self.check(&TokenKind::Static) {
+                self.advance();
+                
+                if self.check(&TokenKind::Fn) {
+                    let mut func = self.parse_fn_decl()?;
+                    if let Decl::Function { ref mut is_static, .. } = func {
+                        *is_static = true;
+                    }
+                    methods.push(func);
+                } else if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
+                    let field_name = Ident { name: name.to_string(), span: *span };
+                    self.advance();
+                    
+                    self.expect(TokenKind::Colon)?;
+                    let field_type = self.parse_type()?;
+                    
+                    self.expect(TokenKind::Eq)?;
+                    let field_value = self.parse_expr()?;
+                    
+                    static_fields.push((field_name, field_type, field_value));
+                    
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    }
+                } else {
+                    return Err(Diagnostic::error("Expected function or identifier after 'static'").with_span(self.current_span()));
+                }
+            } else if self.check(&TokenKind::Fn) {
                 methods.push(self.parse_fn_decl()?);
             } else if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
                 if *name == "init" {
@@ -258,6 +415,7 @@ impl<'a> Parser<'a> {
                         params,
                         return_type: None,
                         body: body.clone(),
+                        is_static: false,
                         span: init_span_start.merge(body.span),
                     });
                     continue;
@@ -268,7 +426,14 @@ impl<'a> Parser<'a> {
                 
                 self.expect(TokenKind::Colon)?;
                 let field_type = self.parse_type()?;
-                fields.push((field_name, field_type));
+                
+                let mut field_value = None;
+                if self.check(&TokenKind::Eq) {
+                    self.advance();
+                    field_value = Some(self.parse_expr()?);
+                }
+                
+                fields.push((field_name, field_type, field_value));
                 
                 if self.check(&TokenKind::Comma) {
                     self.advance();
@@ -283,6 +448,8 @@ impl<'a> Parser<'a> {
         Ok(Decl::Class {
             name: name_tok,
             fields,
+            static_fields,
+            const_fields,
             methods,
             span: start_tok.span.merge(end_tok.span),
         })
@@ -340,6 +507,7 @@ impl<'a> Parser<'a> {
             params,
             return_type,
             body,
+            is_static: false,
             span: start_tok.span.merge(end_span),
         })
     }
@@ -394,9 +562,22 @@ impl<'a> Parser<'a> {
             } else {
                 None
             };
-            self.expect(TokenKind::Eq)?;
-            let value = self.parse_expr()?;
-            let span = start_tok.span.merge(value.span());
+            
+            let mut value = None;
+            let span_end = if self.check(&TokenKind::Eq) {
+                self.advance();
+                let expr = self.parse_expr()?;
+                let end = expr.span();
+                value = Some(expr);
+                end
+            } else {
+                if ty.is_none() {
+                    return Err(Diagnostic::error("Type annotation is required when an initializer is omitted").with_span(self.current_span()));
+                }
+                start_tok.span
+            };
+            
+            let span = start_tok.span.merge(span_end);
             Ok(Stmt::Let { name, ty, value, span })
         } else if self.check(&TokenKind::Var) {
             let start_tok = self.expect(TokenKind::Var)?;
@@ -412,9 +593,22 @@ impl<'a> Parser<'a> {
             } else {
                 None
             };
-            self.expect(TokenKind::Eq)?;
-            let value = self.parse_expr()?;
-            let span = start_tok.span.merge(value.span());
+            
+            let mut value = None;
+            let span_end = if self.check(&TokenKind::Eq) {
+                self.advance();
+                let expr = self.parse_expr()?;
+                let end = expr.span();
+                value = Some(expr);
+                end
+            } else {
+                if ty.is_none() {
+                    return Err(Diagnostic::error("Type annotation is required when an initializer is omitted").with_span(self.current_span()));
+                }
+                start_tok.span
+            };
+            
+            let span = start_tok.span.merge(span_end);
             Ok(Stmt::Var { name, ty, value, span })
         } else if self.check(&TokenKind::Return) {
             let start_tok = self.expect(TokenKind::Return)?;

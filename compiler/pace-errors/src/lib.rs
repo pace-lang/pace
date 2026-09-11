@@ -8,6 +8,11 @@ pub enum ErrorCode {
     ImmutableAssignment,
     UnusedVariable,
     SnakeCaseName,
+    UninitializedVariable,
+    MissingFields,
+    UnknownField,
+    ArityMismatch,
+    InvalidArguments,
 }
 
 impl ErrorCode {
@@ -16,6 +21,11 @@ impl ErrorCode {
             ErrorCode::TypeMismatch => "E001",
             ErrorCode::NonExhaustiveReturn => "E002",
             ErrorCode::ImmutableAssignment => "E003",
+            ErrorCode::UninitializedVariable => "E004",
+            ErrorCode::MissingFields => "E005",
+            ErrorCode::UnknownField => "E006",
+            ErrorCode::ArityMismatch => "E007",
+            ErrorCode::InvalidArguments => "E008",
             ErrorCode::UnusedVariable => "W001",
             ErrorCode::SnakeCaseName => "W002",
         }

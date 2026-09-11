@@ -45,12 +45,33 @@ impl CGenerator {
             self.output.push_str("}\n\n");
         }
 
+        for (name, ty) in &program.global_vars {
+            let c_ty = self.emit_c_type(ty);
+            self.output.push_str(&format!("{} {};\n", c_ty, name));
+        }
+        self.output.push_str("\n");
+
         for func in &program.functions {
             self.generate_function(func);
             self.output.push_str("\n");
         }
 
+        // Generate pace_init for top-level code (like static initializers)
+        self.output.push_str("void pace_init() {\n");
+        for (i, ty) in program.main_body.locals.iter().enumerate() {
+            let c_ty = self.emit_c_type(ty);
+            let def_val = self.emit_c_default_val(ty);
+            self.output.push_str(&format!("    {} _{} = {};\n", c_ty, i, def_val));
+        }
+        self.output.push_str("\n");
+        for (i, block) in program.main_body.blocks.iter().enumerate() {
+            self.output.push_str(&format!("init_bb_{}:\n", i));
+            self.generate_block(block, &program.main_body.locals);
+        }
+        self.output.push_str("}\n\n");
+
         self.output.push_str("int main() {\n");
+        self.output.push_str("    pace_init();\n");
         // Always call the user's main function if it exists.
         // We know it exists if the program has a function named "main".
         let has_main = program.functions.iter().any(|f| f.name == "main");
@@ -161,6 +182,9 @@ impl CGenerator {
                     self.generate_lvalue(lval, locals);
                     self.output.push_str(");\n");
                 }
+                Statement::GlobalWrite(name, local) => {
+                    write!(&mut self.output, "    {} = _{};\n", name, local.0).unwrap();
+                }
             }
         }
     }
@@ -212,7 +236,10 @@ impl CGenerator {
             Rvalue::BuiltinCall(name, args) => {
                 let c_name = if name == "print" || name == "println" {
                     if let Some(arg) = args.first() {
-                        let ty = &locals[arg.0 as usize];
+                        let mut ty = &locals[arg.0 as usize];
+                        if let Ty::Optional(inner) = ty {
+                            ty = inner;
+                        }
                         if matches!(ty, Ty::String) {
                             "pace_print_string"
                         } else if matches!(ty, Ty::Float) {
@@ -242,6 +269,9 @@ impl CGenerator {
                     write!(&mut self.output, "_{}", arg.0).unwrap();
                 }
                 self.output.push_str(")");
+            }
+            Rvalue::GlobalRead(name) => {
+                write!(&mut self.output, "{}", name).unwrap();
             }
             Rvalue::FieldAccess(obj, field) => {
                 let is_ptr = matches!(locals[obj.0 as usize], Ty::Class(_));

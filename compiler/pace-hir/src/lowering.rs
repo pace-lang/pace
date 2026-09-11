@@ -39,13 +39,19 @@ impl LoweringContext {
             match stmt {
                 ast::Stmt::Let { name, ty, value, span } => {
                     let id = self.generate_id();
-                    let lowered_val = self.lower_expr(value)?;
+                    let lowered_val = match value {
+                        Some(expr) => Some(self.lower_expr(expr)?),
+                        None => None,
+                    };
                     self.scope.insert(name.name.clone(), id);
                     statements.push(Stmt::Let { id, name: name.name, ty, value: lowered_val, span });
                 }
                 ast::Stmt::Var { name, ty, value, span } => {
                     let id = self.generate_id();
-                    let lowered_val = self.lower_expr(value)?;
+                    let lowered_val = match value {
+                        Some(expr) => Some(self.lower_expr(expr)?),
+                        None => None,
+                    };
                     self.scope.insert(name.name.clone(), id);
                     statements.push(Stmt::Var { id, name: name.name, ty, value: lowered_val, span });
                 }
@@ -69,30 +75,53 @@ impl LoweringContext {
         match decl {
             ast::Decl::Let { name, ty, value, span } => {
                 let id = self.generate_id();
-                let lowered_val = self.lower_expr(value)?;
                 self.scope.insert(name.name.clone(), id);
-                Ok(Some(Decl::Let { id, name: name.name, ty, value: lowered_val, span }))
+                let lowered_value = match value {
+                    Some(expr) => Some(self.lower_expr(expr)?),
+                    None => None,
+                };
+                Ok(Some(Decl::Let { id, name: name.name, ty, value: lowered_value, span }))
             }
             ast::Decl::Var { name, ty, value, span } => {
                 let id = self.generate_id();
-                let lowered_val = self.lower_expr(value)?;
                 self.scope.insert(name.name.clone(), id);
-                Ok(Some(Decl::Var { id, name: name.name, ty, value: lowered_val, span }))
+                let lowered_value = match value {
+                    Some(expr) => Some(self.lower_expr(expr)?),
+                    None => None,
+                };
+                Ok(Some(Decl::Var { id, name: name.name, ty, value: lowered_value, span }))
             }
-            ast::Decl::Struct { name, fields, methods, span, .. } => {
+            ast::Decl::Struct { name, fields, static_fields, const_fields, methods, span, .. } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 let mut lowered_fields = Vec::new();
-                for (field_name, field_ty) in fields {
-                    lowered_fields.push((field_name.name, field_ty));
+                for (field_name, field_ty, field_val) in fields {
+                    let lowered_val = match field_val {
+                        Some(v) => Some(self.lower_expr(v)?),
+                        None => None,
+                    };
+                    lowered_fields.push((field_name.name, field_ty, lowered_val));
                 }
+                
+                let mut lowered_static = Vec::new();
+                for (sf_name, sf_ty, sf_val) in static_fields {
+                    lowered_static.push((sf_name.name, sf_ty, self.lower_expr(sf_val)?));
+                }
+                let mut lowered_const = Vec::new();
+                for (cf_name, cf_ty, cf_val) in const_fields {
+                    lowered_const.push((cf_name.name, cf_ty, self.lower_expr(cf_val)?));
+                }
+                
                 let mut lowered_methods = Vec::new();
                 for method in methods {
-                    if let ast::Decl::Function { name: m_name, params, return_type, body, span: m_span } = method {
-                        let mut new_params = vec![(
-                            ast::Ident { name: "self".to_string(), span: m_name.span },
-                            ast::Type::Named(name.clone())
-                        )];
+                    if let ast::Decl::Function { name: m_name, params, return_type, body, span: m_span, is_static } = method {
+                        let mut new_params = Vec::new();
+                        if !is_static {
+                            new_params.push((
+                                ast::Ident { name: "self".to_string(), span: m_name.span },
+                                ast::Type::Named(name.clone())
+                            ));
+                        }
                         new_params.extend(params);
                         let m_decl = ast::Decl::Function {
                             name: ast::Ident { name: format!("{}_{}", name.name, m_name.name), span: m_name.span },
@@ -100,28 +129,46 @@ impl LoweringContext {
                             return_type,
                             body,
                             span: m_span,
+                            is_static,
                         };
                         if let Some(lowered) = self.lower_decl(m_decl)? {
                             lowered_methods.push(lowered);
                         }
                     }
                 }
-                Ok(Some(Decl::Struct { id, name: name.name, fields: lowered_fields, methods: lowered_methods, span }))
+                Ok(Some(Decl::Struct { id, name: name.name, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
             }
-            ast::Decl::Class { name, fields, methods, span, .. } => {
+            ast::Decl::Class { name, fields, static_fields, const_fields, methods, span, .. } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 let mut lowered_fields = Vec::new();
-                for (field_name, field_ty) in fields {
-                    lowered_fields.push((field_name.name, field_ty));
+                for (field_name, field_ty, field_val) in fields {
+                    let lowered_val = match field_val {
+                        Some(v) => Some(self.lower_expr(v)?),
+                        None => None,
+                    };
+                    lowered_fields.push((field_name.name, field_ty, lowered_val));
                 }
+                
+                let mut lowered_static = Vec::new();
+                for (sf_name, sf_ty, sf_val) in static_fields {
+                    lowered_static.push((sf_name.name, sf_ty, self.lower_expr(sf_val)?));
+                }
+                let mut lowered_const = Vec::new();
+                for (cf_name, cf_ty, cf_val) in const_fields {
+                    lowered_const.push((cf_name.name, cf_ty, self.lower_expr(cf_val)?));
+                }
+                
                 let mut lowered_methods = Vec::new();
                 for method in methods {
-                    if let ast::Decl::Function { name: m_name, params, return_type, body, span: m_span } = method {
-                        let mut new_params = vec![(
-                            ast::Ident { name: "self".to_string(), span: m_name.span },
-                            ast::Type::Named(name.clone())
-                        )];
+                    if let ast::Decl::Function { name: m_name, params, return_type, body, span: m_span, is_static } = method {
+                        let mut new_params = Vec::new();
+                        if !is_static {
+                            new_params.push((
+                                ast::Ident { name: "self".to_string(), span: m_name.span },
+                                ast::Type::Named(name.clone())
+                            ));
+                        }
                         new_params.extend(params);
                         let m_decl = ast::Decl::Function {
                             name: ast::Ident { name: format!("{}_{}", name.name, m_name.name), span: m_name.span },
@@ -129,19 +176,20 @@ impl LoweringContext {
                             return_type,
                             body,
                             span: m_span,
+                            is_static,
                         };
                         if let Some(lowered) = self.lower_decl(m_decl)? {
                             lowered_methods.push(lowered);
                         }
                     }
                 }
-                Ok(Some(Decl::Class { id, name: name.name, fields: lowered_fields, methods: lowered_methods, span }))
+                Ok(Some(Decl::Class { id, name: name.name, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
             }
             ast::Decl::Expr(expr, span) => {
                 let lowered = self.lower_expr(expr)?;
                 Ok(Some(Decl::Expr(lowered, span)))
             }
-            ast::Decl::Function { name, params, return_type, body, span } => {
+            ast::Decl::Function { name, params, return_type, body, span, is_static } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 
@@ -162,6 +210,7 @@ impl LoweringContext {
                     params: lowered_params,
                     return_type,
                     body: lowered_body,
+                    is_static,
                     span,
                 }))
             }

@@ -35,7 +35,13 @@ pub fn compile_file(file_path: &Path, output_dir: &Path, output_name: &str, run:
 
     // 3. Typecheck
     let mut tc = TypeChecker::new();
-    let _ = tc.check_program(&hir);
+    if let Err(e) = tc.check_program(&hir) {
+        let mut reporter = pace_errors::Reporter::new();
+        reporter.report(pace_errors::Diagnostic::error(e));
+        reporter.emit_all(&source, file_path.to_str().unwrap());
+        tc.reporter.emit_all(&source, file_path.to_str().unwrap());
+        return Err("Compilation failed due to type errors.".to_string());
+    }
     
     tc.reporter.emit_all(&source, file_path.to_str().unwrap());
     if tc.reporter.has_errors() {

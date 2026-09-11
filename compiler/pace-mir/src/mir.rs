@@ -24,6 +24,7 @@ pub enum Statement {
     Assign(Lvalue, Rvalue),
     Retain(Lvalue),
     Release(Lvalue),
+    GlobalWrite(String, Local),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,6 +38,7 @@ pub enum Rvalue {
     Call(Local, Vec<Local>),
     BuiltinCall(String, Vec<Local>),
     GlobalCall(String, Vec<Local>),
+    GlobalRead(String),
     FieldAccess(Local, String),
     Instantiate(pace_ty::Ty, Vec<Local>),
 }
@@ -72,4 +74,5 @@ pub struct MirProgram {
     pub main_body: MirBody,
     pub struct_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty)>>,
     pub class_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty)>>,
+    pub global_vars: Vec<(String, pace_ty::Ty)>,
 }

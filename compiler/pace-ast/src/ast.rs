@@ -17,17 +17,18 @@ pub enum Decl {
     Let {
         name: Ident,
         ty: Option<Type>,
-        value: Expr,
+        value: Option<Expr>,
         span: Span,
     },
     Var {
         name: Ident,
         ty: Option<Type>,
-        value: Expr,
+        value: Option<Expr>,
         span: Span,
     },
     Const {
         name: Ident,
+        ty: Option<Type>,
         value: Expr,
         span: Span,
     },
@@ -36,17 +37,22 @@ pub enum Decl {
         params: Vec<(Ident, Type)>,
         return_type: Option<Type>,
         body: Block,
+        is_static: bool,
         span: Span,
     },
     Struct {
         name: Ident,
-        fields: Vec<(Ident, Type)>,
+        fields: Vec<(Ident, Type, Option<Expr>)>,
+        static_fields: Vec<(Ident, Type, Expr)>,
+        const_fields: Vec<(Ident, Type, Expr)>,
         methods: Vec<Decl>, // Expects Decl::Function
         span: Span,
     },
     Class {
         name: Ident,
-        fields: Vec<(Ident, Type)>,
+        fields: Vec<(Ident, Type, Option<Expr>)>,
+        static_fields: Vec<(Ident, Type, Expr)>,
+        const_fields: Vec<(Ident, Type, Expr)>,
         methods: Vec<Decl>, // Expects Decl::Function
         span: Span,
     },
@@ -79,13 +85,13 @@ pub enum Stmt {
     Let {
         name: Ident,
         ty: Option<Type>,
-        value: Expr,
+        value: Option<Expr>,
         span: Span,
     },
     Var {
         name: Ident,
         ty: Option<Type>,
-        value: Expr,
+        value: Option<Expr>,
         span: Span,
     },
     ExprStmt(Expr, Span),

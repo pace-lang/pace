@@ -6,14 +6,15 @@ use logos::Logos;
 pub enum TokenKind<'a> {
     // Declarations
     #[token("let")] Let,
-    #[token("var")] Var,
     #[token("const")] Const,
+    #[token("var")] Var,
     #[token("fn")] Fn,
     #[token("struct")] Struct,
     #[token("class")] Class,
     #[token("trait")] Trait,
     #[token("enum")] Enum,
     #[token("type")] Type,
+    #[token("static")] Static,
 
     // Control Flow
     #[token("if")] If,
