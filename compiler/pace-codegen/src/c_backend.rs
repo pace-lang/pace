@@ -34,6 +34,15 @@ impl CGenerator {
                 self.output.push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
             }
             self.output.push_str("};\n\n");
+
+            self.output.push_str(&format!("void pace_{}_deinit(void* ptr) {{\n", id.0));
+            self.output.push_str(&format!("    struct pace_{}* self = (struct pace_{}*)ptr;\n", id.0, id.0));
+            for (fname, fty) in fields {
+                if matches!(fty, Ty::Class(_)) {
+                    self.output.push_str(&format!("    pace_release(self->{});\n", fname));
+                }
+            }
+            self.output.push_str("}\n\n");
         }
 
         for func in &program.functions {
@@ -256,7 +265,7 @@ impl CGenerator {
                         self.output.push_str(" }");
                     }
                     Ty::Class(id) => {
-                        write!(&mut self.output, "memcpy(pace_alloc(sizeof(struct pace_{}), NULL), &(struct pace_{}){{ ", id.0, id.0).unwrap();
+                        write!(&mut self.output, "memcpy(pace_alloc(sizeof(struct pace_{}), pace_{}_deinit), &(struct pace_{}){{ ", id.0, id.0, id.0).unwrap();
                         if fields.is_empty() {
                             self.output.push_str("0");
                         } else {

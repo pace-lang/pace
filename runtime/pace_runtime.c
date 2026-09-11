@@ -14,34 +14,43 @@ void pace_println() {
     printf("\n");
 }
 
-struct pace_arc_header {
-    long long ref_count;
-    pace_destructor_t dtor;
-};
-
-void* pace_alloc(size_t size, pace_destructor_t dtor) {
-    struct pace_arc_header* hdr = (struct pace_arc_header*)malloc(sizeof(struct pace_arc_header) + size);
-    if (!hdr) return NULL;
-    hdr->ref_count = 1;
-    hdr->dtor = dtor;
-    return (void*)(hdr + 1);
+void* pace_alloc(size_t size, pace_destructor_t deinit) {
+    // Allocate space for the header + the object payload
+    pace_arc_header* header = (pace_arc_header*)malloc(sizeof(pace_arc_header) + size);
+    if (!header) {
+        fprintf(stderr, "Fatal error: out of memory\n");
+        exit(1);
+    }
+    
+    header->ref_count = 1; // Objects start with a reference count of 1
+    header->deinit = deinit;
+    
+    // Return a pointer to the payload, which sits immediately after the header
+    return (void*)((char*)header + sizeof(pace_arc_header));
 }
 
 void pace_retain(void* obj) {
     if (!obj) return;
-    struct pace_arc_header* hdr = ((struct pace_arc_header*)obj) - 1;
+    pace_arc_header* hdr = ((pace_arc_header*)obj) - 1;
     hdr->ref_count++;
 }
 
 void pace_release(void* obj) {
     if (!obj) return;
-    struct pace_arc_header* hdr = ((struct pace_arc_header*)obj) - 1;
-    hdr->ref_count--;
-    if (hdr->ref_count == 0) {
-        if (hdr->dtor) {
-            hdr->dtor(obj);
+    
+    // Get the header, which is immediately before the object payload
+    pace_arc_header* header = (pace_arc_header*)((char*)obj - sizeof(pace_arc_header));
+    
+    if (header->ref_count > 0) {
+        header->ref_count--;
+        
+        if (header->ref_count == 0) {
+            // Invoke the destructor if present
+            if (header->deinit) {
+                header->deinit(obj);
+            }
+            free(header);
         }
-        free(hdr);
     }
 }
 

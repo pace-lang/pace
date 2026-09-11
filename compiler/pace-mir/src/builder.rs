@@ -124,10 +124,22 @@ impl<'a> MirBuilder<'a> {
             }
             Expr::MemberAccess { object, member, .. } => {
                 let obj_local = self.build_expr(object);
-                // In MVP we assume fields are integers, ideally we should lookup struct_defs.
-                let temp = self.new_local(Ty::Int);
+                let mut field_ty = Ty::Int;
+                let obj_ty = self.locals[obj_local.0 as usize].clone();
+                if let Ty::Struct(id) | Ty::Class(id) = obj_ty {
+                    let defs = if matches!(obj_ty, Ty::Struct(_)) { self.struct_defs.get(&id) } else { self.class_defs.get(&id) };
+                    if let Some(fields) = defs {
+                        for (n, t) in fields {
+                            if n == member { field_ty = t.clone(); break; }
+                        }
+                    }
+                }
+                
+                let temp = self.new_local(field_ty.clone());
                 self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::FieldAccess(obj_local, member.clone())));
-                // If it was a class, we'd retain here.
+                if matches!(field_ty, Ty::Class(_)) {
+                    self.push_stmt(Statement::Retain(Lvalue::Local(temp))); // MVP: Retain classes when read from fields
+                }
                 temp
             }
             Expr::Call { callee, args, .. } => {
@@ -282,7 +294,19 @@ impl<'a> MirBuilder<'a> {
                 };
                 let lval_ty = match &lvalue {
                     Lvalue::Local(l) => self.locals[l.0 as usize].clone(),
-                    Lvalue::FieldAccess(obj, _) => Ty::Int, // MVP: assumes integer field
+                    Lvalue::FieldAccess(obj, member) => {
+                        let mut field_ty = Ty::Int;
+                        let obj_ty = self.locals[obj.0 as usize].clone();
+                        if let Ty::Struct(id) | Ty::Class(id) = obj_ty {
+                            let defs = if matches!(obj_ty, Ty::Struct(_)) { self.struct_defs.get(&id) } else { self.class_defs.get(&id) };
+                            if let Some(fields) = defs {
+                                for (n, t) in fields {
+                                    if n == member { field_ty = t.clone(); break; }
+                                }
+                            }
+                        }
+                        field_ty
+                    }
                 };
                 if matches!(lval_ty, Ty::Class(_)) {
                     self.push_stmt(Statement::Release(lvalue.clone()));
@@ -296,11 +320,23 @@ impl<'a> MirBuilder<'a> {
         }
     }
 
-    pub fn build_program(program: &pace_hir::Program, tc: &TypeChecker) -> MirProgram {
+    pub fn build_program(program: &pace_hir::Program, tc: &pace_ty::TypeChecker) -> MirProgram {
         let mut global_fns = HashMap::new();
         for decl in &program.declarations {
-            if let pace_hir::Decl::Function { name, id, .. } = decl {
+            if let pace_hir::Decl::Function { id, name, .. } = decl {
                 global_fns.insert(*id, name.clone());
+            } else if let pace_hir::Decl::Struct { methods, .. } = decl {
+                for method in methods {
+                    if let pace_hir::Decl::Function { id, name, .. } = method {
+                        global_fns.insert(*id, name.clone());
+                    }
+                }
+            } else if let pace_hir::Decl::Class { methods, .. } = decl {
+                for method in methods {
+                    if let pace_hir::Decl::Function { id, name, .. } = method {
+                        global_fns.insert(*id, name.clone());
+                    }
+                }
             }
         }
 

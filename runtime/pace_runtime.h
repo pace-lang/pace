@@ -14,9 +14,15 @@ void pace_print_int(long long val);
 void pace_print_str(const char* val);
 void pace_println();
 
+// ARC object header
+typedef struct {
+    int ref_count;
+    void (*deinit)(void*); // Destructor to recursively release children
+} pace_arc_header;
+
 typedef void (*pace_destructor_t)(void*);
 
-void* pace_alloc(size_t size, pace_destructor_t dtor);
+void* pace_alloc(size_t size, void (*deinit)(void*));
 void pace_retain(void* obj);
 void pace_release(void* obj);
 
