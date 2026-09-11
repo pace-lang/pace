@@ -1,4 +1,4 @@
-use pace_ast::{Block, Decl, Expr, Ident, Program, Stmt, Type, EnumVariant, MatchArm, Pattern};
+use pace_ast::{Block, Decl, Expr, Ident, Program, Stmt, Type, EnumVariant, MatchArm, Pattern, GenericParam};
 use pace_lexer::{Lexer, Token, TokenKind};
 use pace_errors::Diagnostic;
 use pace_span::Span;
@@ -183,14 +183,23 @@ impl<'a> Parser<'a> {
             Ok(Decl::Expr(expr, span))
         }
     }
-    fn parse_generic_params(&mut self) -> Result<Option<Vec<Ident>>, Diagnostic> {
+    fn parse_generic_params(&mut self) -> Result<Option<Vec<GenericParam>>, Diagnostic> {
         if self.check(&TokenKind::Lt) {
             self.advance();
             let mut params = Vec::new();
             while !self.check(&TokenKind::Gt) && self.current.is_some() {
                 if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
-                    params.push(Ident { name: name.to_string(), span: *span });
+                    let param_name = Ident { name: name.to_string(), span: *span };
                     self.advance();
+                    
+                    let mut default = None;
+                    if self.check(&TokenKind::Eq) {
+                        self.advance();
+                        default = Some(self.parse_type()?);
+                    }
+                    
+                    params.push(GenericParam { name: param_name, default });
+                    
                     if self.check(&TokenKind::Comma) {
                         self.advance();
                     }
@@ -318,6 +327,7 @@ impl<'a> Parser<'a> {
                     let body = self.parse_block()?;
                     methods.push(Decl::Function {
                         name: ident,
+                        generic_params: None,
                         params,
                         return_type: None,
                         body: body.clone(),
@@ -458,6 +468,7 @@ impl<'a> Parser<'a> {
                     let body = self.parse_block()?;
                     methods.push(Decl::Function {
                         name: ident,
+                        generic_params: None,
                         params,
                         return_type: None,
                         body: body.clone(),
@@ -582,6 +593,8 @@ impl<'a> Parser<'a> {
             _ => return Err(Diagnostic::error("Expected identifier after 'fn'").with_span(self.current_span())),
         };
 
+        let generic_params = self.parse_generic_params()?;
+
         self.expect(TokenKind::LParen)?;
         
         let mut params = Vec::new();
@@ -619,6 +632,7 @@ impl<'a> Parser<'a> {
 
         Ok(Decl::Function {
             name: name_tok,
+            generic_params,
             params,
             return_type,
             body,

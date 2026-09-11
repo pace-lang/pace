@@ -62,7 +62,7 @@ pub enum Decl {
     Struct {
         id: HirId,
         name: String,
-        generic_params: Option<Vec<String>>,
+        generic_params: Option<Vec<(String, Option<Type>)>>,
         fields: Vec<(String, Type, Option<Expr>)>,
         static_fields: Vec<(String, Type, Expr)>,
         const_fields: Vec<(String, Type, Expr)>,
@@ -72,7 +72,7 @@ pub enum Decl {
     Class {
         id: HirId,
         name: String,
-        generic_params: Option<Vec<String>>,
+        generic_params: Option<Vec<(String, Option<Type>)>>,
         fields: Vec<(String, Type, Option<Expr>)>,
         static_fields: Vec<(String, Type, Expr)>,
         const_fields: Vec<(String, Type, Expr)>,
@@ -82,13 +82,14 @@ pub enum Decl {
     Enum {
         id: HirId,
         name: String,
-        generic_params: Option<Vec<String>>,
+        generic_params: Option<Vec<(String, Option<Type>)>>,
         variants: Vec<EnumVariant>,
         span: Span,
     },
     Function {
         id: HirId,
         name: String,
+        generic_params: Option<Vec<(String, Option<Type>)>>,
         params: Vec<(HirId, String, Type)>,
         return_type: Option<Type>,
         body: Block,

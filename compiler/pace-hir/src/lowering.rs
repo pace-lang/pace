@@ -114,7 +114,7 @@ impl LoweringContext {
                 
                 let mut lowered_methods = Vec::new();
                 for method in methods {
-                    if let ast::Decl::Function { name: m_name, params, return_type, body, span: m_span, is_static } = method {
+                    if let ast::Decl::Function { name: m_name, generic_params: m_generic_params, params, return_type, body, span: m_span, is_static } = method {
                         let mut new_params = Vec::new();
                         if !is_static {
                             new_params.push((
@@ -125,6 +125,7 @@ impl LoweringContext {
                         new_params.extend(params);
                         let m_decl = ast::Decl::Function {
                             name: ast::Ident { name: format!("{}_{}", name.name, m_name.name), span: m_name.span },
+                            generic_params: m_generic_params,
                             params: new_params,
                             return_type,
                             body,
@@ -136,7 +137,7 @@ impl LoweringContext {
                         }
                     }
                 }
-                let hir_generic_params = generic_params.map(|params| params.into_iter().map(|id| id.name).collect());
+                let hir_generic_params = generic_params.map(|params| params.into_iter().map(|p| (p.name.name, p.default)).collect());
                 Ok(Some(Decl::Struct { id, name: name.name, generic_params: hir_generic_params, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
             }
             ast::Decl::Class { name, generic_params, fields, static_fields, const_fields, methods, span, .. } => {
@@ -162,7 +163,7 @@ impl LoweringContext {
                 
                 let mut lowered_methods = Vec::new();
                 for method in methods {
-                    if let ast::Decl::Function { name: m_name, params, return_type, body, span: m_span, is_static } = method {
+                    if let ast::Decl::Function { name: m_name, generic_params: m_generic_params, params, return_type, body, span: m_span, is_static } = method {
                         let mut new_params = Vec::new();
                         if !is_static {
                             new_params.push((
@@ -173,6 +174,7 @@ impl LoweringContext {
                         new_params.extend(params);
                         let m_decl = ast::Decl::Function {
                             name: ast::Ident { name: format!("{}_{}", name.name, m_name.name), span: m_name.span },
+                            generic_params: m_generic_params,
                             params: new_params,
                             return_type,
                             body,
@@ -184,7 +186,7 @@ impl LoweringContext {
                         }
                     }
                 }
-                let hir_generic_params = generic_params.map(|params| params.into_iter().map(|id| id.name).collect());
+                let hir_generic_params = generic_params.map(|params| params.into_iter().map(|p| (p.name.name, p.default)).collect());
                 Ok(Some(Decl::Class { id, name: name.name, generic_params: hir_generic_params, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
             }
             ast::Decl::Expr(expr, span) => {
@@ -214,10 +216,10 @@ impl LoweringContext {
                         span: v.span,
                     });
                 }
-                let hir_generic_params = generic_params.map(|params| params.into_iter().map(|id| id.name).collect());
+                let hir_generic_params = generic_params.map(|params| params.into_iter().map(|p| (p.name.name, p.default)).collect());
                 Ok(Some(Decl::Enum { id, name: name.name, generic_params: hir_generic_params, variants: lowered_variants, span }))
             }
-            ast::Decl::Function { name, params, return_type, body, span, is_static } => {
+            ast::Decl::Function { name, generic_params, params, return_type, body, span, is_static } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 
@@ -232,9 +234,11 @@ impl LoweringContext {
                 let lowered_body = self.lower_block(body)?;
                 self.scope = outer_scope;
                 
+                let hir_generic_params = generic_params.map(|params| params.into_iter().map(|p| (p.name.name, p.default)).collect());
                 Ok(Some(Decl::Function {
                     id,
                     name: name.name,
+                    generic_params: hir_generic_params,
                     params: lowered_params,
                     return_type,
                     body: lowered_body,

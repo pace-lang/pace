@@ -13,6 +13,12 @@ pub struct Ident {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct GenericParam {
+    pub name: Ident,
+    pub default: Option<Type>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
     Let {
         name: Ident,
@@ -34,6 +40,7 @@ pub enum Decl {
     },
     Function {
         name: Ident,
+        generic_params: Option<Vec<GenericParam>>,
         params: Vec<(Ident, Type)>,
         return_type: Option<Type>,
         body: Block,
@@ -42,7 +49,7 @@ pub enum Decl {
     },
     Struct {
         name: Ident,
-        generic_params: Option<Vec<Ident>>,
+        generic_params: Option<Vec<GenericParam>>,
         fields: Vec<(Ident, Type, Option<Expr>)>,
         static_fields: Vec<(Ident, Type, Expr)>,
         const_fields: Vec<(Ident, Type, Expr)>,
@@ -51,7 +58,7 @@ pub enum Decl {
     },
     Class {
         name: Ident,
-        generic_params: Option<Vec<Ident>>,
+        generic_params: Option<Vec<GenericParam>>,
         fields: Vec<(Ident, Type, Option<Expr>)>,
         static_fields: Vec<(Ident, Type, Expr)>,
         const_fields: Vec<(Ident, Type, Expr)>,
@@ -60,7 +67,7 @@ pub enum Decl {
     },
     Enum {
         name: Ident,
-        generic_params: Option<Vec<Ident>>,
+        generic_params: Option<Vec<GenericParam>>,
         variants: Vec<EnumVariant>,
         span: Span,
     },
