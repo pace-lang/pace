@@ -51,34 +51,13 @@ impl CGenerator {
         }
 
         self.output.push_str("int main() {\n");
-        
-        let mut locals = Vec::new();
-        for i in 0..program.main_body.locals.len() {
-            let ty = &program.main_body.locals[i];
-            locals.push(format!("    {} _{} = {};", self.emit_c_type(ty), i, self.emit_c_default_val(ty)));
+        // Always call the user's main function if it exists.
+        // We know it exists if the program has a function named "main".
+        let has_main = program.functions.iter().any(|f| f.name == "main");
+        if has_main {
+            self.output.push_str("    pace_main();\n");
         }
-        self.output.push_str(&locals.join("\n"));
-        self.output.push_str("\n\n");
-
-        for (i, block) in program.main_body.blocks.iter().enumerate() {
-            write!(&mut self.output, "bb_{}:\n", i).unwrap();
-            self.generate_block(block, &program.main_body.locals);
-            match &block.terminator {
-                Some(Terminator::Return(_local)) => {
-                    self.output.push_str("    return 0;\n");
-                }
-                Some(Terminator::Goto(bb)) => {
-                    write!(&mut self.output, "    goto bb_{};\n", bb.0).unwrap();
-                }
-                Some(Terminator::Branch { cond, then_block, else_block }) => {
-                    write!(&mut self.output, "    if (_{}) goto bb_{}; else goto bb_{};\n", cond.0, then_block.0, else_block.0).unwrap();
-                }
-                None => {
-                    self.output.push_str("    return 0;\n");
-                }
-            }
-        }
-
+        self.output.push_str("    return 0;\n");
         self.output.push_str("}\n");
         self.output.clone()
     }
@@ -104,7 +83,8 @@ impl CGenerator {
 
     fn generate_function(&mut self, func: &MirFunction) {
         let ret_ty_str = self.emit_c_type(&func.return_type);
-        self.output.push_str(&format!("{} {}(", ret_ty_str, func.name));
+        let c_name = if func.name == "main" { "pace_main" } else { &func.name };
+        self.output.push_str(&format!("{} {}(", ret_ty_str, c_name));
         for (i, param) in func.params.iter().enumerate() {
             if i > 0 { self.output.push_str(", "); }
             let ty = &func.body.locals[param.0 as usize];

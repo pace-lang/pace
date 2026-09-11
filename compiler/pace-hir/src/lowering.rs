@@ -43,6 +43,12 @@ impl LoweringContext {
                     self.scope.insert(name.name.clone(), id);
                     statements.push(Stmt::Let { id, name: name.name, value: lowered_val, span });
                 }
+                ast::Stmt::Var { name, value, span } => {
+                    let id = self.generate_id();
+                    let lowered_val = self.lower_expr(value)?;
+                    self.scope.insert(name.name.clone(), id);
+                    statements.push(Stmt::Var { id, name: name.name, value: lowered_val, span });
+                }
                 ast::Stmt::ExprStmt(expr, span) => {
                     statements.push(Stmt::ExprStmt(self.lower_expr(expr)?, span));
                 }
@@ -66,6 +72,12 @@ impl LoweringContext {
                 let lowered_val = self.lower_expr(value)?;
                 self.scope.insert(name.name.clone(), id);
                 Ok(Some(Decl::Let { id, name: name.name, value: lowered_val, span }))
+            }
+            ast::Decl::Var { name, value, span } => {
+                let id = self.generate_id();
+                let lowered_val = self.lower_expr(value)?;
+                self.scope.insert(name.name.clone(), id);
+                Ok(Some(Decl::Var { id, name: name.name, value: lowered_val, span }))
             }
             ast::Decl::Struct { name, fields, methods, span, .. } => {
                 let id = self.generate_id();

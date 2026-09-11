@@ -19,6 +19,12 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
+    Var {
+        id: HirId,
+        name: String,
+        value: Expr,
+        span: Span,
+    },
     ExprStmt(Expr, Span),
     Return(Option<Expr>, Span),
 }
@@ -31,6 +37,12 @@ pub struct Program {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
     Let {
+        id: HirId,
+        name: String,
+        value: Expr,
+        span: Span,
+    },
+    Var {
         id: HirId,
         name: String,
         value: Expr,

@@ -41,6 +41,7 @@ impl<'a> Parser<'a> {
 
         let end_span = declarations.last().map(|d| match d {
             Decl::Let { span, .. } => *span,
+            Decl::Var { span, .. } => *span,
             Decl::Const { span, .. } => *span,
             Decl::Function { span, .. } => *span,
             Decl::Struct { span, .. } => *span,
@@ -72,6 +73,27 @@ impl<'a> Parser<'a> {
             let end_span = value.span();
 
             Ok(Decl::Let {
+                name: name_tok,
+                value,
+                span: start_tok.span.merge(end_span),
+            })
+        } else if self.check(&TokenKind::Var) {
+            let start_tok = self.expect(TokenKind::Var)?;
+            
+            let name_tok = match &self.current {
+                Some(Token { kind: TokenKind::Ident(name), span }) => {
+                    let ident = Ident { name: name.to_string(), span: *span };
+                    self.advance();
+                    ident
+                }
+                _ => return Err("Expected identifier after 'var'".to_string()),
+            };
+
+            self.expect(TokenKind::Eq)?;
+            let value = self.parse_expr()?;
+            let end_span = value.span();
+
+            Ok(Decl::Var {
                 name: name_tok,
                 value,
                 span: start_tok.span.merge(end_span),
@@ -349,6 +371,18 @@ impl<'a> Parser<'a> {
             let value = self.parse_expr()?;
             let span = start_tok.span.merge(value.span());
             Ok(Stmt::Let { name, value, span })
+        } else if self.check(&TokenKind::Var) {
+            let start_tok = self.expect(TokenKind::Var)?;
+            let name_tok = self.current.take().ok_or("Expected identifier after 'var'".to_string())?;
+            let name = match name_tok.kind {
+                TokenKind::Ident(n) => Ident { name: n.to_string(), span: name_tok.span },
+                _ => return Err("Expected identifier after 'var'".to_string()),
+            };
+            self.advance();
+            self.expect(TokenKind::Eq)?;
+            let value = self.parse_expr()?;
+            let span = start_tok.span.merge(value.span());
+            Ok(Stmt::Var { name, value, span })
         } else if self.check(&TokenKind::Return) {
             let start_tok = self.expect(TokenKind::Return)?;
             

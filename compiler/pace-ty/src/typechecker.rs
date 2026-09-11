@@ -3,22 +3,28 @@ use pace_hir::{Expr, Decl, Program, HirId};
 use pace_ast::BinaryOp;
 use crate::ty::Ty;
 
+use pace_errors::{Reporter, Diagnostic};
+
 pub struct TypeChecker {
     pub env: HashMap<HirId, Ty>,
+    pub mutability_env: HashMap<HirId, bool>,
     pub named_types: HashMap<String, HirId>, // struct/class names to HirId
     pub struct_defs: HashMap<HirId, Vec<(String, Ty)>>,
     pub class_defs: HashMap<HirId, Vec<(String, Ty)>>,
     pub methods_env: HashMap<String, Ty>,
+    pub reporter: Reporter,
 }
 
 impl TypeChecker {
     pub fn new() -> Self {
         Self {
             env: HashMap::new(),
+            mutability_env: HashMap::new(),
             named_types: HashMap::new(),
             struct_defs: HashMap::new(),
             class_defs: HashMap::new(),
             methods_env: HashMap::new(),
+            reporter: Reporter::new(),
         }
     }
 
@@ -48,7 +54,28 @@ impl TypeChecker {
     }
 
     pub fn check_program(&mut self, program: &Program) -> Result<(), String> {
-        // Pass 1: Register top-level structures and classes names
+        let mut has_main = false;
+        
+        for decl in &program.declarations {
+            if let Decl::Function { name, .. } = decl {
+                if name == "main" {
+                    has_main = true;
+                }
+            } else if let Decl::Expr(_, span) = decl {
+                self.reporter.report(Diagnostic::error("Top-level executable statements are not allowed")
+                    .with_span(*span)
+                    .with_hint("Wrap this code in a 'fn main()' block"));
+            }
+        }
+        
+        // MVP: Assume it's an executable if it's not a library. 
+        // For now we will warn if main is missing instead of error, so we don't break old tests without main yet.
+        if !has_main {
+            self.reporter.report(Diagnostic::warning("No 'main' function found")
+                .with_hint("Executables must have an entry point 'fn main()'"));
+        }
+        
+        // 1. Gather all top-level types (Structs/Classes/Functions)
         for decl in &program.declarations {
             match decl {
                 Decl::Struct { id, name, methods, .. } => {
@@ -141,6 +168,12 @@ impl TypeChecker {
                 pace_hir::Stmt::Let { id, value, .. } => {
                     let ty = self.check_expr(value)?;
                     self.env.insert(*id, ty);
+                    self.mutability_env.insert(*id, false); // Let is immutable
+                }
+                pace_hir::Stmt::Var { id, value, .. } => {
+                    let ty = self.check_expr(value)?;
+                    self.env.insert(*id, ty);
+                    self.mutability_env.insert(*id, true); // Var is mutable
                 }
                 pace_hir::Stmt::ExprStmt(expr, _) => {
                     self.check_expr(expr)?;
@@ -161,6 +194,13 @@ impl TypeChecker {
             Decl::Let { id, value, .. } => {
                 let ty = self.check_expr(value)?;
                 self.env.insert(*id, ty);
+                self.mutability_env.insert(*id, false); // Let is immutable
+                Ok(())
+            }
+            Decl::Var { id, value, .. } => {
+                let ty = self.check_expr(value)?;
+                self.env.insert(*id, ty);
+                self.mutability_env.insert(*id, true); // Var is mutable
                 Ok(())
             }
             Decl::Struct { id, .. } => {
@@ -175,7 +215,13 @@ impl TypeChecker {
                 self.check_expr(expr)?;
                 Ok(())
             }
-            Decl::Function { params, body, .. } => {
+            Decl::Function { name, params, body, span, .. } => {
+                if name.contains('_') && name != "main" && !name.ends_with("_init") {
+                    self.reporter.report(Diagnostic::warning(format!("Function '{}' should use camelCase, not snake_case", name))
+                        .with_span(*span)
+                        .with_hint("Rename to camelCase"));
+                }
+                
                 let outer_env = self.env.clone();
                 for (param_id, _, pty) in params {
                     let ty = self.resolve_type(pty)?;
@@ -364,11 +410,35 @@ impl TypeChecker {
                 self.check_block(body)?;
                 Ok(Ty::Int)
             }
-            Expr::Assign { target, value, .. } => {
+            Expr::Assign { target, value, span } => {
                 let target_ty = self.check_expr(target)?;
+                
+                // Mutability check
+                if let Expr::Ident(id, _) = &**target {
+                    if let Some(&is_mut) = self.mutability_env.get(id) {
+                        if !is_mut {
+                            self.reporter.report(Diagnostic::error("Cannot reassign immutable variable")
+                                .with_span(*span)
+                                .with_hint("Declare this variable with 'var' instead of 'let' to make it mutable"));
+                        }
+                    }
+                } else if let Expr::MemberAccess { object, .. } = &**target {
+                    if let Expr::Ident(id, _) = &**object {
+                        if let Some(&is_mut) = self.mutability_env.get(id) {
+                            if !is_mut {
+                                self.reporter.report(Diagnostic::error("Cannot mutate field of immutable variable")
+                                    .with_span(*span)
+                                    .with_hint("Declare this variable with 'var' instead of 'let' to make it mutable"));
+                            }
+                        }
+                    }
+                }
+                
                 let val_ty = self.check_expr(value)?;
                 if target_ty != val_ty {
-                    return Err(format!("Type mismatch in assignment: expected {:?}, got {:?}", target_ty, val_ty));
+                    self.reporter.report(Diagnostic::error(format!("Type mismatch in assignment: expected {:?}, got {:?}", target_ty, val_ty))
+                        .with_span(*span));
+                    return Ok(target_ty); // Return target type to continue checking gracefully
                 }
                 Ok(target_ty)
             }

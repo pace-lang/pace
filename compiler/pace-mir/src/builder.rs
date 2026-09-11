@@ -58,7 +58,7 @@ impl<'a> MirBuilder<'a> {
     pub fn build_block(&mut self, block: &pace_hir::Block) {
         for stmt in &block.statements {
             match stmt {
-                pace_hir::Stmt::Let { id, value, .. } => {
+                pace_hir::Stmt::Let { id, value, .. } | pace_hir::Stmt::Var { id, value, .. } => {
                     let rval_local = self.build_expr(value);
                     let var_ty = self.locals[rval_local.0 as usize].clone();
                     let var_local = self.new_local(var_ty.clone());
@@ -346,7 +346,7 @@ impl<'a> MirBuilder<'a> {
 
         for decl in &program.declarations {
             match decl {
-                pace_hir::Decl::Let { id, value, .. } => {
+                pace_hir::Decl::Let { id, value, .. } | pace_hir::Decl::Var { id, value, .. } => {
                     let rval_local = main_builder.build_expr(value);
                     let var_ty = main_builder.locals[rval_local.0 as usize].clone();
                     let var_local = main_builder.new_local(var_ty.clone());

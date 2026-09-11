@@ -19,6 +19,11 @@ pub enum Decl {
         value: Expr,
         span: Span,
     },
+    Var {
+        name: Ident,
+        value: Expr,
+        span: Span,
+    },
     Const {
         name: Ident,
         value: Expr,
@@ -70,6 +75,11 @@ pub struct Block {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Let {
+        name: Ident,
+        value: Expr,
+        span: Span,
+    },
+    Var {
         name: Ident,
         value: Expr,
         span: Span,
@@ -153,6 +163,7 @@ impl Decl {
     pub fn span(&self) -> Span {
         match self {
             Decl::Let { span, .. } => *span,
+            Decl::Var { span, .. } => *span,
             Decl::Const { span, .. } => *span,
             Decl::Function { span, .. } => *span,
             Decl::Struct { span, .. } => *span,

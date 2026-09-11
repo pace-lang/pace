@@ -334,6 +334,9 @@ dependencies = [
 [[package]]
 name = "pace-errors"
 version = "0.1.0"
+dependencies = [
+ "pace-span",
+]
 
 [[package]]
 name = "pace-hir"
@@ -391,6 +394,7 @@ name = "pace-ty"
 version = "0.1.0"
 dependencies = [
  "pace-ast",
+ "pace-errors",
  "pace-hir",
  "pace-lexer",
  "pace-parser",

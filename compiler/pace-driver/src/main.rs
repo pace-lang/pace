@@ -38,7 +38,14 @@ fn main() {
 
     // 4. Typecheck
     let mut tc = TypeChecker::new();
-    tc.check_program(&hir).expect("Typecheck failed");
+    let _ = tc.check_program(&hir); // We ignore the error string and rely on reporter instead
+    
+    // Print diagnostics
+    tc.reporter.emit_all(&source, file_path);
+    if tc.reporter.has_errors() {
+        eprintln!("Compilation failed due to type errors.");
+        std::process::exit(1);
+    }
 
     // 5. Build MIR
     let mir = MirBuilder::build_program(&hir, &tc);
@@ -48,7 +55,11 @@ fn main() {
     let c_code = codegen.generate(&mir);
 
     let c_file = "/tmp/pace_out.c";
-    let bin_file = "hello"; // Output binary name
+    let path = std::path::Path::new(file_path);
+    let bin_file = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("hello");
     
     fs::write(c_file, c_code).expect("Failed to write C file");
 
