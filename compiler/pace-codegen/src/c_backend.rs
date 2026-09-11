@@ -5,12 +5,14 @@ use pace_ty::Ty;
 
 pub struct CGenerator {
     output: String,
+    enum_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, Option<Vec<(String, pace_ty::Ty)>>)>>,
 }
 
 impl CGenerator {
     pub fn new() -> Self {
         Self {
             output: String::new(),
+            enum_defs: std::collections::HashMap::new(),
         }
     }
 
@@ -20,11 +22,30 @@ impl CGenerator {
         self.output.push_str("#include <string.h>\n");
         self.output.push_str("#include \"pace_runtime.h\"\n\n");
 
+        self.enum_defs = program.enum_defs.clone();
+
         for (id, fields) in &program.struct_defs {
             self.output.push_str(&format!("struct pace_{} {{\n", id.0));
             for (fname, fty) in fields {
                 self.output.push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
             }
+            self.output.push_str("};\n\n");
+        }
+        
+        for (id, variants) in &program.enum_defs {
+            self.output.push_str(&format!("struct pace_{} {{\n", id.0));
+            self.output.push_str("    long long tag;\n");
+            self.output.push_str("    union {\n");
+            for (v_name, v_fields) in variants {
+                if let Some(fields) = v_fields {
+                    self.output.push_str(&format!("        struct {{\n"));
+                    for (fname, fty) in fields {
+                        self.output.push_str(&format!("            {} {};\n", self.emit_c_type(fty), fname));
+                    }
+                    self.output.push_str(&format!("        }} {};\n", v_name));
+                }
+            }
+            self.output.push_str("    } payload;\n");
             self.output.push_str("};\n\n");
         }
         
@@ -90,6 +111,7 @@ impl CGenerator {
             Ty::String => "char*".to_string(),
             Ty::Struct(id) => format!("struct pace_{}", id.0),
             Ty::Class(id) => format!("struct pace_{}*", id.0),
+            Ty::Enum(id) => format!("struct pace_{}", id.0),
             Ty::Function(_, _) => "void*".to_string(),
             Ty::Optional(inner) => self.emit_c_type(inner),
             Ty::Void => "void".to_string(),
@@ -100,7 +122,7 @@ impl CGenerator {
         match ty {
             Ty::Int | Ty::Bool | Ty::Float => "0".to_string(),
             Ty::String | Ty::Class(_) | Ty::Function(_, _) => "NULL".to_string(),
-            Ty::Struct(_) => "{0}".to_string(),
+            Ty::Struct(_) | Ty::Enum(_) => "{0}".to_string(),
             Ty::Optional(inner) => self.emit_c_default_val(inner),
             Ty::Void => "".to_string(),
         }
@@ -199,6 +221,9 @@ impl CGenerator {
                 } else {
                     write!(&mut self.output, "_{}.{}", obj.0, field).unwrap();
                 }
+            }
+            Lvalue::EnumFieldAccess(obj, variant_name, field) => {
+                write!(&mut self.output, "_{}.payload.{}.{}", obj.0, variant_name, field).unwrap();
             }
         }
     }
@@ -308,6 +333,41 @@ impl CGenerator {
                         write!(&mut self.output, " }}, sizeof(struct pace_{}))", id.0).unwrap();
                     }
                     _ => panic!("Instantiating non-struct/class"),
+                }
+            }
+            Rvalue::EnumTag(local) => write!(&mut self.output, "_{}.tag", local.0).unwrap(),
+            Rvalue::EnumFieldAccess(obj, variant_name, field_name) => write!(&mut self.output, "_{}.payload.{}.{}", obj.0, variant_name, field_name).unwrap(),
+            Rvalue::InstantiateEnum(id, variant_name, fields) => {
+                let mut tag = 0;
+                let variants = self.enum_defs.get(id).unwrap();
+                for (i, (v_name, _)) in variants.iter().enumerate() {
+                    if v_name == variant_name {
+                        tag = i;
+                        break;
+                    }
+                }
+                
+                let mut has_fields = false;
+                for (v_name, v_fields) in variants {
+                    if v_name == variant_name && v_fields.is_some() {
+                        has_fields = true;
+                        break;
+                    }
+                }
+                
+                if has_fields {
+                    write!(&mut self.output, "(struct pace_{}){{ .tag = {}, .payload = {{ .{} = {{ ", id.0, tag, variant_name).unwrap();
+                    if fields.is_empty() {
+                        self.output.push_str("0");
+                    } else {
+                        for (i, arg) in fields.iter().enumerate() {
+                            if i > 0 { self.output.push_str(", "); }
+                            write!(&mut self.output, "_{}", arg.0).unwrap();
+                        }
+                    }
+                    self.output.push_str(" } } }");
+                } else {
+                    write!(&mut self.output, "(struct pace_{}){{ .tag = {} }}", id.0, tag).unwrap();
                 }
             }
         }

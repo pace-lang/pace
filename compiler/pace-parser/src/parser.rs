@@ -1,4 +1,4 @@
-use pace_ast::{Block, Decl, Expr, Ident, Program, Stmt, Type};
+use pace_ast::{Block, Decl, Expr, Ident, Program, Stmt, Type, EnumVariant, MatchArm, Pattern};
 use pace_lexer::{Lexer, Token, TokenKind};
 use pace_errors::Diagnostic;
 use pace_span::Span;
@@ -51,6 +51,7 @@ impl<'a> Parser<'a> {
             Decl::Function { span, .. } => *span,
             Decl::Struct { span, .. } => *span,
             Decl::Class { span, .. } => *span,
+            Decl::Enum { span, .. } => *span,
             Decl::Expr(_, span) => *span,
         }).unwrap_or(start_span);
 
@@ -174,6 +175,8 @@ impl<'a> Parser<'a> {
             self.parse_struct_decl()
         } else if self.check(&TokenKind::Class) {
             self.parse_class_decl()
+        } else if self.check(&TokenKind::Enum) {
+            self.parse_enum_decl()
         } else {
             let expr = self.parse_expr()?;
             let span = expr.span();
@@ -451,6 +454,71 @@ impl<'a> Parser<'a> {
             static_fields,
             const_fields,
             methods,
+            span: start_tok.span.merge(end_tok.span),
+        })
+    }
+
+    fn parse_enum_decl(&mut self) -> Result<Decl, Diagnostic> {
+        let start_tok = self.expect(TokenKind::Enum)?;
+        
+        let name_tok = match &self.current {
+            Some(Token { kind: TokenKind::Ident(name), span }) => {
+                let ident = Ident { name: name.to_string(), span: *span };
+                self.advance();
+                ident
+            }
+            _ => return Err(Diagnostic::error("Expected identifier after 'enum'").with_span(self.current_span())),
+        };
+
+        self.expect(TokenKind::LBrace)?;
+        let mut variants = Vec::new();
+
+        while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            let variant_name = match &self.current {
+                Some(Token { kind: TokenKind::Ident(name), span }) => {
+                    let ident = Ident { name: name.to_string(), span: *span };
+                    self.advance();
+                    ident
+                }
+                _ => return Err(Diagnostic::error("Expected variant name").with_span(self.current_span())),
+            };
+
+            let mut fields = None;
+            let mut v_end_span = variant_name.span;
+            
+            if self.check(&TokenKind::LParen) {
+                self.advance();
+                let mut vfields = Vec::new();
+                while !self.check(&TokenKind::RParen) && self.current.is_some() {
+                    let field_name = match &self.current {
+                        Some(Token { kind: TokenKind::Ident(n), span }) => Ident { name: n.to_string(), span: *span },
+                        _ => return Err(Diagnostic::error("Expected field name").with_span(self.current_span())),
+                    };
+                    self.advance();
+                    self.expect(TokenKind::Colon)?;
+                    let field_ty = self.parse_type()?;
+                    vfields.push((field_name, field_ty));
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    }
+                }
+                let rparen = self.expect(TokenKind::RParen)?;
+                v_end_span = rparen.span;
+                fields = Some(vfields);
+            }
+            
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            }
+
+            variants.push(EnumVariant { name: variant_name.clone(), fields, span: variant_name.span.merge(v_end_span) });
+        }
+        
+        let end_tok = self.expect(TokenKind::RBrace)?;
+
+        Ok(Decl::Enum {
+            name: name_tok,
+            variants,
             span: start_tok.span.merge(end_tok.span),
         })
     }
@@ -759,6 +827,9 @@ impl<'a> Parser<'a> {
                 body,
             });
         }
+        if self.check(&TokenKind::Match) {
+            return self.parse_match_expr();
+        }
 
         let tok = self.current.take().ok_or_else(|| Diagnostic::error("Expected expression, found EOF").with_span(self.current_span()))?;
         self.advance();
@@ -773,5 +844,73 @@ impl<'a> Parser<'a> {
             }
             _ => Err(Diagnostic::error(format!("Unexpected token in expression: {:?}", tok.kind)).with_span(self.current_span())),
         }
+    }
+
+    fn parse_match_expr(&mut self) -> Result<Expr, Diagnostic> {
+        let start_tok = self.expect(TokenKind::Match)?;
+        let subject = self.parse_expr()?;
+        self.expect(TokenKind::LBrace)?;
+
+        let mut arms = Vec::new();
+        while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            let pattern = if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
+                if *name == "_" {
+                    let s = *span;
+                    self.advance();
+                    Pattern::CatchAll(s)
+                } else {
+                    let ident = Ident { name: name.to_string(), span: *span };
+                    self.advance();
+                    
+                    if self.check(&TokenKind::LParen) {
+                        self.advance();
+                        let mut fields = Vec::new();
+                        while !self.check(&TokenKind::RParen) && self.current.is_some() {
+                            if let Some(Token { kind: TokenKind::Ident(n), span: fspan }) = &self.current {
+                                fields.push(Ident { name: n.to_string(), span: *fspan });
+                                self.advance();
+                                if self.check(&TokenKind::Comma) {
+                                    self.advance();
+                                }
+                            } else {
+                                return Err(Diagnostic::error("Expected identifier in match pattern").with_span(self.current_span()));
+                            }
+                        }
+                        self.expect(TokenKind::RParen)?;
+                        Pattern::Variant { name: ident.clone(), fields: Some(fields), span: ident.span }
+                    } else {
+                        Pattern::Ident(ident)
+                    }
+                }
+            } else {
+                return Err(Diagnostic::error("Expected pattern").with_span(self.current_span()));
+            };
+
+            self.expect(TokenKind::FatArrow)?;
+            let body = self.parse_expr()?;
+            
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            }
+            
+            let p_span = match &pattern {
+                Pattern::Ident(id) => id.span,
+                Pattern::Variant { span, .. } => *span,
+                Pattern::CatchAll(s) => *s,
+            };
+            
+            arms.push(MatchArm {
+                pattern,
+                span: p_span.merge(body.span()),
+                body,
+            });
+        }
+        
+        let end_tok = self.expect(TokenKind::RBrace)?;
+        Ok(Expr::Match {
+            subject: Box::new(subject),
+            arms,
+            span: start_tok.span.merge(end_tok.span),
+        })
     }
 }

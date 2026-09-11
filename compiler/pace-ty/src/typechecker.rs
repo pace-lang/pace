@@ -11,9 +11,10 @@ pub struct TypeChecker {
     pub methods_env: HashMap<String, Ty>,
     pub struct_defs: HashMap<HirId, Vec<(String, Ty)>>,
     pub class_defs: HashMap<HirId, Vec<(String, Ty)>>,
+    pub enum_defs: HashMap<HirId, Vec<pace_hir::EnumVariant>>,
     pub static_fields_env: HashMap<String, Ty>, // format: "{class_name}_{field_name}"
     pub const_env: HashMap<String, Ty>,
-    pub named_types: HashMap<String, (HirId, bool)>, // maps name like "User" to (HirId, is_class)
+    pub named_types: HashMap<String, (HirId, u8)>, // maps name like "User" to (HirId, 0=struct, 1=class, 2=enum)
     pub declared_bindings: Vec<(HirId, String, pace_span::Span)>,
     pub used_bindings: std::collections::HashSet<HirId>,
     pub initialized_bindings: std::collections::HashSet<HirId>,
@@ -29,6 +30,7 @@ impl TypeChecker {
             methods_env: HashMap::new(),
             struct_defs: HashMap::new(),
             class_defs: HashMap::new(),
+            enum_defs: HashMap::new(),
             static_fields_env: HashMap::new(),
             const_env: HashMap::new(),
             named_types: HashMap::new(),
@@ -50,11 +52,13 @@ impl TypeChecker {
                     "Bool" | "bool" => Ok(Ty::Bool),
                     "Void" | "void" => Ok(Ty::Void),
                     other => {
-                        if let Some(&(hir_id, is_class)) = self.named_types.get(other) {
-                            if is_class {
+                        if let Some(&(hir_id, kind)) = self.named_types.get(other) {
+                            if kind == 1 {
                                 return Ok(Ty::Class(hir_id));
-                            } else {
+                            } else if kind == 0 {
                                 return Ok(Ty::Struct(hir_id));
+                            } else {
+                                return Ok(Ty::Enum(hir_id));
                             }
                         }
                         Err(format!("Unknown type: {}", other))
@@ -94,7 +98,7 @@ impl TypeChecker {
         for decl in &program.declarations {
             match decl {
                 Decl::Struct { id, name, static_fields, const_fields, methods, .. } => {
-                    self.named_types.insert(name.clone(), (*id, false));
+                    self.named_types.insert(name.clone(), (*id, 0));
                     for (sf_name, sf_ty, _) in static_fields {
                          let resolved_ty = self.resolve_type(sf_ty).unwrap_or(Ty::Int);
                          self.static_fields_env.insert(format!("{}_{}", name, sf_name), resolved_ty);
@@ -120,7 +124,7 @@ impl TypeChecker {
                     }
                 }
                 Decl::Class { id, name, static_fields, const_fields, methods, .. } => {
-                    self.named_types.insert(name.clone(), (*id, true));
+                    self.named_types.insert(name.clone(), (*id, 1));
                     for (sf_name, sf_ty, _) in static_fields {
                          let resolved_ty = self.resolve_type(sf_ty).unwrap_or(Ty::Int);
                          self.static_fields_env.insert(format!("{}_{}", name, sf_name), resolved_ty);
@@ -145,6 +149,20 @@ impl TypeChecker {
                         }
                     }
                 }
+                Decl::Enum { id, name, variants, .. } => {
+                    self.named_types.insert(name.clone(), (*id, 2));
+                    for v in variants {
+                        if let Some(fields) = &v.fields {
+                            let mut param_tys = Vec::new();
+                            for (_, fty) in fields {
+                                param_tys.push(self.resolve_type(fty).unwrap_or(Ty::Int));
+                            }
+                            self.env.insert(v.id, Ty::Function(param_tys, Box::new(Ty::Enum(*id))));
+                        } else {
+                            self.env.insert(v.id, Ty::Enum(*id));
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -165,6 +183,9 @@ impl TypeChecker {
                         resolved_fields.push((fname.clone(), self.resolve_type(fty)?));
                     }
                     self.class_defs.insert(*id, resolved_fields);
+                }
+                Decl::Enum { id, variants, .. } => {
+                    self.enum_defs.insert(*id, variants.clone());
                 }
                 _ => {}
             }
@@ -421,6 +442,10 @@ impl TypeChecker {
                 }
                 Ok(())
             }
+            Decl::Enum { id, .. } => {
+                self.env.insert(*id, Ty::Enum(*id));
+                Ok(())
+            }
             Decl::Expr(expr, _) => {
                 self.check_expr(expr)?;
                 Ok(())
@@ -437,6 +462,7 @@ impl TypeChecker {
                     }
                 }
                 self.declared_bindings.push((*id, name.clone(), *span));
+                self.initialized_bindings.insert(*id);
                 
                 // Definite assignment check for initializers
                 if name.ends_with("_init") {
@@ -457,11 +483,13 @@ impl TypeChecker {
                         }
                     }
                     
-                    if let Some(&(hir_id, is_class)) = self.named_types.get(type_name) {
-                        let fields = if is_class {
+                    if let Some(&(hir_id, kind)) = self.named_types.get(type_name) {
+                        let fields = if kind == 1 {
                             self.class_defs.get(&hir_id)
-                        } else {
+                        } else if kind == 0 {
                             self.struct_defs.get(&hir_id)
+                        } else {
+                            None
                         };
                         
                         if let Some(fields) = fields {
@@ -615,6 +643,23 @@ impl TypeChecker {
                         
                         Err(format!("Class has no member '{}'", member))
                     }
+                    Ty::Enum(hir_id) => {
+                        let variants = self.enum_defs.get(&hir_id).ok_or("Enum definition not found")?;
+                        for v in variants {
+                            if &v.name == member {
+                                if let Some(fields) = &v.fields {
+                                    let mut param_tys = Vec::new();
+                                    for (_, fty) in fields {
+                                        param_tys.push(self.resolve_type(fty).unwrap_or(Ty::Int));
+                                    }
+                                    return Ok(Ty::Function(param_tys, Box::new(Ty::Enum(hir_id))));
+                                } else {
+                                    return Ok(Ty::Enum(hir_id));
+                                }
+                            }
+                        }
+                        Err(format!("Enum has no variant '{}'", member))
+                    }
                     _ => Err(format!("Cannot access member '{}' on type {:?}", member, obj_ty)),
                 }
             }
@@ -719,6 +764,49 @@ impl TypeChecker {
                     return Ok(Ty::Class(id));
                 }
 
+                if let Ty::Function(_, ret_ty) = &callee_ty {
+                    if let Ty::Enum(enum_id) = **ret_ty {
+                        // Enum variant instantiation!
+                        let variants = self.enum_defs.get(&enum_id).unwrap();
+                        let mut variant_name = "";
+                        if let Expr::MemberAccess { member, .. } = &**callee {
+                            variant_name = member;
+                        }
+                        let mut def_fields = Vec::new();
+                        for v in variants {
+                            if v.name == variant_name {
+                                if let Some(f) = &v.fields {
+                                    def_fields = f.clone();
+                                }
+                            }
+                        }
+                        let mut def_map: std::collections::HashMap<_, _> = def_fields.into_iter().map(|(n, t)| (n, self.resolve_type(&t).unwrap_or(Ty::Int))).collect();
+                        for (label, fexpr) in args {
+                            let fty = self.check_expr(fexpr)?;
+                            if let Some(fname) = label {
+                                if let Some(expected_ty) = def_map.remove(fname) {
+                                    if fty != expected_ty {
+                                        self.reporter.report(Diagnostic::error(format!("Field '{}' expects type {:?}, got {:?}", fname, expected_ty, fty)).with_span(*span).with_code(ErrorCode::TypeMismatch));
+                                        return Err(format!("Field '{}' expects type {:?}, got {:?}", fname, expected_ty, fty));
+                                    }
+                                } else {
+                                    self.reporter.report(Diagnostic::error(format!("Unknown field '{}' in variant instantiation", fname)).with_span(*span).with_code(ErrorCode::UnknownField));
+                                    return Err(format!("Unknown field '{}' in variant instantiation", fname));
+                                }
+                            } else {
+                                self.reporter.report(Diagnostic::error("Variant instantiation requires named arguments").with_span(*span).with_code(ErrorCode::InvalidArguments));
+                                return Err("Variant instantiation requires named arguments".to_string());
+                            }
+                        }
+                        def_map.retain(|_, ty| !matches!(ty, Ty::Optional(_)));
+                        if !def_map.is_empty() {
+                            self.reporter.report(Diagnostic::error(format!("Missing fields in variant instantiation: {:?}", def_map.keys())).with_span(*span).with_code(ErrorCode::MissingFields));
+                            return Err(format!("Missing fields in variant instantiation: {:?}", def_map.keys()));
+                        }
+                        return Ok(Ty::Enum(enum_id));
+                    }
+                }
+
                 for (_, arg) in args {
                     self.check_expr(arg)?;
                 }
@@ -797,6 +885,50 @@ impl TypeChecker {
                     return Ok(target_ty); // Return target type to continue checking gracefully
                 }
                 Ok(target_ty)
+            }
+            Expr::Match { subject, arms, span } => {
+                let subject_ty = self.check_expr(subject)?;
+                let mut ret_ty = None;
+                
+                for arm in arms {
+                    let mut arm_env = HashMap::new();
+                    if let pace_hir::Pattern::Variant { name, fields, .. } = &arm.pattern {
+                        if let Ty::Enum(enum_id) = subject_ty {
+                            if let Some(variants) = self.enum_defs.get(&enum_id) {
+                                if let Some(v) = variants.iter().find(|v| v.name == *name) {
+                                    if let Some(vfields) = &v.fields {
+                                        if let Some(pfields) = fields {
+                                            if vfields.len() == pfields.len() {
+                                                for (i, (pf_id, _, _)) in pfields.iter().enumerate() {
+                                                    let fty = self.resolve_type(&vfields[i].1).unwrap_or(Ty::Int);
+                                                    arm_env.insert(*pf_id, fty);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    let outer_env = self.env.clone();
+                    for (k, v) in arm_env {
+                        self.env.insert(k, v);
+                    }
+                    
+                    let arm_ty = self.check_expr(&arm.body)?;
+                    self.env = outer_env;
+                    
+                    if ret_ty.is_none() {
+                        ret_ty = Some(arm_ty);
+                    } else if ret_ty != Some(arm_ty.clone()) {
+                        self.reporter.report(Diagnostic::error(format!("Match arms have incompatible types: {:?} and {:?}", ret_ty.as_ref().unwrap(), arm_ty))
+                            .with_span(arm.span)
+                            .with_code(ErrorCode::TypeMismatch));
+                    }
+                }
+                
+                Ok(ret_ty.unwrap_or(Ty::Void))
             }
         }
     }

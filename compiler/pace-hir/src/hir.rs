@@ -77,6 +77,12 @@ pub enum Decl {
         methods: Vec<Decl>,
         span: Span,
     },
+    Enum {
+        id: HirId,
+        name: String,
+        variants: Vec<EnumVariant>,
+        span: Span,
+    },
     Function {
         id: HirId,
         name: String,
@@ -87,6 +93,14 @@ pub enum Decl {
         span: Span,
     },
     Expr(Expr, Span),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumVariant {
+    pub name: String,
+    pub id: HirId,
+    pub fields: Option<Vec<(String, Type)>>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -129,6 +143,29 @@ pub enum Expr {
         value: Box<Expr>,
         span: Span,
     },
+    Match {
+        subject: Box<Expr>,
+        arms: Vec<MatchArm>,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub body: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    Ident(HirId, String, Span),
+    Variant {
+        name: String,
+        fields: Option<Vec<(HirId, String, Span)>>,
+        span: Span,
+    },
+    CatchAll(Span),
 }
 
 impl Expr {
@@ -146,6 +183,7 @@ impl Expr {
             Expr::If { span, .. } => *span,
             Expr::While { span, .. } => *span,
             Expr::Assign { span, .. } => *span,
+            Expr::Match { span, .. } => *span,
         }
     }
 }

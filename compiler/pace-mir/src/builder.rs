@@ -11,9 +11,10 @@ pub struct MirBuilder<'a> {
     pub global_fns: HashMap<HirId, String>,
     pub struct_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
     pub class_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
+    pub enum_defs: &'a HashMap<HirId, Vec<pace_hir::EnumVariant>>,
     pub global_env: &'a HashMap<pace_hir::HirId, Ty>,
     pub local_types: &'a HashMap<pace_hir::HirId, Ty>,
-    pub named_types: &'a HashMap<String, (pace_hir::HirId, bool)>,
+    pub named_types: &'a HashMap<String, (pace_hir::HirId, u8)>,
     pub static_fields_env: &'a HashMap<String, Ty>,
     pub methods_env: &'a HashMap<String, Ty>,
 }
@@ -23,9 +24,10 @@ impl<'a> MirBuilder<'a> {
         global_fns: HashMap<HirId, String>,
         struct_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
         class_defs: &'a HashMap<pace_hir::HirId, Vec<(String, Ty)>>,
+        enum_defs: &'a HashMap<pace_hir::HirId, Vec<pace_hir::EnumVariant>>,
         global_env: &'a HashMap<pace_hir::HirId, Ty>,
         local_types: &'a HashMap<pace_hir::HirId, Ty>,
-        named_types: &'a HashMap<String, (pace_hir::HirId, bool)>,
+        named_types: &'a HashMap<String, (pace_hir::HirId, u8)>,
         static_fields_env: &'a HashMap<String, Ty>,
         methods_env: &'a HashMap<String, Ty>,
     ) -> Self {
@@ -41,6 +43,7 @@ impl<'a> MirBuilder<'a> {
             global_fns,
             struct_defs,
             class_defs,
+            enum_defs,
             global_env,
             local_types,
             named_types,
@@ -114,6 +117,18 @@ impl<'a> MirBuilder<'a> {
     pub fn build_expr(&mut self, expr: &Expr) -> Local {
         match expr {
             Expr::Ident(id, _) => {
+                if let Some(Ty::Enum(enum_id)) = self.global_env.get(id) {
+                    if let Some(variants) = self.enum_defs.get(enum_id) {
+                        for v in variants {
+                            if v.id == *id {
+                                let temp = self.new_local(Ty::Enum(*enum_id));
+                                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::InstantiateEnum(*enum_id, v.name.clone(), vec![])));
+                                return temp;
+                            }
+                        }
+                    }
+                }
+                
                 let local = *self.hir_to_local.get(id).expect("Local not found");
                 let temp = self.new_local(self.locals[local.0 as usize].clone());
                 self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(local)));
@@ -177,16 +192,40 @@ impl<'a> MirBuilder<'a> {
                 }
                 
                 let obj_local = self.build_expr(object);
-                let mut field_ty = Ty::Int;
                 let obj_ty = self.locals[obj_local.0 as usize].clone();
-                if let Ty::Struct(id) | Ty::Class(id) = obj_ty {
-                    let defs = if matches!(obj_ty, Ty::Struct(_)) { self.struct_defs.get(&id) } else { self.class_defs.get(&id) };
-                    if let Some(fields) = defs {
-                        for (n, t) in fields {
-                            if n == member { field_ty = t.clone(); break; }
+                let field_ty = match obj_ty {
+                    Ty::Struct(id) => {
+                        let mut ft = Ty::Int;
+                        if let Some(fields) = self.struct_defs.get(&id) {
+                            for (n, t) in fields {
+                                if n == member { ft = t.clone(); break; }
+                            }
                         }
+                        ft
                     }
-                }
+                    Ty::Class(id) => {
+                        let mut ft = Ty::Int;
+                        if let Some(fields) = self.class_defs.get(&id) {
+                            for (n, t) in fields {
+                                if n == member { ft = t.clone(); break; }
+                            }
+                        }
+                        ft
+                    }
+                    Ty::Enum(id) => {
+                        let mut ft = Ty::Int;
+                        if let Some(variants) = self.enum_defs.get(&id) {
+                            for v in variants {
+                                if v.name == *member {
+                                    ft = Ty::Enum(id);
+                                    break;
+                                }
+                            }
+                        }
+                        ft
+                    }
+                    _ => Ty::Int,
+                };
                 
                 let temp = self.new_local(field_ty.clone());
                 self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::FieldAccess(obj_local, member.clone())));
@@ -214,6 +253,17 @@ impl<'a> MirBuilder<'a> {
                             for (name, &(tid, _)) in self.named_types {
                                 if *nid == tid { struct_name = name.clone(); break; }
                             }
+                        } else if let Ty::Function(_, ret) = ty {
+                            if let Ty::Enum(eid) = **ret {
+                                is_global = true;
+                                if let Some(variants) = self.enum_defs.get(&eid) {
+                                    for v in variants {
+                                        if v.id == *id {
+                                            global_name = v.name.clone();
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 } else if let Expr::MemberAccess { object, member, .. } = &**callee {
@@ -232,6 +282,10 @@ impl<'a> MirBuilder<'a> {
                                     global_name = static_name;
                                     is_static_method = true;
                                 }
+                            } else if let Ty::Enum(_) = ty {
+                                is_global = true;
+                                global_name = member.clone();
+                                is_static_method = true;
                             }
                         }
                     }
@@ -307,12 +361,37 @@ impl<'a> MirBuilder<'a> {
                 
                 if is_global {
                     let mut ret_ty = Ty::Int;
+                    let mut is_enum_variant = false;
+                    let mut enum_id = None;
+                    
                     if let Expr::Ident(id, _) = &**callee {
                         if let Some(Ty::Function(_, ret)) = self.global_env.get(id) {
+                            if let Ty::Enum(eid) = **ret {
+                                is_enum_variant = true;
+                                enum_id = Some(eid);
+                            } else {
+                                ret_ty = *ret.clone();
+                            }
+                        }
+                    } else if let Expr::MemberAccess { object, member, .. } = &**callee {
+                        if let Expr::Ident(id, _) = &**object {
+                            if let Some(Ty::Enum(eid)) = self.global_env.get(id) {
+                                is_enum_variant = true;
+                                enum_id = Some(*eid);
+                            } else if let Some(Ty::Function(_, ret)) = self.methods_env.get(&global_name) {
+                                ret_ty = *ret.clone();
+                            }
+                        } else if let Some(Ty::Function(_, ret)) = self.methods_env.get(&global_name) {
                             ret_ty = *ret.clone();
                         }
                     } else if let Some(Ty::Function(_, ret)) = self.methods_env.get(&global_name) {
                         ret_ty = *ret.clone();
+                    }
+                    
+                    if is_enum_variant {
+                        let temp = self.new_local(Ty::Enum(enum_id.unwrap()));
+                        self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::InstantiateEnum(enum_id.unwrap(), global_name.clone(), arg_locals)));
+                        return temp;
                     }
                     
                     let temp = self.new_local(ret_ty);
@@ -389,6 +468,115 @@ impl<'a> MirBuilder<'a> {
                 self.current_block = merge_bb;
                 self.new_local(Ty::Int)
             }
+            Expr::Match { subject, arms, .. } => {
+                let subject_local = self.build_expr(subject);
+                let temp = self.new_local(Ty::Int); // MVP return Ty
+                
+                let tag_local = self.new_local(Ty::Int);
+                self.push_stmt(Statement::Assign(Lvalue::Local(tag_local), Rvalue::EnumTag(subject_local)));
+                
+                let merge_bb = self.new_block();
+                let mut current_bb = self.current_block;
+                
+                for arm in arms {
+                    let next_arm_bb = self.new_block();
+                    let body_bb = self.new_block();
+                    
+                    let mut arm_tag = 0;
+                    if let pace_hir::Pattern::Variant { name, .. } = &arm.pattern {
+                        let subject_ty = self.locals[subject_local.0 as usize].clone();
+                        if let Ty::Enum(enum_id) = subject_ty {
+                            if let Some(variants) = self.enum_defs.get(&enum_id) {
+                                for (i, v) in variants.iter().enumerate() {
+                                    if v.name == *name {
+                                        arm_tag = i as i32;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    } else if let pace_hir::Pattern::Ident(id, _, _) = &arm.pattern {
+                        let subject_ty = self.locals[subject_local.0 as usize].clone();
+                        let f_local = self.new_local(subject_ty);
+                        self.hir_to_local.insert(*id, f_local);
+                        self.push_stmt(Statement::Assign(Lvalue::Local(f_local), Rvalue::Use(subject_local)));
+                        
+                        self.blocks[current_bb.0 as usize].terminator = Some(Terminator::Goto(body_bb));
+                        self.current_block = body_bb;
+                        let arm_local = self.build_expr(&arm.body);
+                        self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(arm_local)));
+                        if self.blocks[self.current_block.0 as usize].terminator.is_none() {
+                            self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(merge_bb));
+                        }
+                        current_bb = next_arm_bb;
+                        self.current_block = next_arm_bb;
+                        continue;
+                    } else if let pace_hir::Pattern::CatchAll(_) = &arm.pattern {
+                        self.blocks[current_bb.0 as usize].terminator = Some(Terminator::Goto(body_bb));
+                        self.current_block = body_bb;
+                        let arm_local = self.build_expr(&arm.body);
+                        self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(arm_local)));
+                        if self.blocks[self.current_block.0 as usize].terminator.is_none() {
+                            self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(merge_bb));
+                        }
+                        current_bb = next_arm_bb;
+                        self.current_block = next_arm_bb;
+                        continue;
+                    }
+                    
+                    let cond_local = self.new_local(Ty::Int);
+                    let tag_const_local = self.new_local(Ty::Int);
+                    self.push_stmt(Statement::Assign(Lvalue::Local(tag_const_local), Rvalue::IntConstant(arm_tag.to_string())));
+                    self.push_stmt(Statement::Assign(Lvalue::Local(cond_local), Rvalue::BinaryOp(pace_ast::BinaryOp::EqEq, tag_local, tag_const_local)));
+                    
+                    self.blocks[current_bb.0 as usize].terminator = Some(Terminator::Branch {
+                        cond: cond_local,
+                        then_block: body_bb,
+                        else_block: next_arm_bb,
+                    });
+                    
+                    self.current_block = body_bb;
+                    
+                    if let pace_hir::Pattern::Variant { name, fields, .. } = &arm.pattern {
+                        if let Some(pfields) = fields {
+                            let subject_ty = self.locals[subject_local.0 as usize].clone();
+                            if let Ty::Enum(enum_id) = subject_ty {
+                                if let Some(variants) = self.enum_defs.get(&enum_id) {
+                                    if let Some(v) = variants.iter().find(|v| v.name == *name) {
+                                        if let Some(vfields) = &v.fields {
+                                            for (i, (pf_id, _, _)) in pfields.iter().enumerate() {
+                                                if i < vfields.len() {
+                                                    let fty = self.local_types.get(pf_id).unwrap_or(&Ty::Int).clone();
+                                                    let f_local = self.new_local(fty);
+                                                    self.hir_to_local.insert(*pf_id, f_local);
+                                                    self.push_stmt(Statement::Assign(Lvalue::Local(f_local), Rvalue::EnumFieldAccess(subject_local, name.clone(), vfields[i].0.clone())));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    let arm_local = self.build_expr(&arm.body);
+                    self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(arm_local)));
+                    
+                    if self.blocks[self.current_block.0 as usize].terminator.is_none() {
+                        self.blocks[self.current_block.0 as usize].terminator = Some(Terminator::Goto(merge_bb));
+                    }
+                    
+                    current_bb = next_arm_bb;
+                    self.current_block = next_arm_bb;
+                }
+                
+                if self.blocks[current_bb.0 as usize].terminator.is_none() {
+                     self.blocks[current_bb.0 as usize].terminator = Some(Terminator::Goto(merge_bb));
+                }
+                
+                self.current_block = merge_bb;
+                temp
+            }
             Expr::Assign { target, value, .. } => {
                 let rval = self.build_expr(value);
                 let lvalue = match &**target {
@@ -406,16 +594,19 @@ impl<'a> MirBuilder<'a> {
                     Lvalue::FieldAccess(obj, member) => {
                         let mut field_ty = Ty::Int;
                         let obj_ty = self.locals[obj.0 as usize].clone();
+                        let mut found = false;
                         if let Ty::Struct(id) | Ty::Class(id) = obj_ty {
                             let defs = if matches!(obj_ty, Ty::Struct(_)) { self.struct_defs.get(&id) } else { self.class_defs.get(&id) };
                             if let Some(fields) = defs {
                                 for (n, t) in fields {
-                                    if n == member { field_ty = t.clone(); break; }
+                                    if n == member { field_ty = t.clone(); found = true; break; }
                                 }
                             }
                         }
+                        if !found { panic!("Field not found"); }
                         field_ty
-                    }
+                    },
+                    Lvalue::EnumFieldAccess(_, _, _) => panic!("Cannot assign to enum field"),
                 };
                 if matches!(lval_ty, Ty::Class(_)) {
                     self.push_stmt(Statement::Release(lvalue.clone()));
@@ -451,7 +642,7 @@ impl<'a> MirBuilder<'a> {
 
         let mut functions = Vec::new();
         let mut global_vars = Vec::new();
-        let mut main_builder = MirBuilder::new(global_fns.clone(), &tc.struct_defs, &tc.class_defs, &tc.env, &tc.local_types, &tc.named_types, &tc.static_fields_env, &tc.methods_env);
+        let mut main_builder = MirBuilder::new(global_fns.clone(), &tc.struct_defs, &tc.class_defs, &tc.enum_defs, &tc.env, &tc.local_types, &tc.named_types, &tc.static_fields_env, &tc.methods_env);
         let mut _main_last_local = Local(0);
 
         for decl in &program.declarations {
@@ -505,6 +696,7 @@ impl<'a> MirBuilder<'a> {
                                 global_fns.clone(),
                                 &tc.struct_defs,
                                 &tc.class_defs,
+                                &tc.enum_defs,
                                 &tc.env,
                                 &tc.local_types,
                                 &tc.named_types,
@@ -545,6 +737,7 @@ impl<'a> MirBuilder<'a> {
                         global_fns.clone(),
                         &tc.struct_defs,
                         &tc.class_defs,
+                        &tc.enum_defs,
                         &tc.env,
                         &tc.local_types,
                         &tc.named_types,
@@ -573,7 +766,20 @@ impl<'a> MirBuilder<'a> {
                         body: fn_body,
                     });
                 }
+                pace_hir::Decl::Enum { .. } => {}
             }
+        }
+
+        let mut resolved_enum_defs = std::collections::HashMap::new();
+        for (id, variants) in &tc.enum_defs {
+            let mut res_variants = Vec::new();
+            for v in variants {
+                let res_fields = v.fields.as_ref().map(|fields| {
+                    fields.iter().map(|(name, ty)| (name.clone(), tc.resolve_type(ty).unwrap_or(Ty::Int))).collect()
+                });
+                res_variants.push((v.name.clone(), res_fields));
+            }
+            resolved_enum_defs.insert(*id, res_variants);
         }
 
         MirProgram {
@@ -581,6 +787,7 @@ impl<'a> MirBuilder<'a> {
             main_body: main_builder.finish(&[]),
             struct_defs: tc.struct_defs.clone(),
             class_defs: tc.class_defs.clone(),
+            enum_defs: resolved_enum_defs,
             global_vars,
         }
     }

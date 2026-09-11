@@ -17,6 +17,7 @@ pub struct BasicBlock {
 pub enum Lvalue {
     Local(Local),
     FieldAccess(Local, String),
+    EnumFieldAccess(Local, String, String), // Local, variant_name, field_name
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -40,7 +41,10 @@ pub enum Rvalue {
     GlobalCall(String, Vec<Local>),
     GlobalRead(String),
     FieldAccess(Local, String),
+    EnumFieldAccess(Local, String, String),
     Instantiate(pace_ty::Ty, Vec<Local>),
+    InstantiateEnum(pace_hir::HirId, String, Vec<Local>),
+    EnumTag(Local),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -74,5 +78,6 @@ pub struct MirProgram {
     pub main_body: MirBody,
     pub struct_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty)>>,
     pub class_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty)>>,
+    pub enum_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, Option<Vec<(String, pace_ty::Ty)>>)>>,
     pub global_vars: Vec<(String, pace_ty::Ty)>,
 }

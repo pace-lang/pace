@@ -6,6 +6,7 @@ pub enum Ty {
     Bool,
     Struct(pace_hir::HirId),
     Class(pace_hir::HirId),
+    Enum(pace_hir::HirId),
     Function(Vec<Ty>, Box<Ty>),
     Optional(Box<Ty>),
     Void,

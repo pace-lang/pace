@@ -189,6 +189,31 @@ impl LoweringContext {
                 let lowered = self.lower_expr(expr)?;
                 Ok(Some(Decl::Expr(lowered, span)))
             }
+            ast::Decl::Enum { name, variants, span } => {
+                let id = self.generate_id();
+                self.scope.insert(name.name.clone(), id);
+                let mut lowered_variants = Vec::new();
+                for v in variants {
+                    let var_id = self.generate_id();
+                    self.scope.insert(v.name.name.clone(), var_id);
+                    
+                    let mut lowered_fields = None;
+                    if let Some(fields) = v.fields {
+                        let mut lf = Vec::new();
+                        for (fname, fty) in fields {
+                            lf.push((fname.name, fty));
+                        }
+                        lowered_fields = Some(lf);
+                    }
+                    lowered_variants.push(crate::hir::EnumVariant {
+                        name: v.name.name,
+                        id: var_id,
+                        fields: lowered_fields,
+                        span: v.span,
+                    });
+                }
+                Ok(Some(Decl::Enum { id, name: name.name, variants: lowered_variants, span }))
+            }
             ast::Decl::Function { name, params, return_type, body, span, is_static } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
@@ -299,6 +324,50 @@ impl LoweringContext {
                 Ok(Expr::Assign {
                     target: Box::new(lowered_target),
                     value: Box::new(lowered_val),
+                    span,
+                })
+            }
+            ast::Expr::Match { subject, arms, span } => {
+                let lowered_subject = self.lower_expr(*subject)?;
+                let mut lowered_arms = Vec::new();
+                for arm in arms {
+                    let outer_scope = self.scope.clone();
+                    
+                    let pattern = match arm.pattern {
+                        ast::Pattern::Ident(ident) => {
+                            let id = self.generate_id();
+                            self.scope.insert(ident.name.clone(), id);
+                            crate::hir::Pattern::Ident(id, ident.name, ident.span)
+                        }
+                        ast::Pattern::Variant { name, fields, span: p_span } => {
+                            let mut lowered_fields = None;
+                            if let Some(f) = fields {
+                                let mut lf = Vec::new();
+                                for fname in f {
+                                    let id = self.generate_id();
+                                    self.scope.insert(fname.name.clone(), id);
+                                    lf.push((id, fname.name, fname.span));
+                                }
+                                lowered_fields = Some(lf);
+                            }
+                            crate::hir::Pattern::Variant { name: name.name, fields: lowered_fields, span: p_span }
+                        }
+                        ast::Pattern::CatchAll(s) => crate::hir::Pattern::CatchAll(s),
+                    };
+                    
+                    let body = self.lower_expr(arm.body)?;
+                    self.scope = outer_scope;
+                    
+                    lowered_arms.push(crate::hir::MatchArm {
+                        pattern,
+                        body,
+                        span: arm.span,
+                    });
+                }
+                
+                Ok(Expr::Match {
+                    subject: Box::new(lowered_subject),
+                    arms: lowered_arms,
                     span,
                 })
             }

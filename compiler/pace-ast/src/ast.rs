@@ -56,7 +56,19 @@ pub enum Decl {
         methods: Vec<Decl>, // Expects Decl::Function
         span: Span,
     },
+    Enum {
+        name: Ident,
+        variants: Vec<EnumVariant>,
+        span: Span,
+    },
     Expr(Expr, Span),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumVariant {
+    pub name: Ident,
+    pub fields: Option<Vec<(Ident, Type)>>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -136,6 +148,29 @@ pub enum Expr {
         value: Box<Expr>,
         span: Span,
     },
+    Match {
+        subject: Box<Expr>,
+        arms: Vec<MatchArm>,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub body: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    Ident(Ident),
+    Variant {
+        name: Ident,
+        fields: Option<Vec<Ident>>,
+        span: Span,
+    },
+    CatchAll(Span),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -165,6 +200,7 @@ impl Expr {
             Expr::If { span, .. } => *span,
             Expr::While { span, .. } => *span,
             Expr::Assign { span, .. } => *span,
+            Expr::Match { span, .. } => *span,
         }
     }
 }
@@ -178,6 +214,7 @@ impl Decl {
             Decl::Function { span, .. } => *span,
             Decl::Struct { span, .. } => *span,
             Decl::Class { span, .. } => *span,
+            Decl::Enum { span, .. } => *span,
             Decl::Expr(_, span) => *span,
         }
     }
