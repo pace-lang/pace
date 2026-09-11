@@ -315,6 +315,7 @@ version = "0.1.0"
 dependencies = [
  "pace-ast",
  "pace-mir",
+ "pace-ty",
 ]
 
 [[package]]
@@ -361,6 +362,7 @@ dependencies = [
  "pace-ast",
  "pace-hir",
  "pace-span",
+ "pace-ty",
 ]
 
 [[package]]

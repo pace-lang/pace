@@ -1,6 +1,8 @@
 #ifndef PACE_RUNTIME_H
 #define PACE_RUNTIME_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -9,7 +11,14 @@ void PACE_RETAIN(long long obj);
 void PACE_RELEASE(long long obj);
 
 void pace_print_int(long long val);
-void pace_print_string(const char* val);
+void pace_print_str(const char* val);
+void pace_println();
+
+typedef void (*pace_destructor_t)(void*);
+
+void* pace_alloc(size_t size, pace_destructor_t dtor);
+void pace_retain(void* obj);
+void pace_release(void* obj);
 
 #ifdef __cplusplus
 }

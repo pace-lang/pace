@@ -41,7 +41,7 @@ fn main() {
     tc.check_program(&hir).expect("Typecheck failed");
 
     // 5. Build MIR
-    let mir = MirBuilder::build_program(&hir);
+    let mir = MirBuilder::build_program(&hir, &tc);
 
     // 6. Generate C Code
     let mut codegen = CGenerator::new();
@@ -54,10 +54,11 @@ fn main() {
 
     // 7. Compile with GCC
     println!("Compiling {}...", file_path);
-    let status = Command::new("gcc")
-        .arg(c_file)
-        .arg("../runtime/pace_runtime.c")
-        .arg("-I../runtime")
+    let status = std::process::Command::new("gcc")
+        .arg("-O2")
+        .arg("-Iruntime")
+        .arg("/tmp/pace_out.c")
+        .arg("runtime/pace_runtime.c")
         .arg("-o")
         .arg(bin_file)
         .status()

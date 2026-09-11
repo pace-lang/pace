@@ -1,4 +1,5 @@
 use pace_ast::BinaryOp;
+use pace_ty::Ty;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Local(pub u32);
@@ -13,10 +14,16 @@ pub struct BasicBlock {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Lvalue {
+    Local(Local),
+    FieldAccess(Local, String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
-    Assign(Local, Rvalue),
-    Retain(Local),
-    Release(Local),
+    Assign(Lvalue, Rvalue),
+    Retain(Lvalue),
+    Release(Lvalue),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +35,8 @@ pub enum Rvalue {
     Call(Local, Vec<Local>),
     BuiltinCall(String, Vec<Local>),
     GlobalCall(String, Vec<Local>),
+    FieldAccess(Local, String),
+    Instantiate(pace_ty::Ty, Vec<Local>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,13 +53,14 @@ pub enum Terminator {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MirBody {
     pub blocks: Vec<BasicBlock>,
-    pub locals: u32,
+    pub locals: Vec<pace_ty::Ty>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MirFunction {
     pub name: String,
     pub params: Vec<Local>,
+    pub return_type: Ty,
     pub body: MirBody,
 }
 
@@ -58,4 +68,6 @@ pub struct MirFunction {
 pub struct MirProgram {
     pub functions: Vec<MirFunction>,
     pub main_body: MirBody,
+    pub struct_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty)>>,
+    pub class_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty)>>,
 }

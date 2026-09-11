@@ -1,6 +1,7 @@
 use std::fmt::Write;
-use pace_mir::{BasicBlock, MirProgram, MirFunction, MirBody, Rvalue, Statement, Terminator};
+use pace_mir::{BasicBlock, MirProgram, MirFunction, MirBody, Rvalue, Statement, Terminator, Lvalue};
 use pace_ast::BinaryOp;
+use pace_ty::Ty;
 
 pub struct CGenerator {
     output: String,
@@ -14,10 +15,26 @@ impl CGenerator {
     }
 
     pub fn generate(&mut self, program: &MirProgram) -> String {
-        // Emit headers and runtime include
         self.output.push_str("#include <stdio.h>\n");
         self.output.push_str("#include <stdlib.h>\n");
+        self.output.push_str("#include <string.h>\n");
         self.output.push_str("#include \"pace_runtime.h\"\n\n");
+
+        for (id, fields) in &program.struct_defs {
+            self.output.push_str(&format!("struct pace_{} {{\n", id.0));
+            for (fname, fty) in fields {
+                self.output.push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
+            }
+            self.output.push_str("};\n\n");
+        }
+        
+        for (id, fields) in &program.class_defs {
+            self.output.push_str(&format!("struct pace_{} {{\n", id.0));
+            for (fname, fty) in fields {
+                self.output.push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
+            }
+            self.output.push_str("};\n\n");
+        }
 
         for func in &program.functions {
             self.generate_function(func);
@@ -27,15 +44,16 @@ impl CGenerator {
         self.output.push_str("int main() {\n");
         
         let mut locals = Vec::new();
-        for i in 0..program.main_body.locals {
-            locals.push(format!("    long long _{} = 0;", i));
+        for i in 0..program.main_body.locals.len() {
+            let ty = &program.main_body.locals[i];
+            locals.push(format!("    {} _{} = {};", self.emit_c_type(ty), i, self.emit_c_default_val(ty)));
         }
         self.output.push_str(&locals.join("\n"));
         self.output.push_str("\n\n");
 
         for (i, block) in program.main_body.blocks.iter().enumerate() {
             write!(&mut self.output, "bb_{}:\n", i).unwrap();
-            self.generate_block(block, "");
+            self.generate_block(block, &program.main_body.locals);
             match &block.terminator {
                 Some(Terminator::Return(_local)) => {
                     self.output.push_str("    return 0;\n");
@@ -56,19 +74,41 @@ impl CGenerator {
         self.output.clone()
     }
 
+    fn emit_c_type(&self, ty: &Ty) -> String {
+        match ty {
+            Ty::Int | Ty::Bool => "long long".to_string(),
+            Ty::Float => "double".to_string(),
+            Ty::String => "char*".to_string(),
+            Ty::Struct(id) => format!("struct pace_{}", id.0),
+            Ty::Class(id) => format!("struct pace_{}*", id.0),
+            Ty::Function(_, _) => "void*".to_string(),
+        }
+    }
+
+    fn emit_c_default_val(&self, ty: &Ty) -> String {
+        match ty {
+            Ty::Int | Ty::Bool | Ty::Float => "0".to_string(),
+            Ty::String | Ty::Class(_) | Ty::Function(_, _) => "NULL".to_string(),
+            Ty::Struct(_) => "{0}".to_string(),
+        }
+    }
+
     fn generate_function(&mut self, func: &MirFunction) {
-        self.output.push_str(&format!("long long {}(", func.name));
+        let ret_ty_str = self.emit_c_type(&func.return_type);
+        self.output.push_str(&format!("{} {}(", ret_ty_str, func.name));
         for (i, param) in func.params.iter().enumerate() {
             if i > 0 { self.output.push_str(", "); }
-            write!(&mut self.output, "long long _{}", param.0).unwrap();
+            let ty = &func.body.locals[param.0 as usize];
+            let ty_str = self.emit_c_type(ty);
+            write!(&mut self.output, "{} _{}", ty_str, param.0).unwrap();
         }
         self.output.push_str(") {\n");
         
         let mut locals = Vec::new();
-        for i in 0..func.body.locals {
-            // don't redeclare parameters
-            if !func.params.iter().any(|p| p.0 == i) {
-                locals.push(format!("    long long _{} = 0;", i));
+        for i in 0..func.body.locals.len() {
+            if !func.params.iter().any(|p| p.0 == i as u32) {
+                let ty = &func.body.locals[i];
+                locals.push(format!("    {} _{} = {};", self.emit_c_type(ty), i, self.emit_c_default_val(ty)));
             }
         }
         self.output.push_str(&locals.join("\n"));
@@ -76,7 +116,7 @@ impl CGenerator {
 
         for (i, block) in func.body.blocks.iter().enumerate() {
             write!(&mut self.output, "{}_bb_{}:\n", func.name, i).unwrap();
-            self.generate_block(block, &func.name);
+            self.generate_block(block, &func.body.locals);
             match &block.terminator {
                 Some(Terminator::Return(local)) => {
                     write!(&mut self.output, "    return _{};\n", local.0).unwrap();
@@ -95,10 +135,10 @@ impl CGenerator {
         self.output.push_str("}\n");
     }
 
-    fn generate_block(&mut self, block: &BasicBlock, prefix: &str) {
+    fn generate_block(&mut self, block: &BasicBlock, locals: &Vec<Ty>) {
         for stmt in &block.statements {
             match stmt {
-                Statement::Assign(local, rval) => {
+                Statement::Assign(lval, rval) => {
                     self.output.push_str("    ");
                     
                     let mut is_void = false;
@@ -109,23 +149,42 @@ impl CGenerator {
                     }
                     
                     if !is_void {
-                        write!(&mut self.output, "_{} = ", local.0).unwrap();
+                        self.generate_lvalue(lval, locals);
+                        self.output.push_str(" = ");
                     }
                     
-                    self.generate_rvalue(rval);
+                    self.generate_rvalue(rval, locals);
                     self.output.push_str(";\n");
                 }
-                Statement::Retain(local) => {
-                    writeln!(&mut self.output, "    PACE_RETAIN(_{});", local.0).unwrap();
+                Statement::Retain(lval) => {
+                    self.output.push_str("    pace_retain(");
+                    self.generate_lvalue(lval, locals);
+                    self.output.push_str(");\n");
                 }
-                Statement::Release(local) => {
-                    writeln!(&mut self.output, "    PACE_RELEASE(_{});", local.0).unwrap();
+                Statement::Release(lval) => {
+                    self.output.push_str("    pace_release(");
+                    self.generate_lvalue(lval, locals);
+                    self.output.push_str(");\n");
                 }
             }
         }
     }
 
-    fn generate_rvalue(&mut self, rvalue: &Rvalue) {
+    fn generate_lvalue(&mut self, lval: &Lvalue, locals: &Vec<Ty>) {
+        match lval {
+            Lvalue::Local(local) => write!(&mut self.output, "_{}", local.0).unwrap(),
+            Lvalue::FieldAccess(obj, field) => {
+                let is_ptr = matches!(locals[obj.0 as usize], Ty::Class(_));
+                if is_ptr {
+                    write!(&mut self.output, "_{}->{}", obj.0, field).unwrap();
+                } else {
+                    write!(&mut self.output, "_{}.{}", obj.0, field).unwrap();
+                }
+            }
+        }
+    }
+
+    fn generate_rvalue(&mut self, rvalue: &Rvalue, locals: &Vec<Ty>) {
         match rvalue {
             Rvalue::Use(local) => write!(&mut self.output, "_{}", local.0).unwrap(),
             Rvalue::IntConstant(val) => write!(&mut self.output, "{}", val).unwrap(),
@@ -166,13 +225,42 @@ impl CGenerator {
                 }
                 self.output.push_str(")");
             }
-            Rvalue::GlobalCall(name, args) => {
-                write!(&mut self.output, "{}(", name).unwrap();
+            Rvalue::GlobalCall(callee, args) => {
+                write!(&mut self.output, "{}(", callee).unwrap();
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 { self.output.push_str(", "); }
                     write!(&mut self.output, "_{}", arg.0).unwrap();
                 }
                 self.output.push_str(")");
+            }
+            Rvalue::FieldAccess(obj, field) => {
+                let is_ptr = matches!(locals[obj.0 as usize], Ty::Class(_));
+                if is_ptr {
+                    write!(&mut self.output, "_{}->{}", obj.0, field).unwrap();
+                } else {
+                    write!(&mut self.output, "_{}.{}", obj.0, field).unwrap();
+                }
+            }
+            Rvalue::Instantiate(ty, fields) => {
+                match ty {
+                    Ty::Struct(id) => {
+                        write!(&mut self.output, "(struct pace_{}){{ ", id.0).unwrap();
+                        for (i, arg) in fields.iter().enumerate() {
+                            if i > 0 { self.output.push_str(", "); }
+                            write!(&mut self.output, "_{}", arg.0).unwrap();
+                        }
+                        self.output.push_str(" }");
+                    }
+                    Ty::Class(id) => {
+                        write!(&mut self.output, "memcpy(pace_alloc(sizeof(struct pace_{}), NULL), &(struct pace_{}){{ ", id.0, id.0).unwrap();
+                        for (i, arg) in fields.iter().enumerate() {
+                            if i > 0 { self.output.push_str(", "); }
+                            write!(&mut self.output, "_{}", arg.0).unwrap();
+                        }
+                        write!(&mut self.output, " }}, sizeof(struct pace_{}))", id.0).unwrap();
+                    }
+                    _ => panic!("Instantiating non-struct/class"),
+                }
             }
         }
     }

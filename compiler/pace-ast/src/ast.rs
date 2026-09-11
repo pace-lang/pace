@@ -110,8 +110,13 @@ pub enum Expr {
         body: Block,
         span: Span,
     },
+    Instantiate {
+        name: Ident,
+        fields: Vec<(Ident, Expr)>,
+        span: Span,
+    },
     Assign {
-        target: Ident,
+        target: Box<Expr>,
         value: Box<Expr>,
         span: Span,
     },
@@ -143,6 +148,7 @@ impl Expr {
             Expr::Call { span, .. } => *span,
             Expr::If { span, .. } => *span,
             Expr::While { span, .. } => *span,
+            Expr::Instantiate { span, .. } => *span,
             Expr::Assign { span, .. } => *span,
         }
     }

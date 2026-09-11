@@ -7,3 +7,4 @@ edition = "2024"
 pace-hir = { path = "../pace-hir" }
 pace-ast = { path = "../pace-ast" }
 pace-span = { path = "../pace-span" }
+pace-ty = { path = "../pace-ty" }

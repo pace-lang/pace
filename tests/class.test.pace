@@ -1,0 +1,13 @@
+class Counter {
+    val: Int,
+}
+
+fn increment(c: Counter) -> Int {
+    c.val = c.val + 1
+    return c.val
+}
+
+let counter = Counter { val: 0 }
+increment(counter)
+increment(counter)
+print(counter.val)

@@ -1,0 +1,17 @@
+class Box {
+    val: Int,
+}
+
+fn create_box() -> Box {
+    let b = Box { val: 42 }
+    return b
+}
+
+fn use_box(b2: Box) {
+    print(b2.val)
+}
+
+let my_box = create_box()
+use_box(my_box)
+let my_box_copy = my_box
+print(my_box_copy.val)

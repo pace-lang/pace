@@ -67,15 +67,23 @@ impl LoweringContext {
                 self.scope.insert(name.name.clone(), id);
                 Ok(Some(Decl::Let { id, name: name.name, value: lowered_val, span }))
             }
-            ast::Decl::Struct { name, span, .. } => {
+            ast::Decl::Struct { name, fields, span, .. } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
-                Ok(Some(Decl::Struct { id, name: name.name, span }))
+                let mut lowered_fields = Vec::new();
+                for (field_name, field_ty) in fields {
+                    lowered_fields.push((field_name.name, field_ty));
+                }
+                Ok(Some(Decl::Struct { id, name: name.name, fields: lowered_fields, span }))
             }
-            ast::Decl::Class { name, span, .. } => {
+            ast::Decl::Class { name, fields, span, .. } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
-                Ok(Some(Decl::Class { id, name: name.name, span }))
+                let mut lowered_fields = Vec::new();
+                for (field_name, field_ty) in fields {
+                    lowered_fields.push((field_name.name, field_ty));
+                }
+                Ok(Some(Decl::Class { id, name: name.name, fields: lowered_fields, span }))
             }
             ast::Decl::Expr(expr, span) => {
                 let lowered = self.lower_expr(expr)?;
@@ -177,11 +185,24 @@ impl LoweringContext {
                 })
             }
             ast::Expr::Assign { target, value, span } => {
-                let id = *self.scope.get(&target.name).ok_or(format!("Cannot reassign unbound variable '{}'", target.name))?;
+                let lowered_target = self.lower_expr(*target)?;
                 let lowered_val = self.lower_expr(*value)?;
                 Ok(Expr::Assign {
-                    target: id,
+                    target: Box::new(lowered_target),
                     value: Box::new(lowered_val),
+                    span,
+                })
+            }
+            ast::Expr::Instantiate { name, fields, span } => {
+                let id = *self.scope.get(&name.name).ok_or(format!("Undefined type: {}", name.name))?;
+                let mut lowered_fields = Vec::new();
+                for (field_name, field_expr) in fields {
+                    lowered_fields.push((field_name.name, self.lower_expr(field_expr)?));
+                }
+                Ok(Expr::Instantiate {
+                    name: name.name,
+                    id,
+                    fields: lowered_fields,
                     span,
                 })
             }

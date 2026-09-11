@@ -5,23 +5,94 @@ use crate::ty::Ty;
 
 pub struct TypeChecker {
     pub env: HashMap<HirId, Ty>,
+    pub struct_defs: HashMap<HirId, Vec<(String, Ty)>>,
+    pub class_defs: HashMap<HirId, Vec<(String, Ty)>>,
+    pub named_types: HashMap<String, HirId>,
 }
 
 impl TypeChecker {
     pub fn new() -> Self {
         Self {
             env: HashMap::new(),
+            struct_defs: HashMap::new(),
+            class_defs: HashMap::new(),
+            named_types: HashMap::new(),
+        }
+    }
+
+    pub fn resolve_type(&self, ast_ty: &pace_ast::Type) -> Result<Ty, String> {
+        match ast_ty {
+            pace_ast::Type::Named(id) => {
+                match id.name.as_str() {
+                    "Int" => Ok(Ty::Int),
+                    "Float" => Ok(Ty::Float),
+                    "String" => Ok(Ty::String),
+                    "Bool" => Ok(Ty::Bool),
+                    other => {
+                        if let Some(&hir_id) = self.named_types.get(other) {
+                            if self.struct_defs.contains_key(&hir_id) {
+                                return Ok(Ty::Struct(hir_id));
+                            }
+                            if self.class_defs.contains_key(&hir_id) {
+                                return Ok(Ty::Class(hir_id));
+                            }
+                        }
+                        Err(format!("Unknown type: {}", other))
+                    }
+                }
+            }
+            pace_ast::Type::Optional(_, _) => Err("Optional types not yet supported".to_string()),
         }
     }
 
     pub fn check_program(&mut self, program: &Program) -> Result<(), String> {
+        // Pass 1: Register top-level structures and classes names
         for decl in &program.declarations {
-            if let Decl::Function { id, params, .. } = decl {
-                let mut param_tys = Vec::new();
-                for _ in params {
-                    param_tys.push(Ty::Int); 
+            match decl {
+                Decl::Struct { id, name, .. } => {
+                    self.named_types.insert(name.clone(), *id);
                 }
-                self.env.insert(*id, Ty::Function(param_tys, Box::new(Ty::Int)));
+                Decl::Class { id, name, .. } => {
+                    self.named_types.insert(name.clone(), *id);
+                }
+                _ => {}
+            }
+        }
+
+        // Pass 2: Register struct/class fields
+        for decl in &program.declarations {
+            match decl {
+                Decl::Struct { id, fields, .. } => {
+                    let mut resolved_fields = Vec::new();
+                    for (fname, fty) in fields {
+                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?));
+                    }
+                    self.struct_defs.insert(*id, resolved_fields);
+                }
+                Decl::Class { id, fields, .. } => {
+                    let mut resolved_fields = Vec::new();
+                    for (fname, fty) in fields {
+                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?));
+                    }
+                    self.class_defs.insert(*id, resolved_fields);
+                }
+                _ => {}
+            }
+        }
+
+        // Pass 3: Register functions
+        for decl in &program.declarations {
+            if let Decl::Function { id, params, return_type, .. } = decl {
+                let mut param_tys = Vec::new();
+                for (_, _, pty) in params {
+                    param_tys.push(self.resolve_type(pty)?); 
+                }
+                let ret_ty = if let Some(rty) = return_type {
+                    self.resolve_type(rty)?
+                } else {
+                    Ty::Int // Defaulting for now
+                };
+                self.env.insert(*id, Ty::Function(param_tys, Box::new(ret_ty)));
             }
         }
 
@@ -74,8 +145,9 @@ impl TypeChecker {
             }
             Decl::Function { params, body, .. } => {
                 let outer_env = self.env.clone();
-                for (param_id, _, _) in params {
-                    self.env.insert(*param_id, Ty::Int);
+                for (param_id, _, pty) in params {
+                    let ty = self.resolve_type(pty)?;
+                    self.env.insert(*param_id, ty);
                 }
                 self.check_block(body)?;
                 self.env = outer_env;
@@ -116,18 +188,36 @@ impl TypeChecker {
             Expr::MemberAccess { object, member, .. } => {
                 let obj_ty = self.check_expr(object)?;
                 match obj_ty {
-                    Ty::Struct(_) | Ty::Class(_) => {
-                        Ok(Ty::Int)
+                    Ty::Struct(hir_id) => {
+                        let fields = self.struct_defs.get(&hir_id).ok_or("Struct definition not found")?;
+                        for (fname, fty) in fields {
+                            if fname == member {
+                                return Ok(fty.clone());
+                            }
+                        }
+                        Err(format!("Struct has no member '{}'", member))
+                    }
+                    Ty::Class(hir_id) => {
+                        let fields = self.class_defs.get(&hir_id).ok_or("Class definition not found")?;
+                        for (fname, fty) in fields {
+                            if fname == member {
+                                return Ok(fty.clone());
+                            }
+                        }
+                        Err(format!("Class has no member '{}'", member))
                     }
                     _ => Err(format!("Cannot access member '{}' on type {:?}", member, obj_ty)),
                 }
             }
             Expr::Call { callee, args, .. } => {
-                self.check_expr(callee)?;
+                let callee_ty = self.check_expr(callee)?;
                 for arg in args {
                     self.check_expr(arg)?;
                 }
-                Ok(Ty::Int) // Assume int return for now
+                if let Ty::Function(_, ret_ty) = callee_ty {
+                    return Ok(*ret_ty);
+                }
+                Ok(Ty::Int) // Fallback for MVP
             }
             Expr::BuiltinCall(name, args, _) => {
                 let mut arg_types = Vec::new();
@@ -158,12 +248,47 @@ impl TypeChecker {
                 Ok(Ty::Int)
             }
             Expr::Assign { target, value, .. } => {
-                let target_ty = self.env.get(target).cloned().ok_or("Cannot reassign unbound variable")?;
+                let target_ty = self.check_expr(target)?;
                 let val_ty = self.check_expr(value)?;
                 if target_ty != val_ty {
                     return Err(format!("Type mismatch in assignment: expected {:?}, got {:?}", target_ty, val_ty));
                 }
                 Ok(target_ty)
+            }
+            Expr::Instantiate { name, id, fields, .. } => {
+                let is_struct = self.struct_defs.contains_key(id);
+                let is_class = self.class_defs.contains_key(id);
+                
+                let def_fields = if is_struct {
+                    self.struct_defs.get(id).unwrap().clone()
+                } else if is_class {
+                    self.class_defs.get(id).unwrap().clone()
+                } else {
+                    return Err(format!("'{}' is not a struct or class", name));
+                };
+
+                for (fname, expr) in fields {
+                    let expr_ty = self.check_expr(expr)?;
+                    let mut found = false;
+                    for (dfname, dfty) in &def_fields {
+                        if fname == dfname {
+                            if *dfty != expr_ty {
+                                return Err(format!("Field '{}' expects type {:?}, got {:?}", fname, dfty, expr_ty));
+                            }
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        return Err(format!("Type '{}' has no field '{}'", name, fname));
+                    }
+                }
+                
+                if is_struct {
+                    Ok(Ty::Struct(*id))
+                } else {
+                    Ok(Ty::Class(*id))
+                }
             }
         }
     }

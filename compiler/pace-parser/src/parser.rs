@@ -355,12 +355,8 @@ impl<'a> Parser<'a> {
         if self.check(&TokenKind::Eq) {
             self.advance();
             let right = self.parse_expr()?;
-            if let Expr::Ident(id) = left {
-                let span = id.span.merge(right.span());
-                return Ok(Expr::Assign { target: id, value: Box::new(right), span });
-            } else {
-                return Err("Invalid assignment target".to_string());
-            }
+            let span = left.span().merge(right.span());
+            return Ok(Expr::Assign { target: Box::new(left), value: Box::new(right), span });
         }
 
         loop {
@@ -431,7 +427,36 @@ impl<'a> Parser<'a> {
             TokenKind::Int(val) => Ok(Expr::IntLiteral(val.to_string(), tok.span)),
             TokenKind::Float(val) => Ok(Expr::FloatLiteral(val.to_string(), tok.span)),
             TokenKind::String(val) => Ok(Expr::StringLiteral(val.to_string(), tok.span)),
-            TokenKind::Ident(name) => Ok(Expr::Ident(Ident { name: name.to_string(), span: tok.span })),
+            TokenKind::Ident(name) => {
+                let ident = Ident { name: name.to_string(), span: tok.span };
+                if self.check(&TokenKind::LBrace) {
+                    self.advance();
+                    let mut fields = Vec::new();
+                    while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+                        let field_name = match &self.current {
+                            Some(Token { kind: TokenKind::Ident(n), span }) => Ident { name: n.to_string(), span: *span },
+                            _ => return Err("Expected field name in instantiation".to_string()),
+                        };
+                        self.advance();
+                        self.expect(TokenKind::Colon)?;
+                        let expr = self.parse_expr()?;
+                        fields.push((field_name, expr));
+                        
+                        if self.check(&TokenKind::Comma) {
+                            self.advance();
+                        } else {
+                            break;
+                        }
+                    }
+                    let rbrace = self.expect(TokenKind::RBrace)?;
+                    return Ok(Expr::Instantiate {
+                        name: ident.clone(),
+                        fields,
+                        span: ident.span.merge(rbrace.span),
+                    });
+                }
+                Ok(Expr::Ident(ident))
+            }
             _ => Err(format!("Unexpected token in expression: {:?}", tok.kind)),
         }
     }

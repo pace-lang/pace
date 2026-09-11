@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 pace-mir = { path = "../pace-mir" }
 pace-ast = { path = "../pace-ast" }
+pace-ty = { path = "../pace-ty" }

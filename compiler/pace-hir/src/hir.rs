@@ -39,11 +39,13 @@ pub enum Decl {
     Struct {
         id: HirId,
         name: String,
+        fields: Vec<(String, Type)>,
         span: Span,
     },
     Class {
         id: HirId,
         name: String,
+        fields: Vec<(String, Type)>,
         span: Span,
     },
     Function {
@@ -91,8 +93,14 @@ pub enum Expr {
         span: Span,
     },
     Assign {
-        target: HirId,
+        target: Box<Expr>,
         value: Box<Expr>,
+        span: Span,
+    },
+    Instantiate {
+        name: String,
+        id: HirId,
+        fields: Vec<(String, Expr)>,
         span: Span,
     },
 }
@@ -110,6 +118,7 @@ impl Expr {
             Expr::If { span, .. } => *span,
             Expr::While { span, .. } => *span,
             Expr::Assign { span, .. } => *span,
+            Expr::Instantiate { span, .. } => *span,
         }
     }
 }

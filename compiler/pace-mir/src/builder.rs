@@ -1,33 +1,45 @@
-use crate::mir::*;
-use pace_hir::{Expr, HirId};
 use std::collections::HashMap;
+use pace_hir::{Expr, Stmt as HirStmt, HirId};
+use crate::mir::*;
+use pace_ty::{Ty, TypeChecker};
 
-pub struct MirBuilder {
-    blocks: Vec<BasicBlock>,
-    current_block: BasicBlockId,
-    next_local: u32,
-    hir_to_local: HashMap<HirId, Local>,
-    global_fns: HashMap<HirId, String>,
+pub struct MirBuilder<'a> {
+    pub blocks: Vec<BasicBlock>,
+    pub current_block: BasicBlockId,
+    pub locals: Vec<Ty>,
+    pub hir_to_local: HashMap<HirId, Local>,
+    pub global_fns: HashMap<HirId, String>,
+    pub struct_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
+    pub class_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
+    pub global_env: &'a HashMap<HirId, Ty>,
 }
 
-impl MirBuilder {
-    pub fn new(global_fns: HashMap<HirId, String>) -> Self {
+impl<'a> MirBuilder<'a> {
+    pub fn new(
+        global_fns: HashMap<HirId, String>,
+        struct_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
+        class_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
+        global_env: &'a HashMap<HirId, Ty>,
+    ) -> Self {
         let initial_block = BasicBlock {
             statements: Vec::new(),
             terminator: None,
         };
-        Self {
+        MirBuilder {
             blocks: vec![initial_block],
             current_block: BasicBlockId(0),
-            next_local: 0,
+            locals: Vec::new(),
             hir_to_local: HashMap::new(),
             global_fns,
+            struct_defs,
+            class_defs,
+            global_env,
         }
     }
 
-    fn new_local(&mut self) -> Local {
-        let l = Local(self.next_local);
-        self.next_local += 1;
+    pub fn new_local(&mut self, ty: Ty) -> Local {
+        let l = Local(self.locals.len() as u32);
+        self.locals.push(ty);
         l
     }
 
@@ -45,9 +57,13 @@ impl MirBuilder {
             match stmt {
                 pace_hir::Stmt::Let { id, value, .. } => {
                     let rval_local = self.build_expr(value);
-                    let var_local = self.new_local();
+                    let var_ty = self.locals[rval_local.0 as usize].clone();
+                    let var_local = self.new_local(var_ty.clone());
                     self.hir_to_local.insert(*id, var_local);
-                    self.push_stmt(Statement::Assign(var_local, Rvalue::Use(rval_local)));
+                    self.push_stmt(Statement::Assign(Lvalue::Local(var_local), Rvalue::Use(rval_local)));
+                    if matches!(var_ty, Ty::Class(_)) {
+                        self.push_stmt(Statement::Retain(Lvalue::Local(var_local)));
+                    }
                 }
                 pace_hir::Stmt::ExprStmt(expr, _) => {
                     self.build_expr(expr);
@@ -56,8 +72,8 @@ impl MirBuilder {
                     let local = match expr {
                         Some(e) => self.build_expr(e),
                         None => {
-                            let temp = self.new_local();
-                            self.push_stmt(Statement::Assign(temp, Rvalue::IntConstant("0".to_string())));
+                            let temp = self.new_local(Ty::Int);
+                            self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::IntConstant("0".to_string())));
                             temp
                         }
                     };
@@ -77,48 +93,54 @@ impl MirBuilder {
 
     pub fn build_expr(&mut self, expr: &Expr) -> Local {
         match expr {
-            Expr::IntLiteral(val, _) => {
-                let temp = self.new_local();
-                self.push_stmt(Statement::Assign(temp, Rvalue::IntConstant(val.clone())));
-                temp
-            }
-            Expr::StringLiteral(val, _) => {
-                let temp = self.new_local();
-                self.push_stmt(Statement::Assign(temp, Rvalue::StringConstant(val.clone())));
-                // Because string is a reference type in Pace, ARC injects Retain!
-                self.push_stmt(Statement::Retain(temp));
-                temp
-            }
             Expr::Ident(id, _) => {
-                if let Some(local) = self.hir_to_local.get(id) {
-                    *local
-                } else {
-                    let local = self.new_local();
-                    self.hir_to_local.insert(*id, local);
-                    local
+                let local = *self.hir_to_local.get(id).expect("Local not found");
+                let temp = self.new_local(self.locals[local.0 as usize].clone());
+                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(local)));
+                if matches!(self.locals[temp.0 as usize], Ty::Class(_)) {
+                    self.push_stmt(Statement::Retain(Lvalue::Local(temp)));
                 }
+                temp
             }
             Expr::Binary { left, op, right, .. } => {
                 let lhs = self.build_expr(left);
                 let rhs = self.build_expr(right);
-                
-                let temp = self.new_local();
-                self.push_stmt(Statement::Assign(temp, Rvalue::BinaryOp(*op, lhs, rhs)));
+                let temp = self.new_local(Ty::Int);
+                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::BinaryOp(*op, lhs, rhs)));
                 temp
             }
-            Expr::MemberAccess { .. } => {
-                self.new_local() // Mocked for MVP v0.1
+            Expr::IntLiteral(val, _) => {
+                let temp = self.new_local(Ty::Int);
+                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::IntConstant(val.clone())));
+                temp
+            }
+            Expr::StringLiteral(val, _) => {
+                let temp = self.new_local(Ty::String);
+                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::StringConstant(val.clone())));
+                temp
+            }
+            Expr::MemberAccess { object, member, .. } => {
+                let obj_local = self.build_expr(object);
+                // In MVP we assume fields are integers, ideally we should lookup struct_defs.
+                let temp = self.new_local(Ty::Int);
+                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::FieldAccess(obj_local, member.clone())));
+                // If it was a class, we'd retain here.
+                temp
             }
             Expr::Call { callee, args, .. } => {
                 if let Expr::Ident(id, _) = &**callee {
-                    let maybe_func_name = self.global_fns.get(id).cloned();
-                    if let Some(func_name) = maybe_func_name {
+                    if let Some(func_name) = self.global_fns.get(id).cloned() {
                         let mut arg_locals = Vec::new();
                         for arg in args {
                             arg_locals.push(self.build_expr(arg));
                         }
-                        let temp = self.new_local();
-                        self.push_stmt(Statement::Assign(temp, Rvalue::GlobalCall(func_name, arg_locals)));
+                        let ret_ty = if let Some(Ty::Function(_, ret)) = self.global_env.get(id) {
+                            *ret.clone()
+                        } else {
+                            Ty::Int
+                        };
+                        let temp = self.new_local(ret_ty);
+                        self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::GlobalCall(func_name, arg_locals)));
                         return temp;
                     }
                 }
@@ -128,8 +150,8 @@ impl MirBuilder {
                 for arg in args {
                     arg_locals.push(self.build_expr(arg));
                 }
-                let temp = self.new_local();
-                self.push_stmt(Statement::Assign(temp, Rvalue::Call(callee_local, arg_locals)));
+                let temp = self.new_local(Ty::Int); // Placeholder MVP return ty
+                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Call(callee_local, arg_locals)));
                 temp
             }
             Expr::BuiltinCall(name, args, _) => {
@@ -137,8 +159,8 @@ impl MirBuilder {
                 for arg in args {
                     arg_locals.push(self.build_expr(arg));
                 }
-                let temp = self.new_local();
-                self.push_stmt(Statement::Assign(temp, Rvalue::BuiltinCall(name.clone(), arg_locals)));
+                let temp = self.new_local(Ty::Int);
+                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::BuiltinCall(name.clone(), arg_locals)));
                 temp
             }
             Expr::If { cond, then_block, else_block, .. } => {
@@ -169,7 +191,7 @@ impl MirBuilder {
                 }
 
                 self.current_block = merge_bb;
-                self.new_local()
+                self.new_local(Ty::Int)
             }
             Expr::While { cond, body, .. } => {
                 let cond_bb = self.new_block();
@@ -194,78 +216,152 @@ impl MirBuilder {
                 }
 
                 self.current_block = merge_bb;
-                self.new_local()
+                self.new_local(Ty::Int)
             }
             Expr::Assign { target, value, .. } => {
                 let rval = self.build_expr(value);
-                let target_local = *self.hir_to_local.get(target).unwrap();
-                self.push_stmt(Statement::Assign(target_local, Rvalue::Use(rval)));
-                target_local
+                let lvalue = match &**target {
+                    Expr::Ident(id, _) => {
+                        Lvalue::Local(*self.hir_to_local.get(id).unwrap())
+                    }
+                    Expr::MemberAccess { object, member, .. } => {
+                        let obj_local = self.build_expr(object);
+                        Lvalue::FieldAccess(obj_local, member.clone())
+                    }
+                    _ => panic!("Invalid assignment target"),
+                };
+                let lval_ty = match &lvalue {
+                    Lvalue::Local(l) => self.locals[l.0 as usize].clone(),
+                    Lvalue::FieldAccess(obj, _) => Ty::Int, // MVP: assumes integer field
+                };
+                if matches!(lval_ty, Ty::Class(_)) {
+                    self.push_stmt(Statement::Release(lvalue.clone()));
+                }
+                self.push_stmt(Statement::Assign(lvalue.clone(), Rvalue::Use(rval)));
+                if matches!(lval_ty, Ty::Class(_)) {
+                    self.push_stmt(Statement::Retain(lvalue));
+                }
+                rval
+            }
+            Expr::Instantiate { id, fields, .. } => {
+                let mut field_locals = Vec::new();
+                for (_, expr) in fields {
+                    field_locals.push(self.build_expr(expr));
+                }
+                
+                let ty = if self.struct_defs.contains_key(id) {
+                    Ty::Struct(*id)
+                } else {
+                    Ty::Class(*id)
+                };
+                
+                let temp = self.new_local(ty.clone());
+                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Instantiate(ty, field_locals)));
+                // Instantiate produces a +1 reference directly! No retain needed here!
+                temp
             }
         }
     }
 
-    pub fn build_program(program: &pace_hir::Program) -> MirProgram {
+    pub fn build_program(program: &pace_hir::Program, tc: &TypeChecker) -> MirProgram {
         let mut global_fns = HashMap::new();
         for decl in &program.declarations {
-            if let pace_hir::Decl::Function { id, name, .. } = decl {
+            if let pace_hir::Decl::Function { name, id, .. } = decl {
                 global_fns.insert(*id, name.clone());
             }
         }
 
         let mut functions = Vec::new();
-        let mut main_builder = MirBuilder::new(global_fns.clone());
-        let mut main_last_local = Local(0); 
+        let mut main_builder = MirBuilder::new(global_fns.clone(), &tc.struct_defs, &tc.class_defs, &tc.env);
+        let mut main_last_local = Local(0);
 
         for decl in &program.declarations {
             match decl {
                 pace_hir::Decl::Let { id, value, .. } => {
                     let rval_local = main_builder.build_expr(value);
-                    let var_local = main_builder.new_local();
+                    let var_ty = main_builder.locals[rval_local.0 as usize].clone();
+                    let var_local = main_builder.new_local(var_ty.clone());
                     main_builder.hir_to_local.insert(*id, var_local);
-                    main_builder.push_stmt(Statement::Assign(var_local, Rvalue::Use(rval_local)));
-                    main_last_local = var_local;
+                    main_builder.push_stmt(Statement::Assign(Lvalue::Local(var_local), Rvalue::Use(rval_local)));
+                    if matches!(var_ty, Ty::Class(_)) {
+                        main_builder.push_stmt(Statement::Retain(Lvalue::Local(var_local)));
+                    }
+                    main_last_local = rval_local;
                 }
-                pace_hir::Decl::Struct { .. } | pace_hir::Decl::Class { .. } => {
-                }
+                pace_hir::Decl::Struct { .. } | pace_hir::Decl::Class { .. } => {}
                 pace_hir::Decl::Expr(expr, _) => {
                     let rval_local = main_builder.build_expr(expr);
                     main_last_local = rval_local;
                 }
-                pace_hir::Decl::Function { params, body, name, .. } => {
-                    let mut fn_builder = MirBuilder::new(global_fns.clone());
+                pace_hir::Decl::Function { name, id, params, return_type, body, .. } => {
+                    let mut fn_builder = MirBuilder::new(
+                        global_fns.clone(),
+                        &tc.struct_defs,
+                        &tc.class_defs,
+                        &tc.env,
+                    );
                     let mut mir_params = Vec::new();
-                    for (param_id, _, _) in params {
-                        let local = fn_builder.new_local();
+                    for (param_id, _, pty) in params {
+                        let ty = tc.resolve_type(pty).unwrap_or(Ty::Int);
+                        let local = fn_builder.new_local(ty);
                         fn_builder.hir_to_local.insert(*param_id, local);
                         mir_params.push(local);
                     }
                     
+                    let ret_ty = if let Some(rty) = return_type {
+                        tc.resolve_type(rty).unwrap_or(Ty::Int)
+                    } else {
+                        Ty::Int
+                    };
                     fn_builder.build_block(body);
-                    let fn_body = fn_builder.finish(Local(0));
+                    let fn_body = fn_builder.finish(&mir_params);
                     functions.push(MirFunction {
                         name: name.clone(),
                         params: mir_params,
+                        return_type: ret_ty,
                         body: fn_body,
                     });
                 }
             }
         }
+
         MirProgram {
             functions,
-            main_body: main_builder.finish(main_last_local),
+            main_body: main_builder.finish(&[]),
+            struct_defs: tc.struct_defs.clone(),
+            class_defs: tc.class_defs.clone(),
         }
     }
+}
 
-    pub fn finish(mut self, return_val: Local) -> MirBody {
-        let idx = self.current_block.0 as usize;
-        if self.blocks[idx].terminator.is_none() {
-            self.blocks[idx].terminator = Some(Terminator::Return(return_val));
+impl<'a> MirBuilder<'a> {
+    pub fn finish(mut self, params: &[Local]) -> MirBody {
+        let current_bb = self.current_block.0 as usize;
+        
+        if self.blocks[current_bb].terminator.is_none() {
+            let temp = self.new_local(Ty::Int);
+            self.blocks[current_bb].statements.push(Statement::Assign(Lvalue::Local(temp), Rvalue::IntConstant("0".to_string())));
+            self.blocks[current_bb].terminator = Some(Terminator::Return(temp));
+        }
+
+        let mut return_locals = Vec::new();
+        for block in &self.blocks {
+            if let Some(Terminator::Return(r)) = &block.terminator {
+                return_locals.push(*r);
+            }
+        }
+        
+        // ARC: Release all Class locals at the end, except return_local and params
+        for (i, ty) in self.locals.iter().enumerate() {
+            let local = Local(i as u32);
+            if matches!(ty, Ty::Class(_)) && !return_locals.contains(&local) && !params.contains(&local) {
+                self.blocks[current_bb].statements.push(Statement::Release(Lvalue::Local(local)));
+            }
         }
 
         MirBody {
             blocks: self.blocks,
-            locals: self.next_local,
+            locals: self.locals,
         }
     }
 }
