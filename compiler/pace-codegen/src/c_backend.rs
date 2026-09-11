@@ -245,17 +245,25 @@ impl CGenerator {
                 match ty {
                     Ty::Struct(id) => {
                         write!(&mut self.output, "(struct pace_{}){{ ", id.0).unwrap();
-                        for (i, arg) in fields.iter().enumerate() {
-                            if i > 0 { self.output.push_str(", "); }
-                            write!(&mut self.output, "_{}", arg.0).unwrap();
+                        if fields.is_empty() {
+                            self.output.push_str("0");
+                        } else {
+                            for (i, arg) in fields.iter().enumerate() {
+                                if i > 0 { self.output.push_str(", "); }
+                                write!(&mut self.output, "_{}", arg.0).unwrap();
+                            }
                         }
                         self.output.push_str(" }");
                     }
                     Ty::Class(id) => {
                         write!(&mut self.output, "memcpy(pace_alloc(sizeof(struct pace_{}), NULL), &(struct pace_{}){{ ", id.0, id.0).unwrap();
-                        for (i, arg) in fields.iter().enumerate() {
-                            if i > 0 { self.output.push_str(", "); }
-                            write!(&mut self.output, "_{}", arg.0).unwrap();
+                        if fields.is_empty() {
+                            self.output.push_str("0");
+                        } else {
+                            for (i, arg) in fields.iter().enumerate() {
+                                if i > 0 { self.output.push_str(", "); }
+                                write!(&mut self.output, "_{}", arg.0).unwrap();
+                            }
                         }
                         write!(&mut self.output, " }}, sizeof(struct pace_{}))", id.0).unwrap();
                     }

@@ -1,0 +1,9 @@
+class Box {
+    val: Int,
+    init(v: Int) {
+        self.val = v
+    }
+}
+
+let b = Box(v: 42)
+print(b.val)

@@ -103,23 +103,57 @@ impl<'a> Parser<'a> {
 
         self.expect(TokenKind::LBrace)?;
         let mut fields = Vec::new();
+        let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
-            let field_name = match &self.current {
-                Some(Token { kind: TokenKind::Ident(name), span }) => {
-                    let ident = Ident { name: name.to_string(), span: *span };
-                    self.advance();
-                    ident
+            if self.check(&TokenKind::Fn) {
+                methods.push(self.parse_fn_decl()?);
+            } else if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
+                if *name == "init" {
+                    let init_span_start = *span;
+                    self.advance(); // consume 'init'
+                    let ident = Ident { name: "init".to_string(), span: init_span_start };
+                    
+                    self.expect(TokenKind::LParen)?;
+                    let mut params = Vec::new();
+                    while !self.check(&TokenKind::RParen) && self.current.is_some() {
+                        let param_name = match &self.current {
+                            Some(Token { kind: TokenKind::Ident(n), span }) => Ident { name: n.to_string(), span: *span },
+                            _ => return Err("Expected parameter name".to_string()),
+                        };
+                        self.advance();
+                        self.expect(TokenKind::Colon)?;
+                        let param_ty = self.parse_type()?;
+                        params.push((param_name, param_ty));
+                        if self.check(&TokenKind::Comma) {
+                            self.advance();
+                        }
+                    }
+                    self.expect(TokenKind::RParen)?;
+                    
+                    let body = self.parse_block()?;
+                    methods.push(Decl::Function {
+                        name: ident,
+                        params,
+                        return_type: None,
+                        body: body.clone(),
+                        span: init_span_start.merge(body.span),
+                    });
+                    continue;
                 }
-                _ => return Err("Expected field name".to_string()),
-            };
-
-            self.expect(TokenKind::Colon)?;
-            let field_type = self.parse_type()?;
-            fields.push((field_name, field_type));
-            
-            if self.check(&TokenKind::Comma) {
+                
+                let field_name = Ident { name: name.to_string(), span: self.current.as_ref().unwrap().span };
                 self.advance();
+                
+                self.expect(TokenKind::Colon)?;
+                let field_type = self.parse_type()?;
+                fields.push((field_name, field_type));
+                
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                }
+            } else {
+                return Err("Expected field or method in struct".to_string());
             }
         }
         
@@ -128,6 +162,7 @@ impl<'a> Parser<'a> {
         Ok(Decl::Struct {
             name: name_tok,
             fields,
+            methods,
             span: start_tok.span.merge(end_tok.span),
         })
     }
@@ -151,23 +186,52 @@ impl<'a> Parser<'a> {
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
             if self.check(&TokenKind::Fn) {
                 methods.push(self.parse_fn_decl()?);
-            } else {
-                let field_name = match &self.current {
-                    Some(Token { kind: TokenKind::Ident(name), span }) => {
-                        let ident = Ident { name: name.to_string(), span: *span };
+            } else if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
+                if *name == "init" {
+                    let init_span_start = *span;
+                    self.advance(); // consume 'init'
+                    let ident = Ident { name: "init".to_string(), span: init_span_start };
+                    
+                    self.expect(TokenKind::LParen)?;
+                    let mut params = Vec::new();
+                    while !self.check(&TokenKind::RParen) && self.current.is_some() {
+                        let param_name = match &self.current {
+                            Some(Token { kind: TokenKind::Ident(n), span }) => Ident { name: n.to_string(), span: *span },
+                            _ => return Err("Expected parameter name".to_string()),
+                        };
                         self.advance();
-                        ident
+                        self.expect(TokenKind::Colon)?;
+                        let param_ty = self.parse_type()?;
+                        params.push((param_name, param_ty));
+                        if self.check(&TokenKind::Comma) {
+                            self.advance();
+                        }
                     }
-                    _ => return Err("Expected field or method in class".to_string()),
-                };
-
+                    self.expect(TokenKind::RParen)?;
+                    
+                    let body = self.parse_block()?;
+                    methods.push(Decl::Function {
+                        name: ident,
+                        params,
+                        return_type: None,
+                        body: body.clone(),
+                        span: init_span_start.merge(body.span),
+                    });
+                    continue;
+                }
+                
+                let field_name = Ident { name: name.to_string(), span: self.current.as_ref().unwrap().span };
+                self.advance();
+                
                 self.expect(TokenKind::Colon)?;
                 let field_type = self.parse_type()?;
                 fields.push((field_name, field_type));
-
+                
                 if self.check(&TokenKind::Comma) {
                     self.advance();
                 }
+            } else {
+                return Err("Expected field or method in class".to_string());
             }
         }
         
@@ -329,16 +393,31 @@ impl<'a> Parser<'a> {
             } else if self.check(&TokenKind::LParen) {
                 self.advance();
                 let mut args = Vec::new();
-                while !self.check(&TokenKind::RParen) && self.current.is_some() {
-                    args.push(self.parse_expr()?);
-                    if self.check(&TokenKind::Comma) {
-                        self.advance();
+                if !self.check(&TokenKind::RParen) {
+                    loop {
+                        // Check for named argument: `ident:`
+                        let mut label = None;
+                        
+                        let mut parsed_expr = self.parse_expr()?;
+                        
+                        if let Expr::Ident(ref ident) = parsed_expr {
+                            if self.check(&TokenKind::Colon) {
+                                self.advance(); // consume `:`
+                                label = Some(ident.clone());
+                                parsed_expr = self.parse_expr()?;
+                            }
+                        }
+                        args.push((label, parsed_expr));
+                        if self.check(&TokenKind::Comma) {
+                            self.advance();
+                        } else {
+                            break;
+                        }
                     }
                 }
-                let end_tok = self.expect(TokenKind::RParen)?;
-                let span = left.span().merge(end_tok.span);
+                let rparen = self.expect(TokenKind::RParen)?;
                 left = Expr::Call {
-                    span,
+                    span: left.span().merge(rparen.span),
                     callee: Box::new(left),
                     args,
                 };
@@ -429,32 +508,6 @@ impl<'a> Parser<'a> {
             TokenKind::String(val) => Ok(Expr::StringLiteral(val.to_string(), tok.span)),
             TokenKind::Ident(name) => {
                 let ident = Ident { name: name.to_string(), span: tok.span };
-                if self.check(&TokenKind::LBrace) {
-                    self.advance();
-                    let mut fields = Vec::new();
-                    while !self.check(&TokenKind::RBrace) && self.current.is_some() {
-                        let field_name = match &self.current {
-                            Some(Token { kind: TokenKind::Ident(n), span }) => Ident { name: n.to_string(), span: *span },
-                            _ => return Err("Expected field name in instantiation".to_string()),
-                        };
-                        self.advance();
-                        self.expect(TokenKind::Colon)?;
-                        let expr = self.parse_expr()?;
-                        fields.push((field_name, expr));
-                        
-                        if self.check(&TokenKind::Comma) {
-                            self.advance();
-                        } else {
-                            break;
-                        }
-                    }
-                    let rbrace = self.expect(TokenKind::RBrace)?;
-                    return Ok(Expr::Instantiate {
-                        name: ident.clone(),
-                        fields,
-                        span: ident.span.merge(rbrace.span),
-                    });
-                }
                 Ok(Expr::Ident(ident))
             }
             _ => Err(format!("Unexpected token in expression: {:?}", tok.kind)),

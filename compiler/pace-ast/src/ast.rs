@@ -34,6 +34,7 @@ pub enum Decl {
     Struct {
         name: Ident,
         fields: Vec<(Ident, Type)>,
+        methods: Vec<Decl>, // Expects Decl::Function
         span: Span,
     },
     Class {
@@ -96,7 +97,7 @@ pub enum Expr {
     },
     Call {
         callee: Box<Expr>,
-        args: Vec<Expr>,
+        args: Vec<(Option<Ident>, Expr)>,
         span: Span,
     },
     If {
@@ -108,11 +109,6 @@ pub enum Expr {
     While {
         cond: Box<Expr>,
         body: Block,
-        span: Span,
-    },
-    Instantiate {
-        name: Ident,
-        fields: Vec<(Ident, Expr)>,
         span: Span,
     },
     Assign {
@@ -148,7 +144,6 @@ impl Expr {
             Expr::Call { span, .. } => *span,
             Expr::If { span, .. } => *span,
             Expr::While { span, .. } => *span,
-            Expr::Instantiate { span, .. } => *span,
             Expr::Assign { span, .. } => *span,
         }
     }

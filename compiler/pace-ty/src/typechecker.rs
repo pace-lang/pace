@@ -5,18 +5,20 @@ use crate::ty::Ty;
 
 pub struct TypeChecker {
     pub env: HashMap<HirId, Ty>,
+    pub named_types: HashMap<String, HirId>, // struct/class names to HirId
     pub struct_defs: HashMap<HirId, Vec<(String, Ty)>>,
     pub class_defs: HashMap<HirId, Vec<(String, Ty)>>,
-    pub named_types: HashMap<String, HirId>,
+    pub methods_env: HashMap<String, Ty>,
 }
 
 impl TypeChecker {
     pub fn new() -> Self {
         Self {
             env: HashMap::new(),
+            named_types: HashMap::new(),
             struct_defs: HashMap::new(),
             class_defs: HashMap::new(),
-            named_types: HashMap::new(),
+            methods_env: HashMap::new(),
         }
     }
 
@@ -49,11 +51,41 @@ impl TypeChecker {
         // Pass 1: Register top-level structures and classes names
         for decl in &program.declarations {
             match decl {
-                Decl::Struct { id, name, .. } => {
+                Decl::Struct { id, name, methods, .. } => {
                     self.named_types.insert(name.clone(), *id);
+                    for method in methods {
+                        if let Decl::Function { name: m_name, params, return_type, id: m_id, .. } = method {
+                            let mut param_tys = Vec::new();
+                            for (_, _, pty) in params {
+                                param_tys.push(self.resolve_type(pty).unwrap_or(Ty::Int));
+                            }
+                            let ret_ty = if let Some(r) = return_type {
+                                self.resolve_type(r).unwrap_or(Ty::Int)
+                            } else {
+                                Ty::Int
+                            };
+                            self.env.insert(*m_id, Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())));
+                            self.methods_env.insert(m_name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
+                        }
+                    }
                 }
-                Decl::Class { id, name, .. } => {
+                Decl::Class { id, name, methods, .. } => {
                     self.named_types.insert(name.clone(), *id);
+                    for method in methods {
+                        if let Decl::Function { name: m_name, params, return_type, id: m_id, .. } = method {
+                            let mut param_tys = Vec::new();
+                            for (_, _, pty) in params {
+                                param_tys.push(self.resolve_type(pty).unwrap_or(Ty::Int));
+                            }
+                            let ret_ty = if let Some(r) = return_type {
+                                self.resolve_type(r).unwrap_or(Ty::Int)
+                            } else {
+                                Ty::Int
+                            };
+                            self.env.insert(*m_id, Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())));
+                            self.methods_env.insert(m_name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -211,7 +243,92 @@ impl TypeChecker {
             }
             Expr::Call { callee, args, .. } => {
                 let callee_ty = self.check_expr(callee)?;
-                for arg in args {
+                
+                if let Ty::Struct(id) = callee_ty {
+                    let mut struct_name = "";
+                    for (name, nid) in &self.named_types {
+                        if *nid == id { struct_name = name; break; }
+                    }
+                    let init_name = format!("{}_init", struct_name);
+                    
+                    if let Some(Ty::Function(param_tys, _)) = self.methods_env.get(&init_name).cloned() {
+                        if args.len() != param_tys.len() - 1 {
+                            return Err(format!("{} takes {} arguments, got {}", init_name, param_tys.len() - 1, args.len()));
+                        }
+                        for (i, (_, fexpr)) in args.iter().enumerate() {
+                            let fty = self.check_expr(fexpr)?;
+                            if fty != param_tys[i + 1] {
+                                return Err(format!("Argument {} expects type {:?}, got {:?}", i, param_tys[i + 1], fty));
+                            }
+                        }
+                        return Ok(Ty::Struct(id));
+                    }
+                    
+                    let def_fields = self.struct_defs.get(&id).unwrap().clone();
+                    let mut def_map: std::collections::HashMap<_, _> = def_fields.into_iter().collect();
+                    for (label, fexpr) in args {
+                        let fty = self.check_expr(fexpr)?;
+                        if let Some(fname) = label {
+                            if let Some(expected_ty) = def_map.remove(fname) {
+                                if fty != expected_ty {
+                                    return Err(format!("Field '{}' expects type {:?}, got {:?}", fname, expected_ty, fty));
+                                }
+                            } else {
+                                return Err(format!("Unknown field '{}' in instantiation", fname));
+                            }
+                        } else {
+                            return Err("Struct instantiation requires named arguments".to_string());
+                        }
+                    }
+                    if !def_map.is_empty() {
+                        return Err(format!("Missing fields in struct instantiation: {:?}", def_map.keys()));
+                    }
+                    return Ok(Ty::Struct(id));
+                }
+                
+                if let Ty::Class(id) = callee_ty {
+                    let mut class_name = "";
+                    for (name, nid) in &self.named_types {
+                        if *nid == id { class_name = name; break; }
+                    }
+                    let init_name = format!("{}_init", class_name);
+                    
+                    if let Some(Ty::Function(param_tys, _)) = self.methods_env.get(&init_name).cloned() {
+                        if args.len() != param_tys.len() - 1 {
+                            return Err(format!("{} takes {} arguments, got {}", init_name, param_tys.len() - 1, args.len()));
+                        }
+                        for (i, (_, fexpr)) in args.iter().enumerate() {
+                            let fty = self.check_expr(fexpr)?;
+                            if fty != param_tys[i + 1] {
+                                return Err(format!("Argument {} expects type {:?}, got {:?}", i, param_tys[i + 1], fty));
+                            }
+                        }
+                        return Ok(Ty::Class(id));
+                    }
+
+                    let def_fields = self.class_defs.get(&id).unwrap().clone();
+                    let mut def_map: std::collections::HashMap<_, _> = def_fields.into_iter().collect();
+                    for (label, fexpr) in args {
+                        let fty = self.check_expr(fexpr)?;
+                        if let Some(fname) = label {
+                            if let Some(expected_ty) = def_map.remove(fname) {
+                                if fty != expected_ty {
+                                    return Err(format!("Field '{}' expects type {:?}, got {:?}", fname, expected_ty, fty));
+                                }
+                            } else {
+                                return Err(format!("Unknown field '{}' in instantiation", fname));
+                            }
+                        } else {
+                            return Err("Class instantiation requires named arguments".to_string());
+                        }
+                    }
+                    if !def_map.is_empty() {
+                        return Err(format!("Missing fields in class instantiation: {:?}", def_map.keys()));
+                    }
+                    return Ok(Ty::Class(id));
+                }
+
+                for (_, arg) in args {
                     self.check_expr(arg)?;
                 }
                 if let Ty::Function(_, ret_ty) = callee_ty {
@@ -254,41 +371,6 @@ impl TypeChecker {
                     return Err(format!("Type mismatch in assignment: expected {:?}, got {:?}", target_ty, val_ty));
                 }
                 Ok(target_ty)
-            }
-            Expr::Instantiate { name, id, fields, .. } => {
-                let is_struct = self.struct_defs.contains_key(id);
-                let is_class = self.class_defs.contains_key(id);
-                
-                let def_fields = if is_struct {
-                    self.struct_defs.get(id).unwrap().clone()
-                } else if is_class {
-                    self.class_defs.get(id).unwrap().clone()
-                } else {
-                    return Err(format!("'{}' is not a struct or class", name));
-                };
-
-                for (fname, expr) in fields {
-                    let expr_ty = self.check_expr(expr)?;
-                    let mut found = false;
-                    for (dfname, dfty) in &def_fields {
-                        if fname == dfname {
-                            if *dfty != expr_ty {
-                                return Err(format!("Field '{}' expects type {:?}, got {:?}", fname, dfty, expr_ty));
-                            }
-                            found = true;
-                            break;
-                        }
-                    }
-                    if !found {
-                        return Err(format!("Type '{}' has no field '{}'", name, fname));
-                    }
-                }
-                
-                if is_struct {
-                    Ok(Ty::Struct(*id))
-                } else {
-                    Ok(Ty::Class(*id))
-                }
             }
         }
     }

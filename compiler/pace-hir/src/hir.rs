@@ -40,12 +40,14 @@ pub enum Decl {
         id: HirId,
         name: String,
         fields: Vec<(String, Type)>,
+        methods: Vec<Decl>, // Lowered to global functions anyway, but kept for namespacing if needed
         span: Span,
     },
     Class {
         id: HirId,
         name: String,
         fields: Vec<(String, Type)>,
+        methods: Vec<Decl>,
         span: Span,
     },
     Function {
@@ -77,7 +79,7 @@ pub enum Expr {
     },
     Call {
         callee: Box<Expr>,
-        args: Vec<Expr>,
+        args: Vec<(Option<String>, Expr)>,
         span: Span,
     },
     BuiltinCall(String, Vec<Expr>, Span),
@@ -97,12 +99,6 @@ pub enum Expr {
         value: Box<Expr>,
         span: Span,
     },
-    Instantiate {
-        name: String,
-        id: HirId,
-        fields: Vec<(String, Expr)>,
-        span: Span,
-    },
 }
 
 impl Expr {
@@ -118,7 +114,6 @@ impl Expr {
             Expr::If { span, .. } => *span,
             Expr::While { span, .. } => *span,
             Expr::Assign { span, .. } => *span,
-            Expr::Instantiate { span, .. } => *span,
         }
     }
 }

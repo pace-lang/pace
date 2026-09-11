@@ -12,6 +12,7 @@ pub struct MirBuilder<'a> {
     pub struct_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
     pub class_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
     pub global_env: &'a HashMap<HirId, Ty>,
+    pub named_types: &'a HashMap<String, HirId>,
 }
 
 impl<'a> MirBuilder<'a> {
@@ -20,6 +21,7 @@ impl<'a> MirBuilder<'a> {
         struct_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
         class_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
         global_env: &'a HashMap<HirId, Ty>,
+        named_types: &'a HashMap<String, HirId>,
     ) -> Self {
         let initial_block = BasicBlock {
             statements: Vec::new(),
@@ -34,6 +36,7 @@ impl<'a> MirBuilder<'a> {
             struct_defs,
             class_defs,
             global_env,
+            named_types,
         }
     }
 
@@ -128,12 +131,63 @@ impl<'a> MirBuilder<'a> {
                 temp
             }
             Expr::Call { callee, args, .. } => {
+                let mut is_instantiation = false;
+                let mut inst_ty = None;
+                let mut struct_name = String::new();
+                
+                if let Expr::Ident(id, _) = &**callee {
+                    if let Some(ty) = self.global_env.get(id) {
+                        if matches!(ty, Ty::Struct(_) | Ty::Class(_)) {
+                            is_instantiation = true;
+                            inst_ty = Some(ty.clone());
+                            let nid = match ty { Ty::Struct(i) => i, Ty::Class(i) => i, _ => unreachable!() };
+                            for (name, tid) in self.named_types {
+                                if nid == tid { struct_name = name.clone(); break; }
+                            }
+                        }
+                    }
+                }
+                
+                let mut arg_locals = Vec::new();
+                for (_, arg) in args {
+                    arg_locals.push(self.build_expr(arg));
+                }
+                
+                if is_instantiation {
+                    let ty = inst_ty.unwrap();
+                    let init_name = format!("{}_init", struct_name);
+                    let mut has_init = false;
+                    for fn_name in self.global_fns.values() {
+                        if *fn_name == init_name {
+                            has_init = true;
+                            break;
+                        }
+                    }
+                    
+                    let temp = self.new_local(ty.clone());
+                    
+                    if has_init {
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(temp),
+                            Rvalue::Instantiate(ty.clone(), vec![]),
+                        ));
+                        
+                        let mut call_args = vec![temp];
+                        call_args.extend(arg_locals);
+                        
+                        let ret_dummy = self.new_local(Ty::Int);
+                        self.push_stmt(Statement::Assign(Lvalue::Local(ret_dummy), Rvalue::GlobalCall(init_name, call_args)));
+                    } else {
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(temp),
+                            Rvalue::Instantiate(ty, arg_locals),
+                        ));
+                    }
+                    return temp;
+                }
+                
                 if let Expr::Ident(id, _) = &**callee {
                     if let Some(func_name) = self.global_fns.get(id).cloned() {
-                        let mut arg_locals = Vec::new();
-                        for arg in args {
-                            arg_locals.push(self.build_expr(arg));
-                        }
                         let ret_ty = if let Some(Ty::Function(_, ret)) = self.global_env.get(id) {
                             *ret.clone()
                         } else {
@@ -146,10 +200,6 @@ impl<'a> MirBuilder<'a> {
                 }
                 
                 let callee_local = self.build_expr(callee);
-                let mut arg_locals = Vec::new();
-                for arg in args {
-                    arg_locals.push(self.build_expr(arg));
-                }
                 let temp = self.new_local(Ty::Int); // Placeholder MVP return ty
                 self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Call(callee_local, arg_locals)));
                 temp
@@ -243,23 +293,6 @@ impl<'a> MirBuilder<'a> {
                 }
                 rval
             }
-            Expr::Instantiate { id, fields, .. } => {
-                let mut field_locals = Vec::new();
-                for (_, expr) in fields {
-                    field_locals.push(self.build_expr(expr));
-                }
-                
-                let ty = if self.struct_defs.contains_key(id) {
-                    Ty::Struct(*id)
-                } else {
-                    Ty::Class(*id)
-                };
-                
-                let temp = self.new_local(ty.clone());
-                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Instantiate(ty, field_locals)));
-                // Instantiate produces a +1 reference directly! No retain needed here!
-                temp
-            }
         }
     }
 
@@ -272,8 +305,8 @@ impl<'a> MirBuilder<'a> {
         }
 
         let mut functions = Vec::new();
-        let mut main_builder = MirBuilder::new(global_fns.clone(), &tc.struct_defs, &tc.class_defs, &tc.env);
-        let mut main_last_local = Local(0);
+        let mut main_builder = MirBuilder::new(global_fns.clone(), &tc.struct_defs, &tc.class_defs, &tc.env, &tc.named_types);
+        let mut _main_last_local = Local(0);
 
         for decl in &program.declarations {
             match decl {
@@ -286,12 +319,46 @@ impl<'a> MirBuilder<'a> {
                     if matches!(var_ty, Ty::Class(_)) {
                         main_builder.push_stmt(Statement::Retain(Lvalue::Local(var_local)));
                     }
-                    main_last_local = rval_local;
+                    _main_last_local = rval_local;
                 }
-                pace_hir::Decl::Struct { .. } | pace_hir::Decl::Class { .. } => {}
+                pace_hir::Decl::Struct { methods, .. } | pace_hir::Decl::Class { methods, .. } => {
+                    for method in methods {
+                        if let pace_hir::Decl::Function { name, params, return_type, body, .. } = method {
+                            let mut fn_builder = MirBuilder::new(
+                                global_fns.clone(),
+                                &tc.struct_defs,
+                                &tc.class_defs,
+                                &tc.env,
+                                &tc.named_types,
+                            );
+                            let mut mir_params = Vec::new();
+                            for (param_id, _, pty) in params {
+                                let ty = tc.resolve_type(pty).unwrap_or(Ty::Int);
+                                let local = fn_builder.new_local(ty);
+                                fn_builder.hir_to_local.insert(*param_id, local);
+                                mir_params.push(local);
+                            }
+                            
+                            let ret_ty = if let Some(rty) = return_type {
+                                tc.resolve_type(rty).unwrap_or(Ty::Int)
+                            } else {
+                                Ty::Int
+                            };
+                            fn_builder.build_block(body);
+                            let fn_body = fn_builder.finish(&mir_params);
+                            
+                            functions.push(MirFunction {
+                                name: name.clone(),
+                                params: mir_params,
+                                return_type: ret_ty,
+                                body: fn_body,
+                            });
+                        }
+                    }
+                }
                 pace_hir::Decl::Expr(expr, _) => {
                     let rval_local = main_builder.build_expr(expr);
-                    main_last_local = rval_local;
+                    _main_last_local = rval_local;
                 }
                 pace_hir::Decl::Function { name, id, params, return_type, body, .. } => {
                     let mut fn_builder = MirBuilder::new(
@@ -299,6 +366,7 @@ impl<'a> MirBuilder<'a> {
                         &tc.struct_defs,
                         &tc.class_defs,
                         &tc.env,
+                        &tc.named_types,
                     );
                     let mut mir_params = Vec::new();
                     for (param_id, _, pty) in params {
