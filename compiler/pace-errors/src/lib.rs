@@ -114,61 +114,48 @@ impl Reporter {
     }
 
     pub fn emit_all(&self, source: &str, file_name: &str) {
+        use ariadne::{Report, ReportKind, Label, Source, Color};
+
         for diag in &self.diagnostics {
-            let color_code = match diag.severity {
-                Severity::Error => "\x1b[31m",   // Red
-                Severity::Warning => "\x1b[33m", // Yellow
-                Severity::Note => "\x1b[36m",    // Cyan
+            let kind = match diag.severity {
+                Severity::Error => ReportKind::Error,
+                Severity::Warning => ReportKind::Warning,
+                Severity::Note => ReportKind::Advice,
             };
-            let reset_code = "\x1b[0m";
-            let bold_code = "\x1b[1m";
-            
-            let code_str = match &diag.code {
-                Some(c) => format!("[{}]", c.as_str()),
-                None => "".to_string(),
+
+            let color = match diag.severity {
+                Severity::Error => Color::Red,
+                Severity::Warning => Color::Yellow,
+                Severity::Note => Color::Cyan,
             };
+
+            let span_start = diag.span.map(|s| s.start).unwrap_or(0);
+            let span_end = diag.span.map(|s| s.end).unwrap_or(span_start + 1);
             
-            eprintln!("{}{} {}{}{}: {}", bold_code, color_code, diag.severity, code_str, reset_code, diag.message);
+            let mut builder = Report::build(kind, (file_name, span_start..span_end))
+                .with_message(&diag.message);
+                
+            if let Some(code) = &diag.code {
+                builder = builder.with_code(code.as_str());
+            }
             
             if let Some(span) = diag.span {
-                // Find line number and column
-                let mut line = 1;
-                let mut col = 1;
-                let mut line_start = 0;
-                let mut line_end = source.len();
+                let mut label = Label::new((file_name, span.start..span.end)).with_color(color);
                 
-                for (i, c) in source.char_indices() {
-                    if i == span.start {
-                        break;
-                    }
-                    if c == '\n' {
-                        line += 1;
-                        col = 1;
-                        line_start = i + 1;
-                    } else {
-                        col += 1;
-                    }
+                if let Some(hint) = &diag.hint {
+                    label = label.with_message(hint);
+                } else {
+                    label = label.with_message("here");
                 }
                 
-                for (i, c) in source[line_start..].char_indices() {
-                    if c == '\n' {
-                        line_end = line_start + i;
-                        break;
-                    }
-                }
-                
-                let line_str = &source[line_start..line_end];
-                
-                eprintln!("  --> {}:{}:{}", file_name, line, col);
-                eprintln!("   |");
-                eprintln!("{:<2} | {}", line, line_str);
-                eprintln!("   | {}{}{}{}", " ".repeat(col - 1), color_code, "^".repeat(std::cmp::max(1, span.end.saturating_sub(span.start))), reset_code);
+                builder = builder.with_label(label);
+            } else if let Some(hint) = &diag.hint {
+                builder = builder.with_note(hint);
             }
-            
-            if let Some(hint) = &diag.hint {
-                eprintln!("   = \x1b[1mhelp\x1b[0m: {}", hint);
-            }
-            eprintln!();
+
+            builder.finish()
+                .eprint((file_name, Source::from(source)))
+                .unwrap();
         }
     }
 }
