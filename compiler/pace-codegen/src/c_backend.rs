@@ -71,6 +71,7 @@ impl CGenerator {
             Ty::Class(id) => format!("struct pace_{}*", id.0),
             Ty::Function(_, _) => "void*".to_string(),
             Ty::Optional(inner) => self.emit_c_type(inner),
+            Ty::Void => "void".to_string(),
         }
     }
 
@@ -80,6 +81,7 @@ impl CGenerator {
             Ty::String | Ty::Class(_) | Ty::Function(_, _) => "NULL".to_string(),
             Ty::Struct(_) => "{0}".to_string(),
             Ty::Optional(inner) => self.emit_c_default_val(inner),
+            Ty::Void => "".to_string(),
         }
     }
 
@@ -119,7 +121,9 @@ impl CGenerator {
                     write!(&mut self.output, "    if (_{}) goto {}_bb_{}; else goto {}_bb_{};\n", cond.0, func.name, then_block.0, func.name, else_block.0).unwrap();
                 }
                 None => {
-                    self.output.push_str("    return 0;\n");
+                    if ret_ty_str != "void" {
+                        self.output.push_str("    return 0;\n");
+                    }
                 }
             }
         }

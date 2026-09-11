@@ -3,7 +3,7 @@ use pace_hir::{Expr, Decl, Program, HirId};
 
 use crate::ty::Ty;
 
-use pace_errors::{Reporter, Diagnostic};
+use pace_errors::{Reporter, Diagnostic, ErrorCode};
 
 pub struct TypeChecker {
     pub env: HashMap<HirId, Ty>,
@@ -12,6 +12,8 @@ pub struct TypeChecker {
     pub struct_defs: HashMap<HirId, Vec<(String, Ty)>>,
     pub class_defs: HashMap<HirId, Vec<(String, Ty)>>,
     pub methods_env: HashMap<String, Ty>,
+    pub used_bindings: std::collections::HashSet<HirId>,
+    pub declared_bindings: Vec<(HirId, String, pace_span::Span)>,
     pub reporter: Reporter,
 }
 
@@ -24,6 +26,8 @@ impl TypeChecker {
             struct_defs: HashMap::new(),
             class_defs: HashMap::new(),
             methods_env: HashMap::new(),
+            used_bindings: std::collections::HashSet::new(),
+            declared_bindings: Vec::new(),
             reporter: Reporter::new(),
         }
     }
@@ -36,6 +40,7 @@ impl TypeChecker {
                     "Float" | "float" => Ok(Ty::Float),
                     "String" | "string" => Ok(Ty::String),
                     "Bool" | "bool" => Ok(Ty::Bool),
+                    "Void" | "void" => Ok(Ty::Void),
                     other => {
                         if let Some(&hir_id) = self.named_types.get(other) {
                             if self.struct_defs.contains_key(&hir_id) {
@@ -90,9 +95,9 @@ impl TypeChecker {
                                 param_tys.push(self.resolve_type(pty).unwrap_or(Ty::Int));
                             }
                             let ret_ty = if let Some(r) = return_type {
-                                self.resolve_type(r).unwrap_or(Ty::Int)
+                                self.resolve_type(r).unwrap_or(Ty::Void)
                             } else {
-                                Ty::Int
+                                Ty::Void
                             };
                             self.env.insert(*m_id, Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())));
                             self.methods_env.insert(m_name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
@@ -108,9 +113,9 @@ impl TypeChecker {
                                 param_tys.push(self.resolve_type(pty).unwrap_or(Ty::Int));
                             }
                             let ret_ty = if let Some(r) = return_type {
-                                self.resolve_type(r).unwrap_or(Ty::Int)
+                                self.resolve_type(r).unwrap_or(Ty::Void)
                             } else {
-                                Ty::Int
+                                Ty::Void
                             };
                             self.env.insert(*m_id, Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())));
                             self.methods_env.insert(m_name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
@@ -152,7 +157,7 @@ impl TypeChecker {
                 let ret_ty = if let Some(rty) = return_type {
                     self.resolve_type(rty)?
                 } else {
-                    Ty::Int // Defaulting for now
+                    Ty::Void
                 };
                 self.env.insert(*id, Ty::Function(param_tys, Box::new(ret_ty)));
             }
@@ -161,19 +166,29 @@ impl TypeChecker {
         for decl in &program.declarations {
             self.check_decl(decl)?;
         }
+        
+        // Pass 4: Unused Variables and Functions Linter Sweep
+        for (id, name, span) in &self.declared_bindings {
+            if !self.used_bindings.contains(&id) && !name.starts_with('_') && name != "main" && !name.ends_with("_init") {
+                self.reporter.report(Diagnostic::warning(format!("unused variable or function: `{}`", name))
+                    .with_span(*span)
+                    .with_code(ErrorCode::UnusedVariable)
+                    .with_hint(format!("if this is intentional, prefix it with an underscore: `_{}`", name)));
+            }
+        }
+        
         Ok(())
     }
 
-    pub fn check_block(&mut self, block: &pace_hir::Block) -> Result<(), String> {
+    pub fn check_block(&mut self, block: &pace_hir::Block, expected_ret_ty: Option<&Ty>) -> Result<(), String> {
         let outer_env = self.env.clone();
         for stmt in &block.statements {
             match stmt {
-                pace_hir::Stmt::Let { id, ty: explicit_ty, value, .. } => {
+                pace_hir::Stmt::Let { id, name, ty: explicit_ty, value, span } => {
                     let mut ty = self.check_expr(value)?;
                     if let Some(explicit) = explicit_ty {
                         let expected = self.resolve_type(explicit)?;
                         if ty != expected {
-                            // If expected is Optional<T> and we got T, that's fine.
                             if expected != Ty::Optional(Box::new(ty.clone())) {
                                 self.reporter.report(pace_errors::Diagnostic::error(format!("Type mismatch: expected {:?}, got {:?}", expected, ty)).with_span(explicit.span()));
                                 return Err("Type mismatch".to_string());
@@ -183,8 +198,9 @@ impl TypeChecker {
                     }
                     self.env.insert(*id, ty);
                     self.mutability_env.insert(*id, false); // Let is immutable
+                    self.declared_bindings.push((*id, name.clone(), *span));
                 }
-                pace_hir::Stmt::Var { id, ty: explicit_ty, value, .. } => {
+                pace_hir::Stmt::Var { id, name, ty: explicit_ty, value, span } => {
                     let mut ty = self.check_expr(value)?;
                     if let Some(explicit) = explicit_ty {
                         let expected = self.resolve_type(explicit)?;
@@ -198,13 +214,24 @@ impl TypeChecker {
                     }
                     self.env.insert(*id, ty);
                     self.mutability_env.insert(*id, true); // Var is mutable
+                    self.declared_bindings.push((*id, name.clone(), *span));
                 }
                 pace_hir::Stmt::ExprStmt(expr, _) => {
                     self.check_expr(expr)?;
                 }
-                pace_hir::Stmt::Return(expr, _) => {
-                    if let Some(e) = expr {
-                        self.check_expr(e)?;
+                pace_hir::Stmt::Return(expr, span) => {
+                    let ret_ty = if let Some(e) = expr {
+                        self.check_expr(e)?
+                    } else {
+                        Ty::Void
+                    };
+                    
+                    if let Some(expected) = expected_ret_ty {
+                        if ret_ty != *expected {
+                            self.reporter.report(Diagnostic::error(format!("Type mismatch: function expects to return {:?}, but returned {:?}", expected, ret_ty))
+                                .with_span(*span)
+                                .with_code(ErrorCode::TypeMismatch));
+                        }
                     }
                 }
             }
@@ -215,7 +242,7 @@ impl TypeChecker {
 
     pub fn check_decl(&mut self, decl: &Decl) -> Result<(), String> {
         match decl {
-            Decl::Let { id, ty: explicit_ty, value, .. } => {
+            Decl::Let { id, name, ty: explicit_ty, value, span } => {
                 let mut ty = self.check_expr(value)?;
                 if let Some(explicit) = explicit_ty {
                     let expected = self.resolve_type(explicit)?;
@@ -229,9 +256,10 @@ impl TypeChecker {
                 }
                 self.env.insert(*id, ty);
                 self.mutability_env.insert(*id, false); // Let is immutable
+                self.declared_bindings.push((*id, name.clone(), *span));
                 Ok(())
             }
-            Decl::Var { id, ty: explicit_ty, value, .. } => {
+            Decl::Var { id, name, ty: explicit_ty, value, span } => {
                 let mut ty = self.check_expr(value)?;
                 if let Some(explicit) = explicit_ty {
                     let expected = self.resolve_type(explicit)?;
@@ -245,6 +273,7 @@ impl TypeChecker {
                 }
                 self.env.insert(*id, ty);
                 self.mutability_env.insert(*id, true); // Var is mutable
+                self.declared_bindings.push((*id, name.clone(), *span));
                 Ok(())
             }
             Decl::Struct { id, .. } => {
@@ -259,23 +288,57 @@ impl TypeChecker {
                 self.check_expr(expr)?;
                 Ok(())
             }
-            Decl::Function { name, params, body, span, .. } => {
+            Decl::Function { id, name, params, return_type, body, span, .. } => {
                 if name.contains('_') && name != "main" && !name.ends_with("_init") {
                     self.reporter.report(Diagnostic::warning(format!("Function '{}' should use camelCase, not snake_case", name))
                         .with_span(*span)
+                        .with_code(ErrorCode::SnakeCaseName)
                         .with_hint("Rename to camelCase"));
                 }
+                self.declared_bindings.push((*id, name.clone(), *span));
                 
                 let outer_env = self.env.clone();
                 for (param_id, _, pty) in params {
                     let ty = self.resolve_type(pty)?;
                     self.env.insert(*param_id, ty);
                 }
-                self.check_block(body)?;
+                let ret_ty = if let Some(rty) = &return_type {
+                    self.resolve_type(rty)?
+                } else {
+                    Ty::Void
+                };
+                
+                let returns_exhaustively = self.check_exhaustive_return(body);
+                if !returns_exhaustively && ret_ty != Ty::Void {
+                    self.reporter.report(Diagnostic::error(format!("Function '{}' expects to return {:?}, but does not exhaustively return a value", name, ret_ty))
+                        .with_span(*span)
+                        .with_code(ErrorCode::NonExhaustiveReturn));
+                }
+                
+                self.check_block(body, Some(&ret_ty))?;
                 self.env = outer_env;
                 Ok(())
             }
         }
+    }
+
+    pub fn check_exhaustive_return(&self, block: &pace_hir::Block) -> bool {
+        for stmt in &block.statements {
+            match stmt {
+                pace_hir::Stmt::Return(..) => return true,
+                pace_hir::Stmt::ExprStmt(expr, _) => {
+                    if let pace_hir::Expr::If { then_block, else_block, .. } = expr {
+                        let then_returns = self.check_exhaustive_return(then_block);
+                        let else_returns = else_block.as_ref().map_or(false, |b| self.check_exhaustive_return(b));
+                        if then_returns && else_returns {
+                            return true;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
     }
 
     fn check_expr(&mut self, expr: &Expr) -> Result<Ty, String> {
@@ -285,6 +348,7 @@ impl TypeChecker {
             Expr::BoolLiteral(..) => Ok(Ty::Bool),
             Expr::StringLiteral(..) => Ok(Ty::String),
             Expr::Ident(id, span) => {
+                self.used_bindings.insert(*id);
                 self.env.get(id).cloned().ok_or(format!("Cannot infer type for unbound variable at {:?}", span))
             }
             Expr::Binary { left, op, right, .. } => {
@@ -445,15 +509,15 @@ impl TypeChecker {
             }
             Expr::If { cond, then_block, else_block, .. } => {
                 self.check_expr(cond)?;
-                self.check_block(then_block)?;
+                self.check_block(then_block, None)?;
                 if let Some(else_b) = else_block {
-                    self.check_block(else_b)?;
+                    self.check_block(else_b, None)?;
                 }
                 Ok(Ty::Int)
             }
             Expr::While { cond, body, .. } => {
                 self.check_expr(cond)?;
-                self.check_block(body)?;
+                self.check_block(body, None)?;
                 Ok(Ty::Int)
             }
             Expr::Assign { target, value, span } => {
@@ -465,6 +529,7 @@ impl TypeChecker {
                         if !is_mut {
                             self.reporter.report(Diagnostic::error("Cannot reassign immutable variable")
                                 .with_span(*span)
+                                .with_code(ErrorCode::ImmutableAssignment)
                                 .with_hint("Declare this variable with 'var' instead of 'let' to make it mutable"));
                         }
                     }
@@ -474,6 +539,7 @@ impl TypeChecker {
                             if !is_mut {
                                 self.reporter.report(Diagnostic::error("Cannot mutate field of immutable variable")
                                     .with_span(*span)
+                                    .with_code(ErrorCode::ImmutableAssignment)
                                     .with_hint("Declare this variable with 'var' instead of 'let' to make it mutable"));
                             }
                         }

@@ -8,4 +8,5 @@ pub enum Ty {
     Class(pace_hir::HirId),
     Function(Vec<Ty>, Box<Ty>),
     Optional(Box<Ty>),
+    Void,
 }

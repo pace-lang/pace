@@ -2,6 +2,27 @@ use pace_span::Span;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorCode {
+    TypeMismatch,
+    NonExhaustiveReturn,
+    ImmutableAssignment,
+    UnusedVariable,
+    SnakeCaseName,
+}
+
+impl ErrorCode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ErrorCode::TypeMismatch => "E001",
+            ErrorCode::NonExhaustiveReturn => "E002",
+            ErrorCode::ImmutableAssignment => "E003",
+            ErrorCode::UnusedVariable => "W001",
+            ErrorCode::SnakeCaseName => "W002",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
     Error,
     Warning,
@@ -24,6 +45,7 @@ pub struct Diagnostic {
     pub message: String,
     pub span: Option<Span>,
     pub hint: Option<String>,
+    pub code: Option<ErrorCode>,
 }
 
 impl Diagnostic {
@@ -33,6 +55,7 @@ impl Diagnostic {
             message: msg.into(),
             span: None,
             hint: None,
+            code: None,
         }
     }
     
@@ -42,6 +65,7 @@ impl Diagnostic {
             message: msg.into(),
             span: None,
             hint: None,
+            code: None,
         }
     }
 
@@ -52,6 +76,11 @@ impl Diagnostic {
     
     pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
         self.hint = Some(hint.into());
+        self
+    }
+
+    pub fn with_code(mut self, code: ErrorCode) -> Self {
+        self.code = Some(code);
         self
     }
 }
@@ -84,7 +113,12 @@ impl Reporter {
             let reset_code = "\x1b[0m";
             let bold_code = "\x1b[1m";
             
-            eprintln!("{}{} {}{}: {}", bold_code, color_code, diag.severity, reset_code, diag.message);
+            let code_str = match &diag.code {
+                Some(c) => format!("[{}]", c.as_str()),
+                None => "".to_string(),
+            };
+            
+            eprintln!("{}{} {}{}{}: {}", bold_code, color_code, diag.severity, code_str, reset_code, diag.message);
             
             if let Some(span) = diag.span {
                 // Find line number and column
@@ -118,7 +152,7 @@ impl Reporter {
                 eprintln!("  --> {}:{}:{}", file_name, line, col);
                 eprintln!("   |");
                 eprintln!("{:<2} | {}", line, line_str);
-                eprintln!("   | {}{}", " ".repeat(col - 1), "^".repeat(std::cmp::max(1, span.end.saturating_sub(span.start))));
+                eprintln!("   | {}{}{}{}", " ".repeat(col - 1), color_code, "^".repeat(std::cmp::max(1, span.end.saturating_sub(span.start))), reset_code);
             }
             
             if let Some(hint) = &diag.hint {
