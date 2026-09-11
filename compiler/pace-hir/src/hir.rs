@@ -62,6 +62,7 @@ pub enum Decl {
     Struct {
         id: HirId,
         name: String,
+        generic_params: Option<Vec<String>>,
         fields: Vec<(String, Type, Option<Expr>)>,
         static_fields: Vec<(String, Type, Expr)>,
         const_fields: Vec<(String, Type, Expr)>,
@@ -71,6 +72,7 @@ pub enum Decl {
     Class {
         id: HirId,
         name: String,
+        generic_params: Option<Vec<String>>,
         fields: Vec<(String, Type, Option<Expr>)>,
         static_fields: Vec<(String, Type, Expr)>,
         const_fields: Vec<(String, Type, Expr)>,
@@ -80,6 +82,7 @@ pub enum Decl {
     Enum {
         id: HirId,
         name: String,
+        generic_params: Option<Vec<String>>,
         variants: Vec<EnumVariant>,
         span: Span,
     },
@@ -109,7 +112,7 @@ pub enum Expr {
     FloatLiteral(String, Span),
     BoolLiteral(bool, Span),
     StringLiteral(String, Span),
-    Ident(HirId, Span),
+    Ident(HirId, String, Span),
     Binary {
         left: Box<Expr>,
         op: BinaryOp,
@@ -175,7 +178,7 @@ impl Expr {
             Expr::FloatLiteral(_, span) => *span,
             Expr::BoolLiteral(_, span) => *span,
             Expr::StringLiteral(_, span) => *span,
-            Expr::Ident(_, s) => *s,
+            Expr::Ident(_, _, s) => *s,
             Expr::Binary { span, .. } => *span,
             Expr::MemberAccess { span, .. } => *span,
             Expr::Call { span, .. } => *span,

@@ -42,6 +42,7 @@ pub enum Decl {
     },
     Struct {
         name: Ident,
+        generic_params: Option<Vec<Ident>>,
         fields: Vec<(Ident, Type, Option<Expr>)>,
         static_fields: Vec<(Ident, Type, Expr)>,
         const_fields: Vec<(Ident, Type, Expr)>,
@@ -50,6 +51,7 @@ pub enum Decl {
     },
     Class {
         name: Ident,
+        generic_params: Option<Vec<Ident>>,
         fields: Vec<(Ident, Type, Option<Expr>)>,
         static_fields: Vec<(Ident, Type, Expr)>,
         const_fields: Vec<(Ident, Type, Expr)>,
@@ -58,6 +60,7 @@ pub enum Decl {
     },
     Enum {
         name: Ident,
+        generic_params: Option<Vec<Ident>>,
         variants: Vec<EnumVariant>,
         span: Span,
     },
@@ -74,6 +77,7 @@ pub struct EnumVariant {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Named(Ident),
+    Generic(Box<Type>, Vec<Type>, Span),
     Optional(Box<Type>, Span),
 }
 
@@ -81,6 +85,7 @@ impl Type {
     pub fn span(&self) -> Span {
         match self {
             Type::Named(ident) => ident.span,
+            Type::Generic(_, _, span) => *span,
             Type::Optional(_, span) => *span,
         }
     }

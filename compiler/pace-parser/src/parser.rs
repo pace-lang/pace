@@ -183,6 +183,44 @@ impl<'a> Parser<'a> {
             Ok(Decl::Expr(expr, span))
         }
     }
+    fn parse_generic_params(&mut self) -> Result<Option<Vec<Ident>>, Diagnostic> {
+        if self.check(&TokenKind::Lt) {
+            self.advance();
+            let mut params = Vec::new();
+            while !self.check(&TokenKind::Gt) && self.current.is_some() {
+                if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
+                    params.push(Ident { name: name.to_string(), span: *span });
+                    self.advance();
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    }
+                } else {
+                    return Err(Diagnostic::error("Expected type parameter identifier").with_span(self.current_span()));
+                }
+            }
+            self.expect(TokenKind::Gt)?;
+            Ok(Some(params))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn parse_generic_args(&mut self) -> Result<Option<Vec<Type>>, Diagnostic> {
+        if self.check(&TokenKind::Lt) {
+            self.advance();
+            let mut args = Vec::new();
+            while !self.check(&TokenKind::Gt) && self.current.is_some() {
+                args.push(self.parse_type()?);
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                }
+            }
+            self.expect(TokenKind::Gt)?;
+            Ok(Some(args))
+        } else {
+            Ok(None)
+        }
+    }
 
     fn parse_struct_decl(&mut self) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Struct)?;
@@ -195,6 +233,8 @@ impl<'a> Parser<'a> {
             }
             _ => return Err(Diagnostic::error("Expected identifier after 'struct'").with_span(self.current_span())),
         };
+
+        let generic_params = self.parse_generic_params()?;
 
         self.expect(TokenKind::LBrace)?;
         let mut fields = Vec::new();
@@ -313,6 +353,7 @@ impl<'a> Parser<'a> {
 
         Ok(Decl::Struct {
             name: name_tok,
+            generic_params,
             fields,
             static_fields,
             const_fields,
@@ -332,6 +373,8 @@ impl<'a> Parser<'a> {
             }
             _ => return Err(Diagnostic::error("Expected identifier after 'class'").with_span(self.current_span())),
         };
+
+        let generic_params = self.parse_generic_params()?;
 
         self.expect(TokenKind::LBrace)?;
         let mut fields = Vec::new();
@@ -450,6 +493,7 @@ impl<'a> Parser<'a> {
 
         Ok(Decl::Class {
             name: name_tok,
+            generic_params,
             fields,
             static_fields,
             const_fields,
@@ -469,6 +513,8 @@ impl<'a> Parser<'a> {
             }
             _ => return Err(Diagnostic::error("Expected identifier after 'enum'").with_span(self.current_span())),
         };
+
+        let generic_params = self.parse_generic_params()?;
 
         self.expect(TokenKind::LBrace)?;
         let mut variants = Vec::new();
@@ -518,6 +564,7 @@ impl<'a> Parser<'a> {
 
         Ok(Decl::Enum {
             name: name_tok,
+            generic_params,
             variants,
             span: start_tok.span.merge(end_tok.span),
         })
@@ -581,13 +628,31 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type(&mut self) -> Result<Type, Diagnostic> {
-        let mut base_type = match &self.current {
-            Some(Token { kind: TokenKind::Ident(name), span }) => {
-                let ident = Ident { name: name.to_string(), span: *span };
-                self.advance();
-                Type::Named(ident)
-            }
+        let (ident_name, ident_span) = match &self.current {
+            Some(Token { kind: TokenKind::Ident(name), span }) => (name.to_string(), *span),
             _ => return Err(Diagnostic::error("Expected type name").with_span(self.current_span())),
+        };
+        
+        self.advance();
+        let ident = Ident { name: ident_name, span: ident_span };
+        
+        let mut base_type = if self.check(&TokenKind::Lt) {
+            let mut args = Vec::new();
+            self.advance();
+            let mut end_span = ident_span;
+            while !self.check(&TokenKind::Gt) && self.current.is_some() {
+                args.push(self.parse_type()?);
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                }
+            }
+            if let Some(tok) = &self.current {
+                end_span = tok.span;
+            }
+            self.expect(TokenKind::Gt)?;
+            Type::Generic(Box::new(Type::Named(ident)), args, ident_span.merge(end_span))
+        } else {
+            Type::Named(ident)
         };
 
         if self.check(&TokenKind::Question) {

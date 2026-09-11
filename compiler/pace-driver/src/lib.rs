@@ -54,7 +54,7 @@ pub fn compile_file(file_path: &Path, output_dir: &Path, output_name: &str, run:
     }
 
     // 4. Build MIR
-    let mir = MirBuilder::build_program(&hir, &tc);
+    let mir = MirBuilder::build_program(&hir, &mut tc);
 
     // 5. Generate C Code
     let mut codegen = CGenerator::new();

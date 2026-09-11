@@ -91,7 +91,7 @@ impl LoweringContext {
                 };
                 Ok(Some(Decl::Var { id, name: name.name, ty, value: lowered_value, span }))
             }
-            ast::Decl::Struct { name, fields, static_fields, const_fields, methods, span, .. } => {
+            ast::Decl::Struct { name, generic_params, fields, static_fields, const_fields, methods, span, .. } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 let mut lowered_fields = Vec::new();
@@ -136,9 +136,10 @@ impl LoweringContext {
                         }
                     }
                 }
-                Ok(Some(Decl::Struct { id, name: name.name, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
+                let hir_generic_params = generic_params.map(|params| params.into_iter().map(|id| id.name).collect());
+                Ok(Some(Decl::Struct { id, name: name.name, generic_params: hir_generic_params, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
             }
-            ast::Decl::Class { name, fields, static_fields, const_fields, methods, span, .. } => {
+            ast::Decl::Class { name, generic_params, fields, static_fields, const_fields, methods, span, .. } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 let mut lowered_fields = Vec::new();
@@ -183,13 +184,14 @@ impl LoweringContext {
                         }
                     }
                 }
-                Ok(Some(Decl::Class { id, name: name.name, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
+                let hir_generic_params = generic_params.map(|params| params.into_iter().map(|id| id.name).collect());
+                Ok(Some(Decl::Class { id, name: name.name, generic_params: hir_generic_params, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
             }
             ast::Decl::Expr(expr, span) => {
                 let lowered = self.lower_expr(expr)?;
                 Ok(Some(Decl::Expr(lowered, span)))
             }
-            ast::Decl::Enum { name, variants, span } => {
+            ast::Decl::Enum { name, generic_params, variants, span } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 let mut lowered_variants = Vec::new();
@@ -212,7 +214,8 @@ impl LoweringContext {
                         span: v.span,
                     });
                 }
-                Ok(Some(Decl::Enum { id, name: name.name, variants: lowered_variants, span }))
+                let hir_generic_params = generic_params.map(|params| params.into_iter().map(|id| id.name).collect());
+                Ok(Some(Decl::Enum { id, name: name.name, generic_params: hir_generic_params, variants: lowered_variants, span }))
             }
             ast::Decl::Function { name, params, return_type, body, span, is_static } => {
                 let id = self.generate_id();
@@ -255,8 +258,14 @@ impl LoweringContext {
                 if ident.name == "false" {
                     return Ok(Expr::BoolLiteral(false, ident.span));
                 }
-                let id = self.scope.get(&ident.name).copied().ok_or(format!("Undefined variable: {}", ident.name))?;
-                Ok(Expr::Ident(id, ident.span))
+                let id = if let Some(id) = self.scope.get(&ident.name).copied() {
+                    id
+                } else {
+                    let id = self.generate_id();
+                    self.scope.insert(ident.name.clone(), id);
+                    id
+                };
+                Ok(Expr::Ident(id, ident.name.clone(), ident.span))
             }
             ast::Expr::Binary { left, op, right, span } => {
                 Ok(Expr::Binary {
