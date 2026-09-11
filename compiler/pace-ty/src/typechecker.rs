@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use pace_hir::{Expr, Decl, Program, HirId};
-use pace_ast::BinaryOp;
+
 use crate::ty::Ty;
 
 use pace_errors::{Reporter, Diagnostic};
@@ -32,10 +32,10 @@ impl TypeChecker {
         match ast_ty {
             pace_ast::Type::Named(id) => {
                 match id.name.as_str() {
-                    "Int" => Ok(Ty::Int),
-                    "Float" => Ok(Ty::Float),
-                    "String" => Ok(Ty::String),
-                    "Bool" => Ok(Ty::Bool),
+                    "Int" | "int" => Ok(Ty::Int),
+                    "Float" | "float" => Ok(Ty::Float),
+                    "String" | "string" => Ok(Ty::String),
+                    "Bool" | "bool" => Ok(Ty::Bool),
                     other => {
                         if let Some(&hir_id) = self.named_types.get(other) {
                             if self.struct_defs.contains_key(&hir_id) {
@@ -49,7 +49,10 @@ impl TypeChecker {
                     }
                 }
             }
-            pace_ast::Type::Optional(_, _) => Err("Optional types not yet supported".to_string()),
+            pace_ast::Type::Optional(inner_ty, _) => {
+                let inner = self.resolve_type(inner_ty)?;
+                Ok(Ty::Optional(Box::new(inner)))
+            }
         }
     }
 
@@ -165,13 +168,34 @@ impl TypeChecker {
         let outer_env = self.env.clone();
         for stmt in &block.statements {
             match stmt {
-                pace_hir::Stmt::Let { id, value, .. } => {
-                    let ty = self.check_expr(value)?;
+                pace_hir::Stmt::Let { id, ty: explicit_ty, value, .. } => {
+                    let mut ty = self.check_expr(value)?;
+                    if let Some(explicit) = explicit_ty {
+                        let expected = self.resolve_type(explicit)?;
+                        if ty != expected {
+                            // If expected is Optional<T> and we got T, that's fine.
+                            if expected != Ty::Optional(Box::new(ty.clone())) {
+                                self.reporter.report(pace_errors::Diagnostic::error(format!("Type mismatch: expected {:?}, got {:?}", expected, ty)).with_span(explicit.span()));
+                                return Err("Type mismatch".to_string());
+                            }
+                            ty = expected; // Promote to Optional
+                        }
+                    }
                     self.env.insert(*id, ty);
                     self.mutability_env.insert(*id, false); // Let is immutable
                 }
-                pace_hir::Stmt::Var { id, value, .. } => {
-                    let ty = self.check_expr(value)?;
+                pace_hir::Stmt::Var { id, ty: explicit_ty, value, .. } => {
+                    let mut ty = self.check_expr(value)?;
+                    if let Some(explicit) = explicit_ty {
+                        let expected = self.resolve_type(explicit)?;
+                        if ty != expected {
+                            if expected != Ty::Optional(Box::new(ty.clone())) {
+                                self.reporter.report(pace_errors::Diagnostic::error(format!("Type mismatch: expected {:?}, got {:?}", expected, ty)).with_span(explicit.span()));
+                                return Err("Type mismatch".to_string());
+                            }
+                            ty = expected; // Promote to Optional
+                        }
+                    }
                     self.env.insert(*id, ty);
                     self.mutability_env.insert(*id, true); // Var is mutable
                 }
@@ -191,14 +215,34 @@ impl TypeChecker {
 
     pub fn check_decl(&mut self, decl: &Decl) -> Result<(), String> {
         match decl {
-            Decl::Let { id, value, .. } => {
-                let ty = self.check_expr(value)?;
+            Decl::Let { id, ty: explicit_ty, value, .. } => {
+                let mut ty = self.check_expr(value)?;
+                if let Some(explicit) = explicit_ty {
+                    let expected = self.resolve_type(explicit)?;
+                    if ty != expected {
+                        if expected != Ty::Optional(Box::new(ty.clone())) {
+                            self.reporter.report(pace_errors::Diagnostic::error(format!("Type mismatch: expected {:?}, got {:?}", expected, ty)).with_span(explicit.span()));
+                            return Err("Type mismatch".to_string());
+                        }
+                        ty = expected;
+                    }
+                }
                 self.env.insert(*id, ty);
                 self.mutability_env.insert(*id, false); // Let is immutable
                 Ok(())
             }
-            Decl::Var { id, value, .. } => {
-                let ty = self.check_expr(value)?;
+            Decl::Var { id, ty: explicit_ty, value, .. } => {
+                let mut ty = self.check_expr(value)?;
+                if let Some(explicit) = explicit_ty {
+                    let expected = self.resolve_type(explicit)?;
+                    if ty != expected {
+                        if expected != Ty::Optional(Box::new(ty.clone())) {
+                            self.reporter.report(pace_errors::Diagnostic::error(format!("Type mismatch: expected {:?}, got {:?}", expected, ty)).with_span(explicit.span()));
+                            return Err("Type mismatch".to_string());
+                        }
+                        ty = expected;
+                    }
+                }
                 self.env.insert(*id, ty);
                 self.mutability_env.insert(*id, true); // Var is mutable
                 Ok(())
@@ -237,6 +281,8 @@ impl TypeChecker {
     fn check_expr(&mut self, expr: &Expr) -> Result<Ty, String> {
         match expr {
             Expr::IntLiteral(..) => Ok(Ty::Int),
+            Expr::FloatLiteral(..) => Ok(Ty::Float),
+            Expr::BoolLiteral(..) => Ok(Ty::Bool),
             Expr::StringLiteral(..) => Ok(Ty::String),
             Expr::Ident(id, span) => {
                 self.env.get(id).cloned().ok_or(format!("Cannot infer type for unbound variable at {:?}", span))

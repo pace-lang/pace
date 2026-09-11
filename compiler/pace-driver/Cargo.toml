@@ -11,3 +11,4 @@ pace-hir = { path = "../pace-hir" }
 pace-ty = { path = "../pace-ty" }
 pace-mir = { path = "../pace-mir" }
 pace-codegen = { path = "../pace-codegen" }
+pace-errors = { path = "../pace-errors" }

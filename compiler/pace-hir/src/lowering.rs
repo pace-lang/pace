@@ -37,17 +37,17 @@ impl LoweringContext {
         let outer_scope = self.scope.clone();
         for stmt in block.statements {
             match stmt {
-                ast::Stmt::Let { name, value, span } => {
+                ast::Stmt::Let { name, ty, value, span } => {
                     let id = self.generate_id();
                     let lowered_val = self.lower_expr(value)?;
                     self.scope.insert(name.name.clone(), id);
-                    statements.push(Stmt::Let { id, name: name.name, value: lowered_val, span });
+                    statements.push(Stmt::Let { id, name: name.name, ty, value: lowered_val, span });
                 }
-                ast::Stmt::Var { name, value, span } => {
+                ast::Stmt::Var { name, ty, value, span } => {
                     let id = self.generate_id();
                     let lowered_val = self.lower_expr(value)?;
                     self.scope.insert(name.name.clone(), id);
-                    statements.push(Stmt::Var { id, name: name.name, value: lowered_val, span });
+                    statements.push(Stmt::Var { id, name: name.name, ty, value: lowered_val, span });
                 }
                 ast::Stmt::ExprStmt(expr, span) => {
                     statements.push(Stmt::ExprStmt(self.lower_expr(expr)?, span));
@@ -67,17 +67,17 @@ impl LoweringContext {
 
     fn lower_decl(&mut self, decl: ast::Decl) -> Result<Option<Decl>, String> {
         match decl {
-            ast::Decl::Let { name, value, span } => {
+            ast::Decl::Let { name, ty, value, span } => {
                 let id = self.generate_id();
                 let lowered_val = self.lower_expr(value)?;
                 self.scope.insert(name.name.clone(), id);
-                Ok(Some(Decl::Let { id, name: name.name, value: lowered_val, span }))
+                Ok(Some(Decl::Let { id, name: name.name, ty, value: lowered_val, span }))
             }
-            ast::Decl::Var { name, value, span } => {
+            ast::Decl::Var { name, ty, value, span } => {
                 let id = self.generate_id();
                 let lowered_val = self.lower_expr(value)?;
                 self.scope.insert(name.name.clone(), id);
-                Ok(Some(Decl::Var { id, name: name.name, value: lowered_val, span }))
+                Ok(Some(Decl::Var { id, name: name.name, ty, value: lowered_val, span }))
             }
             ast::Decl::Struct { name, fields, methods, span, .. } => {
                 let id = self.generate_id();
@@ -172,8 +172,15 @@ impl LoweringContext {
     fn lower_expr(&mut self, expr: ast::Expr) -> Result<Expr, String> {
         match expr {
             ast::Expr::IntLiteral(val, span) => Ok(Expr::IntLiteral(val, span)),
+            ast::Expr::FloatLiteral(val, span) => Ok(Expr::FloatLiteral(val, span)),
             ast::Expr::StringLiteral(val, span) => Ok(Expr::StringLiteral(val, span)),
             ast::Expr::Ident(ident) => {
+                if ident.name == "true" {
+                    return Ok(Expr::BoolLiteral(true, ident.span));
+                }
+                if ident.name == "false" {
+                    return Ok(Expr::BoolLiteral(false, ident.span));
+                }
                 let id = self.scope.get(&ident.name).copied().ok_or(format!("Undefined variable: {}", ident.name))?;
                 Ok(Expr::Ident(id, ident.span))
             }
@@ -246,8 +253,6 @@ impl LoweringContext {
                     span,
                 })
             }
-
-            _ => Err("Unsupported AST expression node in HIR lowering".to_string()),
         }
     }
 }

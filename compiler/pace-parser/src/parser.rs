@@ -1,5 +1,6 @@
 use pace_ast::{Block, Decl, Expr, Ident, Program, Stmt, Type};
 use pace_lexer::{Lexer, Token, TokenKind};
+use pace_errors::Diagnostic;
 use pace_span::Span;
 
 pub struct Parser<'a> {
@@ -13,6 +14,10 @@ impl<'a> Parser<'a> {
         Self { lexer, current }
     }
 
+    fn current_span(&self) -> Span {
+        self.current.as_ref().map(|t| t.span).unwrap_or(Span::DUMMY)
+    }
+
     fn advance(&mut self) {
         self.current = self.lexer.next().and_then(|r| r.ok());
     }
@@ -21,17 +26,17 @@ impl<'a> Parser<'a> {
         self.current.as_ref().map_or(false, |t| &t.kind == kind)
     }
 
-    fn expect(&mut self, kind: TokenKind<'a>) -> Result<Token<'a>, String> {
+    fn expect(&mut self, kind: TokenKind<'a>) -> Result<Token<'a>, Diagnostic> {
         if self.check(&kind) {
             let tok = self.current.clone().unwrap();
             self.advance();
             Ok(tok)
         } else {
-            Err(format!("Expected {:?}", kind))
+            Err(Diagnostic::error(format!("Expected {:?}", kind)).with_span(self.current_span()))
         }
     }
 
-    pub fn parse_program(&mut self) -> Result<Program, String> {
+    pub fn parse_program(&mut self) -> Result<Program, Diagnostic> {
         let mut declarations = Vec::new();
         let start_span = self.current.as_ref().map(|t| t.span).unwrap_or(Span::DUMMY);
 
@@ -55,7 +60,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_decl(&mut self) -> Result<Decl, String> {
+    fn parse_decl(&mut self) -> Result<Decl, Diagnostic> {
         if self.check(&TokenKind::Let) {
             let start_tok = self.expect(TokenKind::Let)?;
             
@@ -65,7 +70,14 @@ impl<'a> Parser<'a> {
                     self.advance();
                     ident
                 }
-                _ => return Err("Expected identifier after 'let'".to_string()),
+                _ => return Err(Diagnostic::error("Expected identifier after 'let'").with_span(self.current_span())),
+            };
+
+            let ty = if self.check(&TokenKind::Colon) {
+                self.advance();
+                Some(self.parse_type()?)
+            } else {
+                None
             };
 
             self.expect(TokenKind::Eq)?;
@@ -74,6 +86,7 @@ impl<'a> Parser<'a> {
 
             Ok(Decl::Let {
                 name: name_tok,
+                ty,
                 value,
                 span: start_tok.span.merge(end_span),
             })
@@ -86,7 +99,14 @@ impl<'a> Parser<'a> {
                     self.advance();
                     ident
                 }
-                _ => return Err("Expected identifier after 'var'".to_string()),
+                _ => return Err(Diagnostic::error("Expected identifier after 'var'").with_span(self.current_span())),
+            };
+
+            let ty = if self.check(&TokenKind::Colon) {
+                self.advance();
+                Some(self.parse_type()?)
+            } else {
+                None
             };
 
             self.expect(TokenKind::Eq)?;
@@ -95,6 +115,7 @@ impl<'a> Parser<'a> {
 
             Ok(Decl::Var {
                 name: name_tok,
+                ty,
                 value,
                 span: start_tok.span.merge(end_span),
             })
@@ -111,7 +132,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_struct_decl(&mut self) -> Result<Decl, String> {
+    fn parse_struct_decl(&mut self) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Struct)?;
         
         let name_tok = match &self.current {
@@ -120,7 +141,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 ident
             }
-            _ => return Err("Expected identifier after 'struct'".to_string()),
+            _ => return Err(Diagnostic::error("Expected identifier after 'struct'").with_span(self.current_span())),
         };
 
         self.expect(TokenKind::LBrace)?;
@@ -141,7 +162,7 @@ impl<'a> Parser<'a> {
                     while !self.check(&TokenKind::RParen) && self.current.is_some() {
                         let param_name = match &self.current {
                             Some(Token { kind: TokenKind::Ident(n), span }) => Ident { name: n.to_string(), span: *span },
-                            _ => return Err("Expected parameter name".to_string()),
+                            _ => return Err(Diagnostic::error("Expected parameter name").with_span(self.current_span())),
                         };
                         self.advance();
                         self.expect(TokenKind::Colon)?;
@@ -175,7 +196,7 @@ impl<'a> Parser<'a> {
                     self.advance();
                 }
             } else {
-                return Err("Expected field or method in struct".to_string());
+                return Err(Diagnostic::error("Expected field or method in struct").with_span(self.current_span()));
             }
         }
         
@@ -189,7 +210,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_class_decl(&mut self) -> Result<Decl, String> {
+    fn parse_class_decl(&mut self) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Class)?;
         
         let name_tok = match &self.current {
@@ -198,7 +219,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 ident
             }
-            _ => return Err("Expected identifier after 'class'".to_string()),
+            _ => return Err(Diagnostic::error("Expected identifier after 'class'").with_span(self.current_span())),
         };
 
         self.expect(TokenKind::LBrace)?;
@@ -219,7 +240,7 @@ impl<'a> Parser<'a> {
                     while !self.check(&TokenKind::RParen) && self.current.is_some() {
                         let param_name = match &self.current {
                             Some(Token { kind: TokenKind::Ident(n), span }) => Ident { name: n.to_string(), span: *span },
-                            _ => return Err("Expected parameter name".to_string()),
+                            _ => return Err(Diagnostic::error("Expected parameter name").with_span(self.current_span())),
                         };
                         self.advance();
                         self.expect(TokenKind::Colon)?;
@@ -253,7 +274,7 @@ impl<'a> Parser<'a> {
                     self.advance();
                 }
             } else {
-                return Err("Expected field or method in class".to_string());
+                return Err(Diagnostic::error("Expected field or method in class").with_span(self.current_span()));
             }
         }
         
@@ -267,7 +288,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_fn_decl(&mut self) -> Result<Decl, String> {
+    fn parse_fn_decl(&mut self) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Fn)?;
         
         let name_tok = match &self.current {
@@ -276,7 +297,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 ident
             }
-            _ => return Err("Expected identifier after 'fn'".to_string()),
+            _ => return Err(Diagnostic::error("Expected identifier after 'fn'").with_span(self.current_span())),
         };
 
         self.expect(TokenKind::LParen)?;
@@ -289,7 +310,7 @@ impl<'a> Parser<'a> {
                     self.advance();
                     ident
                 }
-                _ => return Err("Expected parameter name".to_string()),
+                _ => return Err(Diagnostic::error("Expected parameter name").with_span(self.current_span())),
             };
 
             self.expect(TokenKind::Colon)?;
@@ -323,14 +344,14 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_type(&mut self) -> Result<Type, String> {
+    fn parse_type(&mut self) -> Result<Type, Diagnostic> {
         let mut base_type = match &self.current {
             Some(Token { kind: TokenKind::Ident(name), span }) => {
                 let ident = Ident { name: name.to_string(), span: *span };
                 self.advance();
                 Type::Named(ident)
             }
-            _ => return Err("Expected type name".to_string()),
+            _ => return Err(Diagnostic::error("Expected type name").with_span(self.current_span())),
         };
 
         if self.check(&TokenKind::Question) {
@@ -342,8 +363,8 @@ impl<'a> Parser<'a> {
         Ok(base_type)
     }
 
-    fn parse_block(&mut self) -> Result<Block, String> {
-        let start_tok = self.expect(TokenKind::LBrace).map_err(|e| format!("{} (found {:?})", e, self.current))?;
+    fn parse_block(&mut self) -> Result<Block, Diagnostic> {
+        let start_tok = self.expect(TokenKind::LBrace).map_err(|_| Diagnostic::error(format!("Expected LBrace (found {:?})", self.current)).with_span(self.current_span()))?;
         let mut statements = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
@@ -358,31 +379,43 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_stmt(&mut self) -> Result<Stmt, String> {
+    fn parse_stmt(&mut self) -> Result<Stmt, Diagnostic> {
         if self.check(&TokenKind::Let) {
             let start_tok = self.expect(TokenKind::Let)?;
-            let name_tok = self.current.take().ok_or("Expected identifier after 'let'".to_string())?;
+            let name_tok = self.current.take().ok_or_else(|| Diagnostic::error("Expected identifier after 'let'").with_span(self.current_span()))?;
             let name = match name_tok.kind {
                 TokenKind::Ident(n) => Ident { name: n.to_string(), span: name_tok.span },
-                _ => return Err("Expected identifier after 'let'".to_string()),
+                _ => return Err(Diagnostic::error("Expected identifier after 'let'").with_span(self.current_span())),
             };
             self.advance();
+            let ty = if self.check(&TokenKind::Colon) {
+                self.advance();
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
             self.expect(TokenKind::Eq)?;
             let value = self.parse_expr()?;
             let span = start_tok.span.merge(value.span());
-            Ok(Stmt::Let { name, value, span })
+            Ok(Stmt::Let { name, ty, value, span })
         } else if self.check(&TokenKind::Var) {
             let start_tok = self.expect(TokenKind::Var)?;
-            let name_tok = self.current.take().ok_or("Expected identifier after 'var'".to_string())?;
+            let name_tok = self.current.take().ok_or_else(|| Diagnostic::error("Expected identifier after 'var'").with_span(self.current_span()))?;
             let name = match name_tok.kind {
                 TokenKind::Ident(n) => Ident { name: n.to_string(), span: name_tok.span },
-                _ => return Err("Expected identifier after 'var'".to_string()),
+                _ => return Err(Diagnostic::error("Expected identifier after 'var'").with_span(self.current_span())),
             };
             self.advance();
+            let ty = if self.check(&TokenKind::Colon) {
+                self.advance();
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
             self.expect(TokenKind::Eq)?;
             let value = self.parse_expr()?;
             let span = start_tok.span.merge(value.span());
-            Ok(Stmt::Var { name, value, span })
+            Ok(Stmt::Var { name, ty, value, span })
         } else if self.check(&TokenKind::Return) {
             let start_tok = self.expect(TokenKind::Return)?;
             
@@ -403,7 +436,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_postfix_expr(&mut self) -> Result<Expr, String> {
+    fn parse_postfix_expr(&mut self) -> Result<Expr, Diagnostic> {
         let mut left = self.parse_primary()?;
         
         loop {
@@ -415,7 +448,7 @@ impl<'a> Parser<'a> {
                         self.advance();
                         ident
                     }
-                    _ => return Err("Expected member name after '.'".to_string()),
+                    _ => return Err(Diagnostic::error("Expected member name after '.'").with_span(self.current_span())),
                 };
                 
                 let span = left.span().merge(member_name.span);
@@ -462,7 +495,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, String> {
+    fn parse_expr(&mut self) -> Result<Expr, Diagnostic> {
         let mut left = self.parse_postfix_expr()?;
 
         if self.check(&TokenKind::Eq) {
@@ -502,7 +535,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn parse_primary(&mut self) -> Result<Expr, String> {
+    fn parse_primary(&mut self) -> Result<Expr, Diagnostic> {
         if self.check(&TokenKind::If) {
             let start_tok = self.expect(TokenKind::If)?;
             let cond = self.parse_expr()?;
@@ -533,7 +566,7 @@ impl<'a> Parser<'a> {
             });
         }
 
-        let tok = self.current.take().ok_or("Expected expression, found EOF".to_string())?;
+        let tok = self.current.take().ok_or_else(|| Diagnostic::error("Expected expression, found EOF").with_span(self.current_span()))?;
         self.advance();
 
         match tok.kind {
@@ -544,7 +577,7 @@ impl<'a> Parser<'a> {
                 let ident = Ident { name: name.to_string(), span: tok.span };
                 Ok(Expr::Ident(ident))
             }
-            _ => Err(format!("Unexpected token in expression: {:?}", tok.kind)),
+            _ => Err(Diagnostic::error(format!("Unexpected token in expression: {:?}", tok.kind)).with_span(self.current_span())),
         }
     }
 }

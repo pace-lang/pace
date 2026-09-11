@@ -7,3 +7,4 @@ edition = "2024"
 pace-lexer = { path = "../pace-lexer" }
 pace-ast = { path = "../pace-ast" }
 pace-span = { path = "../pace-span" }
+pace-errors = { path = "../pace-errors" }

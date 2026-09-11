@@ -58,6 +58,18 @@ void pace_print_int(long long val) {
     printf("%lld\n", val);
 }
 
+void pace_print_float(double val) {
+    printf("%f\n", val);
+}
+
+void pace_print_bool(int val) {
+    if (val) {
+        printf("true\n");
+    } else {
+        printf("false\n");
+    }
+}
+
 void pace_print_string(const char* val) {
     printf("%s\n", val);
 }

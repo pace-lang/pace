@@ -90,7 +90,6 @@ impl Reporter {
                 // Find line number and column
                 let mut line = 1;
                 let mut col = 1;
-                let mut current_pos = 0;
                 let mut line_start = 0;
                 let mut line_end = source.len();
                 
@@ -105,7 +104,6 @@ impl Reporter {
                     } else {
                         col += 1;
                     }
-                    current_pos = i;
                 }
                 
                 for (i, c) in source[line_start..].char_indices() {

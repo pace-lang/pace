@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use pace_mir::{BasicBlock, MirProgram, MirFunction, MirBody, Rvalue, Statement, Terminator, Lvalue};
+use pace_mir::{BasicBlock, MirProgram, MirFunction, Rvalue, Statement, Terminator, Lvalue};
 use pace_ast::BinaryOp;
 use pace_ty::Ty;
 
@@ -70,6 +70,7 @@ impl CGenerator {
             Ty::Struct(id) => format!("struct pace_{}", id.0),
             Ty::Class(id) => format!("struct pace_{}*", id.0),
             Ty::Function(_, _) => "void*".to_string(),
+            Ty::Optional(inner) => self.emit_c_type(inner),
         }
     }
 
@@ -78,6 +79,7 @@ impl CGenerator {
             Ty::Int | Ty::Bool | Ty::Float => "0".to_string(),
             Ty::String | Ty::Class(_) | Ty::Function(_, _) => "NULL".to_string(),
             Ty::Struct(_) => "{0}".to_string(),
+            Ty::Optional(inner) => self.emit_c_default_val(inner),
         }
     }
 
@@ -177,7 +179,9 @@ impl CGenerator {
         match rvalue {
             Rvalue::Use(local) => write!(&mut self.output, "_{}", local.0).unwrap(),
             Rvalue::IntConstant(val) => write!(&mut self.output, "{}", val).unwrap(),
-            Rvalue::StringConstant(val) => write!(&mut self.output, "(long long)\"{}\"", val).unwrap(), // Cast string pointer to integer type for generic holding
+            Rvalue::FloatConstant(val) => write!(&mut self.output, "{}", val).unwrap(),
+            Rvalue::BoolConstant(val) => write!(&mut self.output, "{}", if *val { "1" } else { "0" }).unwrap(),
+            Rvalue::StringConstant(val) => write!(&mut self.output, "\"{}\"", val.trim_matches('"')).unwrap(),
             Rvalue::BinaryOp(op, lhs, rhs) => {
                 let op_str = match op {
                     BinaryOp::Add => "+",
@@ -203,7 +207,20 @@ impl CGenerator {
             }
             Rvalue::BuiltinCall(name, args) => {
                 let c_name = if name == "print" || name == "println" {
-                    "pace_print_int"
+                    if let Some(arg) = args.first() {
+                        let ty = &locals[arg.0 as usize];
+                        if matches!(ty, Ty::String) {
+                            "pace_print_string"
+                        } else if matches!(ty, Ty::Float) {
+                            "pace_print_float"
+                        } else if matches!(ty, Ty::Bool) {
+                            "pace_print_bool"
+                        } else {
+                            "pace_print_int"
+                        }
+                    } else {
+                        "pace_println"
+                    }
                 } else {
                     name.as_str()
                 };

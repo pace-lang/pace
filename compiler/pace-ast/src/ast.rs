@@ -16,11 +16,13 @@ pub struct Ident {
 pub enum Decl {
     Let {
         name: Ident,
+        ty: Option<Type>,
         value: Expr,
         span: Span,
     },
     Var {
         name: Ident,
+        ty: Option<Type>,
         value: Expr,
         span: Span,
     },
@@ -76,11 +78,13 @@ pub struct Block {
 pub enum Stmt {
     Let {
         name: Ident,
+        ty: Option<Type>,
         value: Expr,
         span: Span,
     },
     Var {
         name: Ident,
+        ty: Option<Type>,
         value: Expr,
         span: Span,
     },

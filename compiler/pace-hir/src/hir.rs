@@ -16,12 +16,14 @@ pub enum Stmt {
     Let {
         id: HirId,
         name: String,
+        ty: Option<Type>,
         value: Expr,
         span: Span,
     },
     Var {
         id: HirId,
         name: String,
+        ty: Option<Type>,
         value: Expr,
         span: Span,
     },
@@ -39,12 +41,14 @@ pub enum Decl {
     Let {
         id: HirId,
         name: String,
+        ty: Option<Type>,
         value: Expr,
         span: Span,
     },
     Var {
         id: HirId,
         name: String,
+        ty: Option<Type>,
         value: Expr,
         span: Span,
     },
@@ -76,6 +80,8 @@ pub enum Decl {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     IntLiteral(String, Span),
+    FloatLiteral(String, Span),
+    BoolLiteral(bool, Span),
     StringLiteral(String, Span),
     Ident(HirId, Span),
     Binary {
@@ -116,8 +122,10 @@ pub enum Expr {
 impl Expr {
     pub fn span(&self) -> Span {
         match self {
-            Expr::IntLiteral(_, s) => *s,
-            Expr::StringLiteral(_, s) => *s,
+            Expr::IntLiteral(_, span) => *span,
+            Expr::FloatLiteral(_, span) => *span,
+            Expr::BoolLiteral(_, span) => *span,
+            Expr::StringLiteral(_, span) => *span,
             Expr::Ident(_, s) => *s,
             Expr::Binary { span, .. } => *span,
             Expr::MemberAccess { span, .. } => *span,

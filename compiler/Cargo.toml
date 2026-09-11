@@ -13,4 +13,4 @@ members = [
     "pace-pkg",
     "pace-lsp",
     "pace-driver"
-]
+, "pace-cli"]

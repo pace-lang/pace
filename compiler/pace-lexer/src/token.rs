@@ -2,7 +2,7 @@ use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(skip r"[ \t\n\f]+")] // Skip whitespace
-#[logos(skip r"//[^\n]*")]   // Skip normal comments
+#[logos(skip(r"//[^\n]*", allow_greedy = true))]   // Skip normal comments
 pub enum TokenKind<'a> {
     // Declarations
     #[token("let")] Let,
@@ -66,7 +66,7 @@ pub enum TokenKind<'a> {
     String(&'a str),
 
     // Doc Comments
-    #[regex(r"///[^\n]*", |lex| lex.slice())]
+    #[regex(r"///[^\n]*", |lex| lex.slice(), allow_greedy = true)]
     DocComment(&'a str),
 
     // Operators & Punctuation

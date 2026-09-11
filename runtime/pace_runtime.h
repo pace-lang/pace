@@ -11,7 +11,9 @@ void PACE_RETAIN(long long obj);
 void PACE_RELEASE(long long obj);
 
 void pace_print_int(long long val);
-void pace_print_str(const char* val);
+void pace_print_float(double val);
+void pace_print_bool(int val);
+void pace_print_string(const char* val);
 void pace_println();
 
 // ARC object header

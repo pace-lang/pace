@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use pace_hir::{Expr, Stmt as HirStmt, HirId};
+use pace_hir::{Expr, HirId};
 use crate::mir::*;
-use pace_ty::{Ty, TypeChecker};
+use pace_ty::Ty;
 
 pub struct MirBuilder<'a> {
     pub blocks: Vec<BasicBlock>,
@@ -113,9 +113,19 @@ impl<'a> MirBuilder<'a> {
                 temp
             }
             Expr::IntLiteral(val, _) => {
-                let temp = self.new_local(Ty::Int);
-                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::IntConstant(val.clone())));
-                temp
+                let local = self.new_local(Ty::Int);
+                self.push_stmt(Statement::Assign(Lvalue::Local(local), Rvalue::IntConstant(val.clone())));
+                local
+            }
+            Expr::FloatLiteral(val, _) => {
+                let local = self.new_local(Ty::Float);
+                self.push_stmt(Statement::Assign(Lvalue::Local(local), Rvalue::FloatConstant(val.clone())));
+                local
+            }
+            Expr::BoolLiteral(val, _) => {
+                let local = self.new_local(Ty::Bool);
+                self.push_stmt(Statement::Assign(Lvalue::Local(local), Rvalue::BoolConstant(*val)));
+                local
             }
             Expr::StringLiteral(val, _) => {
                 let temp = self.new_local(Ty::String);
@@ -396,7 +406,7 @@ impl<'a> MirBuilder<'a> {
                     let rval_local = main_builder.build_expr(expr);
                     _main_last_local = rval_local;
                 }
-                pace_hir::Decl::Function { name, id, params, return_type, body, .. } => {
+                pace_hir::Decl::Function { name, id: _, params, return_type, body, .. } => {
                     let mut fn_builder = MirBuilder::new(
                         global_fns.clone(),
                         &tc.struct_defs,

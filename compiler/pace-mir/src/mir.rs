@@ -31,6 +31,8 @@ pub enum Rvalue {
     Use(Local),
     BinaryOp(BinaryOp, Local, Local),
     IntConstant(String),
+    FloatConstant(String),
+    BoolConstant(bool),
     StringConstant(String),
     Call(Local, Vec<Local>),
     BuiltinCall(String, Vec<Local>),
