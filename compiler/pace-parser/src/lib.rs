@@ -5,8 +5,8 @@ pub use parser::Parser;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pace_ast::{Decl, Expr, Stmt, Type};
     use pace_lexer::Lexer;
-    use pace_ast::{Decl, Expr, Type, Stmt};
 
     #[test]
     fn test_parse_let_binding() {
@@ -21,7 +21,7 @@ mod tests {
             Decl::Let { name, value, .. } => {
                 assert_eq!(name.name, "answer");
                 match value {
-                    Expr::IntLiteral(val, _) => assert_eq!(val, "42"),
+                    Some(Expr::IntLiteral(val, _)) => assert_eq!(val, "42"),
                     _ => panic!("Expected IntLiteral"),
                 }
             }
@@ -39,7 +39,13 @@ mod tests {
         assert_eq!(program.declarations.len(), 1);
 
         match &program.declarations[0] {
-            Decl::Function { name, params, return_type, body, .. } => {
+            Decl::Function {
+                name,
+                params,
+                return_type,
+                body,
+                ..
+            } => {
                 assert_eq!(name.name, "identity");
                 assert_eq!(params.len(), 1);
                 assert_eq!(params[0].0.name, "a");
@@ -71,7 +77,12 @@ mod tests {
         assert_eq!(program.declarations.len(), 1);
 
         match &program.declarations[0] {
-            Decl::Class { name, fields, methods, .. } => {
+            Decl::Class {
+                name,
+                fields,
+                methods,
+                ..
+            } => {
                 assert_eq!(name.name, "User");
                 assert_eq!(fields.len(), 1);
                 assert_eq!(fields[0].0.name, "name");

@@ -1,11 +1,14 @@
-use std::fmt::Write;
-use pace_mir::{BasicBlock, MirProgram, MirFunction, Rvalue, Statement, Terminator, Lvalue};
 use pace_ast::BinaryOp;
+use pace_mir::{BasicBlock, Lvalue, MirFunction, MirProgram, Rvalue, Statement, Terminator};
 use pace_ty::Ty;
+use std::fmt::Write;
 
 pub struct CGenerator {
     output: String,
-    enum_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, Option<Vec<(String, pace_ty::Ty)>>)>>,
+    enum_defs: std::collections::HashMap<
+        pace_hir::HirId,
+        Vec<(String, Option<Vec<(String, pace_ty::Ty)>>)>,
+    >,
 }
 
 impl CGenerator {
@@ -27,11 +30,12 @@ impl CGenerator {
         for (id, fields) in &program.struct_defs {
             self.output.push_str(&format!("struct pace_{} {{\n", id.0));
             for (fname, fty, _) in fields {
-                self.output.push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
+                self.output
+                    .push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
             }
             self.output.push_str("};\n\n");
         }
-        
+
         for (id, variants) in &program.enum_defs {
             self.output.push_str(&format!("struct pace_{} {{\n", id.0));
             self.output.push_str("    long long tag;\n");
@@ -40,7 +44,11 @@ impl CGenerator {
                 if let Some(fields) = v_fields {
                     self.output.push_str(&format!("        struct {{\n"));
                     for (fname, fty) in fields {
-                        self.output.push_str(&format!("            {} {};\n", self.emit_c_type(fty), fname));
+                        self.output.push_str(&format!(
+                            "            {} {};\n",
+                            self.emit_c_type(fty),
+                            fname
+                        ));
                     }
                     self.output.push_str(&format!("        }} {};\n", v_name));
                 }
@@ -48,7 +56,7 @@ impl CGenerator {
             self.output.push_str("    } payload;\n");
             self.output.push_str("};\n\n");
         }
-        
+
         // Forward declarations of class structs
         for (id, _) in &program.class_defs {
             self.output.push_str(&format!("struct pace_{};\n", id.0));
@@ -56,15 +64,19 @@ impl CGenerator {
         self.output.push_str("\n");
 
         for (id, methods) in &program.class_vtables {
-            self.output.push_str(&format!("struct pace_{}_vtable {{\n", id.0));
+            self.output
+                .push_str(&format!("struct pace_{}_vtable {{\n", id.0));
             for (i, (_, ty, _)) in methods.iter().enumerate() {
                 if let Ty::Function(params, ret) = ty {
-                    self.output.push_str(&format!("    {} (*m{})(", self.emit_c_type(ret), i));
+                    self.output
+                        .push_str(&format!("    {} (*m{})(", self.emit_c_type(ret), i));
                     if params.is_empty() {
                         self.output.push_str("void");
                     } else {
                         for (j, p) in params.iter().enumerate() {
-                            if j > 0 { self.output.push_str(", "); }
+                            if j > 0 {
+                                self.output.push_str(", ");
+                            }
                             self.output.push_str(&self.emit_c_type(p));
                         }
                     }
@@ -73,20 +85,27 @@ impl CGenerator {
             }
             self.output.push_str("};\n\n");
         }
-        
+
         for (id, fields) in &program.class_defs {
             self.output.push_str(&format!("struct pace_{} {{\n", id.0));
-            self.output.push_str(&format!("    struct pace_{}_vtable* vtable;\n", id.0));
+            self.output
+                .push_str(&format!("    struct pace_{}_vtable* vtable;\n", id.0));
             for (fname, fty, _) in fields {
-                self.output.push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
+                self.output
+                    .push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
             }
             self.output.push_str("};\n\n");
 
-            self.output.push_str(&format!("void pace_{}_deinit(void* ptr) {{\n", id.0));
-            self.output.push_str(&format!("    struct pace_{}* self = (struct pace_{}*)ptr;\n", id.0, id.0));
+            self.output
+                .push_str(&format!("void pace_{}_deinit(void* ptr) {{\n", id.0));
+            self.output.push_str(&format!(
+                "    struct pace_{}* self = (struct pace_{}*)ptr;\n",
+                id.0, id.0
+            ));
             for (fname, fty, _) in fields {
                 if matches!(fty, Ty::Class(_)) {
-                    self.output.push_str(&format!("    pace_release(self->{});\n", fname));
+                    self.output
+                        .push_str(&format!("    pace_release(self->{});\n", fname));
                 }
             }
             self.output.push_str("}\n\n");
@@ -100,13 +119,23 @@ impl CGenerator {
 
         // Forward declare functions
         for func in &program.functions {
-            let func_name = if func.name == "main" { "pace_main" } else { &func.name };
-            self.output.push_str(&format!("{} {}(", self.emit_c_type(&func.return_type), func_name));
+            let func_name = if func.name == "main" {
+                "pace_main"
+            } else {
+                &func.name
+            };
+            self.output.push_str(&format!(
+                "{} {}(",
+                self.emit_c_type(&func.return_type),
+                func_name
+            ));
             if func.params.is_empty() {
                 self.output.push_str("void");
             } else {
                 for (i, p) in func.params.iter().enumerate() {
-                    if i > 0 { self.output.push_str(", "); }
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
                     let c_ty = self.emit_c_type(&func.body.locals[p.0 as usize]);
                     self.output.push_str(&format!("{} _{}", c_ty, i));
                 }
@@ -117,7 +146,10 @@ impl CGenerator {
 
         // V-Table globals
         for (id, methods) in &program.class_vtables {
-            self.output.push_str(&format!("struct pace_{}_vtable pace_{}_vtable_inst = {{\n", id.0, id.0));
+            self.output.push_str(&format!(
+                "struct pace_{}_vtable pace_{}_vtable_inst = {{\n",
+                id.0, id.0
+            ));
             for (_, _, func_name) in methods {
                 self.output.push_str(&format!("    {},\n", func_name));
             }
@@ -134,7 +166,8 @@ impl CGenerator {
         for (i, ty) in program.main_body.locals.iter().enumerate() {
             let c_ty = self.emit_c_type(ty);
             let def_val = self.emit_c_default_val(ty);
-            self.output.push_str(&format!("    {} _{} = {};\n", c_ty, i, def_val));
+            self.output
+                .push_str(&format!("    {} _{} = {};\n", c_ty, i, def_val));
         }
         self.output.push_str("\n");
         for (i, block) in program.main_body.blocks.iter().enumerate() {
@@ -182,23 +215,34 @@ impl CGenerator {
 
     fn generate_function(&mut self, func: &MirFunction) {
         let ret_ty_str = self.emit_c_type(&func.return_type);
-        let c_name = if func.name == "main" { "pace_main" } else { &func.name };
+        let c_name = if func.name == "main" {
+            "pace_main"
+        } else {
+            &func.name
+        };
         self.output.push_str(&format!("{} {}(", ret_ty_str, c_name));
         for (i, param) in func.params.iter().enumerate() {
-            if i > 0 { self.output.push_str(", "); }
+            if i > 0 {
+                self.output.push_str(", ");
+            }
             let ty = &func.body.locals[param.0 as usize];
             let ty_str = self.emit_c_type(ty);
             write!(&mut self.output, "{} _{}", ty_str, param.0).unwrap();
         }
         self.output.push_str(") {\n");
-        
+
         let mut locals = Vec::new();
         for i in 0..func.body.locals.len() {
             if !func.params.iter().any(|p| p.0 == i as u32) {
                 let ty = &func.body.locals[i];
                 let c_type = self.emit_c_type(ty);
                 if c_type != "void" {
-                    locals.push(format!("    {} _{} = {};", c_type, i, self.emit_c_default_val(ty)));
+                    locals.push(format!(
+                        "    {} _{} = {};",
+                        c_type,
+                        i,
+                        self.emit_c_default_val(ty)
+                    ));
                 }
             }
         }
@@ -219,8 +263,17 @@ impl CGenerator {
                 Some(Terminator::Goto(bb)) => {
                     write!(&mut self.output, "    goto {}_bb_{};\n", func.name, bb.0).unwrap();
                 }
-                Some(Terminator::Branch { cond, then_block, else_block }) => {
-                    write!(&mut self.output, "    if (_{}) goto {}_bb_{}; else goto {}_bb_{};\n", cond.0, func.name, then_block.0, func.name, else_block.0).unwrap();
+                Some(Terminator::Branch {
+                    cond,
+                    then_block,
+                    else_block,
+                }) => {
+                    write!(
+                        &mut self.output,
+                        "    if (_{}) goto {}_bb_{}; else goto {}_bb_{};\n",
+                        cond.0, func.name, then_block.0, func.name, else_block.0
+                    )
+                    .unwrap();
                 }
                 None => {
                     if ret_ty_str != "void" {
@@ -237,7 +290,7 @@ impl CGenerator {
             match stmt {
                 Statement::Assign(lval, rval) => {
                     self.output.push_str("    ");
-                    
+
                     let mut is_void = false;
                     if let Rvalue::BuiltinCall(name, _) = rval {
                         if name == "print" || name == "println" {
@@ -248,12 +301,12 @@ impl CGenerator {
                             is_void = true;
                         }
                     }
-                    
+
                     if !is_void {
                         self.generate_lvalue(lval, locals);
                         self.output.push_str(" = ");
                     }
-                    
+
                     self.generate_rvalue(rval, locals);
                     self.output.push_str(";\n");
                 }
@@ -286,7 +339,12 @@ impl CGenerator {
                 }
             }
             Lvalue::EnumFieldAccess(obj, variant_name, field) => {
-                write!(&mut self.output, "_{}.payload.{}.{}", obj.0, variant_name, field).unwrap();
+                write!(
+                    &mut self.output,
+                    "_{}.payload.{}.{}",
+                    obj.0, variant_name, field
+                )
+                .unwrap();
             }
         }
     }
@@ -296,8 +354,12 @@ impl CGenerator {
             Rvalue::Use(local) => write!(&mut self.output, "_{}", local.0).unwrap(),
             Rvalue::IntConstant(val) => write!(&mut self.output, "{}", val).unwrap(),
             Rvalue::FloatConstant(val) => write!(&mut self.output, "{}", val).unwrap(),
-            Rvalue::BoolConstant(val) => write!(&mut self.output, "{}", if *val { "1" } else { "0" }).unwrap(),
-            Rvalue::StringConstant(val) => write!(&mut self.output, "\"{}\"", val.trim_matches('"')).unwrap(),
+            Rvalue::BoolConstant(val) => {
+                write!(&mut self.output, "{}", if *val { "1" } else { "0" }).unwrap()
+            }
+            Rvalue::StringConstant(val) => {
+                write!(&mut self.output, "\"{}\"", val.trim_matches('"')).unwrap()
+            }
             Rvalue::BinaryOp(op, lhs, rhs) => {
                 let op_str = match op {
                     BinaryOp::Add => "+",
@@ -316,7 +378,9 @@ impl CGenerator {
             Rvalue::Call(callee, args) => {
                 write!(&mut self.output, "_{}(", callee.0).unwrap();
                 for (i, arg) in args.iter().enumerate() {
-                    if i > 0 { self.output.push_str(", "); }
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
                     write!(&mut self.output, "_{}", arg.0).unwrap();
                 }
                 self.output.push_str(")");
@@ -345,7 +409,9 @@ impl CGenerator {
                 };
                 write!(&mut self.output, "{}(", c_name).unwrap();
                 for (i, arg) in args.iter().enumerate() {
-                    if i > 0 { self.output.push_str(", "); }
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
                     if self.emit_c_type(&locals[arg.0 as usize]).contains("*") {
                         write!(&mut self.output, "(void*)_{}", arg.0).unwrap();
                     } else {
@@ -357,7 +423,9 @@ impl CGenerator {
             Rvalue::GlobalCall(name, args) => {
                 write!(&mut self.output, "{}(", name).unwrap();
                 for (i, arg) in args.iter().enumerate() {
-                    if i > 0 { write!(&mut self.output, ", ").unwrap(); }
+                    if i > 0 {
+                        write!(&mut self.output, ", ").unwrap();
+                    }
                     if self.emit_c_type(&locals[arg.0 as usize]).contains("*") {
                         write!(&mut self.output, "(void*)_{}", arg.0).unwrap();
                     } else {
@@ -367,7 +435,12 @@ impl CGenerator {
                 write!(&mut self.output, ")").unwrap();
             }
             Rvalue::VirtualCall(idx, obj_local, args) => {
-                write!(&mut self.output, "_{}->vtable->m{}((void*)_{}", obj_local.0, idx, obj_local.0).unwrap();
+                write!(
+                    &mut self.output,
+                    "_{}->vtable->m{}((void*)_{}",
+                    obj_local.0, idx, obj_local.0
+                )
+                .unwrap();
                 for arg in args {
                     if self.emit_c_type(&locals[arg.0 as usize]).contains("*") {
                         write!(&mut self.output, ", (void*)_{}", arg.0).unwrap();
@@ -388,34 +461,39 @@ impl CGenerator {
                     write!(&mut self.output, "_{}.{}", obj.0, field).unwrap();
                 }
             }
-            Rvalue::Instantiate(ty, fields) => {
-                match ty {
-                    Ty::Struct(id) => {
-                        write!(&mut self.output, "(struct pace_{}){{ ", id.0).unwrap();
-                        if fields.is_empty() {
-                            self.output.push_str("0");
-                        } else {
-                            for (i, arg) in fields.iter().enumerate() {
-                                if i > 0 { self.output.push_str(", "); }
-                                write!(&mut self.output, "_{}", arg.0).unwrap();
+            Rvalue::Instantiate(ty, fields) => match ty {
+                Ty::Struct(id) => {
+                    write!(&mut self.output, "(struct pace_{}){{ ", id.0).unwrap();
+                    if fields.is_empty() {
+                        self.output.push_str("0");
+                    } else {
+                        for (i, arg) in fields.iter().enumerate() {
+                            if i > 0 {
+                                self.output.push_str(", ");
                             }
+                            write!(&mut self.output, "_{}", arg.0).unwrap();
                         }
-                        self.output.push_str(" }");
                     }
-                    Ty::Class(id) => {
-                        write!(&mut self.output, "memcpy(pace_alloc(sizeof(struct pace_{}), pace_{}_deinit), &(struct pace_{}){{ &pace_{}_vtable_inst", id.0, id.0, id.0, id.0).unwrap();
-                        if !fields.is_empty() {
-                            for arg in fields {
-                                write!(&mut self.output, ", _{}", arg.0).unwrap();
-                            }
-                        }
-                        write!(&mut self.output, " }}, sizeof(struct pace_{}))", id.0).unwrap();
-                    }
-                    _ => panic!("Instantiating non-struct/class"),
+                    self.output.push_str(" }");
                 }
-            }
+                Ty::Class(id) => {
+                    write!(&mut self.output, "memcpy(pace_alloc(sizeof(struct pace_{}), pace_{}_deinit), &(struct pace_{}){{ &pace_{}_vtable_inst", id.0, id.0, id.0, id.0).unwrap();
+                    if !fields.is_empty() {
+                        for arg in fields {
+                            write!(&mut self.output, ", _{}", arg.0).unwrap();
+                        }
+                    }
+                    write!(&mut self.output, " }}, sizeof(struct pace_{}))", id.0).unwrap();
+                }
+                _ => panic!("Instantiating non-struct/class"),
+            },
             Rvalue::EnumTag(local) => write!(&mut self.output, "_{}.tag", local.0).unwrap(),
-            Rvalue::EnumFieldAccess(obj, variant_name, field_name) => write!(&mut self.output, "_{}.payload.{}.{}", obj.0, variant_name, field_name).unwrap(),
+            Rvalue::EnumFieldAccess(obj, variant_name, field_name) => write!(
+                &mut self.output,
+                "_{}.payload.{}.{}",
+                obj.0, variant_name, field_name
+            )
+            .unwrap(),
             Rvalue::InstantiateEnum(id, variant_name, fields) => {
                 let mut tag = 0;
                 let variants = self.enum_defs.get(id).unwrap();
@@ -425,7 +503,7 @@ impl CGenerator {
                         break;
                     }
                 }
-                
+
                 let mut has_fields = false;
                 for (v_name, v_fields) in variants {
                     if v_name == variant_name && v_fields.is_some() {
@@ -433,20 +511,32 @@ impl CGenerator {
                         break;
                     }
                 }
-                
+
                 if has_fields {
-                    write!(&mut self.output, "(struct pace_{}){{ .tag = {}, .payload = {{ .{} = {{ ", id.0, tag, variant_name).unwrap();
+                    write!(
+                        &mut self.output,
+                        "(struct pace_{}){{ .tag = {}, .payload = {{ .{} = {{ ",
+                        id.0, tag, variant_name
+                    )
+                    .unwrap();
                     if fields.is_empty() {
                         self.output.push_str("0");
                     } else {
                         for (i, arg) in fields.iter().enumerate() {
-                            if i > 0 { self.output.push_str(", "); }
+                            if i > 0 {
+                                self.output.push_str(", ");
+                            }
                             write!(&mut self.output, "_{}", arg.0).unwrap();
                         }
                     }
                     self.output.push_str(" } } }");
                 } else {
-                    write!(&mut self.output, "(struct pace_{}){{ .tag = {} }}", id.0, tag).unwrap();
+                    write!(
+                        &mut self.output,
+                        "(struct pace_{}){{ .tag = {} }}",
+                        id.0, tag
+                    )
+                    .unwrap();
                 }
             }
         }

@@ -26,7 +26,7 @@ impl<'a> Iterator for Lexer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let kind = self.inner.next()?;
         let span = Span::from(self.inner.span());
-        
+
         match kind {
             Ok(k) => Some(Ok(Token { kind: k, span })),
             Err(_) => Some(Err(())), // Logos returns Err for unknown tokens

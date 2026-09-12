@@ -7,9 +7,9 @@ pub use typechecker::TypeChecker;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pace_hir::LoweringContext;
     use pace_lexer::Lexer;
     use pace_parser::Parser;
-    use pace_hir::LoweringContext;
 
     #[test]
     fn test_typechecker_success() {
@@ -37,8 +37,12 @@ mod tests {
 
         let mut tc = TypeChecker::new();
         let result = tc.check_program(&hir);
-        
+
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Type mismatch in binary operation: String and Int"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Type mismatch in binary operation: String and Int")
+        );
     }
 }

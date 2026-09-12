@@ -2,57 +2,91 @@ use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(skip r"[ \t\n\f]+")] // Skip whitespace
-#[logos(skip(r"//[^\n]*", allow_greedy = true))]   // Skip normal comments
+#[logos(skip(r"//[^\n]*", allow_greedy = true))] // Skip normal comments
 pub enum TokenKind<'a> {
     // Declarations
-    #[token("let")] Let,
-    #[token("const")] Const,
-    #[token("var")] Var,
-    #[token("fn")] Fn,
-    #[token("struct")] Struct,
-    #[token("class")] Class,
-    #[token("trait")] Trait,
-    #[token("enum")] Enum,
-    #[token("type")] Type,
-    #[token("static")] Static,
+    #[token("let")]
+    Let,
+    #[token("const")]
+    Const,
+    #[token("var")]
+    Var,
+    #[token("fn")]
+    Fn,
+    #[token("struct")]
+    Struct,
+    #[token("class")]
+    Class,
+    #[token("trait")]
+    Trait,
+    #[token("enum")]
+    Enum,
+    #[token("type")]
+    Type,
+    #[token("static")]
+    Static,
 
     // Control Flow
-    #[token("if")] If,
-    #[token("else")] Else,
-    #[token("while")] While,
-    #[token("for")] For,
-    #[token("loop")] Loop,
-    #[token("match")] Match,
-    #[token("break")] Break,
-    #[token("continue")] Continue,
-    #[token("return")] Return,
+    #[token("if")]
+    If,
+    #[token("else")]
+    Else,
+    #[token("while")]
+    While,
+    #[token("for")]
+    For,
+    #[token("loop")]
+    Loop,
+    #[token("match")]
+    Match,
+    #[token("break")]
+    Break,
+    #[token("continue")]
+    Continue,
+    #[token("return")]
+    Return,
 
     // Memory / Type
-    #[token("is")] Is,
-    #[token("as")] As,
-    #[token("with")] With,
-    #[token("extends")] Extends,
-    #[token("override")] Override,
-    #[token("super")] Super,
+    #[token("is")]
+    Is,
+    #[token("as")]
+    As,
+    #[token("with")]
+    With,
+    #[token("extends")]
+    Extends,
+    #[token("override")]
+    Override,
+    #[token("super")]
+    Super,
 
     // Modules
-    #[token("import")] Import,
+    #[token("import")]
+    Import,
 
     // Errors
-    #[token("throw")] Throw,
-    #[token("try")] Try,
-    #[token("catch")] Catch,
+    #[token("throw")]
+    Throw,
+    #[token("try")]
+    Try,
+    #[token("catch")]
+    Catch,
 
     // Concurrency
-    #[token("async")] Async,
-    #[token("await")] Await,
+    #[token("async")]
+    Async,
+    #[token("await")]
+    Await,
 
     // FFI
-    #[token("extern")] Extern,
-    #[token("unsafe")] Unsafe,
+    #[token("extern")]
+    Extern,
+    #[token("unsafe")]
+    Unsafe,
 
     // Visibility
-    #[token("private")] Private,
+    #[token("private")]
+    Private,
 
     // Identifiers
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice())]
@@ -73,39 +107,69 @@ pub enum TokenKind<'a> {
     DocComment(&'a str),
 
     // Operators & Punctuation
-    #[token("(")] LParen,
-    #[token(")")] RParen,
-    #[token("{")] LBrace,
-    #[token("}")] RBrace,
-    #[token("[")] LBracket,
-    #[token("]")] RBracket,
-    #[token(",")] Comma,
-    #[token(".")] Dot,
-    #[token(":")] Colon,
-    #[token(";")] Semi,
-    
-    #[token("=")] Eq,
-    #[token("==")] EqEq,
-    #[token("!=")] NotEq,
-    #[token("<")] Lt,
-    #[token("<=")] LtEq,
-    #[token(">")] Gt,
-    #[token(">=")] GtEq,
-    
-    #[token("+")] Plus,
-    #[token("-")] Minus,
-    #[token("*")] Star,
-    #[token("/")] Slash,
-    #[token("%")] Percent,
-    
-    #[token("&&")] AndAnd,
-    #[token("||")] OrOr,
-    #[token("!")] Bang,
-    
-    #[token("??")] NullCoalesce,
-    #[token("?.")] OptChain,
-    #[token("?")] Question,
-    
-    #[token("=>")] FatArrow,
-    #[token("->")] Arrow,
+    #[token("(")]
+    LParen,
+    #[token(")")]
+    RParen,
+    #[token("{")]
+    LBrace,
+    #[token("}")]
+    RBrace,
+    #[token("[")]
+    LBracket,
+    #[token("]")]
+    RBracket,
+    #[token(",")]
+    Comma,
+    #[token(".")]
+    Dot,
+    #[token(":")]
+    Colon,
+    #[token(";")]
+    Semi,
+
+    #[token("=")]
+    Eq,
+    #[token("==")]
+    EqEq,
+    #[token("!=")]
+    NotEq,
+    #[token("<")]
+    Lt,
+    #[token("<=")]
+    LtEq,
+    #[token(">")]
+    Gt,
+    #[token(">=")]
+    GtEq,
+
+    #[token("+")]
+    Plus,
+    #[token("-")]
+    Minus,
+    #[token("*")]
+    Star,
+    #[token("/")]
+    Slash,
+    #[token("%")]
+    Percent,
+
+    #[token("&&")]
+    AndAnd,
+    #[token("||")]
+    OrOr,
+    #[token("!")]
+    Bang,
+
+    #[token("??")]
+    NullCoalesce,
+    #[token("?.")]
+    OptChain,
+    #[token("?")]
+    Question,
+
+    #[token("=>")]
+    FatArrow,
+    #[token("->")]
+    Arrow,
 }

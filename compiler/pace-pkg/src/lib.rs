@@ -22,10 +22,7 @@ pub fn scaffold_project(name: &str, is_lib: bool) -> Result<(), String> {
     fs::create_dir_all(project_dir.join("src"))
         .map_err(|e| format!("Failed to create src directory: {}", e))?;
 
-    let toml_content = format!(
-        "[package]\nname = \"{}\"\nversion = \"0.1.0\"\n",
-        name
-    );
+    let toml_content = format!("[package]\nname = \"{}\"\nversion = \"0.1.0\"\n", name);
     fs::write(project_dir.join("pace.toml"), toml_content)
         .map_err(|e| format!("Failed to write pace.toml: {}", e))?;
 
@@ -57,8 +54,7 @@ pub fn find_manifest(current_dir: &Path) -> Option<PathBuf> {
 }
 
 pub fn parse_manifest(path: &Path) -> Result<PaceToml, String> {
-    let content = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read pace.toml: {}", e))?;
-    toml::from_str(&content)
-        .map_err(|e| format!("Failed to parse pace.toml: {}", e))
+    let content =
+        fs::read_to_string(path).map_err(|e| format!("Failed to read pace.toml: {}", e))?;
+    toml::from_str(&content).map_err(|e| format!("Failed to parse pace.toml: {}", e))
 }

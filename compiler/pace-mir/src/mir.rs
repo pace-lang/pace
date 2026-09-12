@@ -80,6 +80,9 @@ pub struct MirProgram {
     pub struct_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty, bool)>>,
     pub class_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty, bool)>>,
     pub class_vtables: std::collections::HashMap<pace_hir::HirId, Vec<(String, Ty, String)>>,
-    pub enum_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, Option<Vec<(String, pace_ty::Ty)>>)>>,
+    pub enum_defs: std::collections::HashMap<
+        pace_hir::HirId,
+        Vec<(String, Option<Vec<(String, pace_ty::Ty)>>)>,
+    >,
     pub global_vars: Vec<(String, pace_ty::Ty)>,
 }

@@ -68,7 +68,7 @@ impl Diagnostic {
             code: None,
         }
     }
-    
+
     pub fn warning(msg: impl Into<String>) -> Self {
         Self {
             severity: Severity::Warning,
@@ -83,7 +83,7 @@ impl Diagnostic {
         self.span = Some(span);
         self
     }
-    
+
     pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
         self.hint = Some(hint.into());
         self
@@ -102,19 +102,23 @@ pub struct Reporter {
 
 impl Reporter {
     pub fn new() -> Self {
-        Self { diagnostics: Vec::new() }
+        Self {
+            diagnostics: Vec::new(),
+        }
     }
 
     pub fn report(&mut self, diag: Diagnostic) {
         self.diagnostics.push(diag);
     }
-    
+
     pub fn has_errors(&self) -> bool {
-        self.diagnostics.iter().any(|d| d.severity == Severity::Error)
+        self.diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error)
     }
 
     pub fn emit_all(&self, source: &str, file_name: &str) {
-        use ariadne::{Report, ReportKind, Label, Source, Color};
+        use ariadne::{Color, Label, Report, ReportKind, Source};
 
         for diag in &self.diagnostics {
             let kind = match diag.severity {
@@ -131,29 +135,30 @@ impl Reporter {
 
             let span_start = diag.span.map(|s| s.start).unwrap_or(0);
             let span_end = diag.span.map(|s| s.end).unwrap_or(span_start + 1);
-            
-            let mut builder = Report::build(kind, (file_name, span_start..span_end))
-                .with_message(&diag.message);
-                
+
+            let mut builder =
+                Report::build(kind, (file_name, span_start..span_end)).with_message(&diag.message);
+
             if let Some(code) = &diag.code {
                 builder = builder.with_code(code.as_str());
             }
-            
+
             if let Some(span) = diag.span {
                 let mut label = Label::new((file_name, span.start..span.end)).with_color(color);
-                
+
                 if let Some(hint) = &diag.hint {
                     label = label.with_message(hint);
                 } else {
                     label = label.with_message("here");
                 }
-                
+
                 builder = builder.with_label(label);
             } else if let Some(hint) = &diag.hint {
                 builder = builder.with_note(hint);
             }
 
-            builder.finish()
+            builder
+                .finish()
                 .eprint((file_name, Source::from(source)))
                 .unwrap();
         }

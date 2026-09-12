@@ -6,7 +6,11 @@ use std::process::Command;
 use pace_driver::compile_file;
 
 #[derive(ClapParser)]
-#[command(name = "pace", version = "0.1.0", about = "Pace Toolchain and Package Manager")]
+#[command(
+    name = "pace",
+    version = "0.1.0",
+    about = "Pace Toolchain and Package Manager"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -47,10 +51,10 @@ fn get_project_info() -> Result<(PathBuf, String), String> {
     let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
     let manifest_path = pace_pkg::find_manifest(&current_dir)
         .ok_or("No pace.toml found in this directory or any parent directory")?;
-    
+
     let toml = pace_pkg::parse_manifest(&manifest_path)?;
     let root = manifest_path.parent().unwrap().to_path_buf();
-    
+
     Ok((root, toml.package.name))
 }
 
@@ -63,10 +67,10 @@ fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> Result<
         compile_file(&p, Path::new("."), &name, run, check)
     } else {
         let (root, project_name) = get_project_info()?;
-        
+
         let main_file = root.join("src/main.pace");
         let lib_file = root.join("src/lib.pace");
-        
+
         let target_file = if main_file.exists() {
             main_file
         } else if lib_file.exists() {
@@ -74,7 +78,7 @@ fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> Result<
         } else {
             return Err("Neither src/main.pace nor src/lib.pace found".to_string());
         };
-        
+
         let build_dir = root.join("build");
         compile_file(&target_file, &build_dir, &project_name, run, check)
     }

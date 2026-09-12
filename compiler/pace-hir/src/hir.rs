@@ -39,22 +39,41 @@ pub struct Program {
 impl Program {
     pub fn resolve_traits(&mut self, reporter: &mut pace_errors::Reporter) {
         let mut trait_methods = std::collections::HashMap::new();
-        
+
         for decl in &self.declarations {
             if let Decl::Trait { name, methods, .. } = decl {
                 trait_methods.insert(name.clone(), methods.clone());
             }
         }
-        
+
         for decl in &mut self.declarations {
-            if let Decl::Struct { name, with, methods, span, .. } | Decl::Class { name, with, methods, span, .. } = decl {
+            if let Decl::Struct {
+                name,
+                with,
+                methods,
+                span,
+                ..
+            }
+            | Decl::Class {
+                name,
+                with,
+                methods,
+                span,
+                ..
+            } = decl
+            {
                 for trait_name in with {
                     if let Some(t_methods) = trait_methods.get(trait_name) {
                         for t_method in t_methods {
-                            if let Decl::Function { name: t_m_name, body, .. } = t_method {
+                            if let Decl::Function {
+                                name: t_m_name,
+                                body,
+                                ..
+                            } = t_method
+                            {
                                 // Extract actual method name (remove trait prefix)
                                 let actual_name = t_m_name.split('_').last().unwrap_or(t_m_name);
-                                
+
                                 // Check if class already has this method
                                 let has_method = methods.iter().any(|m| {
                                     if let Decl::Function { name: m_name, .. } = m {
@@ -63,7 +82,7 @@ impl Program {
                                         false
                                     }
                                 });
-                                
+
                                 if !has_method {
                                     if body.statements.is_empty() {
                                         reporter.report(pace_errors::Diagnostic::error(format!("Class/Struct '{}' must implement required method '{}' from Trait '{}'", name, actual_name, trait_name))
@@ -72,10 +91,19 @@ impl Program {
                                         let struct_name = name.clone();
                                         // Clone and inject default method
                                         let mut new_method = t_method.clone();
-                                        if let Decl::Function { ref mut name, ref mut params, .. } = new_method {
+                                        if let Decl::Function {
+                                            ref mut name,
+                                            ref mut params,
+                                            ..
+                                        } = new_method
+                                        {
                                             *name = format!("{}_{}", struct_name, actual_name);
                                             if !params.is_empty() && params[0].1 == "self" {
-                                                params[0].2 = pace_ast::Type::Named(pace_ast::Ident { name: struct_name, span: *span });
+                                                params[0].2 =
+                                                    pace_ast::Type::Named(pace_ast::Ident {
+                                                        name: struct_name,
+                                                        span: *span,
+                                                    });
                                             }
                                         }
                                         methods.push(new_method);
@@ -84,16 +112,19 @@ impl Program {
                             }
                         }
                     } else {
-                        reporter.report(pace_errors::Diagnostic::error(format!("Trait '{}' not found", trait_name))
-                            .with_span(*span));
+                        reporter.report(
+                            pace_errors::Diagnostic::error(format!(
+                                "Trait '{}' not found",
+                                trait_name
+                            ))
+                            .with_span(*span),
+                        );
                     }
                 }
             }
         }
     }
 }
-
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
