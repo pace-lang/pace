@@ -26,7 +26,7 @@ impl CGenerator {
 
         for (id, fields) in &program.struct_defs {
             self.output.push_str(&format!("struct pace_{} {{\n", id.0));
-            for (fname, fty) in fields {
+            for (fname, fty, _) in fields {
                 self.output.push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
             }
             self.output.push_str("};\n\n");
@@ -49,16 +49,42 @@ impl CGenerator {
             self.output.push_str("};\n\n");
         }
         
+        // Forward declarations of class structs
+        for (id, _) in &program.class_defs {
+            self.output.push_str(&format!("struct pace_{};\n", id.0));
+        }
+        self.output.push_str("\n");
+
+        for (id, methods) in &program.class_vtables {
+            self.output.push_str(&format!("struct pace_{}_vtable {{\n", id.0));
+            for (i, (_, ty, _)) in methods.iter().enumerate() {
+                if let Ty::Function(params, ret) = ty {
+                    self.output.push_str(&format!("    {} (*m{})(", self.emit_c_type(ret), i));
+                    if params.is_empty() {
+                        self.output.push_str("void");
+                    } else {
+                        for (j, p) in params.iter().enumerate() {
+                            if j > 0 { self.output.push_str(", "); }
+                            self.output.push_str(&self.emit_c_type(p));
+                        }
+                    }
+                    self.output.push_str(");\n");
+                }
+            }
+            self.output.push_str("};\n\n");
+        }
+        
         for (id, fields) in &program.class_defs {
             self.output.push_str(&format!("struct pace_{} {{\n", id.0));
-            for (fname, fty) in fields {
+            self.output.push_str(&format!("    struct pace_{}_vtable* vtable;\n", id.0));
+            for (fname, fty, _) in fields {
                 self.output.push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
             }
             self.output.push_str("};\n\n");
 
             self.output.push_str(&format!("void pace_{}_deinit(void* ptr) {{\n", id.0));
             self.output.push_str(&format!("    struct pace_{}* self = (struct pace_{}*)ptr;\n", id.0, id.0));
-            for (fname, fty) in fields {
+            for (fname, fty, _) in fields {
                 if matches!(fty, Ty::Class(_)) {
                     self.output.push_str(&format!("    pace_release(self->{});\n", fname));
                 }
@@ -71,6 +97,32 @@ impl CGenerator {
             self.output.push_str(&format!("{} {};\n", c_ty, name));
         }
         self.output.push_str("\n");
+
+        // Forward declare functions
+        for func in &program.functions {
+            let func_name = if func.name == "main" { "pace_main" } else { &func.name };
+            self.output.push_str(&format!("{} {}(", self.emit_c_type(&func.return_type), func_name));
+            if func.params.is_empty() {
+                self.output.push_str("void");
+            } else {
+                for (i, p) in func.params.iter().enumerate() {
+                    if i > 0 { self.output.push_str(", "); }
+                    let c_ty = self.emit_c_type(&func.body.locals[p.0 as usize]);
+                    self.output.push_str(&format!("{} _{}", c_ty, i));
+                }
+            }
+            self.output.push_str(");\n");
+        }
+        self.output.push_str("\n");
+
+        // V-Table globals
+        for (id, methods) in &program.class_vtables {
+            self.output.push_str(&format!("struct pace_{}_vtable pace_{}_vtable_inst = {{\n", id.0, id.0));
+            for (_, _, func_name) in methods {
+                self.output.push_str(&format!("    {},\n", func_name));
+            }
+            self.output.push_str("};\n\n");
+        }
 
         for func in &program.functions {
             self.generate_function(func);
@@ -158,7 +210,11 @@ impl CGenerator {
             self.generate_block(block, &func.body.locals);
             match &block.terminator {
                 Some(Terminator::Return(local)) => {
-                    write!(&mut self.output, "    return _{};\n", local.0).unwrap();
+                    if self.emit_c_type(&func.return_type) == "void" {
+                        write!(&mut self.output, "    return;\n").unwrap();
+                    } else {
+                        write!(&mut self.output, "    return _{};\n", local.0).unwrap();
+                    }
                 }
                 Some(Terminator::Goto(bb)) => {
                     write!(&mut self.output, "    goto {}_bb_{};\n", func.name, bb.0).unwrap();
@@ -290,17 +346,36 @@ impl CGenerator {
                 write!(&mut self.output, "{}(", c_name).unwrap();
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 { self.output.push_str(", "); }
-                    write!(&mut self.output, "_{}", arg.0).unwrap();
+                    if self.emit_c_type(&locals[arg.0 as usize]).contains("*") {
+                        write!(&mut self.output, "(void*)_{}", arg.0).unwrap();
+                    } else {
+                        write!(&mut self.output, "_{}", arg.0).unwrap();
+                    }
                 }
                 self.output.push_str(")");
             }
-            Rvalue::GlobalCall(callee, args) => {
-                write!(&mut self.output, "{}(", callee).unwrap();
+            Rvalue::GlobalCall(name, args) => {
+                write!(&mut self.output, "{}(", name).unwrap();
                 for (i, arg) in args.iter().enumerate() {
-                    if i > 0 { self.output.push_str(", "); }
-                    write!(&mut self.output, "_{}", arg.0).unwrap();
+                    if i > 0 { write!(&mut self.output, ", ").unwrap(); }
+                    if self.emit_c_type(&locals[arg.0 as usize]).contains("*") {
+                        write!(&mut self.output, "(void*)_{}", arg.0).unwrap();
+                    } else {
+                        write!(&mut self.output, "_{}", arg.0).unwrap();
+                    }
                 }
-                self.output.push_str(")");
+                write!(&mut self.output, ")").unwrap();
+            }
+            Rvalue::VirtualCall(idx, obj_local, args) => {
+                write!(&mut self.output, "_{}->vtable->m{}((void*)_{}", obj_local.0, idx, obj_local.0).unwrap();
+                for arg in args {
+                    if self.emit_c_type(&locals[arg.0 as usize]).contains("*") {
+                        write!(&mut self.output, ", (void*)_{}", arg.0).unwrap();
+                    } else {
+                        write!(&mut self.output, ", _{}", arg.0).unwrap();
+                    }
+                }
+                write!(&mut self.output, ")").unwrap();
             }
             Rvalue::GlobalRead(name) => {
                 write!(&mut self.output, "{}", name).unwrap();
@@ -328,13 +403,10 @@ impl CGenerator {
                         self.output.push_str(" }");
                     }
                     Ty::Class(id) => {
-                        write!(&mut self.output, "memcpy(pace_alloc(sizeof(struct pace_{}), pace_{}_deinit), &(struct pace_{}){{ ", id.0, id.0, id.0).unwrap();
-                        if fields.is_empty() {
-                            self.output.push_str("0");
-                        } else {
-                            for (i, arg) in fields.iter().enumerate() {
-                                if i > 0 { self.output.push_str(", "); }
-                                write!(&mut self.output, "_{}", arg.0).unwrap();
+                        write!(&mut self.output, "memcpy(pace_alloc(sizeof(struct pace_{}), pace_{}_deinit), &(struct pace_{}){{ &pace_{}_vtable_inst", id.0, id.0, id.0, id.0).unwrap();
+                        if !fields.is_empty() {
+                            for arg in fields {
+                                write!(&mut self.output, ", _{}", arg.0).unwrap();
                             }
                         }
                         write!(&mut self.output, " }}, sizeof(struct pace_{}))", id.0).unwrap();

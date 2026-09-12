@@ -39,6 +39,7 @@ pub enum Rvalue {
     Call(Local, Vec<Local>),
     BuiltinCall(String, Vec<Local>),
     GlobalCall(String, Vec<Local>),
+    VirtualCall(usize, Local, Vec<Local>),
     GlobalRead(String),
     FieldAccess(Local, String),
     EnumFieldAccess(Local, String, String),
@@ -76,8 +77,9 @@ pub struct MirFunction {
 pub struct MirProgram {
     pub functions: Vec<MirFunction>,
     pub main_body: MirBody,
-    pub struct_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty)>>,
-    pub class_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty)>>,
+    pub struct_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty, bool)>>,
+    pub class_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty, bool)>>,
+    pub class_vtables: std::collections::HashMap<pace_hir::HirId, Vec<(String, Ty, String)>>,
     pub enum_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, Option<Vec<(String, pace_ty::Ty)>>)>>,
     pub global_vars: Vec<(String, pace_ty::Ty)>,
 }

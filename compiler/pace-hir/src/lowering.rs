@@ -95,12 +95,12 @@ impl LoweringContext {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 let mut lowered_fields = Vec::new();
-                for (field_name, field_ty, field_val) in fields {
+                for (field_name, field_ty, field_val, is_mut) in fields.clone() {
                     let lowered_val = match field_val {
                         Some(v) => Some(self.lower_expr(v)?),
                         None => None,
                     };
-                    lowered_fields.push((field_name.name, field_ty, lowered_val));
+                    lowered_fields.push((field_name.name.clone(), field_ty.clone(), lowered_val, is_mut));
                 }
                 
                 let mut lowered_static = Vec::new();
@@ -112,9 +112,54 @@ impl LoweringContext {
                     lowered_const.push((cf_name.name, cf_ty, self.lower_expr(cf_val)?));
                 }
                 
+                let mut initializers = Vec::new();
+                for (field_name, _, field_val, _) in &fields {
+                    if let Some(val) = field_val {
+                        let lhs = ast::Expr::MemberAccess {
+                            object: Box::new(ast::Expr::Ident(ast::Ident { name: "self".to_string(), span: field_name.span })),
+                            member: field_name.clone(),
+                            span: field_name.span,
+                        };
+                        let stmt = ast::Stmt::ExprStmt(ast::Expr::Assign {
+                            target: Box::new(lhs),
+                            value: Box::new(val.clone()),
+                            span: val.span(),
+                        }, val.span());
+                        initializers.push(stmt);
+                    }
+                }
+                
+                let mut methods = methods;
+                if !initializers.is_empty() {
+                    let mut has_init = false;
+                    for method in &mut methods {
+                        if let ast::Decl::Function { name: m_name, body, .. } = method {
+                            if m_name.name == "init" {
+                                has_init = true;
+                                for (i, init) in initializers.iter().enumerate() {
+                                    body.statements.insert(i, init.clone());
+                                }
+                            }
+                        }
+                    }
+                    if !has_init {
+                        let synthetic_init = ast::Decl::Function {
+                            name: ast::Ident { name: "init".to_string(), span },
+                            generic_params: None,
+                            params: vec![],
+                            return_type: None,
+                            body: ast::Block { statements: initializers, span },
+                            is_static: false,
+                            is_override: false,
+                            span,
+                        };
+                        methods.push(synthetic_init);
+                    }
+                }
+                
                 let mut lowered_methods = Vec::new();
                 for method in methods {
-                    if let ast::Decl::Function { name: m_name, generic_params: m_generic_params, params, return_type, body, span: m_span, is_static } = method {
+                    if let ast::Decl::Function { name: m_name, generic_params: m_generic_params, params, return_type, body, span: m_span, is_static, is_override } = method {
                         let mut new_params = Vec::new();
                         if !is_static {
                             new_params.push((
@@ -131,6 +176,7 @@ impl LoweringContext {
                             body,
                             span: m_span,
                             is_static,
+                            is_override,
                         };
                         if let Some(lowered) = self.lower_decl(m_decl)? {
                             lowered_methods.push(lowered);
@@ -141,16 +187,16 @@ impl LoweringContext {
                 let hir_with = with.into_iter().map(|w| w.name).collect();
                 Ok(Some(Decl::Struct { id, name: name.name, generic_params: hir_generic_params, with: hir_with, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
             }
-            ast::Decl::Class { name, generic_params, with, fields, static_fields, const_fields, methods, span, .. } => {
+            ast::Decl::Class { name, generic_params, extends, with, fields, static_fields, const_fields, methods, span, .. } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 let mut lowered_fields = Vec::new();
-                for (field_name, field_ty, field_val) in fields {
+                for (field_name, field_ty, field_val, is_mut) in fields.clone() {
                     let lowered_val = match field_val {
                         Some(v) => Some(self.lower_expr(v)?),
                         None => None,
                     };
-                    lowered_fields.push((field_name.name, field_ty, lowered_val));
+                    lowered_fields.push((field_name.name, field_ty, lowered_val, is_mut));
                 }
                 
                 let mut lowered_static = Vec::new();
@@ -162,9 +208,66 @@ impl LoweringContext {
                     lowered_const.push((cf_name.name, cf_ty, self.lower_expr(cf_val)?));
                 }
                 
+                let mut initializers = Vec::new();
+                for (field_name, _, field_val, _) in &fields {
+                    if let Some(val) = field_val {
+                        let lhs = ast::Expr::MemberAccess {
+                            object: Box::new(ast::Expr::Ident(ast::Ident { name: "self".to_string(), span: field_name.span })),
+                            member: field_name.clone(),
+                            span: field_name.span,
+                        };
+                        let stmt = ast::Stmt::ExprStmt(ast::Expr::Assign {
+                            target: Box::new(lhs),
+                            value: Box::new(val.clone()),
+                            span: val.span(),
+                        }, val.span());
+                        initializers.push(stmt);
+                    }
+                }
+                
+                let mut methods = methods;
+                if !initializers.is_empty() {
+                    let mut has_init = false;
+                    for method in &mut methods {
+                        if let ast::Decl::Function { name: m_name, body, .. } = method {
+                            if m_name.name == "init" {
+                                has_init = true;
+                                let mut inject_idx = 0;
+                                if let Some(first_stmt) = body.statements.first() {
+                                    if let ast::Stmt::ExprStmt(ast::Expr::Call { callee, .. }, _) = first_stmt {
+                                        if let ast::Expr::MemberAccess { object, member, .. } = &**callee {
+                                            if let ast::Expr::Super(_) = &**object {
+                                                if member.name == "init" {
+                                                    inject_idx = 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                for (i, init) in initializers.iter().enumerate() {
+                                    body.statements.insert(inject_idx + i, init.clone());
+                                }
+                            }
+                        }
+                    }
+                    if !has_init {
+                        let synthetic_init = ast::Decl::Function {
+                            name: ast::Ident { name: "init".to_string(), span },
+                            generic_params: None,
+                            params: vec![],
+                            return_type: None,
+                            body: ast::Block { statements: initializers, span },
+                            is_static: false,
+                            is_override: false,
+                            span,
+                        };
+                        methods.push(synthetic_init);
+                    }
+                }
+                
                 let mut lowered_methods = Vec::new();
                 for method in methods {
-                    if let ast::Decl::Function { name: m_name, generic_params: m_generic_params, params, return_type, body, span: m_span, is_static } = method {
+                    if let ast::Decl::Function { name: m_name, generic_params: m_generic_params, params, return_type, body, span: m_span, is_static, is_override } = method {
                         let mut new_params = Vec::new();
                         if !is_static {
                             new_params.push((
@@ -181,6 +284,7 @@ impl LoweringContext {
                             body,
                             span: m_span,
                             is_static,
+                            is_override,
                         };
                         if let Some(lowered) = self.lower_decl(m_decl)? {
                             lowered_methods.push(lowered);
@@ -189,7 +293,8 @@ impl LoweringContext {
                 }
                 let hir_generic_params = generic_params.map(|params| params.into_iter().map(|p| (p.name.name, p.default)).collect());
                 let hir_with = with.into_iter().map(|w| w.name).collect();
-                Ok(Some(Decl::Class { id, name: name.name, generic_params: hir_generic_params, with: hir_with, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
+                let hir_extends = extends.map(|e| e.name);
+                Ok(Some(Decl::Class { id, name: name.name, generic_params: hir_generic_params, extends: hir_extends, with: hir_with, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
             }
             ast::Decl::Trait { name, generic_params, methods, span, .. } => {
                 let id = self.generate_id();
@@ -197,7 +302,7 @@ impl LoweringContext {
                 
                 let mut lowered_methods = Vec::new();
                 for method in methods {
-                    if let ast::Decl::Function { name: m_name, generic_params: m_generic_params, params, return_type, body, span: m_span, is_static } = method {
+                    if let ast::Decl::Function { name: m_name, generic_params: m_generic_params, params, return_type, body, span: m_span, is_static, is_override } = method {
                         let mut new_params = Vec::new();
                         if !is_static {
                             new_params.push((
@@ -214,6 +319,7 @@ impl LoweringContext {
                             body,
                             span: m_span,
                             is_static,
+                            is_override,
                         };
                         if let Some(lowered) = self.lower_decl(m_decl)? {
                             lowered_methods.push(lowered);
@@ -253,7 +359,7 @@ impl LoweringContext {
                 let hir_generic_params = generic_params.map(|params| params.into_iter().map(|p| (p.name.name, p.default)).collect());
                 Ok(Some(Decl::Enum { id, name: name.name, generic_params: hir_generic_params, variants: lowered_variants, span }))
             }
-            ast::Decl::Function { name, generic_params, params, return_type, body, span, is_static } => {
+            ast::Decl::Function { name, generic_params, params, return_type, body, span, is_static, is_override } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 
@@ -277,6 +383,7 @@ impl LoweringContext {
                     return_type,
                     body: lowered_body,
                     is_static,
+                    is_override,
                     span,
                 }))
             }
@@ -305,6 +412,7 @@ impl LoweringContext {
                 };
                 Ok(Expr::Ident(id, ident.name.clone(), ident.span))
             }
+            ast::Expr::Super(span) => Ok(Expr::Super(span)),
             ast::Expr::Binary { left, op, right, span } => {
                 Ok(Expr::Binary {
                     left: Box::new(self.lower_expr(*left)?),

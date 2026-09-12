@@ -32,6 +32,8 @@ pub enum TokenKind<'a> {
     #[token("as")] As,
     #[token("with")] With,
     #[token("extends")] Extends,
+    #[token("override")] Override,
+    #[token("super")] Super,
 
     // Modules
     #[token("import")] Import,

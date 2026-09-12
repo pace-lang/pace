@@ -45,13 +45,14 @@ pub enum Decl {
         return_type: Option<Type>,
         body: Block,
         is_static: bool,
+        is_override: bool,
         span: Span,
     },
     Struct {
         name: Ident,
         generic_params: Option<Vec<GenericParam>>,
         with: Vec<Ident>,
-        fields: Vec<(Ident, Type, Option<Expr>)>,
+        fields: Vec<(Ident, Type, Option<Expr>, bool)>,
         static_fields: Vec<(Ident, Type, Expr)>,
         const_fields: Vec<(Ident, Type, Expr)>,
         methods: Vec<Decl>, // Expects Decl::Function
@@ -60,8 +61,9 @@ pub enum Decl {
     Class {
         name: Ident,
         generic_params: Option<Vec<GenericParam>>,
+        extends: Option<Ident>,
         with: Vec<Ident>,
-        fields: Vec<(Ident, Type, Option<Expr>)>,
+        fields: Vec<(Ident, Type, Option<Expr>, bool)>,
         static_fields: Vec<(Ident, Type, Expr)>,
         const_fields: Vec<(Ident, Type, Expr)>,
         methods: Vec<Decl>, // Expects Decl::Function
@@ -136,6 +138,7 @@ pub enum Expr {
     FloatLiteral(String, Span),
     StringLiteral(String, Span),
     Ident(Ident),
+    Super(Span),
     Binary {
         left: Box<Expr>,
         op: BinaryOp,
@@ -210,10 +213,11 @@ pub enum BinaryOp {
 impl Expr {
     pub fn span(&self) -> Span {
         match self {
-            Expr::IntLiteral(_, s) => *s,
-            Expr::FloatLiteral(_, s) => *s,
-            Expr::StringLiteral(_, s) => *s,
-            Expr::Ident(id) => id.span,
+            Expr::IntLiteral(_, span) => *span,
+            Expr::FloatLiteral(_, span) => *span,
+            Expr::StringLiteral(_, span) => *span,
+            Expr::Ident(ident) => ident.span,
+            Expr::Super(span) => *span,
             Expr::Binary { span, .. } => *span,
             Expr::MemberAccess { span, .. } => *span,
             Expr::Call { span, .. } => *span,

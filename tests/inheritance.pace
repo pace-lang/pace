@@ -1,0 +1,46 @@
+class Animal {
+    name: String,
+    
+    init(name: String) {
+        self.name = name
+    }
+    
+    fn speak() {
+        print("Animal speaks")
+    }
+}
+
+class Dog extends Animal {
+    breed: String,
+    
+    init(name: String, breed: String) {
+        super.init(name)
+        self.breed = breed
+    }
+    
+    override fn speak() {
+        print("Dog barks")
+    }
+}
+
+class Cat extends Animal {
+    init(name: String) {
+        super.init(name)
+    }
+    
+    override fn speak() {
+        print("Cat meows")
+    }
+}
+
+fn make_animal_speak(animal: Animal) {
+    animal.speak()
+}
+
+fn main() {
+    let d = Dog("Rex", "German Shepherd")
+    let c = Cat("Whiskers")
+    
+    make_animal_speak(d)
+    make_animal_speak(c)
+}

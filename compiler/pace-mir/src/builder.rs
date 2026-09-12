@@ -9,8 +9,9 @@ pub struct MirBuilder<'a> {
     pub locals: Vec<Ty>,
     pub hir_to_local: HashMap<HirId, Local>,
     pub global_fns: HashMap<HirId, String>,
-    pub struct_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
-    pub class_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
+    pub struct_defs: &'a HashMap<HirId, Vec<(String, Ty, bool)>>,
+    pub class_defs: &'a HashMap<HirId, Vec<(String, Ty, bool)>>,
+    pub class_vtables: &'a HashMap<HirId, Vec<(String, Ty, String)>>,
     pub enum_defs: &'a HashMap<HirId, Vec<pace_hir::EnumVariant>>,
     pub global_env: &'a HashMap<pace_hir::HirId, Ty>,
     pub local_types: &'a HashMap<pace_hir::HirId, Ty>,
@@ -18,19 +19,23 @@ pub struct MirBuilder<'a> {
     pub static_fields_env: &'a HashMap<String, Ty>,
     pub methods_env: &'a HashMap<String, Ty>,
     pub current_expected_ty: Option<Ty>,
+    pub current_self_local: Option<Local>,
+    pub class_parents: &'a HashMap<HirId, HirId>,
 }
 
 impl<'a> MirBuilder<'a> {
     pub fn new(
         global_fns: HashMap<HirId, String>,
-        struct_defs: &'a HashMap<HirId, Vec<(String, Ty)>>,
-        class_defs: &'a HashMap<pace_hir::HirId, Vec<(String, Ty)>>,
+        struct_defs: &'a HashMap<HirId, Vec<(String, Ty, bool)>>,
+        class_defs: &'a HashMap<pace_hir::HirId, Vec<(String, Ty, bool)>>,
+        class_vtables: &'a HashMap<HirId, Vec<(String, Ty, String)>>,
         enum_defs: &'a HashMap<pace_hir::HirId, Vec<pace_hir::EnumVariant>>,
         global_env: &'a HashMap<pace_hir::HirId, Ty>,
         local_types: &'a HashMap<pace_hir::HirId, Ty>,
         named_types: &'a HashMap<String, (pace_hir::HirId, u8)>,
         static_fields_env: &'a HashMap<String, Ty>,
         methods_env: &'a HashMap<String, Ty>,
+        class_parents: &'a HashMap<HirId, HirId>,
     ) -> Self {
         let initial_block = BasicBlock {
             statements: Vec::new(),
@@ -42,15 +47,18 @@ impl<'a> MirBuilder<'a> {
             locals: Vec::new(),
             hir_to_local: HashMap::new(),
             current_expected_ty: None,
+            current_self_local: None,
             global_fns,
             struct_defs,
             class_defs,
+            class_vtables,
             enum_defs,
             global_env,
             local_types,
             named_types,
             static_fields_env,
             methods_env,
+            class_parents,
         }
     }
 
@@ -121,6 +129,12 @@ impl<'a> MirBuilder<'a> {
 
     pub fn build_expr(&mut self, expr: &Expr) -> Local {
         match expr {
+            Expr::Super(_) => {
+                let local = self.current_self_local.expect("Super used outside of a method");
+                let temp = self.new_local(self.locals[local.0 as usize].clone());
+                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(local)));
+                temp
+            }
             Expr::Ident(id, name, _) => {
                 if let Some(Ty::Enum(enum_id)) = self.global_env.get(id) {
                     if let Some(variants) = self.enum_defs.get(enum_id) {
@@ -172,7 +186,7 @@ impl<'a> MirBuilder<'a> {
             }
             Expr::MemberAccess { object, member, .. } => {
                 // If the object is a type (class/struct), it's a static access
-                if let Expr::Ident(id, name, _) = &**object {
+                if let Expr::Ident(id, _name, _) = &**object {
                     if let Some(ty) = self.global_env.get(id) {
                         if matches!(ty, Ty::Struct(_) | Ty::Class(_)) {
                             let mut type_name = "";
@@ -203,7 +217,7 @@ impl<'a> MirBuilder<'a> {
                     Ty::Struct(id) => {
                         let mut ft = Ty::Int;
                         if let Some(fields) = self.struct_defs.get(&id) {
-                            for (n, t) in fields {
+                            for (n, t, _) in fields {
                                 if n == member { ft = t.clone(); break; }
                             }
                         }
@@ -212,7 +226,7 @@ impl<'a> MirBuilder<'a> {
                     Ty::Class(id) => {
                         let mut ft = Ty::Int;
                         if let Some(fields) = self.class_defs.get(&id) {
-                            for (n, t) in fields {
+                            for (n, t, _) in fields {
                                 if n == member { ft = t.clone(); break; }
                             }
                         }
@@ -325,7 +339,7 @@ impl<'a> MirBuilder<'a> {
                                 is_static_method = true;
                             }
                         } else if let Some(expected) = &self.current_expected_ty {
-                            if let Ty::Enum(eid) = expected {
+                            if let Ty::Enum(_eid) = expected {
                                 is_global = true;
                                 global_name = member.clone();
                                 is_static_method = true;
@@ -346,12 +360,19 @@ impl<'a> MirBuilder<'a> {
                     
                     if !is_static_method {
                         // It's an instance method
+                        let is_super = matches!(&**object, Expr::Super(_));
                         let obj_local = self.build_expr(object);
                         let obj_ty = self.locals[obj_local.0 as usize].clone();
                         if let Ty::Struct(id) | Ty::Class(id) = obj_ty {
+                            let mut target_id = id;
+                            if is_super {
+                                if let Some(&parent_id) = self.class_parents.get(&id) {
+                                    target_id = parent_id;
+                                }
+                            }
                             let mut type_name = "";
                             for (name, &(tid, _)) in self.named_types {
-                                if id == tid { type_name = name; break; }
+                                if target_id == tid { type_name = name; break; }
                             }
                             let method_name = format!("{}_{}", type_name, member);
                             if self.methods_env.contains_key(&method_name) {
@@ -367,6 +388,21 @@ impl<'a> MirBuilder<'a> {
                                 if let Some(Ty::Function(_, ret)) = self.methods_env.get(&global_name) {
                                     ret_ty = *ret.clone();
                                 }
+                                
+                                if matches!(obj_ty, Ty::Class(_)) && !is_super {
+                                    if let Some(vtable) = self.class_vtables.get(&id) {
+                                        if let Some(vtable_idx) = vtable.iter().position(|(n, _, _)| n == member) {
+                                            let temp = self.new_local(ret_ty);
+                                            // The arguments are [arg1, arg2, ...] where arg1 is NOT `obj_local` in VirtualCall because VirtualCall takes `obj_local` separately.
+                                            // Wait, `new_arg_locals` has `obj_local` as its first element. 
+                                            // `VirtualCall`'s `args` vector should NOT include `self`? Actually, it's easier to include `self` in `args` just like `GlobalCall`!
+                                            // Let's pass `new_arg_locals` but skip the first element if we pass `obj_local` separately! Or just pass `new_arg_locals[1..].to_vec()`.
+                                            self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::VirtualCall(vtable_idx, obj_local, new_arg_locals[1..].to_vec())));
+                                            return temp;
+                                        }
+                                    }
+                                }
+                                
                                 let temp = self.new_local(ret_ty);
                                 self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::GlobalCall(global_name, new_arg_locals)));
                                 return temp;
@@ -402,7 +438,7 @@ impl<'a> MirBuilder<'a> {
                         let mut call_args = vec![temp];
                         call_args.extend(arg_locals);
                         
-                        let ret_dummy = self.new_local(Ty::Int);
+                        let ret_dummy = self.new_local(Ty::Void);
                         self.push_stmt(Statement::Assign(Lvalue::Local(ret_dummy), Rvalue::GlobalCall(init_name, call_args)));
                     } else {
                         self.push_stmt(Statement::Assign(
@@ -418,7 +454,7 @@ impl<'a> MirBuilder<'a> {
                     let mut is_enum_variant = false;
                     let mut enum_id = None;
                     
-                    if let Expr::Ident(id, name, _) = &**callee {
+                    if let Expr::Ident(id, _name, _) = &**callee {
                         if let Some(Ty::Function(_, ret)) = self.global_env.get(id) {
                             if let Ty::Enum(eid) = **ret {
                                 is_enum_variant = true;
@@ -427,7 +463,7 @@ impl<'a> MirBuilder<'a> {
                                 ret_ty = *ret.clone();
                             }
                         }
-                    } else if let Expr::MemberAccess { object, member, .. } = &**callee {
+                    } else if let Expr::MemberAccess { object, member: _, .. } = &**callee {
                         if let Expr::Ident(id, name, _) = &**object {
                             if let Some(Ty::Enum(eid)) = self.global_env.get(id) {
                                 is_enum_variant = true;
@@ -643,7 +679,7 @@ impl<'a> MirBuilder<'a> {
             }
             Expr::Assign { target, value, .. } => {
                 let lvalue = match &**target {
-                    Expr::Ident(id, name, _) => {
+                    Expr::Ident(id, _name, _) => {
                         Lvalue::Local(*self.hir_to_local.get(id).unwrap())
                     }
                     Expr::MemberAccess { object, member, .. } => {
@@ -661,7 +697,7 @@ impl<'a> MirBuilder<'a> {
                         if let Ty::Struct(id) | Ty::Class(id) = obj_ty {
                             let defs = if matches!(obj_ty, Ty::Struct(_)) { self.struct_defs.get(&id) } else { self.class_defs.get(&id) };
                             if let Some(fields) = defs {
-                                for (n, t) in fields {
+                                for (n, t, _) in fields {
                                     if n == member { field_ty = t.clone(); found = true; break; }
                                 }
                             }
@@ -709,7 +745,7 @@ impl<'a> MirBuilder<'a> {
 
         let mut functions = Vec::new();
         let mut global_vars = Vec::new();
-        let mut main_builder = MirBuilder::new(global_fns.clone(), &tc.struct_defs, &tc.class_defs, &tc.enum_defs, &tc.env, &tc.local_types, &tc.named_types, &tc.static_fields_env, &tc.methods_env);
+        let mut main_builder = MirBuilder::new(global_fns.clone(), &tc.struct_defs, &tc.class_defs, &tc.class_vtables, &tc.enum_defs, &tc.env, &tc.local_types, &tc.named_types, &tc.static_fields_env, &tc.methods_env, &tc.class_parents);
         let mut _main_last_local = Local(0);
 
         for decl in &program.declarations {
@@ -763,25 +799,30 @@ impl<'a> MirBuilder<'a> {
                                 global_fns.clone(),
                                 &tc.struct_defs,
                                 &tc.class_defs,
+                                &tc.class_vtables,
                                 &tc.enum_defs,
                                 &tc.env,
                                 &tc.local_types,
                                 &tc.named_types,
                                 &tc.static_fields_env,
                                 &tc.methods_env,
+                                &tc.class_parents,
                             );
                             let mut mir_params = Vec::new();
-                            for (param_id, _, pty) in params {
+                            for (param_id, param_name, pty) in params {
                                 let ty = tc.get_type(pty).unwrap_or(Ty::Int);
                                 let local = fn_builder.new_local(ty);
+                                if param_name == "self" {
+                                    fn_builder.current_self_local = Some(local);
+                                }
                                 fn_builder.hir_to_local.insert(*param_id, local);
                                 mir_params.push(local);
                             }
                             
                             let ret_ty = if let Some(rty) = return_type {
-                                tc.get_type(rty).unwrap_or(Ty::Int)
+                                tc.get_type(rty).unwrap_or(Ty::Void)
                             } else {
-                                Ty::Int
+                                Ty::Void
                             };
                             fn_builder.build_block(body);
                             let fn_body = fn_builder.finish(&mir_params);
@@ -804,25 +845,30 @@ impl<'a> MirBuilder<'a> {
                         global_fns.clone(),
                         &tc.struct_defs,
                         &tc.class_defs,
+                        &tc.class_vtables,
                         &tc.enum_defs,
                         &tc.env,
                         &tc.local_types,
                         &tc.named_types,
                         &tc.static_fields_env,
                         &tc.methods_env,
+                        &tc.class_parents,
                     );
                     let mut mir_params = Vec::new();
-                    for (param_id, _, pty) in params {
+                    for (param_id, param_name, pty) in params {
                         let ty = tc.get_type(pty).unwrap_or(Ty::Int);
                         let local = fn_builder.new_local(ty);
+                        if param_name == "self" {
+                            fn_builder.current_self_local = Some(local);
+                        }
                         fn_builder.hir_to_local.insert(*param_id, local);
                         mir_params.push(local);
                     }
                     
                     let ret_ty = if let Some(rty) = return_type {
-                        tc.get_type(rty).unwrap_or(Ty::Int)
+                        tc.get_type(rty).unwrap_or(Ty::Void)
                     } else {
-                        Ty::Int
+                        Ty::Void
                     };
                     fn_builder.build_block(body);
                     let fn_body = fn_builder.finish(&mir_params);
@@ -855,6 +901,7 @@ impl<'a> MirBuilder<'a> {
             main_body: main_builder.finish(&[]),
             struct_defs: tc.struct_defs.clone(),
             class_defs: tc.class_defs.clone(),
+            class_vtables: tc.class_vtables.clone(),
             enum_defs: resolved_enum_defs,
             global_vars,
         }

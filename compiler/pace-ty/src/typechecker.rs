@@ -11,8 +11,10 @@ pub struct TypeChecker {
     pub loop_depth: usize,
     pub next_id: u32,
     pub methods_env: HashMap<String, Ty>,
-    pub struct_defs: HashMap<HirId, Vec<(String, Ty)>>,
-    pub class_defs: HashMap<HirId, Vec<(String, Ty)>>,
+    pub struct_defs: HashMap<HirId, Vec<(String, Ty, bool)>>,
+    pub class_defs: HashMap<HirId, Vec<(String, Ty, bool)>>,
+    pub class_parents: HashMap<HirId, HirId>,
+    pub class_vtables: HashMap<HirId, Vec<(String, Ty, String)>>,
     pub enum_defs: HashMap<HirId, Vec<pace_hir::EnumVariant>>,
     pub trait_defs: HashMap<String, Decl>,
     pub static_fields_env: HashMap<String, Ty>, // format: "{class_name}_{field_name}"
@@ -21,6 +23,7 @@ pub struct TypeChecker {
     pub generic_templates: HashMap<String, Decl>,
     pub generic_templates_by_id: HashMap<HirId, String>,
     pub current_expected_ty: Option<Ty>,
+    pub current_fn_name: Option<String>,
     pub declared_bindings: Vec<(HirId, String, pace_span::Span)>,
     pub used_bindings: std::collections::HashSet<HirId>,
     pub initialized_bindings: std::collections::HashSet<HirId>,
@@ -36,6 +39,8 @@ impl TypeChecker {
             methods_env: HashMap::new(),
             struct_defs: HashMap::new(),
             class_defs: HashMap::new(),
+            class_parents: HashMap::new(),
+            class_vtables: HashMap::new(),
             enum_defs: HashMap::new(),
             trait_defs: HashMap::new(),
             static_fields_env: HashMap::new(),
@@ -44,6 +49,7 @@ impl TypeChecker {
             generic_templates: HashMap::new(),
             generic_templates_by_id: HashMap::new(),
             current_expected_ty: None,
+            current_fn_name: None,
             declared_bindings: Vec::new(),
             used_bindings: std::collections::HashSet::new(),
             initialized_bindings: std::collections::HashSet::new(),
@@ -283,16 +289,16 @@ impl TypeChecker {
                 Decl::Struct { id, generic_params, fields, .. } => {
                     if generic_params.is_some() { continue; }
                     let mut resolved_fields = Vec::new();
-                    for (fname, fty, _) in fields {
-                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?));
+                    for (fname, fty, _, is_mut) in fields {
+                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?, *is_mut));
                     }
                     self.struct_defs.insert(*id, resolved_fields);
                 }
                 Decl::Class { id, generic_params, fields, .. } => {
                     if generic_params.is_some() { continue; }
                     let mut resolved_fields = Vec::new();
-                    for (fname, fty, _) in fields {
-                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?));
+                    for (fname, fty, _, is_mut) in fields {
+                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?, *is_mut));
                     }
                     self.class_defs.insert(*id, resolved_fields);
                 }
@@ -302,6 +308,48 @@ impl TypeChecker {
                 }
                 _ => {}
             }
+        }
+
+        // Pass 2.5: Hierarchy Resolution & Field Inheritance
+        for decl in &program.declarations {
+            if let Decl::Class { id, extends, span, .. } = decl {
+                if let Some(parent_name) = extends {
+                    if let Some(&(parent_id, 1)) = self.named_types.get(parent_name) {
+                        if parent_id == *id {
+                            self.reporter.report(pace_errors::Diagnostic::error("Class cannot inherit from itself").with_span(*span));
+                            return Err("Class cannot inherit from itself".to_string());
+                        }
+                        self.class_parents.insert(*id, parent_id);
+                    } else {
+                        self.reporter.report(pace_errors::Diagnostic::error("Class extends a non-class or unknown type").with_span(*span));
+                        return Err("Class extends a non-class or unknown type".to_string());
+                    }
+                }
+            }
+        }
+        
+        let class_ids: Vec<HirId> = self.class_defs.keys().copied().collect();
+        let original_class_defs = self.class_defs.clone();
+        for &id in &class_ids {
+            let mut all_fields = Vec::new();
+            let mut curr = Some(id);
+            let mut hierarchy = Vec::new();
+            
+            while let Some(c_id) = curr {
+                if hierarchy.contains(&c_id) {
+                    self.reporter.report(pace_errors::Diagnostic::error("Circular inheritance detected").with_span(pace_span::Span::new(0, 0)));
+                    return Err("Circular inheritance detected".to_string());
+                }
+                hierarchy.push(c_id);
+                curr = self.class_parents.get(&c_id).copied();
+            }
+            
+            for &c_id in hierarchy.iter().rev() {
+                if let Some(fields) = original_class_defs.get(&c_id) {
+                    all_fields.extend(fields.clone());
+                }
+            }
+            self.class_defs.insert(id, all_fields);
         }
 
         // Pass 3: Register functions
@@ -321,6 +369,79 @@ impl TypeChecker {
             }
         }
 
+        // Pass 3.5: Construct V-Tables and Validate Overrides
+        let mut class_methods: HashMap<HirId, Vec<(String, Ty, String, bool, pace_span::Span)>> = HashMap::new();
+        for decl in &program.declarations {
+            if let Decl::Class { id, methods, .. } = decl {
+                let mut cm = Vec::new();
+                for m in methods {
+                    if let Decl::Function { name, is_override, span, .. } = m {
+                        if let Some(ty) = self.methods_env.get(name) {
+                            let base_name = name.split('_').last().unwrap().to_string();
+                            cm.push((base_name, ty.clone(), name.clone(), *is_override, *span));
+                        }
+                    }
+                }
+                class_methods.insert(*id, cm);
+            }
+        }
+        
+        for &id in &class_ids {
+            let mut vtable: Vec<(String, Ty, String)> = Vec::new();
+            let mut hierarchy = Vec::new();
+            let mut curr = Some(id);
+            while let Some(c_id) = curr {
+                hierarchy.push(c_id);
+                curr = self.class_parents.get(&c_id).copied();
+            }
+            
+            for &c_id in hierarchy.iter().rev() {
+                if let Some(methods) = class_methods.get(&c_id) {
+                    for (base_name, ty, full_name, is_override, span) in methods {
+                        if *is_override {
+                            if let Some(pos) = vtable.iter().position(|(n, _, _)| n == base_name) {
+                                // Validate signature (ignoring the first `self` parameter's exact type, but checking length and other params)
+                                let base_ty = &vtable[pos].1;
+                                let mut sig_match = false;
+                                if let (Ty::Function(base_params, base_ret), Ty::Function(new_params, new_ret)) = (base_ty, ty) {
+                                    if base_ret == new_ret && base_params.len() == new_params.len() {
+                                        let mut params_match = true;
+                                        for i in 1..base_params.len() {
+                                            if base_params[i] != new_params[i] {
+                                                params_match = false;
+                                                break;
+                                            }
+                                        }
+                                        if params_match {
+                                            sig_match = true;
+                                        }
+                                    }
+                                }
+                                
+                                if !sig_match {
+                                    self.reporter.report(pace_errors::Diagnostic::error(format!("Method '{}' overrides parent method but has a different signature", base_name)).with_span(*span));
+                                    return Err(format!("Signature mismatch in override"));
+                                }
+                                vtable[pos] = (base_name.clone(), ty.clone(), full_name.clone());
+                            } else {
+                                self.reporter.report(pace_errors::Diagnostic::error(format!("Method '{}' marked as override but does not override any parent method", base_name)).with_span(*span));
+                                return Err(format!("Invalid override"));
+                            }
+                        } else {
+                            if vtable.iter().any(|(n, _, _)| n == base_name) {
+                                if base_name != "init" {
+                                    self.reporter.report(pace_errors::Diagnostic::error(format!("Method '{}' shadows a parent method. Use 'override' keyword", base_name)).with_span(*span));
+                                    return Err(format!("Missing override keyword"));
+                                }
+                            }
+                            vtable.push((base_name.clone(), ty.clone(), full_name.clone()));
+                        }
+                    }
+                }
+            }
+            self.class_vtables.insert(id, vtable);
+        }
+
         for decl in &program.declarations {
             self.check_decl(decl)?;
         }
@@ -328,7 +449,7 @@ impl TypeChecker {
         // Pass 4: Unused Variables and Functions Linter Sweep
         for (id, name, span) in &self.declared_bindings {
             let is_compiler_generated = self.named_types.keys().any(|k| name.starts_with(&format!("{}_", k)));
-            if !self.used_bindings.contains(&id) && !name.starts_with('_') && name != "main" && !name.ends_with("_init") && !is_compiler_generated {
+            if !self.used_bindings.contains(&id) && !name.starts_with('_') && name != "main" && name != "self" && !name.ends_with("_init") && !is_compiler_generated {
                 self.reporter.report(Diagnostic::warning(format!("unused variable or function: `{}`", name))
                     .with_span(*span)
                     .with_code(ErrorCode::UnusedVariable)
@@ -581,7 +702,7 @@ impl TypeChecker {
                 self.check_expr(expr)?;
                 Ok(())
             }
-            Decl::Function { id, name, generic_params, params, return_type, body, span, is_static, .. } => {
+            Decl::Function { id, name, generic_params, params, return_type, body, span, is_static, is_override: _, .. } => {
                 if generic_params.is_some() {
                     self.generic_templates.insert(name.clone(), decl.clone());
                     self.generic_templates_by_id.insert(*id, name.clone());
@@ -624,6 +745,28 @@ impl TypeChecker {
                     }
                     
                     if let Some(&(hir_id, kind)) = self.named_types.get(type_name) {
+                        if kind == 1 {
+                            let mut calls_super = false;
+                            for stmt in &body.statements {
+                                if let Stmt::ExprStmt(Expr::Call { callee, .. }, _) = stmt {
+                                    if let Expr::MemberAccess { object, .. } = &**callee {
+                                        if matches!(&**object, Expr::Super(_)) {
+                                            calls_super = true;
+                                        }
+                                    }
+                                }
+                            }
+                            if calls_super {
+                                if let Some(parent_id) = self.class_parents.get(&hir_id) {
+                                    if let Some(parent_fields) = self.class_defs.get(parent_id) {
+                                        for (fname, _, _) in parent_fields {
+                                            assigned_fields.insert(fname.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
                         let fields = if kind == 1 {
                             self.class_defs.get(&hir_id)
                         } else if kind == 0 {
@@ -633,7 +776,7 @@ impl TypeChecker {
                         };
                         
                         if let Some(fields) = fields {
-                            for (fname, _) in fields {
+                            for (fname, _, _) in fields {
                                 if !assigned_fields.contains(fname) {
                                     self.reporter.report(Diagnostic::error(format!("Field '{}' must be initialized", fname))
                                         .with_span(*span)
@@ -646,10 +789,14 @@ impl TypeChecker {
                 }
                 
                 let outer_env = self.env.clone();
-                for (param_id, _, pty) in params {
+                let prev_fn = self.current_fn_name.take();
+                self.current_fn_name = Some(name.clone());
+                for (param_id, param_name, pty) in params {
                     let ty = self.resolve_type(pty)?;
                     self.env.insert(*param_id, ty.clone());
                     self.local_types.insert(*param_id, ty);
+                    self.declared_bindings.push((*param_id, param_name.clone(), *span));
+                    self.initialized_bindings.insert(*param_id);
                 }
                 let ret_ty = if let Some(rty) = &return_type {
                     self.resolve_type(rty)?
@@ -665,6 +812,7 @@ impl TypeChecker {
                 }
                 
                 self.check_block(body, Some(&ret_ty))?;
+                self.current_fn_name = prev_fn;
                 self.env = outer_env;
                 Ok(())
             }
@@ -702,6 +850,25 @@ impl TypeChecker {
             Expr::FloatLiteral(..) => Ok(Ty::Float),
             Expr::BoolLiteral(..) => Ok(Ty::Bool),
             Expr::StringLiteral(..) => Ok(Ty::String),
+            Expr::Super(span) => {
+                // Find "self" in current environment
+                for (id, ty) in &self.env {
+                    if let Some((_, name, _)) = self.declared_bindings.iter().find(|(b_id, _, _)| b_id == id) {
+                        if name == "self" {
+                            if let Ty::Class(class_id) = ty {
+                                if let Some(&parent_id) = self.class_parents.get(class_id) {
+                                    return Ok(Ty::Class(parent_id));
+                                } else {
+                                    self.reporter.report(pace_errors::Diagnostic::error("Cannot use 'super' in a class with no parent").with_span(*span));
+                                    return Err("Cannot use 'super' in a class with no parent".to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                self.reporter.report(pace_errors::Diagnostic::error("Cannot use 'super' outside of a class method").with_span(*span));
+                Err("Cannot use 'super' outside of a class method".to_string())
+            }
             Expr::Ident(id, name, span) => {
                 self.used_bindings.insert(*id);
                 if !self.initialized_bindings.contains(id) {
@@ -770,7 +937,7 @@ impl TypeChecker {
                         }
                         
                         let fields = self.struct_defs.get(&hir_id).ok_or("Struct definition not found")?;
-                        for (fname, fty) in fields {
+                        for (fname, fty, _) in fields {
                             if fname == member {
                                 return Ok(fty.clone());
                             }
@@ -796,7 +963,7 @@ impl TypeChecker {
                         }
                         
                         let fields = self.class_defs.get(&hir_id).ok_or("Class definition not found")?;
-                        for (fname, fty) in fields {
+                        for (fname, fty, _) in fields {
                             if fname == member {
                                 return Ok(fty.clone());
                             }
@@ -901,7 +1068,7 @@ impl TypeChecker {
                     }
                     
                     let def_fields = self.struct_defs.get(&id).unwrap().clone();
-                    let mut def_map: std::collections::HashMap<_, _> = def_fields.into_iter().collect();
+                    let mut def_map: std::collections::HashMap<_, _> = def_fields.into_iter().map(|(n, t, _)| (n, t)).collect();
                     for (label, fexpr) in args {
                         let fty = self.check_expr(fexpr)?;
                         if let Some(fname) = label {
@@ -950,7 +1117,7 @@ impl TypeChecker {
                     }
 
                     let def_fields = self.class_defs.get(&id).unwrap().clone();
-                    let mut def_map: std::collections::HashMap<_, _> = def_fields.into_iter().collect();
+                    let mut def_map: std::collections::HashMap<_, _> = def_fields.into_iter().map(|(n, t, _)| (n, t)).collect();
                     for (label, fexpr) in args {
                         let fty = self.check_expr(fexpr)?;
                         if let Some(fname) = label {
@@ -1077,7 +1244,7 @@ impl TypeChecker {
                                 .with_hint("Declare this variable with 'var' instead of 'let' to make it mutable"));
                         }
                     }
-                } else if let Expr::MemberAccess { object, .. } = &**target {
+                } else if let Expr::MemberAccess { object, member, .. } = &**target {
                     if let Expr::Ident(id, _, _) = &**object {
                         if let Some(&is_mut) = self.mutability_env.get(id) {
                             if !is_mut {
@@ -1086,6 +1253,44 @@ impl TypeChecker {
                                     .with_code(ErrorCode::ImmutableAssignment)
                                     .with_hint("Declare this variable with 'var' instead of 'let' to make it mutable"));
                             }
+                        }
+                    }
+                    
+                    let obj_ty = self.check_expr(object)?;
+                    let mut field_is_mut = true;
+                    if let Ty::Struct(id) | Ty::Class(id) = obj_ty {
+                        let fields = if matches!(obj_ty, Ty::Class(_)) {
+                            self.class_defs.get(&id)
+                        } else {
+                            self.struct_defs.get(&id)
+                        };
+                        if let Some(fields) = fields {
+                            for (fname, _, is_mut) in fields {
+                                if fname == member {
+                                    field_is_mut = *is_mut;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if !field_is_mut {
+                        let mut allowed = false;
+                        if let Expr::Ident(_, name, _) = &**object {
+                            if name == "self" {
+                                if let Some(fn_name) = &self.current_fn_name {
+                                    if fn_name.ends_with("_init") || fn_name == "init" {
+                                        allowed = true;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if !allowed {
+                            self.reporter.report(Diagnostic::error(format!("Cannot reassign immutable field '{}'", member))
+                                .with_span(*span)
+                                .with_code(ErrorCode::ImmutableAssignment)
+                                .with_hint("Declare this field with 'var' instead of 'let' to make it mutable"));
                         }
                     }
                 }
@@ -1103,7 +1308,7 @@ impl TypeChecker {
                 }
                 Ok(target_ty)
             }
-            Expr::Match { subject, arms, span } => {
+            Expr::Match { subject, arms, span: _ } => {
                 let subject_ty = self.check_expr(subject)?;
                 let mut ret_ty = None;
                 
@@ -1201,7 +1406,7 @@ impl TypeChecker {
                 *id = self.generate_id();
                 *name = mono_name.clone();
                 *generic_params = None; 
-                for (_, ty, _) in fields.iter_mut() {
+                for (_, ty, _, _) in fields.iter_mut() {
                     *ty = substitute_type(ty, &mapping);
                 }
                 for (_, ty, _) in static_fields.iter_mut() {
@@ -1261,8 +1466,8 @@ impl TypeChecker {
         match new_decl {
             pace_hir::Decl::Struct { id, fields, .. } => {
                 let mut resolved_fields = Vec::new();
-                for (fname, fty, _) in fields {
-                    resolved_fields.push((fname, self.resolve_type(&fty)?));
+                for (fname, fty, _, is_mut) in fields {
+                    resolved_fields.push((fname, self.resolve_type(&fty)?, is_mut));
                 }
                 self.struct_defs.insert(id, resolved_fields);
                 self.named_types.insert(mono_name.clone(), (id, 0));
@@ -1270,8 +1475,8 @@ impl TypeChecker {
             }
             pace_hir::Decl::Class { id, fields, .. } => {
                 let mut resolved_fields = Vec::new();
-                for (fname, fty, _) in fields {
-                    resolved_fields.push((fname, self.resolve_type(&fty)?));
+                for (fname, fty, _, is_mut) in fields {
+                    resolved_fields.push((fname, self.resolve_type(&fty)?, is_mut));
                 }
                 self.class_defs.insert(id, resolved_fields);
                 self.named_types.insert(mono_name.clone(), (id, 1));

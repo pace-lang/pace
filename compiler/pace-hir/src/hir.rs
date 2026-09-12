@@ -51,7 +51,7 @@ impl Program {
                 for trait_name in with {
                     if let Some(t_methods) = trait_methods.get(trait_name) {
                         for t_method in t_methods {
-                            if let Decl::Function { name: t_m_name, params, return_type, body, span: m_span, is_static, .. } = t_method {
+                            if let Decl::Function { name: t_m_name, body, .. } = t_method {
                                 // Extract actual method name (remove trait prefix)
                                 let actual_name = t_m_name.split('_').last().unwrap_or(t_m_name);
                                 
@@ -93,12 +93,7 @@ impl Program {
     }
 }
 
-fn decl_name(decl: &Decl) -> &str {
-    match decl {
-        Decl::Struct { name, .. } | Decl::Class { name, .. } => name,
-        _ => "",
-    }
-}
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
@@ -128,7 +123,7 @@ pub enum Decl {
         name: String,
         generic_params: Option<Vec<(String, Option<Type>)>>,
         with: Vec<String>,
-        fields: Vec<(String, Type, Option<Expr>)>,
+        fields: Vec<(String, Type, Option<Expr>, bool)>,
         static_fields: Vec<(String, Type, Expr)>,
         const_fields: Vec<(String, Type, Expr)>,
         methods: Vec<Decl>, // Lowered to global functions anyway, but kept for namespacing if needed
@@ -138,8 +133,9 @@ pub enum Decl {
         id: HirId,
         name: String,
         generic_params: Option<Vec<(String, Option<Type>)>>,
+        extends: Option<String>,
         with: Vec<String>,
-        fields: Vec<(String, Type, Option<Expr>)>,
+        fields: Vec<(String, Type, Option<Expr>, bool)>,
         static_fields: Vec<(String, Type, Expr)>,
         const_fields: Vec<(String, Type, Expr)>,
         methods: Vec<Decl>,
@@ -167,6 +163,7 @@ pub enum Decl {
         return_type: Option<Type>,
         body: Block,
         is_static: bool,
+        is_override: bool,
         span: Span,
     },
     Expr(Expr, Span),
@@ -187,6 +184,7 @@ pub enum Expr {
     BoolLiteral(bool, Span),
     StringLiteral(String, Span),
     Ident(HirId, String, Span),
+    Super(Span),
     Binary {
         left: Box<Expr>,
         op: BinaryOp,
@@ -253,6 +251,7 @@ impl Expr {
             Expr::BoolLiteral(_, span) => *span,
             Expr::StringLiteral(_, span) => *span,
             Expr::Ident(_, _, s) => *s,
+            Expr::Super(s) => *s,
             Expr::Binary { span, .. } => *span,
             Expr::MemberAccess { span, .. } => *span,
             Expr::Call { span, .. } => *span,
