@@ -8,6 +8,7 @@ pub struct Token<'a> {
     pub span: Span,
 }
 
+#[derive(Clone)]
 pub struct Lexer<'a> {
     inner: logos::Lexer<'a, TokenKind<'a>>,
 }

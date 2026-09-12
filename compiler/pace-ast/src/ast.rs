@@ -142,7 +142,8 @@ pub enum Expr {
     IntLiteral(String, Span),
     FloatLiteral(String, Span),
     StringLiteral(String, Span),
-    Ident(Ident),
+    Null(Span),
+    Ident(Ident, Option<Vec<Type>>),
     Super(Span),
     Binary {
         left: Box<Expr>,
@@ -151,6 +152,11 @@ pub enum Expr {
         span: Span,
     },
     MemberAccess {
+        object: Box<Expr>,
+        member: Ident,
+        span: Span,
+    },
+    OptionalMemberAccess {
         object: Box<Expr>,
         member: Ident,
         span: Span,
@@ -213,6 +219,9 @@ pub enum BinaryOp {
     Lt,
     GtEq,
     LtEq,
+    NullCoalesce,
+    And,
+    Or,
 }
 
 impl Expr {
@@ -221,10 +230,12 @@ impl Expr {
             Expr::IntLiteral(_, span) => *span,
             Expr::FloatLiteral(_, span) => *span,
             Expr::StringLiteral(_, span) => *span,
-            Expr::Ident(ident) => ident.span,
+            Expr::Null(span) => *span,
+            Expr::Ident(ident, _) => ident.span,
             Expr::Super(span) => *span,
             Expr::Binary { span, .. } => *span,
             Expr::MemberAccess { span, .. } => *span,
+            Expr::OptionalMemberAccess { span, .. } => *span,
             Expr::Call { span, .. } => *span,
             Expr::If { span, .. } => *span,
             Expr::While { span, .. } => *span,

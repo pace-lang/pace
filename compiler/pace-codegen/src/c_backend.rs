@@ -198,7 +198,14 @@ impl CGenerator {
             Ty::Class(id) => format!("struct pace_{}*", id.0),
             Ty::Enum(id) => format!("struct pace_{}", id.0),
             Ty::Function(_, _) => "void*".to_string(),
-            Ty::Optional(inner) => self.emit_c_type(inner),
+            Ty::Optional(inner) => {
+                let inner_c = self.emit_c_type(inner);
+                if inner_c == "void" {
+                    "void*".to_string()
+                } else {
+                    inner_c
+                }
+            }
             Ty::Void => "void".to_string(),
         }
     }
@@ -208,7 +215,14 @@ impl CGenerator {
             Ty::Int | Ty::Bool | Ty::Float => "0".to_string(),
             Ty::String | Ty::Class(_) | Ty::Function(_, _) => "NULL".to_string(),
             Ty::Struct(_) | Ty::Enum(_) => "{0}".to_string(),
-            Ty::Optional(inner) => self.emit_c_default_val(inner),
+            Ty::Optional(inner) => {
+                let default_val = self.emit_c_default_val(inner);
+                if default_val == "" {
+                    "NULL".to_string()
+                } else {
+                    default_val
+                }
+            }
             Ty::Void => "".to_string(),
         }
     }
@@ -361,19 +375,36 @@ impl CGenerator {
                 write!(&mut self.output, "\"{}\"", val.trim_matches('"')).unwrap()
             }
             Rvalue::BinaryOp(op, lhs, rhs) => {
-                let op_str = match op {
-                    BinaryOp::Add => "+",
-                    BinaryOp::Sub => "-",
-                    BinaryOp::Mul => "*",
-                    BinaryOp::Div => "/",
-                    BinaryOp::EqEq => "==",
-                    BinaryOp::NotEq => "!=",
-                    BinaryOp::Gt => ">",
-                    BinaryOp::Lt => "<",
-                    BinaryOp::GtEq => ">=",
-                    BinaryOp::LtEq => "<=",
-                };
-                write!(&mut self.output, "_{} {} _{}", lhs.0, op_str, rhs.0).unwrap();
+                if matches!(op, BinaryOp::NullCoalesce) {
+                    write!(&mut self.output, "_{} != 0 ? _{} : _{}", lhs.0, lhs.0, rhs.0).unwrap();
+                } else if matches!(op, BinaryOp::And) {
+                    write!(&mut self.output, "_{} && _{}", lhs.0, rhs.0).unwrap();
+                } else if matches!(op, BinaryOp::Or) {
+                    write!(&mut self.output, "_{} || _{}", lhs.0, rhs.0).unwrap();
+                } else {
+                    let op_str = match op {
+                        BinaryOp::Add => "+",
+                        BinaryOp::Sub => "-",
+                        BinaryOp::Mul => "*",
+                        BinaryOp::Div => "/",
+                        BinaryOp::EqEq => "==",
+                        BinaryOp::NotEq => "!=",
+                        BinaryOp::Gt => ">",
+                        BinaryOp::Lt => "<",
+                        BinaryOp::GtEq => ">=",
+                        BinaryOp::LtEq => "<=",
+                        _ => unreachable!(),
+                    };
+                    write!(&mut self.output, "_{} {} _{}", lhs.0, op_str, rhs.0).unwrap();
+                }
+            }
+            Rvalue::OptionalFieldAccess(obj, field) => {
+                let is_ptr = matches!(locals[obj.0 as usize], Ty::Class(_) | Ty::Optional(_));
+                if is_ptr {
+                    write!(&mut self.output, "_{} != 0 ? _{}->{} : 0", obj.0, obj.0, field).unwrap();
+                } else {
+                    write!(&mut self.output, "_{} != 0 ? _{}.{} : 0", obj.0, obj.0, field).unwrap(); // assuming structs might be checked for 0? Not really safe in C, but works for pointer MVP
+                }
             }
             Rvalue::Call(callee, args) => {
                 write!(&mut self.output, "_{}(", callee.0).unwrap();

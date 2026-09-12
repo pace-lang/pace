@@ -1,5 +1,30 @@
 import demo_lib
+import operators
+import loops
+import conditionals
+import structs_classes
+import inheritance
+import enums_match
+import generics
+import option_result
+import null_safety
 
 fn main() {
-    gree()
+    hello()
+    let b = Box<int>(value: 42)
+    println(b.get())
+
+    println("\n==================================")
+    println("PACE FEATURES SHOWCASE")
+    println("==================================")
+    
+    test_operators()
+    test_loops()
+    test_conditionals()
+    test_structs_classes()
+    test_inheritance()
+    test_enums_match()
+    test_generics()
+    test_option_result()
+    test_null_safety()
 }

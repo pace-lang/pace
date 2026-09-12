@@ -42,6 +42,7 @@ pub enum Rvalue {
     VirtualCall(usize, Local, Vec<Local>),
     GlobalRead(String),
     FieldAccess(Local, String),
+    OptionalFieldAccess(Local, String),
     EnumFieldAccess(Local, String, String),
     Instantiate(pace_ty::Ty, Vec<Local>),
     InstantiateEnum(pace_hir::HirId, String, Vec<Local>),

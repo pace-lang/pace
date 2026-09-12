@@ -1,0 +1,18 @@
+class Animal {
+    name: string
+    fn speak() {
+        println("Animal noise")
+    }
+}
+
+class Dog extends Animal {
+    override fn speak() {
+        println("Woof")
+    }
+}
+
+fn test_inheritance() {
+    println("--- Testing Inheritance ---")
+    let d = Dog(name: "Buddy")
+    d.speak()
+}

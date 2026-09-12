@@ -29,6 +29,7 @@ pub struct TypeChecker {
     pub used_bindings: std::collections::HashSet<HirId>,
     pub initialized_bindings: std::collections::HashSet<HirId>,
     pub local_types: HashMap<HirId, Ty>, // Persisted types of all variables
+    pub instantiated_generics: Vec<Decl>,
     pub reporter: Reporter,
 }
 
@@ -56,6 +57,7 @@ impl TypeChecker {
             used_bindings: std::collections::HashSet::new(),
             initialized_bindings: std::collections::HashSet::new(),
             local_types: HashMap::new(),
+            instantiated_generics: Vec::new(),
             loop_depth: 0,
             next_id: 1000000,
             reporter: Reporter::new(),
@@ -645,19 +647,28 @@ impl TypeChecker {
                     };
 
                     if let Some(expected) = expected_ty {
-                        if ty != expected {
-                            if expected != Ty::Optional(Box::new(ty.clone())) {
-                                self.reporter.report(
-                                    pace_errors::Diagnostic::error(format!(
-                                        "Type mismatch: expected {:?}, got {:?}",
-                                        expected, ty
-                                    ))
-                                    .with_span(explicit_ty.as_ref().unwrap().span()),
-                                );
-                                return Err("Type mismatch".to_string());
+                        let mut type_matches = ty == expected;
+                        if !type_matches {
+                            if expected == Ty::Optional(Box::new(ty.clone())) {
+                                type_matches = true;
+                            } else if let (Ty::Optional(_), Ty::Optional(inner_val)) = (&expected, &ty) {
+                                if **inner_val == Ty::Void {
+                                    type_matches = true;
+                                }
                             }
-                            ty = expected;
                         }
+
+                        if !type_matches {
+                            self.reporter.report(
+                                pace_errors::Diagnostic::error(format!(
+                                    "Type mismatch: expected {:?}, got {:?}",
+                                    expected, ty
+                                ))
+                                .with_span(explicit_ty.as_ref().unwrap().span()),
+                            );
+                            return Err("Type mismatch".to_string());
+                        }
+                        ty = expected;
                     }
                     self.env.insert(*id, ty.clone());
                     self.local_types.insert(*id, ty.clone());
@@ -686,19 +697,28 @@ impl TypeChecker {
 
                     if let Some(explicit) = explicit_ty {
                         let expected = self.resolve_type(explicit)?;
-                        if ty != expected {
-                            if expected != Ty::Optional(Box::new(ty.clone())) {
-                                self.reporter.report(
-                                    pace_errors::Diagnostic::error(format!(
-                                        "Type mismatch: expected {:?}, got {:?}",
-                                        expected, ty
-                                    ))
-                                    .with_span(explicit.span()),
-                                );
-                                return Err("Type mismatch".to_string());
+                        let mut type_matches = ty == expected;
+                        if !type_matches {
+                            if expected == Ty::Optional(Box::new(ty.clone())) {
+                                type_matches = true;
+                            } else if let (Ty::Optional(_), Ty::Optional(inner_val)) = (&expected, &ty) {
+                                if **inner_val == Ty::Void {
+                                    type_matches = true;
+                                }
                             }
-                            ty = expected; // Promote to Optional
                         }
+
+                        if !type_matches {
+                            self.reporter.report(
+                                pace_errors::Diagnostic::error(format!(
+                                    "Type mismatch: expected {:?}, got {:?}",
+                                    expected, ty
+                                ))
+                                .with_span(explicit.span()),
+                            );
+                            return Err("Type mismatch".to_string());
+                        }
+                        ty = expected; // Promote to Optional
                     }
                     self.env.insert(*id, ty.clone());
                     self.local_types.insert(*id, ty.clone());
@@ -1013,7 +1033,7 @@ impl TypeChecker {
                     for stmt in &body.statements {
                         if let Stmt::ExprStmt(Expr::Assign { target, .. }, _) = stmt {
                             if let Expr::MemberAccess { object, member, .. } = &**target {
-                                if let Expr::Ident(obj_id, _, _) = &**object {
+                                if let Expr::Ident(obj_id, _, _, _) = &**object {
                                     if Some(*obj_id) == self_id {
                                         assigned_fields.insert(member.clone());
                                     }
@@ -1171,7 +1191,16 @@ impl TypeChecker {
                 );
                 Err("Cannot use 'super' outside of a class method".to_string())
             }
-            Expr::Ident(id, name, span) => {
+            Expr::Null(span) => {
+                if let Some(expected) = &self.current_expected_ty {
+                    if let Ty::Optional(_) = expected {
+                        return Ok(expected.clone());
+                    }
+                }
+                // Default to Option<Void> if context is unknown
+                Ok(Ty::Optional(Box::new(Ty::Void)))
+            }
+            Expr::Ident(id, name, generic_args, span) => {
                 self.used_bindings.insert(*id);
                 if !self.initialized_bindings.contains(id) {
                     if let Some((_, name, _)) = self
@@ -1194,15 +1223,24 @@ impl TypeChecker {
                 } else if let Some(ty) = self.global_functions.get(name).cloned() {
                     Ok(ty)
                 } else if let Some(&(hir_id, kind)) = self.named_types.get(name) {
-                    if kind == 2 {
-                        Ok(Ty::Enum(hir_id))
+                    let ty = if kind == 0 {
+                        Ty::Struct(hir_id)
+                    } else if kind == 1 {
+                        Ty::Class(hir_id)
                     } else {
-                        self.env
-                            .get(&hir_id)
-                            .cloned()
-                            .ok_or(format!("Constructor not found for {}", name))
+                        Ty::Enum(hir_id)
+                    };
+                    self.env.insert(*id, ty.clone());
+                    self.local_types.insert(*id, ty.clone());
+                    Ok(ty)
+                } else if self.generic_templates.contains_key(name) {
+                    if let Some(args) = generic_args {
+                        if let Ok(inst_ty) = self.instantiate_generic(name, args) {
+                            self.env.insert(*id, inst_ty.clone());
+                            self.local_types.insert(*id, inst_ty.clone());
+                            return Ok(inst_ty);
+                        }
                     }
-                } else if let Some(template_name) = self.generic_templates_by_id.get(id) {
                     if let Some(expected) = &self.current_expected_ty {
                         match expected {
                             Ty::Struct(hir_id) | Ty::Class(hir_id) => {
@@ -1211,7 +1249,7 @@ impl TypeChecker {
                                 } else {
                                     Err(format!(
                                         "Constructor not found for instantiated generic '{}'",
-                                        template_name
+                                        name
                                     ))
                                 }
                             }
@@ -1256,6 +1294,68 @@ impl TypeChecker {
                     | pace_ast::BinaryOp::LtEq => {
                         Ok(Ty::Int) // Boolean represented as Int in MVP
                     }
+                    pace_ast::BinaryOp::And | pace_ast::BinaryOp::Or => {
+                        Ok(Ty::Bool)
+                    }
+                    pace_ast::BinaryOp::NullCoalesce => {
+                        if let Ty::Optional(inner) = &left_ty {
+                            if **inner == right_ty {
+                                Ok(right_ty.clone())
+                            } else {
+                                Err(format!("Type mismatch in '??': left is {:?}, but right is {:?}", left_ty, right_ty))
+                            }
+                        } else {
+                            Err(format!("Left side of '??' must be an optional type, found {:?}", left_ty))
+                        }
+                    }
+                }
+            }
+            Expr::OptionalMemberAccess { object, member, .. } => {
+                let obj_ty = self.check_expr(object)?;
+                if let Ty::Optional(inner) = obj_ty {
+                    // Temporarily mock a normal MemberAccess to reuse logic
+                    let mock_expr = Expr::MemberAccess {
+                        object: Box::new(Expr::IntLiteral("0".to_string(), pace_span::Span::new(0, 0))), // dummy
+                        member: member.clone(),
+                        span: pace_span::Span::new(0, 0),
+                    };
+                    // Hack: directly test the unwrapped type
+                    // In a real compiler we'd extract member check logic into a helper
+                    let prev_expected = self.current_expected_ty.take();
+                    // ... we can't easily do that here without refactoring.
+                    // Let's refactor member checking into a helper or just do basic lookup:
+                    
+                    if let Ty::Struct(hir_id) | Ty::Class(hir_id) = *inner {
+                        let mut type_name = "";
+                        for (name, &(nid, _)) in &self.named_types {
+                            if nid == hir_id {
+                                type_name = name;
+                                break;
+                            }
+                        }
+
+                        if let Ty::Struct(_) = *inner {
+                            if let Some(fields) = self.struct_defs.get(&hir_id) {
+                                for (fname, fty, _) in fields {
+                                    if fname == member {
+                                        return Ok(Ty::Optional(Box::new(fty.clone())));
+                                    }
+                                }
+                            }
+                        } else {
+                            if let Some(fields) = self.class_defs.get(&hir_id) {
+                                for (fname, fty, _) in fields {
+                                    if fname == member {
+                                        return Ok(Ty::Optional(Box::new(fty.clone())));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    Err(format!("Cannot optional chain on {:?}", inner))
+                } else {
+                    Err(format!("Left side of '?.' must be an optional type, found {:?}", obj_ty))
                 }
             }
             Expr::MemberAccess { object, member, .. } => {
@@ -1360,8 +1460,12 @@ impl TypeChecker {
             }
             Expr::Call { callee, args, span } => {
                 let mut generic_instantiation = None;
-                if let Expr::Ident(id, name, _) = &**callee {
-                    if self.generic_templates_by_id.contains_key(id) {
+                if let Expr::Ident(id, name, generic_args, _) = &**callee {
+                    if let Some(explicit_args) = generic_args {
+                        if let Ok(func_ty) = self.instantiate_generic(name, explicit_args) {
+                            generic_instantiation = Some(func_ty);
+                        }
+                    } else if self.generic_templates.contains_key(name) {
                         let template = self.generic_templates.get(name).unwrap().clone();
                         if let pace_hir::Decl::Function {
                             generic_params,
@@ -1773,7 +1877,7 @@ impl TypeChecker {
             } => {
                 // Determine target type without checking initialization for Idents
                 let target_ty = match &**target {
-                    Expr::Ident(id, _, _) => {
+                    Expr::Ident(id, _, _, _) => {
                         self.used_bindings.insert(*id);
                         self.env
                             .get(id)
@@ -1784,7 +1888,7 @@ impl TypeChecker {
                 };
 
                 // Mutability check
-                if let Expr::Ident(id, _, _) = &**target {
+                if let Expr::Ident(id, _, _, _) = &**target {
                     let was_initialized = self.initialized_bindings.contains(id);
                     self.initialized_bindings.insert(*id); // Mark as initialized upon assignment
                     if let Some(&is_mut) = self.mutability_env.get(id) {
@@ -1796,7 +1900,7 @@ impl TypeChecker {
                         }
                     }
                 } else if let Expr::MemberAccess { object, member, .. } = &**target {
-                    if let Expr::Ident(id, _, _) = &**object {
+                    if let Expr::Ident(id, _, _, _) = &**object {
                         if let Some(&is_mut) = self.mutability_env.get(id) {
                             if !is_mut {
                                 self.reporter.report(Diagnostic::error("Cannot mutate field of immutable variable")
@@ -1827,7 +1931,7 @@ impl TypeChecker {
 
                     if !field_is_mut {
                         let mut allowed = false;
-                        if let Expr::Ident(_, name, _) = &**object {
+                        if let Expr::Ident(_, name, _, _) = &**object {
                             if name == "self" {
                                 if let Some(fn_name) = &self.current_fn_name {
                                     if fn_name.ends_with("_init") || fn_name == "init" {
@@ -1852,7 +1956,16 @@ impl TypeChecker {
                 self.current_expected_ty = prev_expected;
 
                 let val_ty = val_ty_res?;
-                if target_ty != val_ty {
+                let mut type_matches = target_ty == val_ty;
+                if !type_matches {
+                    if let (Ty::Optional(_), Ty::Optional(inner_val)) = (&target_ty, &val_ty) {
+                        if **inner_val == Ty::Void {
+                            type_matches = true;
+                        }
+                    }
+                }
+
+                if !type_matches {
                     self.reporter.report(
                         Diagnostic::error(format!(
                             "Type mismatch in assignment: expected {:?}, got {:?}",
@@ -1998,6 +2111,12 @@ impl TypeChecker {
         }
 
         let mut new_decl = template.clone();
+        
+        mapping.insert(template_name.to_string(), pace_ast::Type::Named(pace_ast::Ident {
+            name: mono_name.clone(),
+            span: pace_span::Span::DUMMY,
+        }));
+        
         match &mut new_decl {
             pace_hir::Decl::Struct {
                 id,
@@ -2006,6 +2125,7 @@ impl TypeChecker {
                 static_fields,
                 const_fields,
                 generic_params,
+                methods,
                 ..
             }
             | pace_hir::Decl::Class {
@@ -2015,6 +2135,7 @@ impl TypeChecker {
                 static_fields,
                 const_fields,
                 generic_params,
+                methods,
                 ..
             } => {
                 *id = self.generate_id();
@@ -2028,6 +2149,18 @@ impl TypeChecker {
                 }
                 for (_, ty, _) in const_fields.iter_mut() {
                     *ty = substitute_type(ty, &mapping);
+                }
+                for method in methods.iter_mut() {
+                    if let pace_hir::Decl::Function { name: m_name, params, return_type, .. } = method {
+                        let base_method_name = m_name.strip_prefix(&format!("{}_", template_name)).unwrap_or(m_name).to_string();
+                        *m_name = format!("{}_{}", mono_name, base_method_name);
+                        for (_, _, param_ty) in params.iter_mut() {
+                            *param_ty = substitute_type(param_ty, &mapping);
+                        }
+                        if let Some(ret_ty) = return_type {
+                            *ret_ty = substitute_type(ret_ty, &mapping);
+                        }
+                    }
                 }
             }
             pace_hir::Decl::Enum {
@@ -2094,31 +2227,67 @@ impl TypeChecker {
             self.methods_env.insert(mono_name.clone(), func_ty);
         }
 
+        match &new_decl {
+            pace_hir::Decl::Struct { id, name, fields, .. } => {
+                self.named_types.insert(name.clone(), (*id, 0));
+                let mut resolved_fields = Vec::new();
+                for (f_name, f_ty, _, is_pub) in fields {
+                    let ty = self.resolve_type(f_ty).unwrap_or(Ty::Int);
+                    resolved_fields.push((f_name.clone(), ty, *is_pub));
+                }
+                self.struct_defs.insert(*id, resolved_fields);
+            }
+            pace_hir::Decl::Class { id, name, fields, methods, .. } => {
+                self.named_types.insert(name.clone(), (*id, 1));
+                let mut resolved_fields = Vec::new();
+                for (f_name, f_ty, _, is_pub) in fields {
+                    let ty = self.resolve_type(f_ty).unwrap_or(Ty::Int);
+                    resolved_fields.push((f_name.clone(), ty, *is_pub));
+                }
+                self.class_defs.insert(*id, resolved_fields);
+                
+                for method in methods {
+                    if let pace_hir::Decl::Function { name: m_name, params, return_type, .. } = method {
+                        let mut param_tys = Vec::new();
+                        for (_, _, pty) in params {
+                            if let Ok(ty) = self.resolve_type(pty) {
+                                param_tys.push(ty);
+                            }
+                        }
+                        let ret_ty = if let Some(rty) = return_type {
+                            self.resolve_type(rty).unwrap_or(Ty::Void)
+                        } else {
+                            Ty::Void
+                        };
+                        self.methods_env.insert(m_name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
+                    }
+                }
+
+                let mut vtable = Vec::new();
+                for method in methods {
+                    if let pace_hir::Decl::Function { name: m_name, .. } = method {
+                        if let Some(ty) = self.methods_env.get(m_name) {
+                            let base_name = m_name.strip_prefix(&format!("{}_", name)).unwrap_or(m_name).to_string();
+                            vtable.push((base_name, ty.clone(), m_name.clone()));
+                        }
+                    }
+                }
+                self.class_vtables.insert(*id, vtable);
+            }
+            pace_hir::Decl::Enum { id, name, variants, .. } => {
+                self.named_types.insert(name.clone(), (*id, 2));
+                self.enum_defs.insert(*id, variants.clone());
+            }
+            _ => {}
+        }
+
+        self.instantiated_generics.push(new_decl.clone());
         self.check_decl(&new_decl)?;
 
         match new_decl {
-            pace_hir::Decl::Struct { id, fields, .. } => {
-                let mut resolved_fields = Vec::new();
-                for (fname, fty, _, is_mut) in fields {
-                    resolved_fields.push((fname, self.resolve_type(&fty)?, is_mut));
-                }
-                self.struct_defs.insert(id, resolved_fields);
-                self.named_types.insert(mono_name.clone(), (id, 0));
-                Ok(Ty::Struct(id))
-            }
-            pace_hir::Decl::Class { id, fields, .. } => {
-                let mut resolved_fields = Vec::new();
-                for (fname, fty, _, is_mut) in fields {
-                    resolved_fields.push((fname, self.resolve_type(&fty)?, is_mut));
-                }
-                self.class_defs.insert(id, resolved_fields);
-                self.named_types.insert(mono_name.clone(), (id, 1));
-                Ok(Ty::Class(id))
-            }
+            pace_hir::Decl::Struct { id, .. } => Ok(Ty::Struct(id)),
+            pace_hir::Decl::Class { id, .. } => Ok(Ty::Class(id)),
             pace_hir::Decl::Enum { id, variants, .. } => {
-                self.named_types.insert(mono_name.clone(), (id, 2));
-                self.enum_defs.insert(id, variants.clone());
-
                 for v in variants {
                     if let Some(f) = &v.fields {
                         let mut param_tys = Vec::new();
@@ -2133,25 +2302,11 @@ impl TypeChecker {
                 }
                 Ok(Ty::Enum(id))
             }
-            pace_hir::Decl::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                let mut param_tys = Vec::new();
-                for (_, _, ty) in params {
-                    param_tys.push(self.resolve_type(&ty)?);
-                }
-                let ret_ty = if let Some(rty) = return_type {
-                    self.resolve_type(&rty)?
-                } else {
-                    Ty::Void
-                };
-
-                let func_ty = Ty::Function(param_tys, Box::new(ret_ty));
-                Ok(func_ty)
-            }
-            _ => unreachable!(),
+            pace_hir::Decl::Function { id, .. } => Ok(Ty::Function(
+                vec![], // A bit hacky, but Expr::Call doesn't actually use this Ty::Function for the callee type if it's already instantiated
+                Box::new(Ty::Void),
+            )),
+            _ => Err("Unsupported declaration".to_string()),
         }
     }
 }

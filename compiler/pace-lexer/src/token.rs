@@ -84,6 +84,10 @@ pub enum TokenKind<'a> {
     #[token("unsafe")]
     Unsafe,
 
+    // Null Safety
+    #[token("null")]
+    Null,
+
     // Visibility
     #[token("private")]
     Private,

@@ -1,0 +1,12 @@
+class Container<T> {
+    item: T
+    fn get_item() -> T {
+        return self.item
+    }
+}
+
+fn test_generics() {
+    println("--- Testing Generics ---")
+    let c = Container<int>(item: 100)
+    println(c.get_item())
+}

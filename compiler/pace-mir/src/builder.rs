@@ -156,7 +156,7 @@ impl<'a> MirBuilder<'a> {
                 self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(local)));
                 temp
             }
-            Expr::Ident(id, name, _) => {
+            Expr::Ident(id, name, _, _) => {
                 if let Some(Ty::Enum(enum_id)) = self.global_env.get(id) {
                     if let Some(variants) = self.enum_defs.get(enum_id) {
                         for v in variants {
@@ -184,12 +184,34 @@ impl<'a> MirBuilder<'a> {
                 }
                 temp
             }
+            Expr::Null(_) => {
+                // In C, we can just represent null as 0 or a special Option struct
+                // For simplicity, we just use Void as the inner type
+                let local = self.new_local(Ty::Optional(Box::new(Ty::Void)));
+                self.push_stmt(Statement::Assign(
+                    Lvalue::Local(local),
+                    Rvalue::IntConstant("0".to_string()), // Represent null as 0 in MIR for MVP
+                ));
+                local
+            }
             Expr::Binary {
                 left, op, right, ..
             } => {
                 let lhs = self.build_expr(left);
+                
+                // For short-circuiting like ??, &&, ||, we should ideally use basic blocks
+                // but for MVP, we just emit a binary op if C supports it, or lower to ternary
                 let rhs = self.build_expr(right);
-                let temp = self.new_local(Ty::Int);
+                
+                let ret_ty = if *op == pace_ast::BinaryOp::NullCoalesce {
+                    self.locals[rhs.0 as usize].clone()
+                } else if *op == pace_ast::BinaryOp::And || *op == pace_ast::BinaryOp::Or {
+                    Ty::Bool
+                } else {
+                    Ty::Int
+                };
+                
+                let temp = self.new_local(ret_ty);
                 self.push_stmt(Statement::Assign(
                     Lvalue::Local(temp),
                     Rvalue::BinaryOp(*op, lhs, rhs),
@@ -228,10 +250,34 @@ impl<'a> MirBuilder<'a> {
                 ));
                 temp
             }
+            Expr::OptionalMemberAccess { object, member, .. } => {
+                let obj = self.build_expr(object);
+                let obj_ty = self.locals[obj.0 as usize].clone();
+                
+                let inner_ty = if let Ty::Optional(inner) = obj_ty {
+                    *inner
+                } else {
+                    Ty::Void // Fallback
+                };
+                
+                // We mock the field access type. In a real compiler we'd resolve it fully here.
+                let temp = self.new_local(Ty::Optional(Box::new(Ty::Void))); // We just use Option<Void> as a placeholder, Codegen will emit properly
+                self.push_stmt(Statement::Assign(
+                    Lvalue::Local(temp),
+                    Rvalue::OptionalFieldAccess(obj, member.clone()),
+                ));
+                temp
+            }
             Expr::MemberAccess { object, member, .. } => {
                 // If the object is a type (class/struct), it's a static access
-                if let Expr::Ident(id, _name, _) = &**object {
-                    if let Some(ty) = self.global_env.get(id) {
+                if let Expr::Ident(id, _name, generic_args, _) = &**object {
+                    let mut is_type_name = self.named_types.contains_key(_name) || generic_args.is_some();
+                    let mut ty_opt = self.global_env.get(id).cloned();
+                    if ty_opt.is_none() {
+                        ty_opt = self.local_types.get(id).cloned();
+                    }
+                    if is_type_name && ty_opt.is_some() {
+                        let ty = ty_opt.unwrap();
                         if matches!(ty, Ty::Struct(_) | Ty::Class(_)) {
                             let mut type_name = "";
                             let nid = match ty {
@@ -240,7 +286,7 @@ impl<'a> MirBuilder<'a> {
                                 _ => unreachable!(),
                             };
                             for (name, &(tid, _)) in self.named_types {
-                                if *nid == tid {
+                                if nid == tid {
                                     type_name = name;
                                     break;
                                 }
@@ -259,6 +305,13 @@ impl<'a> MirBuilder<'a> {
                             self.push_stmt(Statement::Assign(
                                 Lvalue::Local(temp),
                                 Rvalue::GlobalRead(static_name),
+                            ));
+                            return temp;
+                        } else if let Ty::Enum(enum_id) = ty {
+                            let temp = self.new_local(Ty::Enum(enum_id));
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(temp),
+                                Rvalue::InstantiateEnum(enum_id, member.clone(), vec![]),
                             ));
                             return temp;
                         }
@@ -324,7 +377,7 @@ impl<'a> MirBuilder<'a> {
                 let mut is_global = false;
                 let mut global_name = String::new();
 
-                if let Expr::Ident(id, name, _) = &**callee {
+                if let Expr::Ident(id, name, _, _) = &**callee {
                     if let Some(name) = self.global_fns.get(id) {
                         is_global = true;
                         global_name = name.clone();
@@ -379,8 +432,14 @@ impl<'a> MirBuilder<'a> {
                     }
                 } else if let Expr::MemberAccess { object, member, .. } = &**callee {
                     let mut is_static_method = false;
-                    if let Expr::Ident(id, name, _) = &**object {
-                        if let Some(ty) = self.global_env.get(id) {
+                    if let Expr::Ident(id, name, generic_args, _) = &**object {
+                        let mut is_type_name = self.named_types.contains_key(name) || generic_args.is_some();
+                        let mut ty_opt = self.global_env.get(id).cloned();
+                        if ty_opt.is_none() {
+                            ty_opt = self.local_types.get(id).cloned();
+                        }
+                        if is_type_name && ty_opt.is_some() {
+                            let ty = ty_opt.unwrap();
                             if matches!(ty, Ty::Struct(_) | Ty::Class(_)) {
                                 let mut type_name = "";
                                 let nid = match ty {
@@ -389,7 +448,7 @@ impl<'a> MirBuilder<'a> {
                                     _ => unreachable!(),
                                 };
                                 for (name, &(tid, _)) in self.named_types {
-                                    if *nid == tid {
+                                    if nid == tid {
                                         type_name = name;
                                         break;
                                     }
@@ -564,7 +623,7 @@ impl<'a> MirBuilder<'a> {
                     let mut is_enum_variant = false;
                     let mut enum_id = None;
 
-                    if let Expr::Ident(id, _name, _) = &**callee {
+                    if let Expr::Ident(id, _name, _, _) = &**callee {
                         if let Some(Ty::Function(_, ret)) = self.global_env.get(id) {
                             if let Ty::Enum(eid) = **ret {
                                 is_enum_variant = true;
@@ -577,7 +636,7 @@ impl<'a> MirBuilder<'a> {
                         object, member: _, ..
                     } = &**callee
                     {
-                        if let Expr::Ident(id, name, _) = &**object {
+                        if let Expr::Ident(id, name, _, _) = &**object {
                             if let Some(Ty::Enum(eid)) = self.global_env.get(id) {
                                 is_enum_variant = true;
                                 enum_id = Some(*eid);
@@ -877,14 +936,60 @@ impl<'a> MirBuilder<'a> {
                 temp
             }
             Expr::Assign { target, value, .. } => {
-                let lvalue = match &**target {
-                    Expr::Ident(id, _name, _) => Lvalue::Local(*self.hir_to_local.get(id).unwrap()),
+                let mut is_static_assign = false;
+                let mut static_name = String::new();
+                let mut lvalue = match &**target {
+                    Expr::Ident(id, _name, _, _) => Lvalue::Local(*self.hir_to_local.get(id).unwrap()),
                     Expr::MemberAccess { object, member, .. } => {
-                        let obj_local = self.build_expr(object);
-                        Lvalue::FieldAccess(obj_local, member.clone())
+                        if let Expr::Ident(id, name, generic_args, _) = &**object {
+                            let mut is_type_name = self.named_types.contains_key(name) || generic_args.is_some();
+                            if is_type_name {
+                                let mut ty_opt = self.global_env.get(id).cloned();
+                                if ty_opt.is_none() {
+                                    ty_opt = self.local_types.get(id).cloned();
+                                }
+                                if let Some(ty) = ty_opt {
+                                    if matches!(ty, Ty::Struct(_) | Ty::Class(_)) {
+                                        let mut type_name = "";
+                                        let nid = match ty {
+                                            Ty::Struct(i) => i,
+                                            Ty::Class(i) => i,
+                                            _ => unreachable!(),
+                                        };
+                                        for (n, &(tid, _)) in self.named_types {
+                                            if nid == tid {
+                                                type_name = n;
+                                                break;
+                                            }
+                                        }
+                                        static_name = format!("{}_{}", type_name, member);
+                                        is_static_assign = true;
+                                    }
+                                }
+                            }
+                        }
+
+                        if is_static_assign {
+                            // Dummy Lvalue, not used for static assign
+                            let temp = self.new_local(Ty::Int);
+                            Lvalue::Local(temp)
+                        } else {
+                            let obj_local = self.build_expr(object);
+                            Lvalue::FieldAccess(obj_local, member.clone())
+                        }
                     }
                     _ => panic!("Invalid assignment target"),
                 };
+                if is_static_assign {
+                    let prev = self.current_expected_ty.take();
+                    // We could lookup the exact static field type, but we can default to Int for expected
+                    self.current_expected_ty = Some(Ty::Int);
+                    let rval = self.build_expr(value);
+                    self.current_expected_ty = prev;
+                    self.push_stmt(Statement::GlobalWrite(static_name, rval));
+                    return rval;
+                }
+
                 let lval_ty = match &lvalue {
                     Lvalue::Local(l) => self.locals[l.0 as usize].clone(),
                     Lvalue::FieldAccess(obj, member) => {
@@ -932,7 +1037,7 @@ impl<'a> MirBuilder<'a> {
 
     pub fn build_program(program: &pace_hir::Program, tc: &mut pace_ty::TypeChecker) -> MirProgram {
         let mut global_fns = HashMap::new();
-        for decl in &program.declarations {
+        for decl in program.declarations.iter().chain(tc.instantiated_generics.iter()) {
             if let pace_hir::Decl::Function { id, name, .. } = decl {
                 global_fns.insert(*id, name.clone());
             } else if let pace_hir::Decl::Struct { methods, .. } = decl {
@@ -967,7 +1072,7 @@ impl<'a> MirBuilder<'a> {
         );
         let mut _main_last_local = Local(0);
 
-        for decl in &program.declarations {
+        for decl in program.declarations.iter().chain(tc.instantiated_generics.iter()) {
             match decl {
                 pace_hir::Decl::Let { id, value, .. } | pace_hir::Decl::Var { id, value, .. } => {
                     if let Some(val) = value {
@@ -1009,6 +1114,7 @@ impl<'a> MirBuilder<'a> {
                     static_fields,
                     const_fields,
                     methods,
+                    generic_params,
                     ..
                 }
                 | pace_hir::Decl::Class {
@@ -1016,8 +1122,12 @@ impl<'a> MirBuilder<'a> {
                     static_fields,
                     const_fields,
                     methods,
+                    generic_params,
                     ..
                 } => {
+                    if generic_params.is_some() {
+                        continue;
+                    }
                     for (sf_name, sf_ty, sf_expr) in static_fields {
                         let global_name = format!("{}_{}", name, sf_name);
                         let ty = tc.get_type(sf_ty).unwrap_or(Ty::Int);
@@ -1094,8 +1204,12 @@ impl<'a> MirBuilder<'a> {
                     params,
                     return_type,
                     body,
+                    generic_params,
                     ..
                 } => {
+                    if generic_params.is_some() {
+                        continue;
+                    }
                     let mut fn_builder = MirBuilder::new(
                         global_fns.clone(),
                         &tc.struct_defs,

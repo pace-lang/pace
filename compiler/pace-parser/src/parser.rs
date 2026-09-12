@@ -1236,7 +1236,8 @@ impl<'a> Parser<'a> {
         let mut left = self.parse_primary()?;
 
         loop {
-            if self.check(&TokenKind::Dot) {
+            if self.check(&TokenKind::Dot) || self.check(&TokenKind::OptChain) {
+                let is_opt = self.check(&TokenKind::OptChain);
                 self.advance();
                 let member_name = match &self.current {
                     Some(Token {
@@ -1251,17 +1252,25 @@ impl<'a> Parser<'a> {
                         ident
                     }
                     _ => {
-                        return Err(Diagnostic::error("Expected member name after '.'")
+                        return Err(Diagnostic::error("Expected member name after '.' or '?.'")
                             .with_span(self.current_span()));
                     }
                 };
 
                 let span = left.span().merge(member_name.span);
-                left = Expr::MemberAccess {
-                    span,
-                    object: Box::new(left),
-                    member: member_name,
-                };
+                if is_opt {
+                    left = Expr::OptionalMemberAccess {
+                        span,
+                        object: Box::new(left),
+                        member: member_name,
+                    };
+                } else {
+                    left = Expr::MemberAccess {
+                        span,
+                        object: Box::new(left),
+                        member: member_name,
+                    };
+                }
             } else if self.check(&TokenKind::LParen) {
                 self.advance();
                 let mut args = Vec::new();
@@ -1272,7 +1281,7 @@ impl<'a> Parser<'a> {
 
                         let mut parsed_expr = self.parse_expr()?;
 
-                        if let Expr::Ident(ref ident) = parsed_expr {
+                        if let Expr::Ident(ref ident, _) = parsed_expr {
                             if self.check(&TokenKind::Colon) {
                                 self.advance(); // consume `:`
                                 label = Some(ident.clone());
@@ -1335,6 +1344,12 @@ impl<'a> Parser<'a> {
                 Some(pace_ast::BinaryOp::GtEq)
             } else if self.check(&TokenKind::LtEq) {
                 Some(pace_ast::BinaryOp::LtEq)
+            } else if self.check(&TokenKind::AndAnd) {
+                Some(pace_ast::BinaryOp::And)
+            } else if self.check(&TokenKind::OrOr) {
+                Some(pace_ast::BinaryOp::Or)
+            } else if self.check(&TokenKind::NullCoalesce) {
+                Some(pace_ast::BinaryOp::NullCoalesce)
             } else {
                 None
             };
@@ -1354,6 +1369,19 @@ impl<'a> Parser<'a> {
         }
 
         Ok(left)
+    }
+
+    fn try_parse_generic_args_expr(&mut self) -> Option<Vec<Type>> {
+        let saved_lexer = self.lexer.clone();
+        let saved_current = self.current.clone();
+        match self.parse_generic_args() {
+            Ok(Some(args)) => Some(args),
+            _ => {
+                self.lexer = saved_lexer;
+                self.current = saved_current;
+                None
+            }
+        }
     }
 
     fn parse_primary(&mut self) -> Result<Expr, Diagnostic> {
@@ -1404,8 +1432,10 @@ impl<'a> Parser<'a> {
                     name: name.to_string(),
                     span: tok.span,
                 };
-                Ok(Expr::Ident(ident))
+                let generic_args = self.try_parse_generic_args_expr();
+                Ok(Expr::Ident(ident, generic_args))
             }
+            TokenKind::Null => Ok(Expr::Null(tok.span)),
             TokenKind::Super => Ok(Expr::Super(tok.span)),
             _ => Err(
                 Diagnostic::error(format!("Unexpected token in expression: {:?}", tok.kind))

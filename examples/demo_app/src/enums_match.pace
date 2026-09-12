@@ -1,0 +1,16 @@
+enum TrafficLight {
+    Red
+    Yellow
+    Green
+}
+
+fn test_enums_match() {
+    println("--- Testing Enums & Match ---")
+    let light = Red
+    match light {
+        Red => println("Stop")
+        Yellow => println("Caution")
+        Green => println("Go")
+        _ => println("Unknown")
+    }
+}

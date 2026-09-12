@@ -1,0 +1,22 @@
+enum Option<T> {
+    Some(val: T)
+    None
+}
+
+enum Result<T, E> {
+    Ok(val: T)
+    Err(err: E)
+}
+
+fn test_option_result() {
+    println("--- Testing Option & Result ---")
+    let some_val = Option<int>.Some(val: 42)
+    let none_val = Option<int>.None
+
+    let res_ok = Result<int, string>.Ok(val: 100)
+    let res_err = Result<int, string>.Err(err: "Error occurred")
+    match some_val {
+        Some(val) => println(val)
+        None => println("None")
+    }
+}

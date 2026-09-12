@@ -1,0 +1,24 @@
+fn test_operators() {
+    println("--- Testing Operators ---")
+    let a = 10
+    let b = 5
+
+    // Arithmetic
+    let add = a + b
+    let sub = a - b
+    let mul = a * b
+    let div = a / b
+
+    // Relational
+    let eq = a == b
+    let neq = a != b
+    let gt = a > b
+    let lt = a < b
+    let gte = a >= b
+    let lte = a <= b
+
+    println(add)
+    println(sub)
+    println(mul)
+    println(div)
+}

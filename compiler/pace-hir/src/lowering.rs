@@ -182,7 +182,7 @@ impl LoweringContext {
                             object: Box::new(ast::Expr::Ident(ast::Ident {
                                 name: "self".to_string(),
                                 span: field_name.span,
-                            })),
+                            }, None)),
                             member: field_name.clone(),
                             span: field_name.span,
                         };
@@ -335,7 +335,7 @@ impl LoweringContext {
                             object: Box::new(ast::Expr::Ident(ast::Ident {
                                 name: "self".to_string(),
                                 span: field_name.span,
-                            })),
+                            }, None)),
                             member: field_name.clone(),
                             span: field_name.span,
                         };
@@ -630,7 +630,7 @@ impl LoweringContext {
             ast::Expr::IntLiteral(val, span) => Ok(Expr::IntLiteral(val, span)),
             ast::Expr::FloatLiteral(val, span) => Ok(Expr::FloatLiteral(val, span)),
             ast::Expr::StringLiteral(val, span) => Ok(Expr::StringLiteral(val, span)),
-            ast::Expr::Ident(ident) => {
+            ast::Expr::Ident(ident, generic_args) => {
                 if ident.name == "true" {
                     return Ok(Expr::BoolLiteral(true, ident.span));
                 }
@@ -644,7 +644,8 @@ impl LoweringContext {
                     self.scope.insert(ident.name.clone(), id);
                     id
                 };
-                Ok(Expr::Ident(id, ident.name.clone(), ident.span))
+                let lowered_args = generic_args.map(|args| args.into_iter().map(|arg| arg.clone()).collect());
+                Ok(Expr::Ident(id, ident.name.clone(), lowered_args, ident.span))
             }
             ast::Expr::Super(span) => Ok(Expr::Super(span)),
             ast::Expr::Binary {
@@ -658,6 +659,7 @@ impl LoweringContext {
                 right: Box::new(self.lower_expr(*right)?),
                 span,
             }),
+            ast::Expr::Null(span) => Ok(Expr::Null(span)),
             ast::Expr::MemberAccess {
                 object,
                 member,
@@ -667,8 +669,17 @@ impl LoweringContext {
                 member: member.name,
                 span,
             }),
+            ast::Expr::OptionalMemberAccess {
+                object,
+                member,
+                span,
+            } => Ok(Expr::OptionalMemberAccess {
+                object: Box::new(self.lower_expr(*object)?),
+                member: member.name,
+                span,
+            }),
             ast::Expr::Call { callee, args, span } => {
-                if let ast::Expr::Ident(ident) = &*callee {
+                if let ast::Expr::Ident(ident, _) = &*callee {
                     if ident.name == "print" || ident.name == "println" {
                         let mut lowered_args = Vec::new();
                         for (_, arg) in args {

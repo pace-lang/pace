@@ -1,0 +1,13 @@
+fn test_conditionals() {
+    println("--- Testing Conditionals ---")
+    let x = 15
+    if x < 10 {
+        println("Less than 10")
+    } else {
+        if x == 15 {
+            println("Is 15")
+        } else {
+            println("Other")
+        }
+    }
+}
