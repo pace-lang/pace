@@ -8,7 +8,7 @@ pub struct MirBuilder<'a> {
     pub current_block: BasicBlockId,
     pub locals: Vec<Ty>,
     pub hir_to_local: HashMap<HirId, Local>,
-    pub global_fns: HashMap<HirId, String>,
+    pub global_fns: HashMap<String, String>,
     pub struct_defs: &'a HashMap<HirId, Vec<(String, Ty, bool)>>,
     pub class_defs: &'a HashMap<HirId, Vec<(String, Ty, bool)>>,
     pub class_vtables: &'a HashMap<HirId, Vec<(String, Ty, String)>>,
@@ -21,11 +21,12 @@ pub struct MirBuilder<'a> {
     pub current_expected_ty: Option<Ty>,
     pub current_self_local: Option<Local>,
     pub class_parents: &'a HashMap<HirId, HirId>,
+    pub global_functions_env: &'a HashMap<String, Ty>,
 }
 
 impl<'a> MirBuilder<'a> {
     pub fn new(
-        global_fns: HashMap<HirId, String>,
+        global_fns: HashMap<String, String>,
         struct_defs: &'a HashMap<HirId, Vec<(String, Ty, bool)>>,
         class_defs: &'a HashMap<pace_hir::HirId, Vec<(String, Ty, bool)>>,
         class_vtables: &'a HashMap<HirId, Vec<(String, Ty, String)>>,
@@ -36,6 +37,7 @@ impl<'a> MirBuilder<'a> {
         static_fields_env: &'a HashMap<String, Ty>,
         methods_env: &'a HashMap<String, Ty>,
         class_parents: &'a HashMap<HirId, HirId>,
+        global_functions_env: &'a HashMap<String, Ty>,
     ) -> Self {
         let initial_block = BasicBlock {
             statements: Vec::new(),
@@ -59,6 +61,7 @@ impl<'a> MirBuilder<'a> {
             static_fields_env,
             methods_env,
             class_parents,
+            global_functions_env,
         }
     }
 
@@ -378,7 +381,7 @@ impl<'a> MirBuilder<'a> {
                 let mut global_name = String::new();
 
                 if let Expr::Ident(id, name, _, _) = &**callee {
-                    if let Some(name) = self.global_fns.get(id) {
+                    if let Some(name) = self.global_fns.get(name) {
                         is_global = true;
                         global_name = name.clone();
                     } else if let Some(ty) = self.global_env.get(id) {
@@ -624,7 +627,7 @@ impl<'a> MirBuilder<'a> {
                     let mut enum_id = None;
 
                     if let Expr::Ident(id, _name, _, _) = &**callee {
-                        if let Some(Ty::Function(_, ret)) = self.global_env.get(id) {
+                        if let Some(Ty::Function(_, ret)) = self.global_functions_env.get(_name) {
                             if let Ty::Enum(eid) = **ret {
                                 is_enum_variant = true;
                                 enum_id = Some(eid);
@@ -1036,20 +1039,27 @@ impl<'a> MirBuilder<'a> {
     }
 
     pub fn build_program(program: &pace_hir::Program, tc: &mut pace_ty::TypeChecker) -> MirProgram {
+        let mut declarations: Vec<pace_hir::Decl> = Vec::new();
+        for module in program.modules.values() {
+            for decl in &module.declarations {
+                declarations.push(decl.clone());
+            }
+        }
+        
         let mut global_fns = HashMap::new();
-        for decl in program.declarations.iter().chain(tc.instantiated_generics.iter()) {
-            if let pace_hir::Decl::Function { id, name, .. } = decl {
-                global_fns.insert(*id, name.clone());
+        for decl in declarations.iter().chain(tc.instantiated_generics.iter()) {
+            if let pace_hir::Decl::Function { name, .. } = decl {
+                global_fns.insert(name.clone(), name.clone());
             } else if let pace_hir::Decl::Struct { methods, .. } = decl {
                 for method in methods {
-                    if let pace_hir::Decl::Function { id, name, .. } = method {
-                        global_fns.insert(*id, name.clone());
+                    if let pace_hir::Decl::Function { name, .. } = method {
+                        global_fns.insert(name.clone(), name.clone());
                     }
                 }
             } else if let pace_hir::Decl::Class { methods, .. } = decl {
                 for method in methods {
-                    if let pace_hir::Decl::Function { id, name, .. } = method {
-                        global_fns.insert(*id, name.clone());
+                    if let pace_hir::Decl::Function { name, .. } = method {
+                        global_fns.insert(name.clone(), name.clone());
                     }
                 }
             }
@@ -1069,10 +1079,11 @@ impl<'a> MirBuilder<'a> {
             &tc.static_fields_env,
             &tc.methods_env,
             &tc.class_parents,
+            &tc.global_functions,
         );
         let mut _main_last_local = Local(0);
 
-        for decl in program.declarations.iter().chain(tc.instantiated_generics.iter()) {
+        for decl in declarations.iter().chain(tc.instantiated_generics.iter()) {
             match decl {
                 pace_hir::Decl::Let { id, value, .. } | pace_hir::Decl::Var { id, value, .. } => {
                     if let Some(val) = value {
@@ -1165,6 +1176,7 @@ impl<'a> MirBuilder<'a> {
                                 &tc.static_fields_env,
                                 &tc.methods_env,
                                 &tc.class_parents,
+                                &tc.global_functions,
                             );
                             let mut mir_params = Vec::new();
                             for (param_id, param_name, pty) in params {
@@ -1222,6 +1234,7 @@ impl<'a> MirBuilder<'a> {
                         &tc.static_fields_env,
                         &tc.methods_env,
                         &tc.class_parents,
+                        &tc.global_functions,
                     );
                     let mut mir_params = Vec::new();
                     for (param_id, param_name, pty) in params {

@@ -27,6 +27,7 @@ pub struct TypeChecker {
     pub current_fn_name: Option<String>,
     pub declared_bindings: Vec<(HirId, String, pace_span::Span)>,
     pub used_bindings: std::collections::HashSet<HirId>,
+    pub used_bindings_by_name: std::collections::HashSet<String>,
     pub initialized_bindings: std::collections::HashSet<HirId>,
     pub local_types: HashMap<HirId, Ty>, // Persisted types of all variables
     pub instantiated_generics: Vec<Decl>,
@@ -55,6 +56,7 @@ impl TypeChecker {
             current_fn_name: None,
             declared_bindings: Vec::new(),
             used_bindings: std::collections::HashSet::new(),
+            used_bindings_by_name: std::collections::HashSet::new(),
             initialized_bindings: std::collections::HashSet::new(),
             local_types: HashMap::new(),
             instantiated_generics: Vec::new(),
@@ -195,9 +197,16 @@ impl TypeChecker {
     }
 
     pub fn check_program(&mut self, program: &Program) -> Result<(), String> {
+        let mut declarations: Vec<Decl> = Vec::new();
+        for module in program.modules.values() {
+            for decl in &module.declarations {
+                declarations.push(decl.clone());
+            }
+        }
+
         let mut has_main = false;
 
-        for decl in &program.declarations {
+        for decl in &declarations {
             if let Decl::Function { name, .. } = decl {
                 if name == "main" {
                     has_main = true;
@@ -221,7 +230,7 @@ impl TypeChecker {
         }
 
         // 1. Gather all top-level types (Structs/Classes/Functions)
-        for decl in &program.declarations {
+        for decl in &declarations {
             match decl {
                 Decl::Struct {
                     id,
@@ -361,7 +370,7 @@ impl TypeChecker {
         }
 
         // Pass 2: Register struct/class fields
-        for decl in &program.declarations {
+        for decl in &declarations {
             match decl {
                 Decl::Struct {
                     id,
@@ -409,7 +418,7 @@ impl TypeChecker {
         }
 
         // Pass 2.5: Hierarchy Resolution & Field Inheritance
-        for decl in &program.declarations {
+        for decl in &declarations {
             if let Decl::Class {
                 id, extends, span, ..
             } = decl
@@ -465,7 +474,7 @@ impl TypeChecker {
         }
 
         // Pass 3: Register functions
-        for decl in &program.declarations {
+        for decl in &declarations {
             if let Decl::Function {
                 id,
                 name,
@@ -496,7 +505,7 @@ impl TypeChecker {
         // Pass 3.5: Construct V-Tables and Validate Overrides
         let mut class_methods: HashMap<HirId, Vec<(String, Ty, String, bool, pace_span::Span)>> =
             HashMap::new();
-        for decl in &program.declarations {
+        for decl in &declarations {
             if let Decl::Class { id, methods, .. } = decl {
                 let mut cm = Vec::new();
                 for m in methods {
@@ -578,7 +587,7 @@ impl TypeChecker {
             self.class_vtables.insert(id, vtable);
         }
 
-        for decl in &program.declarations {
+        for decl in &declarations {
             self.check_decl(decl)?;
         }
 
@@ -589,6 +598,7 @@ impl TypeChecker {
                 .keys()
                 .any(|k| name.starts_with(&format!("{}_", k)));
             if !self.used_bindings.contains(&id)
+                && !self.used_bindings_by_name.contains(name)
                 && !name.starts_with('_')
                 && name != "main"
                 && name != "self"
@@ -1222,6 +1232,7 @@ impl TypeChecker {
                 if let Some(ty) = self.env.get(id).cloned() {
                     Ok(ty)
                 } else if let Some(ty) = self.global_functions.get(name).cloned() {
+                    self.used_bindings_by_name.insert(name.clone());
                     Ok(ty)
                 } else if let Some(&(hir_id, kind)) = self.named_types.get(name) {
                     let ty = if kind == 0 {

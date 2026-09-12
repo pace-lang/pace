@@ -1,9 +1,17 @@
-use pace_span::Span;
+use pace_span::{Span, FileId};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
-    pub declarations: Vec<Decl>,
+    pub modules: HashMap<String, Module>,
     pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Module {
+    pub name: String,
+    pub file_id: FileId,
+    pub declarations: Vec<Decl>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

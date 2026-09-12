@@ -27,13 +27,23 @@ impl LoweringContext {
     }
 
     pub fn lower_program(&mut self, ast: ast::Program) -> Result<Program, String> {
-        let mut declarations = Vec::new();
-        for decl in ast.declarations {
-            if let Some(d) = self.lower_decl(decl)? {
-                declarations.push(d);
+        let mut modules = HashMap::new();
+        
+        for (name, ast_module) in ast.modules {
+            let mut declarations = Vec::new();
+            for decl in ast_module.declarations {
+                if let Some(d) = self.lower_decl(decl)? {
+                    declarations.push(d);
+                }
             }
+            
+            modules.insert(name.clone(), Module {
+                name: ast_module.name,
+                file_id: ast_module.file_id,
+                declarations,
+            });
         }
-        Ok(Program { declarations })
+        Ok(Program { modules })
     }
 
 }

@@ -31,8 +31,18 @@ pub enum Stmt {
     Return(Option<Expr>, Span),
 }
 
+use pace_span::FileId;
+use std::collections::HashMap;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
+    pub modules: HashMap<String, Module>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Module {
+    pub name: String,
+    pub file_id: FileId,
     pub declarations: Vec<Decl>,
 }
 
@@ -40,13 +50,16 @@ impl Program {
     pub fn resolve_traits(&mut self, reporter: &mut pace_errors::Reporter) {
         let mut trait_methods = std::collections::HashMap::new();
 
-        for decl in &self.declarations {
-            if let Decl::Trait { name, methods, .. } = decl {
-                trait_methods.insert(name.clone(), methods.clone());
+        for module in self.modules.values() {
+            for decl in &module.declarations {
+                if let Decl::Trait { name, methods, .. } = decl {
+                    trait_methods.insert(name.clone(), methods.clone());
+                }
             }
         }
 
-        for decl in &mut self.declarations {
+        for module in self.modules.values_mut() {
+            for decl in &mut module.declarations {
             if let Decl::Struct {
                 name,
                 with,
@@ -120,6 +133,7 @@ impl Program {
                             .with_span(*span),
                         );
                     }
+        }
                 }
             }
         }

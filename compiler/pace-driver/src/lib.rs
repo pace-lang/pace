@@ -15,7 +15,7 @@ use std::path::PathBuf;
 fn parse_file_and_imports(
     file_path: &Path,
     visited: &mut HashSet<PathBuf>,
-    declarations: &mut Vec<pace_ast::Decl>,
+    modules: &mut std::collections::HashMap<String, pace_ast::Module>,
     lockfile: Option<&pace_pkg::resolve::PaceLock>,
     cache: &pace_pkg::cache::CacheManager,
     source_map: &mut pace_span::SourceMap,
@@ -37,7 +37,12 @@ fn parse_file_and_imports(
         format!("Compilation failed due to syntax errors in {}", file_path.display())
     })?;
 
-    for decl in ast.declarations {
+    let mut module_decls = Vec::new();
+    let module_name = file_path.file_stem().unwrap().to_string_lossy().to_string();
+
+    for decl in ast {
+        module_decls.push(decl.clone());
+
         if let pace_ast::Decl::Import { path, .. } = &decl {
             let first_ident = &path[0].name;
             
@@ -86,12 +91,16 @@ fn parse_file_and_imports(
                 return Err(format!("Could not resolve import {:?} (tried {})", path.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join("."), import_path.display()));
             }
 
-            parse_file_and_imports(&import_path, visited, declarations, lockfile, cache, source_map)?;
-        } else {
-            declarations.push(decl);
+            parse_file_and_imports(&import_path, visited, modules, lockfile, cache, source_map)?;
         }
     }
     
+    modules.insert(module_name.clone(), pace_ast::Module {
+        name: module_name,
+        file_id,
+        declarations: module_decls,
+    });
+
     Ok(())
 }
 
@@ -111,13 +120,13 @@ pub fn compile_file(
     let lockfile = lockfile_path.and_then(|p| pace_pkg::resolve::DependencyResolver::read_lockfile(&p).ok());
 
     let mut visited = HashSet::new();
-    let mut declarations = Vec::new();
+    let mut modules = std::collections::HashMap::new();
     let mut source_map = pace_span::SourceMap::new();
 
-    parse_file_and_imports(file_path, &mut visited, &mut declarations, lockfile.as_ref(), &cache, &mut source_map)?;
+    parse_file_and_imports(file_path, &mut visited, &mut modules, lockfile.as_ref(), &cache, &mut source_map)?;
 
     let ast = pace_ast::Program {
-        declarations,
+        modules,
         span: pace_span::Span::DUMMY, // We could merge spans, but DUMMY is fine for the program root
     };
 

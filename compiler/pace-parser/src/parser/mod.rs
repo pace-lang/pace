@@ -1,6 +1,4 @@
-use pace_ast::{
-    Block, Decl, EnumVariant, Expr, GenericParam, Ident, MatchArm, Pattern, Program, Stmt, Type,
-};
+use pace_ast::{Decl, Ident, Type};
 use pace_errors::Diagnostic;
 use pace_lexer::{Lexer, Token, TokenKind};
 use pace_span::Span;
@@ -42,34 +40,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_program(&mut self) -> Result<Program, Diagnostic> {
+    pub fn parse_program(&mut self) -> Result<Vec<Decl>, Diagnostic> {
         let mut declarations = Vec::new();
-        let start_span = self.current.as_ref().map(|t| t.span).unwrap_or(Span::DUMMY);
-
         while self.current.is_some() {
             declarations.push(self.parse_decl()?);
         }
-
-        let end_span = declarations
-            .last()
-            .map(|d| match d {
-                Decl::Import { span, .. } => *span,
-                Decl::Let { span, .. } => *span,
-                Decl::Var { span, .. } => *span,
-                Decl::Const { span, .. } => *span,
-                Decl::Function { span, .. } => *span,
-                Decl::Struct { span, .. } => *span,
-                Decl::Class { span, .. } => *span,
-                Decl::Trait { span, .. } => *span,
-                Decl::Enum { span, .. } => *span,
-                Decl::Expr(_, span) => *span,
-            })
-            .unwrap_or(start_span);
-
-        Ok(Program {
-            declarations,
-            span: start_span.merge(end_span),
-        })
+        Ok(declarations)
     }
 
     pub(crate) fn parse_type(&mut self) -> Result<Type, Diagnostic> {
