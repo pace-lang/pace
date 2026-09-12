@@ -11,6 +11,7 @@ pub struct TypeChecker {
     pub loop_depth: usize,
     pub next_id: u32,
     pub methods_env: HashMap<String, Ty>,
+    pub global_functions: HashMap<String, Ty>,
     pub struct_defs: HashMap<HirId, Vec<(String, Ty, bool)>>,
     pub class_defs: HashMap<HirId, Vec<(String, Ty, bool)>>,
     pub class_parents: HashMap<HirId, HirId>,
@@ -37,6 +38,7 @@ impl TypeChecker {
             env: HashMap::new(),
             mutability_env: HashMap::new(),
             methods_env: HashMap::new(),
+            global_functions: HashMap::new(),
             struct_defs: HashMap::new(),
             class_defs: HashMap::new(),
             class_parents: HashMap::new(),
@@ -464,6 +466,7 @@ impl TypeChecker {
         for decl in &program.declarations {
             if let Decl::Function {
                 id,
+                name,
                 generic_params,
                 params,
                 return_type,
@@ -483,7 +486,8 @@ impl TypeChecker {
                     Ty::Void
                 };
                 self.env
-                    .insert(*id, Ty::Function(param_tys, Box::new(ret_ty)));
+                    .insert(*id, Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())));
+                self.global_functions.insert(name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
             }
         }
 
@@ -1187,6 +1191,8 @@ impl TypeChecker {
                 }
                 if let Some(ty) = self.env.get(id).cloned() {
                     Ok(ty)
+                } else if let Some(ty) = self.global_functions.get(name).cloned() {
+                    Ok(ty)
                 } else if let Some(&(hir_id, kind)) = self.named_types.get(name) {
                     if kind == 2 {
                         Ok(Ty::Enum(hir_id))
@@ -1215,10 +1221,9 @@ impl TypeChecker {
                         Err(format!("Cannot infer type for generic template '{}'", name))
                     }
                 } else {
-                    Err(format!(
-                        "Cannot infer type for unbound variable at {:?}",
-                        span
-                    ))
+                    let err_msg = format!("Cannot find value '{}' in this scope", name);
+                    self.reporter.report(Diagnostic::error(&err_msg).with_span(*span));
+                    Err(err_msg)
                 }
             }
             Expr::Binary {

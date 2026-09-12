@@ -49,6 +49,7 @@ impl<'a> Parser<'a> {
         let end_span = declarations
             .last()
             .map(|d| match d {
+                Decl::Import { span, .. } => *span,
                 Decl::Let { span, .. } => *span,
                 Decl::Var { span, .. } => *span,
                 Decl::Const { span, .. } => *span,
@@ -68,7 +69,48 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_decl(&mut self) -> Result<Decl, Diagnostic> {
-        if self.check(&TokenKind::Let) {
+        if self.check(&TokenKind::Import) {
+            let start_tok = self.expect(TokenKind::Import)?;
+            let mut path = Vec::new();
+            
+            loop {
+                match &self.current {
+                    Some(Token { kind: TokenKind::Ident(name), span }) => {
+                        path.push(Ident { name: name.to_string(), span: *span });
+                        self.advance();
+                    },
+                    _ => return Err(Diagnostic::error("Expected identifier in import path").with_span(self.current_span())),
+                }
+                
+                if self.check(&TokenKind::Dot) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+
+            let alias = if self.check(&TokenKind::As) {
+                self.advance();
+                match &self.current {
+                    Some(Token { kind: TokenKind::Ident(name), span }) => {
+                        let ident = Ident { name: name.to_string(), span: *span };
+                        self.advance();
+                        Some(ident)
+                    },
+                    _ => return Err(Diagnostic::error("Expected identifier after 'as'").with_span(self.current_span())),
+                }
+            } else {
+                None
+            };
+            
+            let end_span = alias.as_ref().map(|a| a.span).unwrap_or_else(|| path.last().unwrap().span);
+
+            Ok(Decl::Import {
+                path,
+                alias,
+                span: start_tok.span.merge(end_span),
+            })
+        } else if self.check(&TokenKind::Let) {
             let start_tok = self.expect(TokenKind::Let)?;
 
             let name_tok = match &self.current {

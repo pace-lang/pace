@@ -1,0 +1,5 @@
+import demo_lib
+
+fn main() {
+    gree()
+}

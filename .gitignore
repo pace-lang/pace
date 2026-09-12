@@ -28,7 +28,6 @@ editors/vscode/out/
 
 # Local examples and test projects
 # Local examples and test projects
-examples/
 build/
 test_output_dir/
 benchmarks/

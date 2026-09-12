@@ -20,6 +20,11 @@ pub struct GenericParam {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
+    Import {
+        path: Vec<Ident>,
+        alias: Option<Ident>,
+        span: Span,
+    },
     Let {
         name: Ident,
         ty: Option<Type>,
@@ -232,6 +237,7 @@ impl Expr {
 impl Decl {
     pub fn span(&self) -> Span {
         match self {
+            Decl::Import { span, .. } => *span,
             Decl::Let { span, .. } => *span,
             Decl::Var { span, .. } => *span,
             Decl::Const { span, .. } => *span,

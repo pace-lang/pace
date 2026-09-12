@@ -98,6 +98,7 @@ impl LoweringContext {
 
     fn lower_decl(&mut self, decl: ast::Decl) -> Result<Option<Decl>, String> {
         match decl {
+            ast::Decl::Import { .. } => Ok(None),
             ast::Decl::Let {
                 name,
                 ty,

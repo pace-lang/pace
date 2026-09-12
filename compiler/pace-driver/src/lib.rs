@@ -9,6 +9,90 @@ use pace_mir::MirBuilder;
 use pace_parser::Parser;
 use pace_ty::TypeChecker;
 
+use std::collections::HashSet;
+use std::path::PathBuf;
+
+fn parse_file_and_imports(
+    file_path: &Path,
+    visited: &mut HashSet<PathBuf>,
+    declarations: &mut Vec<pace_ast::Decl>,
+    lockfile: Option<&pace_pkg::resolve::PaceLock>,
+    cache: &pace_pkg::cache::CacheManager,
+) -> Result<(), String> {
+    let canonical = file_path.canonicalize().unwrap_or_else(|_| file_path.to_path_buf());
+    if !visited.insert(canonical.clone()) {
+        return Ok(());
+    }
+
+    let source = fs::read_to_string(file_path).map_err(|e| format!("Failed to read {}: {}", file_path.display(), e))?;
+    let lexer = Lexer::new(&source);
+    let mut parser = Parser::new(lexer);
+    
+    let ast = parser.parse_program().map_err(|diag| {
+        let mut reporter = pace_errors::Reporter::new();
+        reporter.report(diag);
+        reporter.emit_all(&source, file_path.to_str().unwrap());
+        format!("Compilation failed due to syntax errors in {}", file_path.display())
+    })?;
+
+    for decl in ast.declarations {
+        if let pace_ast::Decl::Import { path, .. } = &decl {
+            let first_ident = &path[0].name;
+            
+            // Try to resolve logically
+            let mut import_path = file_path.parent().unwrap().to_path_buf();
+            for (i, ident) in path.iter().enumerate() {
+                if i == path.len() - 1 {
+                    import_path.push(format!("{}.pace", ident.name));
+                } else {
+                    import_path.push(&ident.name);
+                }
+            }
+
+            if !import_path.exists() {
+                if let Some(lock) = lockfile {
+                    let pkg_entry = lock.packages.get(first_ident)
+                        .map(|pkg| (first_ident.clone(), pkg));
+
+                    if let Some((actual_name, pkg)) = pkg_entry {
+                        let mut pkg_path = cache.get_package_path(&actual_name, &pkg.version);
+                        if let Some(source) = &pkg.source {
+                            if source.starts_with("local+") {
+                                let local_path = source.strip_prefix("local+").unwrap();
+                                if let Some(manifest) = pace_pkg::find_manifest(file_path) {
+                                    pkg_path = manifest.parent().unwrap().join(local_path);
+                                }
+                            }
+                        }
+                        let mut resolved_path = pkg_path.join("src");
+                        for (i, ident) in path.iter().skip(1).enumerate() {
+                            if i == path.len() - 2 {
+                                resolved_path.push(format!("{}.pace", ident.name));
+                            } else {
+                                resolved_path.push(&ident.name);
+                            }
+                        }
+                        if path.len() == 1 {
+                            resolved_path.push("lib.pace");
+                        }
+                        import_path = resolved_path;
+                    }
+                }
+            }
+            
+            if !import_path.exists() {
+                return Err(format!("Could not resolve import {:?} (tried {})", path.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join("."), import_path.display()));
+            }
+
+            parse_file_and_imports(&import_path, visited, declarations, lockfile, cache)?;
+        } else {
+            declarations.push(decl);
+        }
+    }
+    
+    Ok(())
+}
+
 pub fn compile_file(
     file_path: &Path,
     output_dir: &Path,
@@ -20,20 +104,18 @@ pub fn compile_file(
         return Err(format!("File not found: {}", file_path.display()));
     }
 
-    let source =
-        fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let cache = pace_pkg::cache::CacheManager::new();
+    let lockfile_path = pace_pkg::find_manifest(file_path).map(|m| m.parent().unwrap().join("pace.lock"));
+    let lockfile = lockfile_path.and_then(|p| pace_pkg::resolve::DependencyResolver::read_lockfile(&p).ok());
 
-    // 1. Lex & Parse
-    let lexer = Lexer::new(&source);
-    let mut parser = Parser::new(lexer);
-    let ast = match parser.parse_program() {
-        Ok(ast) => ast,
-        Err(diag) => {
-            let mut reporter = pace_errors::Reporter::new();
-            reporter.report(diag);
-            reporter.emit_all(&source, file_path.to_str().unwrap());
-            return Err("Compilation failed due to syntax errors.".to_string());
-        }
+    let mut visited = HashSet::new();
+    let mut declarations = Vec::new();
+
+    parse_file_and_imports(file_path, &mut visited, &mut declarations, lockfile.as_ref(), &cache)?;
+
+    let ast = pace_ast::Program {
+        declarations,
+        span: pace_span::Span::DUMMY, // We could merge spans, but DUMMY is fine for the program root
     };
 
     // 2. Lower to HIR
@@ -42,11 +124,14 @@ pub fn compile_file(
 
     // 3. Typecheck
     let mut tc = TypeChecker::new();
+    let source = fs::read_to_string(file_path).unwrap_or_default();
     hir.resolve_traits(&mut tc.reporter);
     if let Err(e) = tc.check_program(&hir) {
-        let mut reporter = pace_errors::Reporter::new();
-        reporter.report(pace_errors::Diagnostic::error(e));
-        reporter.emit_all(&source, file_path.to_str().unwrap());
+        if !tc.reporter.has_errors() {
+            let mut reporter = pace_errors::Reporter::new();
+            reporter.report(pace_errors::Diagnostic::error(e));
+            reporter.emit_all(&source, file_path.to_str().unwrap());
+        }
         tc.reporter.emit_all(&source, file_path.to_str().unwrap());
         return Err("Compilation failed due to type errors.".to_string());
     }
