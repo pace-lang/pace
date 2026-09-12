@@ -1,6 +1,6 @@
 use crate::token::TokenKind;
 use logos::Logos;
-use pace_span::Span;
+use pace_span::{Span, FileId};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token<'a> {
@@ -11,12 +11,14 @@ pub struct Token<'a> {
 #[derive(Clone)]
 pub struct Lexer<'a> {
     inner: logos::Lexer<'a, TokenKind<'a>>,
+    file_id: FileId,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a str, file_id: FileId) -> Self {
         Self {
             inner: TokenKind::lexer(source),
+            file_id,
         }
     }
 }
@@ -26,7 +28,7 @@ impl<'a> Iterator for Lexer<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let kind = self.inner.next()?;
-        let span = Span::from(self.inner.span());
+        let span = Span::from((self.file_id, self.inner.span()));
 
         match kind {
             Ok(k) => Some(Ok(Token { kind: k, span })),

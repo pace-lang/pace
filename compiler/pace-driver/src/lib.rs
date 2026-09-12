@@ -18,6 +18,7 @@ fn parse_file_and_imports(
     declarations: &mut Vec<pace_ast::Decl>,
     lockfile: Option<&pace_pkg::resolve::PaceLock>,
     cache: &pace_pkg::cache::CacheManager,
+    source_map: &mut pace_span::SourceMap,
 ) -> Result<(), String> {
     let canonical = file_path.canonicalize().unwrap_or_else(|_| file_path.to_path_buf());
     if !visited.insert(canonical.clone()) {
@@ -25,13 +26,14 @@ fn parse_file_and_imports(
     }
 
     let source = fs::read_to_string(file_path).map_err(|e| format!("Failed to read {}: {}", file_path.display(), e))?;
-    let lexer = Lexer::new(&source);
+    let file_id = source_map.add_file(file_path.display().to_string(), source.clone());
+    let lexer = Lexer::new(&source, file_id);
     let mut parser = Parser::new(lexer);
     
     let ast = parser.parse_program().map_err(|diag| {
         let mut reporter = pace_errors::Reporter::new();
         reporter.report(diag);
-        reporter.emit_all(&source, file_path.to_str().unwrap());
+        reporter.emit_all(source_map);
         format!("Compilation failed due to syntax errors in {}", file_path.display())
     })?;
 
@@ -84,7 +86,7 @@ fn parse_file_and_imports(
                 return Err(format!("Could not resolve import {:?} (tried {})", path.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join("."), import_path.display()));
             }
 
-            parse_file_and_imports(&import_path, visited, declarations, lockfile, cache)?;
+            parse_file_and_imports(&import_path, visited, declarations, lockfile, cache, source_map)?;
         } else {
             declarations.push(decl);
         }
@@ -110,8 +112,9 @@ pub fn compile_file(
 
     let mut visited = HashSet::new();
     let mut declarations = Vec::new();
+    let mut source_map = pace_span::SourceMap::new();
 
-    parse_file_and_imports(file_path, &mut visited, &mut declarations, lockfile.as_ref(), &cache)?;
+    parse_file_and_imports(file_path, &mut visited, &mut declarations, lockfile.as_ref(), &cache, &mut source_map)?;
 
     let ast = pace_ast::Program {
         declarations,
@@ -124,19 +127,18 @@ pub fn compile_file(
 
     // 3. Typecheck
     let mut tc = TypeChecker::new();
-    let source = fs::read_to_string(file_path).unwrap_or_default();
     hir.resolve_traits(&mut tc.reporter);
     if let Err(e) = tc.check_program(&hir) {
         if !tc.reporter.has_errors() {
             let mut reporter = pace_errors::Reporter::new();
             reporter.report(pace_errors::Diagnostic::error(e));
-            reporter.emit_all(&source, file_path.to_str().unwrap());
+            reporter.emit_all(&source_map);
         }
-        tc.reporter.emit_all(&source, file_path.to_str().unwrap());
+        tc.reporter.emit_all(&source_map);
         return Err("Compilation failed due to type errors.".to_string());
     }
 
-    tc.reporter.emit_all(&source, file_path.to_str().unwrap());
+    tc.reporter.emit_all(&source_map);
     if tc.reporter.has_errors() {
         return Err("Compilation failed due to type errors.".to_string());
     }

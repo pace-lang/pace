@@ -448,7 +448,7 @@ impl TypeChecker {
                 if hierarchy.contains(&c_id) {
                     self.reporter.report(
                         pace_errors::Diagnostic::error("Circular inheritance detected")
-                            .with_span(pace_span::Span::new(0, 0)),
+                            .with_span(pace_span::Span::new(pace_span::FileId::DUMMY, 0, 0)),
                     );
                     return Err("Circular inheritance detected".to_string());
                 }
@@ -1000,8 +1000,9 @@ impl TypeChecker {
                     if !is_compiler_generated {
                         let offset = if *is_static { 10 } else { 3 };
                         let name_span = pace_span::Span::new(
-                            span.start + offset,
-                            span.start + offset + name.len(),
+                            span.file_id,
+                            span.start + offset as u32,
+                            span.start + (offset + name.len()) as u32,
                         );
                         self.reporter.report(
                             Diagnostic::warning(format!(
@@ -1016,7 +1017,7 @@ impl TypeChecker {
                 }
                 let offset = if *is_static { 10 } else { 3 };
                 let name_span =
-                    pace_span::Span::new(span.start + offset, span.start + offset + name.len());
+                    pace_span::Span::new(span.file_id, span.start + offset as u32, span.start + (offset + name.len()) as u32);
                 self.declared_bindings.push((*id, name.clone(), name_span));
                 self.initialized_bindings.insert(*id);
 
@@ -1315,9 +1316,9 @@ impl TypeChecker {
                 if let Ty::Optional(inner) = obj_ty {
                     // Temporarily mock a normal MemberAccess to reuse logic
                     let mock_expr = Expr::MemberAccess {
-                        object: Box::new(Expr::IntLiteral("0".to_string(), pace_span::Span::new(0, 0))), // dummy
-                        member: member.clone(),
-                        span: pace_span::Span::new(0, 0),
+                        object: Box::new(Expr::IntLiteral("0".to_string(), pace_span::Span::new(pace_span::FileId::DUMMY, 0, 0))), // dummy
+                        member: "get".to_string(),
+                        span: pace_span::Span::new(pace_span::FileId::DUMMY, 0, 0),
                     };
                     // Hack: directly test the unwrapped type
                     // In a real compiler we'd extract member check logic into a helper
