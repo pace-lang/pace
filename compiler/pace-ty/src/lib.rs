@@ -14,7 +14,7 @@ mod tests {
     #[test]
     fn test_typechecker_success() {
         let source = "let x = 42 let y = x + 1";
-        let lexer = Lexer::new(source);
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
         let mut parser = Parser::new(lexer);
         let ast = parser.parse_program().unwrap();
 
@@ -28,7 +28,7 @@ mod tests {
     #[test]
     fn test_typechecker_failure() {
         let source = "let x = \"hello\" let y = x + 1";
-        let lexer = Lexer::new(source);
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
         let mut parser = Parser::new(lexer);
         let ast = parser.parse_program().unwrap();
 

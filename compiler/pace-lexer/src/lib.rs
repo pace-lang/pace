@@ -11,7 +11,7 @@ mod tests {
     #[test]
     fn test_keywords_and_identifiers() {
         let source = "let user_name = class";
-        let mut lexer = Lexer::new(source);
+        let mut lexer = Lexer::new(source, pace_span::FileId::DUMMY);
 
         assert_eq!(lexer.next().unwrap().unwrap().kind, TokenKind::Let);
         assert_eq!(
@@ -26,7 +26,7 @@ mod tests {
     #[test]
     fn test_literals() {
         let source = r#"42 3.14 "hello pace""#;
-        let mut lexer = Lexer::new(source);
+        let mut lexer = Lexer::new(source, pace_span::FileId::DUMMY);
 
         assert_eq!(lexer.next().unwrap().unwrap().kind, TokenKind::Int("42"));
         assert_eq!(
@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn test_operators() {
         let source = "?? ?. == => ->";
-        let mut lexer = Lexer::new(source);
+        let mut lexer = Lexer::new(source, pace_span::FileId::DUMMY);
 
         assert_eq!(lexer.next().unwrap().unwrap().kind, TokenKind::NullCoalesce);
         assert_eq!(lexer.next().unwrap().unwrap().kind, TokenKind::OptChain);

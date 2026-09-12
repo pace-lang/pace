@@ -1,74 +1,12 @@
-use pace_ast::{
-    Block, Decl, EnumVariant, Expr, GenericParam, Ident, MatchArm, Pattern, Program, Stmt, Type,
-};
+use pace_ast::{Decl, EnumVariant, Expr, GenericParam, Ident, Type};
 use pace_errors::Diagnostic;
-use pace_lexer::{Lexer, Token, TokenKind};
+use pace_lexer::{Token, TokenKind};
 use pace_span::Span;
 
-pub struct Parser<'a> {
-    lexer: Lexer<'a>,
-    current: Option<Token<'a>>,
-}
+use super::Parser;
 
 impl<'a> Parser<'a> {
-    pub fn new(mut lexer: Lexer<'a>) -> Self {
-        let current = lexer.next().and_then(|r| r.ok());
-        Self { lexer, current }
-    }
-
-    fn current_span(&self) -> Span {
-        self.current.as_ref().map(|t| t.span).unwrap_or(Span::DUMMY)
-    }
-
-    fn advance(&mut self) {
-        self.current = self.lexer.next().and_then(|r| r.ok());
-    }
-
-    fn check(&self, kind: &TokenKind) -> bool {
-        self.current.as_ref().map_or(false, |t| &t.kind == kind)
-    }
-
-    fn expect(&mut self, kind: TokenKind<'a>) -> Result<Token<'a>, Diagnostic> {
-        if self.check(&kind) {
-            let tok = self.current.clone().unwrap();
-            self.advance();
-            Ok(tok)
-        } else {
-            Err(Diagnostic::error(format!("Expected {:?}", kind)).with_span(self.current_span()))
-        }
-    }
-
-    pub fn parse_program(&mut self) -> Result<Program, Diagnostic> {
-        let mut declarations = Vec::new();
-        let start_span = self.current.as_ref().map(|t| t.span).unwrap_or(Span::DUMMY);
-
-        while self.current.is_some() {
-            declarations.push(self.parse_decl()?);
-        }
-
-        let end_span = declarations
-            .last()
-            .map(|d| match d {
-                Decl::Import { span, .. } => *span,
-                Decl::Let { span, .. } => *span,
-                Decl::Var { span, .. } => *span,
-                Decl::Const { span, .. } => *span,
-                Decl::Function { span, .. } => *span,
-                Decl::Struct { span, .. } => *span,
-                Decl::Class { span, .. } => *span,
-                Decl::Trait { span, .. } => *span,
-                Decl::Enum { span, .. } => *span,
-                Decl::Expr(_, span) => *span,
-            })
-            .unwrap_or(start_span);
-
-        Ok(Program {
-            declarations,
-            span: start_span.merge(end_span),
-        })
-    }
-
-    fn parse_decl(&mut self) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_decl(&mut self) -> Result<Decl, Diagnostic> {
         if self.check(&TokenKind::Import) {
             let start_tok = self.expect(TokenKind::Import)?;
             let mut path = Vec::new();
@@ -266,7 +204,7 @@ impl<'a> Parser<'a> {
             Ok(Decl::Expr(expr, span))
         }
     }
-    fn parse_generic_params(&mut self) -> Result<Option<Vec<GenericParam>>, Diagnostic> {
+    pub(crate) fn parse_generic_params(&mut self) -> Result<Option<Vec<GenericParam>>, Diagnostic> {
         if self.check(&TokenKind::Lt) {
             self.advance();
             let mut params = Vec::new();
@@ -309,7 +247,7 @@ impl<'a> Parser<'a> {
     }
 
     #[allow(dead_code)]
-    fn parse_generic_args(&mut self) -> Result<Option<Vec<Type>>, Diagnostic> {
+    pub(crate) fn parse_generic_args(&mut self) -> Result<Option<Vec<Type>>, Diagnostic> {
         if self.check(&TokenKind::Lt) {
             self.advance();
             let mut args = Vec::new();
@@ -326,7 +264,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_with_clause(&mut self) -> Result<Vec<Ident>, Diagnostic> {
+    pub(crate) fn parse_with_clause(&mut self) -> Result<Vec<Ident>, Diagnostic> {
         let mut traits = Vec::new();
         if self.check(&TokenKind::With) {
             self.advance();
@@ -355,7 +293,7 @@ impl<'a> Parser<'a> {
         Ok(traits)
     }
 
-    fn parse_struct_decl(&mut self) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_struct_decl(&mut self) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Struct)?;
 
         let name_tok = match &self.current {
@@ -572,7 +510,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_trait_decl(&mut self) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_trait_decl(&mut self) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Trait)?;
 
         let name_tok = match &self.current {
@@ -617,7 +555,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_class_decl(&mut self) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_class_decl(&mut self) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Class)?;
 
         let name_tok = match &self.current {
@@ -871,7 +809,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_enum_decl(&mut self) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_enum_decl(&mut self) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Enum)?;
 
         let name_tok = match &self.current {
@@ -971,7 +909,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_fn_decl(&mut self) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_fn_decl(&mut self) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Fn)?;
 
         let name_tok = match &self.current {
@@ -1051,485 +989,4 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_type(&mut self) -> Result<Type, Diagnostic> {
-        let (ident_name, ident_span) = match &self.current {
-            Some(Token {
-                kind: TokenKind::Ident(name),
-                span,
-            }) => (name.to_string(), *span),
-            _ => return Err(Diagnostic::error("Expected type name").with_span(self.current_span())),
-        };
-
-        self.advance();
-        let ident = Ident {
-            name: ident_name,
-            span: ident_span,
-        };
-
-        let mut base_type = if self.check(&TokenKind::Lt) {
-            let mut args = Vec::new();
-            self.advance();
-            let mut end_span = ident_span;
-            while !self.check(&TokenKind::Gt) && self.current.is_some() {
-                args.push(self.parse_type()?);
-                if self.check(&TokenKind::Comma) {
-                    self.advance();
-                }
-            }
-            if let Some(tok) = &self.current {
-                end_span = tok.span;
-            }
-            self.expect(TokenKind::Gt)?;
-            Type::Generic(
-                Box::new(Type::Named(ident)),
-                args,
-                ident_span.merge(end_span),
-            )
-        } else {
-            Type::Named(ident)
-        };
-
-        if self.check(&TokenKind::Question) {
-            let span = base_type.span().merge(self.current.as_ref().unwrap().span);
-            self.advance();
-            base_type = Type::Optional(Box::new(base_type), span);
-        }
-
-        Ok(base_type)
-    }
-
-    fn parse_block(&mut self) -> Result<Block, Diagnostic> {
-        let start_tok = self.expect(TokenKind::LBrace).map_err(|_| {
-            Diagnostic::error(format!("Expected LBrace (found {:?})", self.current))
-                .with_span(self.current_span())
-        })?;
-        let mut statements = Vec::new();
-
-        while !self.check(&TokenKind::RBrace) && self.current.is_some() {
-            statements.push(self.parse_stmt()?);
-        }
-
-        let end_tok = self.expect(TokenKind::RBrace)?;
-
-        Ok(Block {
-            statements,
-            span: start_tok.span.merge(end_tok.span),
-        })
-    }
-
-    fn parse_stmt(&mut self) -> Result<Stmt, Diagnostic> {
-        if self.check(&TokenKind::Let) {
-            let start_tok = self.expect(TokenKind::Let)?;
-            let name_tok = self.current.take().ok_or_else(|| {
-                Diagnostic::error("Expected identifier after 'let'").with_span(self.current_span())
-            })?;
-            let name = match name_tok.kind {
-                TokenKind::Ident(n) => Ident {
-                    name: n.to_string(),
-                    span: name_tok.span,
-                },
-                _ => {
-                    return Err(Diagnostic::error("Expected identifier after 'let'")
-                        .with_span(self.current_span()));
-                }
-            };
-            self.advance();
-            let ty = if self.check(&TokenKind::Colon) {
-                self.advance();
-                Some(self.parse_type()?)
-            } else {
-                None
-            };
-
-            let mut value = None;
-            let span_end = if self.check(&TokenKind::Eq) {
-                self.advance();
-                let expr = self.parse_expr()?;
-                let end = expr.span();
-                value = Some(expr);
-                end
-            } else {
-                if ty.is_none() {
-                    return Err(Diagnostic::error(
-                        "Type annotation is required when an initializer is omitted",
-                    )
-                    .with_span(self.current_span()));
-                }
-                start_tok.span
-            };
-
-            let span = start_tok.span.merge(span_end);
-            Ok(Stmt::Let {
-                name,
-                ty,
-                value,
-                span,
-            })
-        } else if self.check(&TokenKind::Var) {
-            let start_tok = self.expect(TokenKind::Var)?;
-            let name_tok = self.current.take().ok_or_else(|| {
-                Diagnostic::error("Expected identifier after 'var'").with_span(self.current_span())
-            })?;
-            let name = match name_tok.kind {
-                TokenKind::Ident(n) => Ident {
-                    name: n.to_string(),
-                    span: name_tok.span,
-                },
-                _ => {
-                    return Err(Diagnostic::error("Expected identifier after 'var'")
-                        .with_span(self.current_span()));
-                }
-            };
-            self.advance();
-            let ty = if self.check(&TokenKind::Colon) {
-                self.advance();
-                Some(self.parse_type()?)
-            } else {
-                None
-            };
-
-            let mut value = None;
-            let span_end = if self.check(&TokenKind::Eq) {
-                self.advance();
-                let expr = self.parse_expr()?;
-                let end = expr.span();
-                value = Some(expr);
-                end
-            } else {
-                if ty.is_none() {
-                    return Err(Diagnostic::error(
-                        "Type annotation is required when an initializer is omitted",
-                    )
-                    .with_span(self.current_span()));
-                }
-                start_tok.span
-            };
-
-            let span = start_tok.span.merge(span_end);
-            Ok(Stmt::Var {
-                name,
-                ty,
-                value,
-                span,
-            })
-        } else if self.check(&TokenKind::Return) {
-            let start_tok = self.expect(TokenKind::Return)?;
-
-            let mut expr = None;
-            let mut end_span = start_tok.span;
-
-            if !self.check(&TokenKind::RBrace) {
-                let e = self.parse_expr()?;
-                end_span = end_span.merge(e.span());
-                expr = Some(e);
-            }
-
-            Ok(Stmt::Return(expr, start_tok.span.merge(end_span)))
-        } else {
-            let expr = self.parse_expr()?;
-            let span = expr.span();
-            Ok(Stmt::ExprStmt(expr, span))
-        }
-    }
-
-    fn parse_postfix_expr(&mut self) -> Result<Expr, Diagnostic> {
-        let mut left = self.parse_primary()?;
-
-        loop {
-            if self.check(&TokenKind::Dot) || self.check(&TokenKind::OptChain) {
-                let is_opt = self.check(&TokenKind::OptChain);
-                self.advance();
-                let member_name = match &self.current {
-                    Some(Token {
-                        kind: TokenKind::Ident(name),
-                        span,
-                    }) => {
-                        let ident = Ident {
-                            name: name.to_string(),
-                            span: *span,
-                        };
-                        self.advance();
-                        ident
-                    }
-                    _ => {
-                        return Err(Diagnostic::error("Expected member name after '.' or '?.'")
-                            .with_span(self.current_span()));
-                    }
-                };
-
-                let span = left.span().merge(member_name.span);
-                if is_opt {
-                    left = Expr::OptionalMemberAccess {
-                        span,
-                        object: Box::new(left),
-                        member: member_name,
-                    };
-                } else {
-                    left = Expr::MemberAccess {
-                        span,
-                        object: Box::new(left),
-                        member: member_name,
-                    };
-                }
-            } else if self.check(&TokenKind::LParen) {
-                self.advance();
-                let mut args = Vec::new();
-                if !self.check(&TokenKind::RParen) {
-                    loop {
-                        // Check for named argument: `ident:`
-                        let mut label = None;
-
-                        let mut parsed_expr = self.parse_expr()?;
-
-                        if let Expr::Ident(ref ident, _) = parsed_expr {
-                            if self.check(&TokenKind::Colon) {
-                                self.advance(); // consume `:`
-                                label = Some(ident.clone());
-                                parsed_expr = self.parse_expr()?;
-                            }
-                        }
-                        args.push((label, parsed_expr));
-                        if self.check(&TokenKind::Comma) {
-                            self.advance();
-                        } else {
-                            break;
-                        }
-                    }
-                }
-                let rparen = self.expect(TokenKind::RParen)?;
-                left = Expr::Call {
-                    span: left.span().merge(rparen.span),
-                    callee: Box::new(left),
-                    args,
-                };
-            } else {
-                break;
-            }
-        }
-        Ok(left)
-    }
-
-    fn parse_expr(&mut self) -> Result<Expr, Diagnostic> {
-        let mut left = self.parse_postfix_expr()?;
-
-        if self.check(&TokenKind::Eq) {
-            self.advance();
-            let right = self.parse_expr()?;
-            let span = left.span().merge(right.span());
-            return Ok(Expr::Assign {
-                target: Box::new(left),
-                value: Box::new(right),
-                span,
-            });
-        }
-
-        loop {
-            let op = if self.check(&TokenKind::Plus) {
-                Some(pace_ast::BinaryOp::Add)
-            } else if self.check(&TokenKind::Minus) {
-                Some(pace_ast::BinaryOp::Sub)
-            } else if self.check(&TokenKind::Star) {
-                Some(pace_ast::BinaryOp::Mul)
-            } else if self.check(&TokenKind::Slash) {
-                Some(pace_ast::BinaryOp::Div)
-            } else if self.check(&TokenKind::EqEq) {
-                Some(pace_ast::BinaryOp::EqEq)
-            } else if self.check(&TokenKind::NotEq) {
-                Some(pace_ast::BinaryOp::NotEq)
-            } else if self.check(&TokenKind::Gt) {
-                Some(pace_ast::BinaryOp::Gt)
-            } else if self.check(&TokenKind::Lt) {
-                Some(pace_ast::BinaryOp::Lt)
-            } else if self.check(&TokenKind::GtEq) {
-                Some(pace_ast::BinaryOp::GtEq)
-            } else if self.check(&TokenKind::LtEq) {
-                Some(pace_ast::BinaryOp::LtEq)
-            } else if self.check(&TokenKind::AndAnd) {
-                Some(pace_ast::BinaryOp::And)
-            } else if self.check(&TokenKind::OrOr) {
-                Some(pace_ast::BinaryOp::Or)
-            } else if self.check(&TokenKind::NullCoalesce) {
-                Some(pace_ast::BinaryOp::NullCoalesce)
-            } else {
-                None
-            };
-
-            if let Some(op) = op {
-                self.advance();
-                let right = self.parse_postfix_expr()?;
-                left = Expr::Binary {
-                    span: left.span().merge(right.span()),
-                    left: Box::new(left),
-                    op,
-                    right: Box::new(right),
-                };
-            } else {
-                break;
-            }
-        }
-
-        Ok(left)
-    }
-
-    fn try_parse_generic_args_expr(&mut self) -> Option<Vec<Type>> {
-        let saved_lexer = self.lexer.clone();
-        let saved_current = self.current.clone();
-        match self.parse_generic_args() {
-            Ok(Some(args)) => Some(args),
-            _ => {
-                self.lexer = saved_lexer;
-                self.current = saved_current;
-                None
-            }
-        }
-    }
-
-    fn parse_primary(&mut self) -> Result<Expr, Diagnostic> {
-        if self.check(&TokenKind::If) {
-            let start_tok = self.expect(TokenKind::If)?;
-            let cond = self.parse_expr()?;
-            let then_block = self.parse_block()?;
-            let mut else_block = None;
-            let mut end_span = then_block.span;
-            if self.check(&TokenKind::Else) {
-                self.advance();
-                let b = self.parse_block()?;
-                end_span = b.span;
-                else_block = Some(b);
-            }
-            return Ok(Expr::If {
-                cond: Box::new(cond),
-                then_block,
-                else_block,
-                span: start_tok.span.merge(end_span),
-            });
-        }
-        if self.check(&TokenKind::While) {
-            let start_tok = self.expect(TokenKind::While)?;
-            let cond = self.parse_expr()?;
-            let body = self.parse_block()?;
-            return Ok(Expr::While {
-                cond: Box::new(cond),
-                span: start_tok.span.merge(body.span),
-                body,
-            });
-        }
-        if self.check(&TokenKind::Match) {
-            return self.parse_match_expr();
-        }
-
-        let tok = self.current.take().ok_or_else(|| {
-            Diagnostic::error("Expected expression, found EOF").with_span(self.current_span())
-        })?;
-        self.advance();
-
-        match tok.kind {
-            TokenKind::Int(val) => Ok(Expr::IntLiteral(val.to_string(), tok.span)),
-            TokenKind::Float(val) => Ok(Expr::FloatLiteral(val.to_string(), tok.span)),
-            TokenKind::String(val) => Ok(Expr::StringLiteral(val.to_string(), tok.span)),
-            TokenKind::Ident(name) => {
-                let ident = Ident {
-                    name: name.to_string(),
-                    span: tok.span,
-                };
-                let generic_args = self.try_parse_generic_args_expr();
-                Ok(Expr::Ident(ident, generic_args))
-            }
-            TokenKind::Null => Ok(Expr::Null(tok.span)),
-            TokenKind::Super => Ok(Expr::Super(tok.span)),
-            _ => Err(
-                Diagnostic::error(format!("Unexpected token in expression: {:?}", tok.kind))
-                    .with_span(self.current_span()),
-            ),
-        }
-    }
-
-    fn parse_match_expr(&mut self) -> Result<Expr, Diagnostic> {
-        let start_tok = self.expect(TokenKind::Match)?;
-        let subject = self.parse_expr()?;
-        self.expect(TokenKind::LBrace)?;
-
-        let mut arms = Vec::new();
-        while !self.check(&TokenKind::RBrace) && self.current.is_some() {
-            let pattern = if let Some(Token {
-                kind: TokenKind::Ident(name),
-                span,
-            }) = &self.current
-            {
-                if *name == "_" {
-                    let s = *span;
-                    self.advance();
-                    Pattern::CatchAll(s)
-                } else {
-                    let ident = Ident {
-                        name: name.to_string(),
-                        span: *span,
-                    };
-                    self.advance();
-
-                    if self.check(&TokenKind::LParen) {
-                        self.advance();
-                        let mut fields = Vec::new();
-                        while !self.check(&TokenKind::RParen) && self.current.is_some() {
-                            if let Some(Token {
-                                kind: TokenKind::Ident(n),
-                                span: fspan,
-                            }) = &self.current
-                            {
-                                fields.push(Ident {
-                                    name: n.to_string(),
-                                    span: *fspan,
-                                });
-                                self.advance();
-                                if self.check(&TokenKind::Comma) {
-                                    self.advance();
-                                }
-                            } else {
-                                return Err(Diagnostic::error(
-                                    "Expected identifier in match pattern",
-                                )
-                                .with_span(self.current_span()));
-                            }
-                        }
-                        self.expect(TokenKind::RParen)?;
-                        Pattern::Variant {
-                            name: ident.clone(),
-                            fields: Some(fields),
-                            span: ident.span,
-                        }
-                    } else {
-                        Pattern::Ident(ident)
-                    }
-                }
-            } else {
-                return Err(Diagnostic::error("Expected pattern").with_span(self.current_span()));
-            };
-
-            self.expect(TokenKind::FatArrow)?;
-            let body = self.parse_expr()?;
-
-            if self.check(&TokenKind::Comma) {
-                self.advance();
-            }
-
-            let p_span = match &pattern {
-                Pattern::Ident(id) => id.span,
-                Pattern::Variant { span, .. } => *span,
-                Pattern::CatchAll(s) => *s,
-            };
-
-            arms.push(MatchArm {
-                pattern,
-                span: p_span.merge(body.span()),
-                body,
-            });
-        }
-
-        let end_tok = self.expect(TokenKind::RBrace)?;
-        Ok(Expr::Match {
-            subject: Box::new(subject),
-            arms,
-            span: start_tok.span.merge(end_tok.span),
-        })
-    }
 }

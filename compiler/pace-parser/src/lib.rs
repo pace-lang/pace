@@ -11,7 +11,7 @@ mod tests {
     #[test]
     fn test_parse_let_binding() {
         let source = "let answer = 42";
-        let lexer = Lexer::new(source);
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
         let mut parser = Parser::new(lexer);
 
         let program = parser.parse_program().unwrap();
@@ -32,7 +32,7 @@ mod tests {
     #[test]
     fn test_parse_function() {
         let source = "fn identity(a: int) -> int { return a }";
-        let lexer = Lexer::new(source);
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
         let mut parser = Parser::new(lexer);
 
         let program = parser.parse_program().unwrap();
@@ -70,7 +70,7 @@ mod tests {
     #[test]
     fn test_parse_class() {
         let source = "class User { name: string }";
-        let lexer = Lexer::new(source);
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
         let mut parser = Parser::new(lexer);
 
         let program = parser.parse_program().unwrap();
