@@ -51,6 +51,7 @@ impl<'a> Parser<'a> {
             Decl::Function { span, .. } => *span,
             Decl::Struct { span, .. } => *span,
             Decl::Class { span, .. } => *span,
+            Decl::Trait { span, .. } => *span,
             Decl::Enum { span, .. } => *span,
             Decl::Expr(_, span) => *span,
         }).unwrap_or(start_span);
@@ -175,6 +176,8 @@ impl<'a> Parser<'a> {
             self.parse_struct_decl()
         } else if self.check(&TokenKind::Class) {
             self.parse_class_decl()
+        } else if self.check(&TokenKind::Trait) {
+            self.parse_trait_decl()
         } else if self.check(&TokenKind::Enum) {
             self.parse_enum_decl()
         } else {
@@ -231,6 +234,27 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_with_clause(&mut self) -> Result<Vec<Ident>, Diagnostic> {
+        let mut traits = Vec::new();
+        if self.check(&TokenKind::With) {
+            self.advance();
+            loop {
+                if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
+                    traits.push(Ident { name: name.to_string(), span: *span });
+                    self.advance();
+                } else {
+                    return Err(Diagnostic::error("Expected trait name after 'with'").with_span(self.current_span()));
+                }
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+        Ok(traits)
+    }
+
     fn parse_struct_decl(&mut self) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Struct)?;
         
@@ -244,6 +268,8 @@ impl<'a> Parser<'a> {
         };
 
         let generic_params = self.parse_generic_params()?;
+        
+        let with = self.parse_with_clause()?;
 
         self.expect(TokenKind::LBrace)?;
         let mut fields = Vec::new();
@@ -364,9 +390,44 @@ impl<'a> Parser<'a> {
         Ok(Decl::Struct {
             name: name_tok,
             generic_params,
+            with,
             fields,
             static_fields,
             const_fields,
+            methods,
+            span: start_tok.span.merge(end_tok.span),
+        })
+    }
+
+    fn parse_trait_decl(&mut self) -> Result<Decl, Diagnostic> {
+        let start_tok = self.expect(TokenKind::Trait)?;
+        
+        let name_tok = match &self.current {
+            Some(Token { kind: TokenKind::Ident(name), span }) => {
+                let ident = Ident { name: name.to_string(), span: *span };
+                self.advance();
+                ident
+            }
+            _ => return Err(Diagnostic::error("Expected identifier after 'trait'").with_span(self.current_span())),
+        };
+
+        let generic_params = self.parse_generic_params()?;
+
+        self.expect(TokenKind::LBrace)?;
+        let mut methods = Vec::new();
+
+        while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            if self.check(&TokenKind::Fn) {
+                methods.push(self.parse_fn_decl()?);
+            } else {
+                return Err(Diagnostic::error("Expected method in trait").with_span(self.current_span()));
+            }
+        }
+        let end_tok = self.expect(TokenKind::RBrace)?;
+
+        Ok(Decl::Trait {
+            name: name_tok,
+            generic_params,
             methods,
             span: start_tok.span.merge(end_tok.span),
         })
@@ -385,6 +446,8 @@ impl<'a> Parser<'a> {
         };
 
         let generic_params = self.parse_generic_params()?;
+        
+        let with = self.parse_with_clause()?;
 
         self.expect(TokenKind::LBrace)?;
         let mut fields = Vec::new();
@@ -505,6 +568,7 @@ impl<'a> Parser<'a> {
         Ok(Decl::Class {
             name: name_tok,
             generic_params,
+            with,
             fields,
             static_fields,
             const_fields,

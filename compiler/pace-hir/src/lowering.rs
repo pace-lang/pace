@@ -91,7 +91,7 @@ impl LoweringContext {
                 };
                 Ok(Some(Decl::Var { id, name: name.name, ty, value: lowered_value, span }))
             }
-            ast::Decl::Struct { name, generic_params, fields, static_fields, const_fields, methods, span, .. } => {
+            ast::Decl::Struct { name, generic_params, with, fields, static_fields, const_fields, methods, span, .. } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 let mut lowered_fields = Vec::new();
@@ -138,9 +138,10 @@ impl LoweringContext {
                     }
                 }
                 let hir_generic_params = generic_params.map(|params| params.into_iter().map(|p| (p.name.name, p.default)).collect());
-                Ok(Some(Decl::Struct { id, name: name.name, generic_params: hir_generic_params, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
+                let hir_with = with.into_iter().map(|w| w.name).collect();
+                Ok(Some(Decl::Struct { id, name: name.name, generic_params: hir_generic_params, with: hir_with, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
             }
-            ast::Decl::Class { name, generic_params, fields, static_fields, const_fields, methods, span, .. } => {
+            ast::Decl::Class { name, generic_params, with, fields, static_fields, const_fields, methods, span, .. } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 let mut lowered_fields = Vec::new();
@@ -187,7 +188,40 @@ impl LoweringContext {
                     }
                 }
                 let hir_generic_params = generic_params.map(|params| params.into_iter().map(|p| (p.name.name, p.default)).collect());
-                Ok(Some(Decl::Class { id, name: name.name, generic_params: hir_generic_params, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
+                let hir_with = with.into_iter().map(|w| w.name).collect();
+                Ok(Some(Decl::Class { id, name: name.name, generic_params: hir_generic_params, with: hir_with, fields: lowered_fields, static_fields: lowered_static, const_fields: lowered_const, methods: lowered_methods, span }))
+            }
+            ast::Decl::Trait { name, generic_params, methods, span, .. } => {
+                let id = self.generate_id();
+                self.scope.insert(name.name.clone(), id);
+                
+                let mut lowered_methods = Vec::new();
+                for method in methods {
+                    if let ast::Decl::Function { name: m_name, generic_params: m_generic_params, params, return_type, body, span: m_span, is_static } = method {
+                        let mut new_params = Vec::new();
+                        if !is_static {
+                            new_params.push((
+                                ast::Ident { name: "self".to_string(), span: m_name.span },
+                                ast::Type::Named(name.clone())
+                            ));
+                        }
+                        new_params.extend(params);
+                        let m_decl = ast::Decl::Function {
+                            name: ast::Ident { name: format!("{}_{}", name.name, m_name.name), span: m_name.span },
+                            generic_params: m_generic_params,
+                            params: new_params,
+                            return_type,
+                            body,
+                            span: m_span,
+                            is_static,
+                        };
+                        if let Some(lowered) = self.lower_decl(m_decl)? {
+                            lowered_methods.push(lowered);
+                        }
+                    }
+                }
+                let hir_generic_params = generic_params.map(|params| params.into_iter().map(|p| (p.name.name, p.default)).collect());
+                Ok(Some(Decl::Trait { id, name: name.name, generic_params: hir_generic_params, methods: lowered_methods, span }))
             }
             ast::Decl::Expr(expr, span) => {
                 let lowered = self.lower_expr(expr)?;

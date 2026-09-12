@@ -833,7 +833,8 @@ impl<'a> MirBuilder<'a> {
                         body: fn_body,
                     });
                 }
-                pace_hir::Decl::Enum { .. } => {}
+                pace_hir::Decl::Enum { .. } => {},
+                pace_hir::Decl::Trait { .. } => {},
             }
         }
 

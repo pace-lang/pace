@@ -14,6 +14,7 @@ pub struct TypeChecker {
     pub struct_defs: HashMap<HirId, Vec<(String, Ty)>>,
     pub class_defs: HashMap<HirId, Vec<(String, Ty)>>,
     pub enum_defs: HashMap<HirId, Vec<pace_hir::EnumVariant>>,
+    pub trait_defs: HashMap<String, Decl>,
     pub static_fields_env: HashMap<String, Ty>, // format: "{class_name}_{field_name}"
     pub const_env: HashMap<String, Ty>,
     pub named_types: HashMap<String, (HirId, u8)>, // maps name like "User" to (HirId, 0=struct, 1=class, 2=enum)
@@ -36,6 +37,7 @@ impl TypeChecker {
             struct_defs: HashMap::new(),
             class_defs: HashMap::new(),
             enum_defs: HashMap::new(),
+            trait_defs: HashMap::new(),
             static_fields_env: HashMap::new(),
             const_env: HashMap::new(),
             named_types: HashMap::new(),
@@ -248,6 +250,9 @@ impl TypeChecker {
                             self.methods_env.insert(m_name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
                         }
                     }
+                }
+                Decl::Trait { name, .. } => {
+                    self.trait_defs.insert(name.clone(), decl.clone());
                 }
                 Decl::Enum { id, name, generic_params, variants, .. } => {
                     if generic_params.is_some() {
@@ -661,6 +666,12 @@ impl TypeChecker {
                 
                 self.check_block(body, Some(&ret_ty))?;
                 self.env = outer_env;
+                Ok(())
+            }
+            Decl::Trait { generic_params, .. } => {
+                if generic_params.is_some() { return Ok(()); }
+                // Trait methods are static mixins. They are typechecked
+                // when they are injected into a Class or Struct.
                 Ok(())
             }
         }

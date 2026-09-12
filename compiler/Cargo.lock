@@ -497,6 +497,7 @@ name = "pace-hir"
 version = "0.1.0"
 dependencies = [
  "pace-ast",
+ "pace-errors",
  "pace-span",
 ]
 

@@ -31,10 +31,11 @@ pub fn compile_file(file_path: &Path, output_dir: &Path, output_name: &str, run:
 
     // 2. Lower to HIR
     let mut lowerer = LoweringContext::new();
-    let hir = lowerer.lower_program(ast)?;
+    let mut hir = lowerer.lower_program(ast)?;
 
     // 3. Typecheck
     let mut tc = TypeChecker::new();
+    hir.resolve_traits(&mut tc.reporter);
     if let Err(e) = tc.check_program(&hir) {
         let mut reporter = pace_errors::Reporter::new();
         reporter.report(pace_errors::Diagnostic::error(e));

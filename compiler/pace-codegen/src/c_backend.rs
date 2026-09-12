@@ -144,7 +144,10 @@ impl CGenerator {
         for i in 0..func.body.locals.len() {
             if !func.params.iter().any(|p| p.0 == i as u32) {
                 let ty = &func.body.locals[i];
-                locals.push(format!("    {} _{} = {};", self.emit_c_type(ty), i, self.emit_c_default_val(ty)));
+                let c_type = self.emit_c_type(ty);
+                if c_type != "void" {
+                    locals.push(format!("    {} _{} = {};", c_type, i, self.emit_c_default_val(ty)));
+                }
             }
         }
         self.output.push_str(&locals.join("\n"));
@@ -182,6 +185,10 @@ impl CGenerator {
                     let mut is_void = false;
                     if let Rvalue::BuiltinCall(name, _) = rval {
                         if name == "print" || name == "println" {
+                            is_void = true;
+                        }
+                    } else if let Lvalue::Local(local) = lval {
+                        if self.emit_c_type(&locals[local.0 as usize]) == "void" {
                             is_void = true;
                         }
                     }

@@ -50,6 +50,7 @@ pub enum Decl {
     Struct {
         name: Ident,
         generic_params: Option<Vec<GenericParam>>,
+        with: Vec<Ident>,
         fields: Vec<(Ident, Type, Option<Expr>)>,
         static_fields: Vec<(Ident, Type, Expr)>,
         const_fields: Vec<(Ident, Type, Expr)>,
@@ -59,9 +60,16 @@ pub enum Decl {
     Class {
         name: Ident,
         generic_params: Option<Vec<GenericParam>>,
+        with: Vec<Ident>,
         fields: Vec<(Ident, Type, Option<Expr>)>,
         static_fields: Vec<(Ident, Type, Expr)>,
         const_fields: Vec<(Ident, Type, Expr)>,
+        methods: Vec<Decl>, // Expects Decl::Function
+        span: Span,
+    },
+    Trait {
+        name: Ident,
+        generic_params: Option<Vec<GenericParam>>,
         methods: Vec<Decl>, // Expects Decl::Function
         span: Span,
     },
@@ -226,6 +234,7 @@ impl Decl {
             Decl::Function { span, .. } => *span,
             Decl::Struct { span, .. } => *span,
             Decl::Class { span, .. } => *span,
+            Decl::Trait { span, .. } => *span,
             Decl::Enum { span, .. } => *span,
             Decl::Expr(_, span) => *span,
         }
