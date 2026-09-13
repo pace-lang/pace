@@ -209,10 +209,15 @@ impl<'a> Parser<'a> {
                 let mut chars = inner.char_indices().peekable();
                 let mut current_str = String::new();
 
-                while let Some((_, c)) = chars.next() {
+                while let Some((idx, c)) = chars.next() {
                     if c == '$' {
                         if !current_str.is_empty() {
-                            exprs.push(Expr::StringLiteral(format!("\"{}\"", current_str), tok.span));
+                            let end_idx = tok.span.start as u32 + 1 + idx as u32;
+                            let start_idx = end_idx - current_str.len() as u32;
+                            exprs.push(Expr::StringLiteral(
+                                format!("\"{}\"", current_str),
+                                pace_span::Span::new(tok.span.file_id, start_idx, end_idx),
+                            ));
                             current_str.clear();
                         }
 
@@ -232,7 +237,12 @@ impl<'a> Parser<'a> {
                                 expr_str.push(inner_c);
                             }
 
-                            let sub_lexer = pace_lexer::Lexer::new(&expr_str, pace_span::FileId::DUMMY);
+                            let brace_pos = tok.span.start as usize + 1 + idx + 1;
+                            let sub_lexer = pace_lexer::Lexer::with_offset(
+                                &expr_str,
+                                self.lexer.file_id,
+                                brace_pos + 1, // Skip '{'
+                            );
                             let mut sub_parser = crate::Parser::new(sub_lexer);
                             let (decls, _, _) = sub_parser.parse_program();
                             if !decls.is_empty() {
@@ -252,10 +262,12 @@ impl<'a> Parser<'a> {
                                 }
                             }
                             if !var_str.is_empty() {
+                                let start_pos = tok.span.start as u32 + 1 + idx as u32 + 1;
+                                let end_pos = start_pos + var_str.len() as u32;
                                 exprs.push(Expr::Ident(
                                     Ident {
                                         name: var_str,
-                                        span: tok.span,
+                                        span: pace_span::Span::new(tok.span.file_id, start_pos, end_pos),
                                     },
                                     None,
                                 ));
@@ -269,7 +281,12 @@ impl<'a> Parser<'a> {
                 }
 
                 if !current_str.is_empty() {
-                    exprs.push(Expr::StringLiteral(format!("\"{}\"", current_str), tok.span));
+                            let end_idx = tok.span.end as u32 - 1;
+                            let start_idx = end_idx - current_str.len() as u32;
+                            exprs.push(Expr::StringLiteral(
+                                format!("\"{}\"", current_str),
+                                pace_span::Span::new(tok.span.file_id, start_idx, end_idx),
+                            ));
                 }
 
                 Ok(Expr::InterpolatedString(exprs, tok.span))

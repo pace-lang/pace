@@ -11,7 +11,8 @@ pub struct Token<'a> {
 #[derive(Clone)]
 pub struct Lexer<'a> {
     inner: logos::Lexer<'a, TokenKind<'a>>,
-    file_id: FileId,
+    pub file_id: FileId,
+    pub base_offset: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -19,6 +20,15 @@ impl<'a> Lexer<'a> {
         Self {
             inner: TokenKind::lexer(source),
             file_id,
+            base_offset: 0,
+        }
+    }
+    
+    pub fn with_offset(source: &'a str, file_id: FileId, base_offset: usize) -> Self {
+        Self {
+            inner: TokenKind::lexer(source),
+            file_id,
+            base_offset,
         }
     }
 }
@@ -28,7 +38,10 @@ impl<'a> Iterator for Lexer<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let kind = self.inner.next()?;
-        let span = Span::from((self.file_id, self.inner.span()));
+        let mut span_range = self.inner.span();
+        span_range.start += self.base_offset;
+        span_range.end += self.base_offset;
+        let span = Span::from((self.file_id, span_range));
 
         match kind {
             Ok(k) => Some(Ok(Token { kind: k, span })),
