@@ -4,18 +4,9 @@ class User {
 
 fn testNullSafety() {
     println("--- Testing Null Safety ---")
-    
-    // Pace defaults to non-nullable types and avoids raw nulls natively.
-    // Future implementation will add `?`, `??`, and `?.` syntax for explicit optional types!
-
     let user: User? = null
-    
-    // Test safe navigation
     let _name = user?.name
-    
-    // Test null coalescing
     let safe_name = user?.name ?? "Guest"
-    
     println("Null safety safe name:")
     println(safe_name)
 }

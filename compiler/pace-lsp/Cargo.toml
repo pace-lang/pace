@@ -4,3 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+tokio = { version = "1.0", features = ["full"] }
+tower-lsp = "0.20.0"
+pace-driver = { path = "../pace-driver" }
+pace-fmt = { path = "../pace-fmt" }
+pace-errors = { path = "../pace-errors" }
+pace-span = { path = "../pace-span" }
+pace-ast = { path = "../pace-ast" }
+pace-parser = { path = "../pace-parser" }
+pace-lexer = { path = "../pace-lexer" }

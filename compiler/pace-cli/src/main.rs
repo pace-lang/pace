@@ -1,9 +1,8 @@
 use clap::{Parser as ClapParser, Subcommand};
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-use pace_driver::compile_file;
 
 #[derive(ClapParser)]
 #[command(
@@ -45,6 +44,17 @@ enum Commands {
     Version,
     /// Upgrade the toolchain to the latest version
     Upgrade,
+    /// Format a Pace file or project
+    Fmt {
+        /// The file to format (optional, formats whole project if omitted)
+        file: Option<String>,
+        /// Print the output to stdout instead of writing to files
+        #[arg(long)]
+        stdout: bool,
+    },
+    /// Start the Language Server (Internal use by editors)
+    #[command(hide = true)]
+    Lsp,
 }
 
 fn get_project_info() -> Result<(PathBuf, String), String> {
@@ -58,13 +68,11 @@ fn get_project_info() -> Result<(PathBuf, String), String> {
     Ok((root, toml.package.name))
 }
 
-// compile_file is now in pace_driver
-
 fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> Result<(), String> {
     if let Some(f) = file {
         let p = PathBuf::from(&f);
         let name = p.file_stem().unwrap().to_str().unwrap().to_string();
-        compile_file(&p, Path::new("."), &name, run, check)
+        pace_driver::compile_file(&p, Path::new("."), &name, run, check)
     } else {
         let (root, project_name) = get_project_info()?;
 
@@ -87,20 +95,56 @@ fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> Result<
         };
 
         let build_dir = root.join("build");
-        compile_file(&target_file, &build_dir, &project_name, run, check)
+        pace_driver::compile_file(&target_file, &build_dir, &project_name, run, check)
     }
 }
 
-fn main() {
+fn format_dir_recursively(dir: &Path, write: bool) -> Result<(), String> {
+    if dir.is_dir() {
+        for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            if path.is_dir() {
+                format_dir_recursively(&path, write)?;
+            } else if path.extension().map_or(false, |ext| ext == "pace") {
+                if let Err(e) = pace_driver::format_file(&path, write) {
+                    eprintln!("Error formatting {}: {}", path.display(), e);
+                } else if write {
+                    println!("Formatted {}", path.display());
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn execute_fmt(file: Option<String>, write: bool) -> Result<(), String> {
+    if let Some(f) = file {
+        pace_driver::format_file(Path::new(&f), write)
+    } else {
+        let (root, _) = get_project_info()?;
+        let src_dir = root.join("src");
+        if src_dir.exists() {
+            format_dir_recursively(&src_dir, write)
+        } else {
+            Err("No src/ directory found to format".to_string())
+        }
+    }
+}
+
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Lsp => {
+            pace_lsp::start_server().await;
+        }
         Commands::New { name, lib } => {
             if let Err(e) = pace_pkg::scaffold_project(&name, lib) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
-            println!("Created new package '{}'", name);
         }
         Commands::Build { file } => {
             if let Err(e) = execute_build_or_run(file, false, false) {
@@ -134,6 +178,12 @@ fn main() {
                 println!("Upgrade complete!");
             } else {
                 eprintln!("Upgrade failed.");
+                std::process::exit(1);
+            }
+        }
+        Commands::Fmt { file, stdout } => {
+            if let Err(e) = execute_fmt(file, !stdout) {
+                eprintln!("{}", e);
                 std::process::exit(1);
             }
         }

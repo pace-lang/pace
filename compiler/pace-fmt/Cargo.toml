@@ -1,0 +1,8 @@
+[package]
+name = "pace-fmt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pace-ast = { path = "../pace-ast" }
+pace-span = { path = "../pace-span" }

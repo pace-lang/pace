@@ -1,11 +1,13 @@
 class Animal {
     name: string
+
     fn speak() {
         println("Animal noise")
     }
 }
 
 class Dog extends Animal {
+
     override fn speak() {
         println("Woof")
     }

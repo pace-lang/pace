@@ -12,7 +12,6 @@ fn testOptionResult() {
     println("--- Testing Option & Result ---")
     let some_val = Option<int>.Some(val: 42)
     let _none_val = Option<int>.None
-
     let _res_ok = Result<int, string>.Ok(val: 100)
     let _res_err = Result<int, string>.Err(err: "Error occurred")
     match some_val {

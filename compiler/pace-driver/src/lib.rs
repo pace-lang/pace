@@ -325,3 +325,41 @@ pub fn compile_file(
 
     Ok(())
 }
+
+pub fn format_file(file_path: &Path, write: bool) -> Result<(), String> {
+    if !file_path.exists() {
+        return Err(format!("File not found: {}", file_path.display()));
+    }
+
+    let source = fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read {}: {}", file_path.display(), e))?;
+    
+    let mut source_map = pace_span::SourceMap::new();
+    let file_id = source_map.add_file(file_path.display().to_string(), source.clone());
+    
+    let lexer = Lexer::new(&source, file_id);
+    let mut parser = Parser::new(lexer);
+    
+    let ast = parser.parse_program().map_err(|diag| {
+        let mut reporter = pace_errors::Reporter::new();
+        reporter.report(diag);
+        reporter.emit_all(&source_map);
+        format!("Syntax error in {}", file_path.display())
+    })?;
+
+    let module = pace_ast::Module {
+        name: file_path.file_stem().unwrap().to_string_lossy().to_string(),
+        file_id,
+        declarations: ast,
+    };
+
+    let formatted = pace_fmt::format_module(&module);
+
+    if write {
+        fs::write(file_path, formatted).map_err(|e| format!("Failed to write {}: {}", file_path.display(), e))?;
+    } else {
+        println!("{}", formatted);
+    }
+
+    Ok(())
+}

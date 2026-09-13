@@ -12,5 +12,7 @@ members = [
     "pace-codegen",
     "pace-pkg",
     "pace-lsp",
-    "pace-driver"
-, "pace-cli"]
+    "pace-driver",
+    "pace-fmt",
+    "pace-cli"
+]

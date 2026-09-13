@@ -1,23 +1,21 @@
-import demo_lib
-import operators
-import loops
 import conditionals
-import structs_classes
-import inheritance
+import demo_lib
 import enums_match
 import generics
-import option_result
+import inheritance
+import loops
 import null_safety
+import operators
+import option_result
+import structs_classes
 
 fn main() {
     hello()
     let b = Box<int>(value: 42)
     println(b.get())
-
     println("\n==================================")
     println("PACE FEATURES SHOWCASE")
     println("==================================")
-    
     testOperators()
     testLoops()
     testConditionals()
