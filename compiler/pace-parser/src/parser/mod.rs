@@ -10,12 +10,15 @@ mod stmt;
 pub struct Parser<'a> {
     pub(crate) lexer: Lexer<'a>,
     pub(crate) current: Option<Token<'a>>,
+    pub diagnostics: Vec<Diagnostic>,
+    pub comments: Vec<(Span, String)>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(mut lexer: Lexer<'a>) -> Self {
-        let current = lexer.next().and_then(|r| r.ok());
-        Self { lexer, current }
+        let mut parser = Self { lexer, current: None, diagnostics: Vec::new(), comments: Vec::new() };
+        parser.advance();
+        parser
     }
 
     pub(crate) fn current_span(&self) -> Span {
@@ -23,7 +26,17 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn advance(&mut self) {
-        self.current = self.lexer.next().and_then(|r| r.ok());
+        loop {
+            let next = self.lexer.next().and_then(|r| r.ok());
+            if let Some(tok) = &next {
+                if let TokenKind::Comment(text) = tok.kind {
+                    self.comments.push((tok.span, text.to_string()));
+                    continue;
+                }
+            }
+            self.current = next;
+            break;
+        }
     }
 
     pub(crate) fn check(&self, kind: &TokenKind) -> bool {
@@ -40,12 +53,38 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_program(&mut self) -> Result<Vec<Decl>, Diagnostic> {
+    pub fn parse_program(&mut self) -> (Vec<Decl>, Vec<Diagnostic>, Vec<(Span, String)>) {
         let mut declarations = Vec::new();
         while self.current.is_some() {
-            declarations.push(self.parse_decl()?);
+            match self.parse_decl() {
+                Ok(decl) => declarations.push(decl),
+                Err(diag) => {
+                    self.diagnostics.push(diag);
+                    self.synchronize();
+                }
+            }
         }
-        Ok(declarations)
+        (declarations, self.diagnostics.clone(), self.comments.clone())
+    }
+
+    fn synchronize(&mut self) {
+        self.advance();
+        while self.current.is_some() {
+            if let Some(tok) = &self.current {
+                match tok.kind {
+                    TokenKind::Class
+                    | TokenKind::Struct
+                    | TokenKind::Enum
+                    | TokenKind::Trait
+                    | TokenKind::Fn
+                    | TokenKind::Let
+                    | TokenKind::Const
+                    | TokenKind::Var => return,
+                    _ => {}
+                }
+            }
+            self.advance();
+        }
     }
 
     pub(crate) fn parse_type(&mut self) -> Result<Type, Diagnostic> {

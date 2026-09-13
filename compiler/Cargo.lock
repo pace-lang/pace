@@ -1293,9 +1293,11 @@ dependencies = [
  "pace-driver",
  "pace-errors",
  "pace-fmt",
+ "pace-hir",
  "pace-lexer",
  "pace-parser",
  "pace-span",
+ "pace-ty",
  "tokio",
  "tower-lsp",
 ]

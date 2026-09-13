@@ -14,10 +14,11 @@ mod tests {
         let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
         let mut parser = Parser::new(lexer);
 
-        let program = parser.parse_program().unwrap();
-        assert_eq!(program.declarations.len(), 1);
+        let (declarations, diags, _comments) = parser.parse_program();
+        assert!(diags.is_empty(), "Expected no errors");
+        assert_eq!(declarations.len(), 1);
 
-        match &program.declarations[0] {
+        match &declarations[0] {
             Decl::Let { name, value, .. } => {
                 assert_eq!(name.name, "answer");
                 match value {
@@ -35,10 +36,11 @@ mod tests {
         let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
         let mut parser = Parser::new(lexer);
 
-        let program = parser.parse_program().unwrap();
-        assert_eq!(program.declarations.len(), 1);
+        let (declarations, diags, _comments) = parser.parse_program();
+        assert!(diags.is_empty(), "Expected no errors");
+        assert_eq!(declarations.len(), 1);
 
-        match &program.declarations[0] {
+        match &declarations[0] {
             Decl::Function {
                 name,
                 params,
@@ -73,10 +75,11 @@ mod tests {
         let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
         let mut parser = Parser::new(lexer);
 
-        let program = parser.parse_program().unwrap();
-        assert_eq!(program.declarations.len(), 1);
+        let (declarations, diags, _comments) = parser.parse_program();
+        assert!(diags.is_empty(), "Expected no errors");
+        assert_eq!(declarations.len(), 1);
 
-        match &program.declarations[0] {
+        match &declarations[0] {
             Decl::Class {
                 name,
                 fields,

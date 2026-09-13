@@ -13,3 +13,5 @@ pace-span = { path = "../pace-span" }
 pace-ast = { path = "../pace-ast" }
 pace-parser = { path = "../pace-parser" }
 pace-lexer = { path = "../pace-lexer" }
+pace-hir = { path = "../pace-hir" }
+pace-ty = { path = "../pace-ty" }

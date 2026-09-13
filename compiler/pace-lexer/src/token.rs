@@ -2,8 +2,10 @@ use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(skip r"[ \t\n\f]+")] // Skip whitespace
-#[logos(skip(r"//[^\n]*", allow_greedy = true))] // Skip normal comments
 pub enum TokenKind<'a> {
+    // Comments
+    #[regex(r"//[^\n]*", |lex| lex.slice(), allow_greedy = true)]
+    Comment(&'a str),
     // Declarations
     #[token("let")]
     Let,

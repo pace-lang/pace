@@ -107,10 +107,13 @@ fn format_dir_recursively(dir: &Path, write: bool) -> Result<(), String> {
             if path.is_dir() {
                 format_dir_recursively(&path, write)?;
             } else if path.extension().map_or(false, |ext| ext == "pace") {
-                if let Err(e) = pace_driver::format_file(&path, write) {
-                    eprintln!("Error formatting {}: {}", path.display(), e);
-                } else if write {
-                    println!("Formatted {}", path.display());
+                match pace_driver::format_file(&path, write) {
+                    Err(e) => eprintln!("Error formatting {}: {}", path.display(), e),
+                    Ok(changed) => {
+                        if changed && write {
+                            println!("Formatted {}", path.display());
+                        }
+                    }
                 }
             }
         }
@@ -120,7 +123,16 @@ fn format_dir_recursively(dir: &Path, write: bool) -> Result<(), String> {
 
 fn execute_fmt(file: Option<String>, write: bool) -> Result<(), String> {
     if let Some(f) = file {
-        pace_driver::format_file(Path::new(&f), write)
+        let path = Path::new(&f);
+        match pace_driver::format_file(path, write) {
+            Ok(changed) => {
+                if changed && write {
+                    println!("Formatted {}", path.display());
+                }
+                Ok(())
+            },
+            Err(e) => Err(e)
+        }
     } else {
         let (root, _) = get_project_info()?;
         let src_dir = root.join("src");

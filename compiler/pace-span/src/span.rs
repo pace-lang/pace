@@ -36,6 +36,10 @@ impl SourceMap {
     pub fn get_path(&self, id: FileId) -> Option<&str> {
         self.files.get(id.0 as usize).map(|(p, _)| p.as_str())
     }
+
+    pub fn get_file_id(&self, path: &str) -> Option<FileId> {
+        self.files.iter().position(|(p, _)| p == path).map(|i| FileId(i as u32))
+    }
 }
 
 /// A range of bytes in the source code, tagged with the file it belongs to.

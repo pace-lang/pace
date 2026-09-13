@@ -16,7 +16,8 @@ mod tests {
         let source = "let x = 42 let y = x + 1";
         let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
         let mut parser = Parser::new(lexer);
-        let ast = parser.parse_program().unwrap();
+        let (ast, diags, _comments) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors");
 
         let mut lowerer = LoweringContext::new();
         let hir = lowerer.lower_program(ast).unwrap();
@@ -30,7 +31,8 @@ mod tests {
         let source = "let x = \"hello\" let y = x + 1";
         let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
         let mut parser = Parser::new(lexer);
-        let ast = parser.parse_program().unwrap();
+        let (ast, diags, _comments) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors");
 
         let mut lowerer = LoweringContext::new();
         let hir = lowerer.lower_program(ast).unwrap();

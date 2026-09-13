@@ -3,6 +3,8 @@ use pace_ast::{BinaryOp, Block, Decl, Expr, GenericParam, MatchArm, Module, Patt
 pub struct Formatter {
     indent_level: usize,
     output: String,
+    comments: Vec<(pace_span::Span, String)>,
+    comment_index: usize,
 }
 
 impl Formatter {
@@ -10,6 +12,8 @@ impl Formatter {
         Self {
             indent_level: 0,
             output: String::new(),
+            comments: Vec::new(),
+            comment_index: 0,
         }
     }
 
@@ -38,7 +42,35 @@ impl Formatter {
         self.output.push('\n');
     }
 
+    fn print_pending_comments_before(&mut self, span: pace_span::Span) {
+        while self.comment_index < self.comments.len() {
+            let comment_span = self.comments[self.comment_index].0;
+            if comment_span.start < span.start {
+                let text = self.comments[self.comment_index].1.clone();
+                self.write_indent();
+                self.write(&text);
+                self.newline();
+                self.comment_index += 1;
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn print_remaining_comments(&mut self) {
+        while self.comment_index < self.comments.len() {
+            let text = &self.comments[self.comment_index].1.clone();
+            self.write_indent();
+            self.write(text);
+            self.newline();
+            self.comment_index += 1;
+        }
+    }
+
     pub fn format_module(&mut self, module: &Module) -> String {
+        self.comments = module.comments.clone();
+        self.comment_index = 0;
+
         let mut imports = Vec::new();
         let mut others = Vec::new();
 
@@ -75,10 +107,12 @@ impl Formatter {
             self.newline();
         }
 
+        self.print_remaining_comments();
         self.output.trim().to_string() + "\n"
     }
 
     fn format_decl(&mut self, decl: &Decl) {
+        self.print_pending_comments_before(decl.span());
         self.write_indent();
         match decl {
             Decl::Import { path, alias, .. } => {
@@ -173,6 +207,7 @@ impl Formatter {
                 self.indent();
 
                 for (c_name, c_ty, c_val) in const_fields {
+                    self.print_pending_comments_before(c_name.span);
                     self.write_indent();
                     self.write("const ");
                     self.write(&c_name.name);
@@ -183,6 +218,7 @@ impl Formatter {
                     self.newline();
                 }
                 for (s_name, s_ty, s_val) in static_fields {
+                    self.print_pending_comments_before(s_name.span);
                     self.write_indent();
                     self.write("static ");
                     self.write(&s_name.name);
@@ -193,6 +229,7 @@ impl Formatter {
                     self.newline();
                 }
                 for (f_name, f_ty, f_val, is_pub) in fields {
+                    self.print_pending_comments_before(f_name.span);
                     self.write_indent();
                     if *is_pub {
                         // TODO: Add pub keyword to ast?
@@ -234,6 +271,7 @@ impl Formatter {
                 self.indent();
 
                 for (c_name, c_ty, c_val) in const_fields {
+                    self.print_pending_comments_before(c_name.span);
                     self.write_indent();
                     self.write("const ");
                     self.write(&c_name.name);
@@ -244,6 +282,7 @@ impl Formatter {
                     self.newline();
                 }
                 for (s_name, s_ty, s_val) in static_fields {
+                    self.print_pending_comments_before(s_name.span);
                     self.write_indent();
                     self.write("static ");
                     self.write(&s_name.name);
@@ -254,6 +293,7 @@ impl Formatter {
                     self.newline();
                 }
                 for (f_name, f_ty, f_val, is_pub) in fields {
+                    self.print_pending_comments_before(f_name.span);
                     self.write_indent();
                     if *is_pub {
                         // TODO: pub
@@ -379,6 +419,7 @@ impl Formatter {
     }
 
     fn format_stmt(&mut self, stmt: &Stmt) {
+        self.print_pending_comments_before(stmt.span());
         self.write_indent();
         match stmt {
             Stmt::Let { name, ty, value, .. } => {

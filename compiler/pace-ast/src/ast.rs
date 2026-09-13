@@ -13,6 +13,7 @@ pub struct Module {
     pub name: String,
     pub file_id: FileId,
     pub declarations: Vec<Decl>,
+    pub comments: Vec<(Span, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -267,6 +268,17 @@ impl Decl {
             Decl::Trait { span, .. } => *span,
             Decl::Enum { span, .. } => *span,
             Decl::Expr(_, span) => *span,
+        }
+    }
+}
+
+impl Stmt {
+    pub fn span(&self) -> Span {
+        match self {
+            Stmt::Let { span, .. } => *span,
+            Stmt::Var { span, .. } => *span,
+            Stmt::ExprStmt(_, span) => *span,
+            Stmt::Return(_, span) => *span,
         }
     }
 }

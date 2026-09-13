@@ -76,6 +76,8 @@ fn parse_file_and_imports(
     lockfile: Option<&pace_pkg::resolve::PaceLock>,
     cache: &pace_pkg::cache::CacheManager,
     source_map: &mut pace_span::SourceMap,
+    overrides: &std::collections::HashMap<PathBuf, String>,
+    all_diags: &mut Vec<pace_errors::Diagnostic>,
 ) -> Result<(), String> {
     let canonical = file_path
         .canonicalize()
@@ -84,21 +86,18 @@ fn parse_file_and_imports(
         return Ok(());
     }
 
-    let source = fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read {}: {}", file_path.display(), e))?;
+    let source = if let Some(text) = overrides.get(file_path) {
+        text.clone()
+    } else {
+        fs::read_to_string(file_path)
+            .map_err(|e| format!("Failed to read {}: {}", file_path.display(), e))?
+    };
     let file_id = source_map.add_file(file_path.display().to_string(), source.clone());
     let lexer = Lexer::new(&source, file_id);
     let mut parser = Parser::new(lexer);
 
-    let ast = parser.parse_program().map_err(|diag| {
-        let mut reporter = pace_errors::Reporter::new();
-        reporter.report(diag);
-        reporter.emit_all(source_map);
-        format!(
-            "Compilation failed due to syntax errors in {}",
-            file_path.display()
-        )
-    })?;
+    let (ast, diags, comments) = parser.parse_program();
+    all_diags.extend(diags);
 
     let mut module_decls = Vec::new();
     let module_name = module_name_opt
@@ -179,6 +178,8 @@ fn parse_file_and_imports(
                 lockfile,
                 cache,
                 source_map,
+                overrides,
+                all_diags,
             )?;
         }
     }
@@ -189,20 +190,18 @@ fn parse_file_and_imports(
             name: module_name,
             file_id,
             declarations: module_decls,
+            comments,
         },
     );
 
     Ok(())
 }
 
-pub fn compile_file(
+pub fn analyze_workspace(
     file_path: &Path,
-    output_dir: &Path,
-    output_name: &str,
-    run: bool,
-    check_only: bool,
-) -> Result<(), String> {
-    if !file_path.exists() {
+    overrides: &std::collections::HashMap<PathBuf, String>,
+) -> Result<(pace_ast::Program, pace_span::SourceMap, Vec<pace_errors::Diagnostic>), String> {
+    if !file_path.exists() && !overrides.contains_key(file_path) {
         return Err(format!("File not found: {}", file_path.display()));
     }
 
@@ -215,8 +214,8 @@ pub fn compile_file(
     let mut visited = HashSet::new();
     let mut modules = std::collections::HashMap::new();
     let mut source_map = pace_span::SourceMap::new();
-
     let mut deps = DependencyGraph::default();
+    let mut all_diags = Vec::new();
 
     parse_file_and_imports(
         file_path,
@@ -227,6 +226,8 @@ pub fn compile_file(
         lockfile.as_ref(),
         &cache,
         &mut source_map,
+        overrides,
+        &mut all_diags,
     )?;
 
     let module_names: Vec<String> = modules.keys().cloned().collect();
@@ -235,8 +236,30 @@ pub fn compile_file(
     let ast = pace_ast::Program {
         modules,
         module_order,
-        span: pace_span::Span::DUMMY, // We could merge spans, but DUMMY is fine for the program root
+        span: pace_span::Span::DUMMY,
     };
+
+    Ok((ast, source_map, all_diags))
+}
+
+pub fn compile_file(
+    file_path: &Path,
+    output_dir: &Path,
+    output_name: &str,
+    run: bool,
+    check_only: bool,
+) -> Result<(), String> {
+    let empty_overrides = std::collections::HashMap::new();
+    let (ast, source_map, diags) = analyze_workspace(file_path, &empty_overrides)?;
+
+    if !diags.is_empty() {
+        let mut reporter = pace_errors::Reporter::new();
+        for diag in diags {
+            reporter.report(diag);
+        }
+        reporter.emit_all(&source_map);
+        return Err("Compilation failed due to syntax errors".to_string());
+    }
 
     // 2. Lower to HIR
     let mut lowerer = LoweringContext::new();
@@ -326,7 +349,7 @@ pub fn compile_file(
     Ok(())
 }
 
-pub fn format_file(file_path: &Path, write: bool) -> Result<(), String> {
+pub fn format_file(file_path: &Path, write: bool) -> Result<bool, String> {
     if !file_path.exists() {
         return Err(format!("File not found: {}", file_path.display()));
     }
@@ -340,26 +363,34 @@ pub fn format_file(file_path: &Path, write: bool) -> Result<(), String> {
     let lexer = Lexer::new(&source, file_id);
     let mut parser = Parser::new(lexer);
     
-    let ast = parser.parse_program().map_err(|diag| {
+    let (ast, diags, comments) = parser.parse_program();
+    if !diags.is_empty() {
         let mut reporter = pace_errors::Reporter::new();
-        reporter.report(diag);
+        for diag in diags {
+            reporter.report(diag);
+        }
         reporter.emit_all(&source_map);
-        format!("Syntax error in {}", file_path.display())
-    })?;
+        return Err(format!("Syntax error in {}", file_path.display()));
+    }
 
     let module = pace_ast::Module {
         name: file_path.file_stem().unwrap().to_string_lossy().to_string(),
         file_id,
         declarations: ast,
+        comments,
     };
 
     let formatted = pace_fmt::format_module(&module);
+    
+    let changed = source != formatted;
 
     if write {
-        fs::write(file_path, formatted).map_err(|e| format!("Failed to write {}: {}", file_path.display(), e))?;
+        if changed {
+            fs::write(file_path, formatted).map_err(|e| format!("Failed to write {}: {}", file_path.display(), e))?;
+        }
     } else {
         println!("{}", formatted);
     }
 
-    Ok(())
+    Ok(changed)
 }
