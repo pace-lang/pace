@@ -155,6 +155,7 @@ pub enum Decl {
         name: String,
         ty: Option<Type>,
         value: Option<Expr>,
+        is_private: bool,
         span: Span,
     },
     Var {
@@ -162,6 +163,7 @@ pub enum Decl {
         name: String,
         ty: Option<Type>,
         value: Option<Expr>,
+        is_private: bool,
         span: Span,
     },
     Const {
@@ -169,6 +171,7 @@ pub enum Decl {
         name: String,
         ty: Option<Type>,
         value: Expr,
+        is_private: bool,
         span: Span,
     },
     Struct {
@@ -176,10 +179,11 @@ pub enum Decl {
         name: String,
         generic_params: Option<Vec<(String, Option<Type>)>>,
         with: Vec<String>,
-        fields: Vec<(String, Type, Option<Expr>, bool)>,
-        static_fields: Vec<(String, Type, Expr)>,
-        const_fields: Vec<(String, Type, Expr)>,
+        fields: Vec<(String, Type, Option<Expr>, bool, bool)>,
+        static_fields: Vec<(String, Type, Expr, bool)>,
+        const_fields: Vec<(String, Type, Expr, bool)>,
         methods: Vec<Decl>, // Lowered to global functions anyway, but kept for namespacing if needed
+        is_private: bool,
         span: Span,
     },
     Class {
@@ -188,10 +192,11 @@ pub enum Decl {
         generic_params: Option<Vec<(String, Option<Type>)>>,
         extends: Option<String>,
         with: Vec<String>,
-        fields: Vec<(String, Type, Option<Expr>, bool)>,
-        static_fields: Vec<(String, Type, Expr)>,
-        const_fields: Vec<(String, Type, Expr)>,
+        fields: Vec<(String, Type, Option<Expr>, bool, bool)>,
+        static_fields: Vec<(String, Type, Expr, bool)>,
+        const_fields: Vec<(String, Type, Expr, bool)>,
         methods: Vec<Decl>,
+        is_private: bool,
         span: Span,
     },
     Trait {
@@ -199,6 +204,7 @@ pub enum Decl {
         name: String,
         generic_params: Option<Vec<(String, Option<Type>)>>,
         methods: Vec<Decl>,
+        is_private: bool,
         span: Span,
     },
     Enum {
@@ -206,6 +212,7 @@ pub enum Decl {
         name: String,
         generic_params: Option<Vec<(String, Option<Type>)>>,
         variants: Vec<EnumVariant>,
+        is_private: bool,
         span: Span,
     },
     Function {
@@ -217,6 +224,7 @@ pub enum Decl {
         body: Block,
         is_static: bool,
         is_override: bool,
+        is_private: bool,
         span: Span,
     },
     Expr(Expr, Span),

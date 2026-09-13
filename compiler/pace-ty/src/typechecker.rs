@@ -18,14 +18,16 @@ pub struct TypeChecker {
     pub loop_depth: usize,
     pub next_id: u32,
     pub methods_env: HashMap<String, Ty>,
+    pub methods_privacy: HashMap<String, bool>,
     pub global_functions: HashMap<String, Ty>,
-    pub struct_defs: HashMap<HirId, Vec<(String, Ty, bool)>>,
-    pub class_defs: HashMap<HirId, Vec<(String, Ty, bool)>>,
+    pub struct_defs: HashMap<HirId, Vec<(String, Ty, bool, bool)>>,
+    pub class_defs: HashMap<HirId, Vec<(String, Ty, bool, bool)>>,
     pub class_parents: HashMap<HirId, HirId>,
     pub class_vtables: HashMap<HirId, Vec<(String, Ty, String)>>,
     pub enum_defs: HashMap<HirId, Vec<pace_hir::EnumVariant>>,
     pub trait_defs: HashMap<String, Decl>,
-    pub static_fields_env: HashMap<String, Ty>, // format: "{class_name}_{field_name}"
+    pub static_fields_env: HashMap<String, Ty>,
+    pub static_fields_privacy: HashMap<String, bool>, // format: "{class_name}_{field_name}"
     pub const_env: HashMap<String, Ty>,
     pub named_types: HashMap<String, (HirId, u8)>, // maps mangled name to (HirId, 0=struct, 1=class, 2=enum)
     pub generic_templates: HashMap<String, Decl>,
@@ -53,6 +55,7 @@ impl TypeChecker {
             env: HashMap::new(),
             mutability_env: HashMap::new(),
             methods_env: HashMap::new(),
+            methods_privacy: HashMap::new(),
             global_functions: HashMap::new(),
             struct_defs: HashMap::new(),
             class_defs: HashMap::new(),
@@ -61,6 +64,7 @@ impl TypeChecker {
             enum_defs: HashMap::new(),
             trait_defs: HashMap::new(),
             static_fields_env: HashMap::new(),
+            static_fields_privacy: HashMap::new(),
             const_env: HashMap::new(),
             named_types: HashMap::new(),
             generic_templates: HashMap::new(),
@@ -311,12 +315,12 @@ impl TypeChecker {
                             .visible_symbols
                             .insert(name.clone(), mangled_name.clone());
                     }
-                    for (sf_name, sf_ty, _) in static_fields {
+                    for (sf_name, sf_ty, _, _) in static_fields {
                         let resolved_ty = self.resolve_type(sf_ty).unwrap_or(Ty::Int);
                         self.static_fields_env
                             .insert(format!("{}_{}", mangled_name, sf_name), resolved_ty);
                     }
-                    for (cf_name, cf_ty, _) in const_fields {
+                    for (cf_name, cf_ty, _, _) in const_fields {
                         let resolved_ty = self.resolve_type(cf_ty).unwrap_or(Ty::Int);
                         self.const_env
                             .insert(format!("{}_{}", mangled_name, cf_name), resolved_ty);
@@ -380,12 +384,12 @@ impl TypeChecker {
                             .visible_symbols
                             .insert(name.clone(), mangled_name.clone());
                     }
-                    for (sf_name, sf_ty, _) in static_fields {
+                    for (sf_name, sf_ty, _, _) in static_fields {
                         let resolved_ty = self.resolve_type(sf_ty).unwrap_or(Ty::Int);
                         self.static_fields_env
                             .insert(format!("{}_{}", mangled_name, sf_name), resolved_ty);
                     }
-                    for (cf_name, cf_ty, _) in const_fields {
+                    for (cf_name, cf_ty, _, _) in const_fields {
                         let resolved_ty = self.resolve_type(cf_ty).unwrap_or(Ty::Int);
                         self.const_env
                             .insert(format!("{}_{}", mangled_name, cf_name), resolved_ty);
@@ -479,8 +483,8 @@ impl TypeChecker {
                         continue;
                     }
                     let mut resolved_fields = Vec::new();
-                    for (fname, fty, _, is_mut) in fields {
-                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?, *is_mut));
+                    for (fname, fty, _, is_mut, is_private) in fields {
+                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?, *is_mut, *is_private));
                     }
                     self.struct_defs.insert(*id, resolved_fields);
                 }
@@ -494,8 +498,8 @@ impl TypeChecker {
                         continue;
                     }
                     let mut resolved_fields = Vec::new();
-                    for (fname, fty, _, is_mut) in fields {
-                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?, *is_mut));
+                    for (fname, fty, _, is_mut, is_private) in fields {
+                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?, *is_mut, *is_private));
                     }
                     self.class_defs.insert(*id, resolved_fields);
                 }
@@ -943,6 +947,7 @@ impl TypeChecker {
                 name,
                 ty: explicit_ty,
                 value,
+                is_private: _,
                 span,
             } => {
                 let mut expected_ty = None;
@@ -991,6 +996,7 @@ impl TypeChecker {
                 name,
                 ty: explicit_ty,
                 value,
+                is_private: _,
                 span,
             } => {
                 let mut ty = if let Some(val) = value {
@@ -1032,6 +1038,7 @@ impl TypeChecker {
                 name,
                 ty: explicit_ty,
                 value,
+                is_private: _,
                 span,
             } => {
                 let mut ty = self.check_expr(value)?;
@@ -1068,7 +1075,7 @@ impl TypeChecker {
                     return Ok(());
                 }
                 self.env.insert(*id, Ty::Struct(*id));
-                for (_, sf_ty, sf_expr) in static_fields {
+                for (_, sf_ty, sf_expr, _) in static_fields {
                     let expected_ty = self.resolve_type(sf_ty)?;
                     let expr_ty = self.check_expr(sf_expr)?;
                     if expected_ty != expr_ty {
@@ -1083,7 +1090,7 @@ impl TypeChecker {
                         return Err("Type mismatch".to_string());
                     }
                 }
-                for (_, cf_ty, cf_expr) in const_fields {
+                for (_, cf_ty, cf_expr, _) in const_fields {
                     let expected_ty = self.resolve_type(cf_ty)?;
                     let expr_ty = self.check_expr(cf_expr)?;
                     if expected_ty != expr_ty {
@@ -1115,7 +1122,7 @@ impl TypeChecker {
                     return Ok(());
                 }
                 self.env.insert(*id, Ty::Class(*id));
-                for (_, sf_ty, sf_expr) in static_fields {
+                for (_, sf_ty, sf_expr, _) in static_fields {
                     let expected_ty = self.resolve_type(sf_ty)?;
                     let expr_ty = self.check_expr(sf_expr)?;
                     if expected_ty != expr_ty {
@@ -1130,7 +1137,7 @@ impl TypeChecker {
                         return Err("Type mismatch".to_string());
                     }
                 }
-                for (_, cf_ty, cf_expr) in const_fields {
+                for (_, cf_ty, cf_expr, _) in const_fields {
                     let expected_ty = self.resolve_type(cf_ty)?;
                     let expr_ty = self.check_expr(cf_expr)?;
                     if expected_ty != expr_ty {
@@ -1252,7 +1259,7 @@ impl TypeChecker {
                             if calls_super {
                                 if let Some(parent_id) = self.class_parents.get(&hir_id) {
                                     if let Some(parent_fields) = self.class_defs.get(parent_id) {
-                                        for (fname, _, _) in parent_fields {
+                                        for (fname, _, _, _) in parent_fields {
                                             assigned_fields.insert(fname.clone());
                                         }
                                     }
@@ -1269,7 +1276,7 @@ impl TypeChecker {
                         };
 
                         if let Some(fields) = fields {
-                            for (fname, _, _) in fields {
+                            for (fname, _, _, _) in fields {
                                 if !assigned_fields.contains(fname) {
                                     self.reporter.report(Diagnostic::error(format!("Field '{}' must be initialized", fname))
                                         .with_span(*span)
@@ -1539,7 +1546,7 @@ impl TypeChecker {
                     if let Ty::Struct(hir_id) | Ty::Class(hir_id) = *inner {
                         if let Ty::Struct(_) = *inner {
                             if let Some(fields) = self.struct_defs.get(&hir_id) {
-                                for (fname, fty, _) in fields {
+                                for (fname, fty, _, _) in fields {
                                     if fname == member {
                                         return Ok(Ty::Optional(Box::new(fty.clone())));
                                     }
@@ -1547,7 +1554,7 @@ impl TypeChecker {
                             }
                         } else {
                             if let Some(fields) = self.class_defs.get(&hir_id) {
-                                for (fname, fty, _) in fields {
+                                for (fname, fty, _, _) in fields {
                                     if fname == member {
                                         return Ok(Ty::Optional(Box::new(fty.clone())));
                                     }
@@ -1623,8 +1630,19 @@ impl TypeChecker {
                             .struct_defs
                             .get(&hir_id)
                             .ok_or("Struct definition not found")?;
-                        for (fname, fty, _) in fields {
+                        for (fname, fty, _, is_private) in fields {
                             if fname == member {
+                                if *is_private {
+                                    let mut can_access = false;
+                                    if let Some(current_fn) = &self.current_fn_name {
+                                        if current_fn.starts_with(&format!("{}_", struct_name)) {
+                                            can_access = true;
+                                        }
+                                    }
+                                    if !can_access {
+                                        return Err(format!("Field '{}' of '{}' is private", member, struct_name));
+                                    }
+                                }
                                 self.used_bindings_by_name.insert(fname.clone());
                                 return Ok(fty.clone());
                             }
@@ -1663,8 +1681,19 @@ impl TypeChecker {
                             .class_defs
                             .get(&hir_id)
                             .ok_or("Class definition not found")?;
-                        for (fname, fty, _) in fields {
+                        for (fname, fty, _, is_private) in fields {
                             if fname == member {
+                                if *is_private {
+                                    let mut can_access = false;
+                                    if let Some(current_fn) = &self.current_fn_name {
+                                        if current_fn.starts_with(&format!("{}_", class_name)) {
+                                            can_access = true;
+                                        }
+                                    }
+                                    if !can_access {
+                                        return Err(format!("Field '{}' of '{}' is private", member, class_name));
+                                    }
+                                }
                                 self.used_bindings_by_name.insert(fname.clone());
                                 return Ok(fty.clone());
                             }
@@ -1833,7 +1862,7 @@ impl TypeChecker {
 
                     let def_fields = self.struct_defs.get(&id).unwrap().clone();
                     let mut def_map: std::collections::HashMap<_, _> =
-                        def_fields.into_iter().map(|(n, t, _)| (n, t)).collect();
+                        def_fields.into_iter().map(|(n, t, _, _)| (n, t)).collect();
                     for (label, fexpr) in args {
                         let fty = self.check_expr(fexpr)?;
                         if let Some(fname) = label {
@@ -1947,7 +1976,7 @@ impl TypeChecker {
 
                     let def_fields = self.class_defs.get(&id).unwrap().clone();
                     let mut def_map: std::collections::HashMap<_, _> =
-                        def_fields.into_iter().map(|(n, t, _)| (n, t)).collect();
+                        def_fields.into_iter().map(|(n, t, _, _)| (n, t)).collect();
                     for (label, fexpr) in args {
                         let fty = self.check_expr(fexpr)?;
                         if let Some(fname) = label {
@@ -2180,7 +2209,7 @@ impl TypeChecker {
                             self.struct_defs.get(&id)
                         };
                         if let Some(fields) = fields {
-                            for (fname, _, is_mut) in fields {
+                            for (fname, _, is_mut, _) in fields {
                                 if fname == member {
                                     field_is_mut = *is_mut;
                                     break;
@@ -2413,13 +2442,13 @@ impl TypeChecker {
                 *id = self.generate_id();
                 *name = mono_name.clone();
                 *generic_params = None;
-                for (_, ty, _, _) in fields.iter_mut() {
+                for (_, ty, _, _, _) in fields.iter_mut() {
                     *ty = substitute_type(ty, &mapping);
                 }
-                for (_, ty, _) in static_fields.iter_mut() {
+                for (_, ty, _, _) in static_fields.iter_mut() {
                     *ty = substitute_type(ty, &mapping);
                 }
-                for (_, ty, _) in const_fields.iter_mut() {
+                for (_, ty, _, _) in const_fields.iter_mut() {
                     *ty = substitute_type(ty, &mapping);
                 }
                 for method in methods.iter_mut() {
@@ -2515,9 +2544,9 @@ impl TypeChecker {
             } => {
                 self.named_types.insert(name.clone(), (*id, 0));
                 let mut resolved_fields = Vec::new();
-                for (f_name, f_ty, _, is_pub) in fields {
+                for (f_name, f_ty, _, is_pub, is_private) in fields {
                     let ty = self.resolve_type(f_ty).unwrap_or(Ty::Int);
-                    resolved_fields.push((f_name.clone(), ty, *is_pub));
+                    resolved_fields.push((f_name.clone(), ty, *is_pub, *is_private));
                 }
                 self.struct_defs.insert(*id, resolved_fields);
             }
@@ -2530,9 +2559,9 @@ impl TypeChecker {
             } => {
                 self.named_types.insert(name.clone(), (*id, 1));
                 let mut resolved_fields = Vec::new();
-                for (f_name, f_ty, _, is_pub) in fields {
+                for (f_name, f_ty, _, is_pub, is_private) in fields {
                     let ty = self.resolve_type(f_ty).unwrap_or(Ty::Int);
-                    resolved_fields.push((f_name.clone(), ty, *is_pub));
+                    resolved_fields.push((f_name.clone(), ty, *is_pub, *is_private));
                 }
                 self.class_defs.insert(*id, resolved_fields);
 

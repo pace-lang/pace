@@ -78,8 +78,8 @@ pub struct MirFunction {
 pub struct MirProgram {
     pub functions: Vec<MirFunction>,
     pub main_body: MirBody,
-    pub struct_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty, bool)>>,
-    pub class_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty, bool)>>,
+    pub struct_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty, bool, bool)>>,
+    pub class_defs: std::collections::HashMap<pace_hir::HirId, Vec<(String, pace_ty::Ty, bool, bool)>>,
     pub class_vtables: std::collections::HashMap<pace_hir::HirId, Vec<(String, Ty, String)>>,
     pub enum_defs: std::collections::HashMap<
         pace_hir::HirId,

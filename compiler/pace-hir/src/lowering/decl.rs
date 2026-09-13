@@ -15,6 +15,7 @@ impl LoweringContext {
                 name,
                 ty,
                 value,
+                is_private,
                 span,
             } => {
                 let id = self.generate_id();
@@ -28,6 +29,7 @@ impl LoweringContext {
                     name: name.name,
                     ty,
                     value: lowered_value,
+                    is_private,
                     span,
                 }))
             }
@@ -35,6 +37,7 @@ impl LoweringContext {
                 name,
                 ty,
                 value,
+                is_private,
                 span,
             } => {
                 let id = self.generate_id();
@@ -48,6 +51,7 @@ impl LoweringContext {
                     name: name.name,
                     ty,
                     value: lowered_value,
+                    is_private,
                     span,
                 }))
             }
@@ -59,13 +63,14 @@ impl LoweringContext {
                 static_fields,
                 const_fields,
                 methods,
+                is_private,
                 span,
                 ..
             } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 let mut lowered_fields = Vec::new();
-                for (field_name, field_ty, field_val, is_mut) in fields.clone() {
+                for (field_name, field_ty, field_val, is_mut, is_field_private) in fields.clone() {
                     let lowered_val = match field_val {
                         Some(v) => Some(self.lower_expr(v)?),
                         None => None,
@@ -75,20 +80,21 @@ impl LoweringContext {
                         field_ty.clone(),
                         lowered_val,
                         is_mut,
+                        is_field_private,
                     ));
                 }
 
                 let mut lowered_static = Vec::new();
-                for (sf_name, sf_ty, sf_val) in static_fields {
-                    lowered_static.push((sf_name.name, sf_ty, self.lower_expr(sf_val)?));
+                for (sf_name, sf_ty, sf_val, is_field_private) in static_fields {
+                    lowered_static.push((sf_name.name, sf_ty, self.lower_expr(sf_val)?, is_field_private));
                 }
                 let mut lowered_const = Vec::new();
-                for (cf_name, cf_ty, cf_val) in const_fields {
-                    lowered_const.push((cf_name.name, cf_ty, self.lower_expr(cf_val)?));
+                for (cf_name, cf_ty, cf_val, is_field_private) in const_fields {
+                    lowered_const.push((cf_name.name, cf_ty, self.lower_expr(cf_val)?, is_field_private));
                 }
 
                 let mut initializers = Vec::new();
-                for (field_name, _, field_val, _) in &fields {
+                for (field_name, _, field_val, _, _) in &fields {
                     if let Some(val) = field_val {
                         let lhs = ast::Expr::MemberAccess {
                             object: Box::new(ast::Expr::Ident(
@@ -144,6 +150,7 @@ impl LoweringContext {
                             },
                             is_static: false,
                             is_override: false,
+                            is_private: false,
                             span,
                         };
                         methods.push(synthetic_init);
@@ -161,6 +168,7 @@ impl LoweringContext {
                         span: m_span,
                         is_static,
                         is_override,
+                        is_private: is_method_private,
                     } = method
                     {
                         let mut new_params = Vec::new();
@@ -186,6 +194,7 @@ impl LoweringContext {
                             span: m_span,
                             is_static,
                             is_override,
+                            is_private: is_method_private,
                         };
                         if let Some(lowered) = self.lower_decl(m_decl)? {
                             lowered_methods.push(lowered);
@@ -208,6 +217,7 @@ impl LoweringContext {
                     static_fields: lowered_static,
                     const_fields: lowered_const,
                     methods: lowered_methods,
+                    is_private,
                     span,
                 }))
             }
@@ -220,31 +230,32 @@ impl LoweringContext {
                 static_fields,
                 const_fields,
                 methods,
+                is_private,
                 span,
                 ..
             } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
                 let mut lowered_fields = Vec::new();
-                for (field_name, field_ty, field_val, is_mut) in fields.clone() {
+                for (field_name, field_ty, field_val, is_mut, is_field_private) in fields.clone() {
                     let lowered_val = match field_val {
                         Some(v) => Some(self.lower_expr(v)?),
                         None => None,
                     };
-                    lowered_fields.push((field_name.name, field_ty, lowered_val, is_mut));
+                    lowered_fields.push((field_name.name, field_ty, lowered_val, is_mut, is_field_private));
                 }
 
                 let mut lowered_static = Vec::new();
-                for (sf_name, sf_ty, sf_val) in static_fields {
-                    lowered_static.push((sf_name.name, sf_ty, self.lower_expr(sf_val)?));
+                for (sf_name, sf_ty, sf_val, is_field_private) in static_fields {
+                    lowered_static.push((sf_name.name, sf_ty, self.lower_expr(sf_val)?, is_field_private));
                 }
                 let mut lowered_const = Vec::new();
-                for (cf_name, cf_ty, cf_val) in const_fields {
-                    lowered_const.push((cf_name.name, cf_ty, self.lower_expr(cf_val)?));
+                for (cf_name, cf_ty, cf_val, is_field_private) in const_fields {
+                    lowered_const.push((cf_name.name, cf_ty, self.lower_expr(cf_val)?, is_field_private));
                 }
 
                 let mut initializers = Vec::new();
-                for (field_name, _, field_val, _) in &fields {
+                for (field_name, _, field_val, _, _) in &fields {
                     if let Some(val) = field_val {
                         let lhs = ast::Expr::MemberAccess {
                             object: Box::new(ast::Expr::Ident(
@@ -316,6 +327,7 @@ impl LoweringContext {
                             },
                             is_static: false,
                             is_override: false,
+                            is_private: false,
                             span,
                         };
                         methods.push(synthetic_init);
@@ -333,6 +345,7 @@ impl LoweringContext {
                         span: m_span,
                         is_static,
                         is_override,
+                        is_private: is_method_private,
                     } = method
                     {
                         let mut new_params = Vec::new();
@@ -358,6 +371,7 @@ impl LoweringContext {
                             span: m_span,
                             is_static,
                             is_override,
+                            is_private: is_method_private,
                         };
                         if let Some(lowered) = self.lower_decl(m_decl)? {
                             lowered_methods.push(lowered);
@@ -382,6 +396,7 @@ impl LoweringContext {
                     static_fields: lowered_static,
                     const_fields: lowered_const,
                     methods: lowered_methods,
+                    is_private,
                     span,
                 }))
             }
@@ -389,6 +404,7 @@ impl LoweringContext {
                 name,
                 generic_params,
                 methods,
+                is_private,
                 span,
                 ..
             } => {
@@ -406,6 +422,7 @@ impl LoweringContext {
                         span: m_span,
                         is_static,
                         is_override,
+                        is_private: is_method_private,
                     } = method
                     {
                         let mut new_params = Vec::new();
@@ -431,6 +448,7 @@ impl LoweringContext {
                             span: m_span,
                             is_static,
                             is_override,
+                            is_private: is_method_private,
                         };
                         if let Some(lowered) = self.lower_decl(m_decl)? {
                             lowered_methods.push(lowered);
@@ -448,6 +466,7 @@ impl LoweringContext {
                     name: name.name,
                     generic_params: hir_generic_params,
                     methods: lowered_methods,
+                    is_private,
                     span,
                 }))
             }
@@ -459,6 +478,7 @@ impl LoweringContext {
                 name,
                 generic_params,
                 variants,
+                is_private,
                 span,
             } => {
                 let id = self.generate_id();
@@ -494,6 +514,7 @@ impl LoweringContext {
                     name: name.name,
                     generic_params: hir_generic_params,
                     variants: lowered_variants,
+                    is_private,
                     span,
                 }))
             }
@@ -506,6 +527,7 @@ impl LoweringContext {
                 span,
                 is_static,
                 is_override,
+                is_private,
             } => {
                 let id = self.generate_id();
                 self.scope.insert(name.name.clone(), id);
@@ -536,6 +558,7 @@ impl LoweringContext {
                     body: lowered_body,
                     is_static,
                     is_override,
+                    is_private,
                     span,
                 }))
             }

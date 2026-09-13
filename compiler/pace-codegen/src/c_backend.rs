@@ -29,7 +29,7 @@ impl CGenerator {
 
         for (id, fields) in &program.struct_defs {
             self.output.push_str(&format!("struct pace_{} {{\n", id.0));
-            for (fname, fty, _) in fields {
+            for (fname, fty, _, _) in fields {
                 self.output
                     .push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
             }
@@ -90,7 +90,7 @@ impl CGenerator {
             self.output.push_str(&format!("struct pace_{} {{\n", id.0));
             self.output
                 .push_str(&format!("    struct pace_{}_vtable* vtable;\n", id.0));
-            for (fname, fty, _) in fields {
+            for (fname, fty, _, _) in fields {
                 self.output
                     .push_str(&format!("    {} {};\n", self.emit_c_type(fty), fname));
             }
@@ -102,7 +102,7 @@ impl CGenerator {
                 "    struct pace_{}* self = (struct pace_{}*)ptr;\n",
                 id.0, id.0
             ));
-            for (fname, fty, _) in fields {
+            for (fname, fty, _, _) in fields {
                 if matches!(fty, Ty::Class(_)) {
                     self.output
                         .push_str(&format!("    pace_release(self->{});\n", fname));

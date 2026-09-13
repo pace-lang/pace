@@ -39,18 +39,21 @@ pub enum Decl {
         name: Ident,
         ty: Option<Type>,
         value: Option<Expr>,
+        is_private: bool,
         span: Span,
     },
     Var {
         name: Ident,
         ty: Option<Type>,
         value: Option<Expr>,
+        is_private: bool,
         span: Span,
     },
     Const {
         name: Ident,
         ty: Option<Type>,
         value: Expr,
+        is_private: bool,
         span: Span,
     },
     Function {
@@ -61,16 +64,18 @@ pub enum Decl {
         body: Block,
         is_static: bool,
         is_override: bool,
+        is_private: bool,
         span: Span,
     },
     Struct {
         name: Ident,
         generic_params: Option<Vec<GenericParam>>,
         with: Vec<Ident>,
-        fields: Vec<(Ident, Type, Option<Expr>, bool)>,
-        static_fields: Vec<(Ident, Type, Expr)>,
-        const_fields: Vec<(Ident, Type, Expr)>,
+        fields: Vec<(Ident, Type, Option<Expr>, bool, bool)>, // name, type, default, is_optional, is_private
+        static_fields: Vec<(Ident, Type, Expr, bool)>, // name, type, default, is_private
+        const_fields: Vec<(Ident, Type, Expr, bool)>,
         methods: Vec<Decl>, // Expects Decl::Function
+        is_private: bool,
         span: Span,
     },
     Class {
@@ -78,22 +83,25 @@ pub enum Decl {
         generic_params: Option<Vec<GenericParam>>,
         extends: Option<Ident>,
         with: Vec<Ident>,
-        fields: Vec<(Ident, Type, Option<Expr>, bool)>,
-        static_fields: Vec<(Ident, Type, Expr)>,
-        const_fields: Vec<(Ident, Type, Expr)>,
+        fields: Vec<(Ident, Type, Option<Expr>, bool, bool)>,
+        static_fields: Vec<(Ident, Type, Expr, bool)>,
+        const_fields: Vec<(Ident, Type, Expr, bool)>,
         methods: Vec<Decl>, // Expects Decl::Function
+        is_private: bool,
         span: Span,
     },
     Trait {
         name: Ident,
         generic_params: Option<Vec<GenericParam>>,
         methods: Vec<Decl>, // Expects Decl::Function
+        is_private: bool,
         span: Span,
     },
     Enum {
         name: Ident,
         generic_params: Option<Vec<GenericParam>>,
         variants: Vec<EnumVariant>,
+        is_private: bool,
         span: Span,
     },
     Expr(Expr, Span),

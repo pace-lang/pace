@@ -125,7 +125,10 @@ impl Formatter {
                 }
                 self.newline();
             }
-            Decl::Let { name, ty, value, .. } => {
+            Decl::Let { name, ty, value, is_private, .. } => {
+                if *is_private {
+                    self.write("private ");
+                }
                 self.write("let ");
                 self.write(&name.name);
                 if let Some(t) = ty {
@@ -138,7 +141,10 @@ impl Formatter {
                 }
                 self.newline();
             }
-            Decl::Var { name, ty, value, .. } => {
+            Decl::Var { name, ty, value, is_private, .. } => {
+                if *is_private {
+                    self.write("private ");
+                }
                 self.write("var ");
                 self.write(&name.name);
                 if let Some(t) = ty {
@@ -151,7 +157,10 @@ impl Formatter {
                 }
                 self.newline();
             }
-            Decl::Const { name, ty, value, .. } => {
+            Decl::Const { name, ty, value, is_private, .. } => {
+                if *is_private {
+                    self.write("private ");
+                }
                 self.write("const ");
                 self.write(&name.name);
                 if let Some(t) = ty {
@@ -162,7 +171,10 @@ impl Formatter {
                 self.format_expr(value);
                 self.newline();
             }
-            Decl::Function { name, generic_params, params, return_type, body, is_static, is_override, .. } => {
+            Decl::Function { name, generic_params, params, return_type, body, is_static, is_override, is_private, .. } => {
+                if *is_private {
+                    self.write("private ");
+                }
                 if *is_override {
                     self.write("override ");
                 }
@@ -192,7 +204,10 @@ impl Formatter {
                 self.format_block(body);
                 self.newline();
             }
-            Decl::Struct { name, generic_params, with, fields, static_fields, const_fields, methods, .. } => {
+            Decl::Struct { name, generic_params, with, fields, static_fields, const_fields, methods, is_private, .. } => {
+                if *is_private {
+                    self.write("private ");
+                }
                 self.write("struct ");
                 self.write(&name.name);
                 if let Some(gps) = generic_params {
@@ -206,9 +221,12 @@ impl Formatter {
                 self.write(" {\n");
                 self.indent();
 
-                for (c_name, c_ty, c_val) in const_fields {
+                for (c_name, c_ty, c_val, is_private) in const_fields {
                     self.print_pending_comments_before(c_name.span);
                     self.write_indent();
+                    if *is_private {
+                        self.write("private ");
+                    }
                     self.write("const ");
                     self.write(&c_name.name);
                     self.write(": ");
@@ -217,9 +235,12 @@ impl Formatter {
                     self.format_expr(c_val);
                     self.newline();
                 }
-                for (s_name, s_ty, s_val) in static_fields {
+                for (s_name, s_ty, s_val, is_private) in static_fields {
                     self.print_pending_comments_before(s_name.span);
                     self.write_indent();
+                    if *is_private {
+                        self.write("private ");
+                    }
                     self.write("static ");
                     self.write(&s_name.name);
                     self.write(": ");
@@ -228,11 +249,16 @@ impl Formatter {
                     self.format_expr(s_val);
                     self.newline();
                 }
-                for (f_name, f_ty, f_val, is_pub) in fields {
+                for (f_name, f_ty, f_val, is_mut, is_private) in fields {
                     self.print_pending_comments_before(f_name.span);
                     self.write_indent();
-                    if *is_pub {
-                        // TODO: Add pub keyword to ast?
+                    if *is_private {
+                        self.write("private ");
+                    }
+                    if !*is_mut {
+                        self.write("let ");
+                    } else {
+                        self.write("var ");
                     }
                     self.write(&f_name.name);
                     self.write(": ");
@@ -252,7 +278,10 @@ impl Formatter {
                 self.write_indent();
                 self.write("}\n");
             }
-            Decl::Class { name, generic_params, extends, with, fields, static_fields, const_fields, methods, .. } => {
+            Decl::Class { name, generic_params, extends, with, fields, static_fields, const_fields, methods, is_private, .. } => {
+                if *is_private {
+                    self.write("private ");
+                }
                 self.write("class ");
                 self.write(&name.name);
                 if let Some(gps) = generic_params {
@@ -270,9 +299,12 @@ impl Formatter {
                 self.write(" {\n");
                 self.indent();
 
-                for (c_name, c_ty, c_val) in const_fields {
+                for (c_name, c_ty, c_val, is_private) in const_fields {
                     self.print_pending_comments_before(c_name.span);
                     self.write_indent();
+                    if *is_private {
+                        self.write("private ");
+                    }
                     self.write("const ");
                     self.write(&c_name.name);
                     self.write(": ");
@@ -281,9 +313,12 @@ impl Formatter {
                     self.format_expr(c_val);
                     self.newline();
                 }
-                for (s_name, s_ty, s_val) in static_fields {
+                for (s_name, s_ty, s_val, is_private) in static_fields {
                     self.print_pending_comments_before(s_name.span);
                     self.write_indent();
+                    if *is_private {
+                        self.write("private ");
+                    }
                     self.write("static ");
                     self.write(&s_name.name);
                     self.write(": ");
@@ -292,11 +327,16 @@ impl Formatter {
                     self.format_expr(s_val);
                     self.newline();
                 }
-                for (f_name, f_ty, f_val, is_pub) in fields {
+                for (f_name, f_ty, f_val, is_mut, is_private) in fields {
                     self.print_pending_comments_before(f_name.span);
                     self.write_indent();
-                    if *is_pub {
-                        // TODO: pub
+                    if *is_private {
+                        self.write("private ");
+                    }
+                    if !*is_mut {
+                        self.write("let ");
+                    } else {
+                        self.write("var ");
                     }
                     self.write(&f_name.name);
                     self.write(": ");
@@ -316,7 +356,10 @@ impl Formatter {
                 self.write_indent();
                 self.write("}\n");
             }
-            Decl::Trait { name, generic_params, methods, .. } => {
+            Decl::Trait { name, generic_params, methods, is_private, .. } => {
+                if *is_private {
+                    self.write("private ");
+                }
                 self.write("trait ");
                 self.write(&name.name);
                 if let Some(gps) = generic_params {
@@ -331,7 +374,10 @@ impl Formatter {
                 self.write_indent();
                 self.write("}\n");
             }
-            Decl::Enum { name, generic_params, variants, .. } => {
+            Decl::Enum { name, generic_params, variants, is_private, .. } => {
+                if *is_private {
+                    self.write("private ");
+                }
                 self.write("enum ");
                 self.write(&name.name);
                 if let Some(gps) = generic_params {

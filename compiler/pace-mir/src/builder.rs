@@ -41,8 +41,8 @@ pub struct MirBuilder<'a> {
     pub locals: Vec<Ty>,
     pub hir_to_local: HashMap<HirId, Local>,
     pub global_fns: HashMap<String, String>,
-    pub struct_defs: &'a HashMap<HirId, Vec<(String, Ty, bool)>>,
-    pub class_defs: &'a HashMap<HirId, Vec<(String, Ty, bool)>>,
+    pub struct_defs: &'a HashMap<HirId, Vec<(String, Ty, bool, bool)>>,
+    pub class_defs: &'a HashMap<HirId, Vec<(String, Ty, bool, bool)>>,
     pub class_vtables: &'a HashMap<HirId, Vec<(String, Ty, String)>>,
     pub enum_defs: &'a HashMap<HirId, Vec<pace_hir::EnumVariant>>,
     pub global_env: &'a HashMap<pace_hir::HirId, Ty>,
@@ -60,8 +60,8 @@ pub struct MirBuilder<'a> {
 impl<'a> MirBuilder<'a> {
     pub fn new(
         global_fns: HashMap<String, String>,
-        struct_defs: &'a HashMap<HirId, Vec<(String, Ty, bool)>>,
-        class_defs: &'a HashMap<pace_hir::HirId, Vec<(String, Ty, bool)>>,
+        struct_defs: &'a HashMap<HirId, Vec<(String, Ty, bool, bool)>>,
+        class_defs: &'a HashMap<pace_hir::HirId, Vec<(String, Ty, bool, bool)>>,
         class_vtables: &'a HashMap<HirId, Vec<(String, Ty, String)>>,
         enum_defs: &'a HashMap<pace_hir::HirId, Vec<pace_hir::EnumVariant>>,
         global_env: &'a HashMap<pace_hir::HirId, Ty>,
@@ -370,7 +370,7 @@ impl<'a> MirBuilder<'a> {
                     Ty::Struct(id) => {
                         let mut ft = Ty::Int;
                         if let Some(fields) = self.struct_defs.get(&id) {
-                            for (n, t, _) in fields {
+                            for (n, t, _, _) in fields {
                                 if n == member {
                                     ft = t.clone();
                                     break;
@@ -382,7 +382,7 @@ impl<'a> MirBuilder<'a> {
                     Ty::Class(id) => {
                         let mut ft = Ty::Int;
                         if let Some(fields) = self.class_defs.get(&id) {
-                            for (n, t, _) in fields {
+                            for (n, t, _, _) in fields {
                                 if n == member {
                                     ft = t.clone();
                                     break;
@@ -1121,7 +1121,7 @@ impl<'a> MirBuilder<'a> {
                                 self.class_defs.get(&id)
                             };
                             if let Some(fields) = defs {
-                                for (n, t, _) in fields {
+                                for (n, t, _, _) in fields {
                                     if n == member {
                                         field_ty = t.clone();
                                         found = true;
@@ -1265,7 +1265,7 @@ impl<'a> MirBuilder<'a> {
                         continue;
                     }
 
-                    for (sf_name, sf_ty, sf_expr) in static_fields {
+                    for (sf_name, sf_ty, sf_expr, _) in static_fields {
                         let global_name = format!("{}_{}", mangled_name, sf_name);
                         let ty = tc_get_type(tc, sf_ty).unwrap_or(Ty::Int);
                         global_vars.push((global_name.clone(), ty.clone()));
@@ -1273,7 +1273,7 @@ impl<'a> MirBuilder<'a> {
                         let rval_local = main_builder.build_expr(sf_expr);
                         main_builder.push_stmt(Statement::GlobalWrite(global_name, rval_local));
                     }
-                    for (cf_name, cf_ty, cf_expr) in const_fields {
+                    for (cf_name, cf_ty, cf_expr, _) in const_fields {
                         let global_name = format!("{}_{}", mangled_name, cf_name);
                         let ty = tc_get_type(tc, cf_ty).unwrap_or(Ty::Int);
                         global_vars.push((global_name.clone(), ty.clone()));

@@ -6,6 +6,14 @@ use super::Parser;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_decl(&mut self) -> Result<Decl, Diagnostic> {
+        let mut is_private = false;
+        let mut start_span = self.current_span();
+        if self.check(&TokenKind::Private) {
+            let tok = self.expect(TokenKind::Private)?;
+            start_span = tok.span;
+            is_private = true;
+        }
+
         if self.check(&TokenKind::Import) {
             let start_tok = self.expect(TokenKind::Import)?;
             let mut path = Vec::new();
@@ -117,7 +125,8 @@ impl<'a> Parser<'a> {
                 name: name_tok,
                 ty,
                 value,
-                span: start_tok.span.merge(span_end),
+                is_private,
+                span: if is_private { start_span.merge(span_end) } else { start_tok.span.merge(span_end) },
             })
         } else if self.check(&TokenKind::Var) {
             let start_tok = self.expect(TokenKind::Var)?;
@@ -168,7 +177,8 @@ impl<'a> Parser<'a> {
                 name: name_tok,
                 ty,
                 value,
-                span: start_tok.span.merge(span_end),
+                is_private,
+                span: if is_private { start_span.merge(span_end) } else { start_tok.span.merge(span_end) },
             })
         } else if self.check(&TokenKind::Const) {
             let start_tok = self.expect(TokenKind::Const)?;
@@ -206,18 +216,19 @@ impl<'a> Parser<'a> {
                 name: name_tok,
                 ty,
                 value,
-                span: start_tok.span.merge(end_span),
+                is_private,
+                span: if is_private { start_span.merge(end_span) } else { start_tok.span.merge(end_span) },
             })
         } else if self.check(&TokenKind::Fn) {
-            self.parse_fn_decl()
+            self.parse_fn_decl(is_private, start_span)
         } else if self.check(&TokenKind::Struct) {
-            self.parse_struct_decl()
+            self.parse_struct_decl(is_private, start_span)
         } else if self.check(&TokenKind::Class) {
-            self.parse_class_decl()
+            self.parse_class_decl(is_private, start_span)
         } else if self.check(&TokenKind::Trait) {
-            self.parse_trait_decl()
+            self.parse_trait_decl(is_private, start_span)
         } else if self.check(&TokenKind::Enum) {
-            self.parse_enum_decl()
+            self.parse_enum_decl(is_private, start_span)
         } else {
             let expr = self.parse_expr()?;
             let span = expr.span();
@@ -313,7 +324,7 @@ impl<'a> Parser<'a> {
         Ok(traits)
     }
 
-    pub(crate) fn parse_struct_decl(&mut self) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_struct_decl(&mut self, is_private: bool, start_span: pace_span::Span) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Struct)?;
 
         let name_tok = match &self.current {
@@ -345,6 +356,12 @@ impl<'a> Parser<'a> {
         let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            let mut is_field_private = false;
+            if self.check(&TokenKind::Private) {
+                self.advance();
+                is_field_private = true;
+            }
+
             if self.check(&TokenKind::Const) {
                 self.advance();
                 if let Some(Token {
@@ -364,7 +381,7 @@ impl<'a> Parser<'a> {
                     self.expect(TokenKind::Eq)?;
                     let field_value = self.parse_expr()?;
 
-                    const_fields.push((field_name, field_type, field_value));
+                    const_fields.push((field_name, field_type, field_value, is_field_private));
 
                     if self.check(&TokenKind::Comma) {
                         self.advance();
@@ -377,7 +394,7 @@ impl<'a> Parser<'a> {
                 self.advance();
 
                 if self.check(&TokenKind::Fn) {
-                    let mut func = self.parse_fn_decl()?;
+                    let mut func = self.parse_fn_decl(is_field_private, self.current_span())?;
                     if let Decl::Function {
                         ref mut is_static, ..
                     } = func
@@ -402,7 +419,7 @@ impl<'a> Parser<'a> {
                     self.expect(TokenKind::Eq)?;
                     let field_value = self.parse_expr()?;
 
-                    static_fields.push((field_name, field_type, field_value));
+                    static_fields.push((field_name, field_type, field_value, is_field_private));
 
                     if self.check(&TokenKind::Comma) {
                         self.advance();
@@ -414,7 +431,7 @@ impl<'a> Parser<'a> {
                     .with_span(self.current_span()));
                 }
             } else if self.check(&TokenKind::Fn) {
-                methods.push(self.parse_fn_decl()?);
+                methods.push(self.parse_fn_decl(is_field_private, self.current_span())?);
             } else if self.check(&TokenKind::Let)
                 || self.check(&TokenKind::Var)
                 || matches!(
@@ -481,6 +498,7 @@ impl<'a> Parser<'a> {
                             body: body.clone(),
                             is_static: false,
                             is_override: false,
+                            is_private: is_field_private,
                             span: init_span_start.merge(body.span),
                         });
                         continue;
@@ -501,7 +519,7 @@ impl<'a> Parser<'a> {
                         field_value = Some(self.parse_expr()?);
                     }
 
-                    fields.push((field_name, field_type, field_value, is_mut));
+                    fields.push((field_name, field_type, field_value, is_mut, is_field_private));
                 } else {
                     return Err(Diagnostic::error("Expected field name after let/var")
                         .with_span(self.current_span()));
@@ -526,11 +544,12 @@ impl<'a> Parser<'a> {
             static_fields,
             const_fields,
             methods,
-            span: start_tok.span.merge(end_tok.span),
+            is_private,
+            span: if is_private { start_span.merge(end_tok.span) } else { start_tok.span.merge(end_tok.span) },
         })
     }
 
-    pub(crate) fn parse_trait_decl(&mut self) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_trait_decl(&mut self, is_private: bool, start_span: pace_span::Span) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Trait)?;
 
         let name_tok = match &self.current {
@@ -557,8 +576,14 @@ impl<'a> Parser<'a> {
         let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            let mut is_field_private = false;
+            if self.check(&TokenKind::Private) {
+                self.advance();
+                is_field_private = true;
+            }
+
             if self.check(&TokenKind::Fn) {
-                methods.push(self.parse_fn_decl()?);
+                methods.push(self.parse_fn_decl(is_field_private, self.current_span())?);
             } else {
                 return Err(
                     Diagnostic::error("Expected method in trait").with_span(self.current_span())
@@ -571,11 +596,12 @@ impl<'a> Parser<'a> {
             name: name_tok,
             generic_params,
             methods,
-            span: start_tok.span.merge(end_tok.span),
+            is_private,
+            span: if is_private { start_span.merge(end_tok.span) } else { start_tok.span.merge(end_tok.span) },
         })
     }
 
-    pub(crate) fn parse_class_decl(&mut self) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_class_decl(&mut self, is_private: bool, start_span: pace_span::Span) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Class)?;
 
         let name_tok = match &self.current {
@@ -626,6 +652,12 @@ impl<'a> Parser<'a> {
         let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            let mut is_field_private = false;
+            if self.check(&TokenKind::Private) {
+                self.advance();
+                is_field_private = true;
+            }
+
             if self.check(&TokenKind::Const) {
                 self.advance();
                 if let Some(Token {
@@ -645,7 +677,7 @@ impl<'a> Parser<'a> {
                     self.expect(TokenKind::Eq)?;
                     let field_value = self.parse_expr()?;
 
-                    const_fields.push((field_name, field_type, field_value));
+                    const_fields.push((field_name, field_type, field_value, is_field_private));
 
                     if self.check(&TokenKind::Comma) {
                         self.advance();
@@ -658,7 +690,7 @@ impl<'a> Parser<'a> {
                 self.advance();
 
                 if self.check(&TokenKind::Fn) {
-                    let mut func = self.parse_fn_decl()?;
+                    let mut func = self.parse_fn_decl(is_field_private, self.current_span())?;
                     if let Decl::Function {
                         ref mut is_static, ..
                     } = func
@@ -683,7 +715,7 @@ impl<'a> Parser<'a> {
                     self.expect(TokenKind::Eq)?;
                     let field_value = self.parse_expr()?;
 
-                    static_fields.push((field_name, field_type, field_value));
+                    static_fields.push((field_name, field_type, field_value, is_field_private));
 
                     if self.check(&TokenKind::Comma) {
                         self.advance();
@@ -700,7 +732,7 @@ impl<'a> Parser<'a> {
                     self.advance();
                 }
                 if self.check(&TokenKind::Fn) {
-                    let mut func = self.parse_fn_decl()?;
+                    let mut func = self.parse_fn_decl(is_field_private, self.current_span())?;
                     if let Decl::Function {
                         is_override: ref mut override_flag,
                         ..
@@ -779,6 +811,7 @@ impl<'a> Parser<'a> {
                             body: body.clone(),
                             is_static: false,
                             is_override: false,
+                            is_private: is_field_private,
                             span: init_span_start.merge(body.span),
                         });
                         continue;
@@ -799,7 +832,7 @@ impl<'a> Parser<'a> {
                         field_value = Some(self.parse_expr()?);
                     }
 
-                    fields.push((field_name, field_type, field_value, is_mut));
+                    fields.push((field_name, field_type, field_value, is_mut, is_field_private));
                 } else {
                     return Err(Diagnostic::error("Expected field name after let/var")
                         .with_span(self.current_span()));
@@ -825,11 +858,12 @@ impl<'a> Parser<'a> {
             static_fields,
             const_fields,
             methods,
-            span: start_tok.span.merge(end_tok.span),
+            is_private,
+            span: if is_private { start_span.merge(end_tok.span) } else { start_tok.span.merge(end_tok.span) },
         })
     }
 
-    pub(crate) fn parse_enum_decl(&mut self) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_enum_decl(&mut self, is_private: bool, start_span: pace_span::Span) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Enum)?;
 
         let name_tok = match &self.current {
@@ -925,11 +959,12 @@ impl<'a> Parser<'a> {
             name: name_tok,
             generic_params,
             variants,
-            span: start_tok.span.merge(end_tok.span),
+            is_private,
+            span: if is_private { start_span.merge(end_tok.span) } else { start_tok.span.merge(end_tok.span) },
         })
     }
 
-    pub(crate) fn parse_fn_decl(&mut self) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_fn_decl(&mut self, is_private: bool, start_span: pace_span::Span) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Fn)?;
 
         let name_tok = match &self.current {
@@ -1005,7 +1040,8 @@ impl<'a> Parser<'a> {
             body,
             is_static: false,
             is_override: false,
-            span: start_tok.span.merge(end_span),
+            is_private,
+            span: if is_private { start_span.merge(end_span) } else { start_tok.span.merge(end_span) },
         })
     }
 }
