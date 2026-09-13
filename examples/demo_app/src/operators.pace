@@ -6,14 +6,20 @@ fn testOperators() {
     let sub = a - b
     let mul = a * b
     let div = a / b
-    let _eq = a == b
-    let _neq = a != b
-    let _gt = a > b
-    let _lt = a < b
-    let _gte = a >= b
-    let _lte = a <= b
-    println(add)
-    println(sub)
-    println(mul)
-    println(div)
+    let eq = a == b
+    let neq = a != b
+    let gt = a > b
+    let lt = a < b
+    let gte = a >= b
+    let lte = a <= b
+    println("Addition of a + b = $add")
+    println("Subtraction of a - b = $sub")
+    println("Multiplication of a * b = $mul")
+    println("Division of a / b = $div")
+    println("Equality of a == b = $eq")
+    println("Inequality of a != b = $neq")
+    println("Greater than of a > b = $gt")
+    println("Less than of a < b = $lt")
+    println("Greater than or equal to of a >= b = $gte")
+    println("Less than or equal to of a <= b = $lte")
 }

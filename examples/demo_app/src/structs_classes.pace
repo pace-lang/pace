@@ -1,11 +1,11 @@
 struct Point {
-    x: int
-    y: int
+    var x: int
+    var y: int
 }
 
 class Counter {
     static count: int = 0
-    value: int
+    var value: int
 
     fn init() {
         self.value = 0
@@ -24,10 +24,11 @@ class Counter {
 fn testStructsClasses() {
     println("--- Testing Structs and Classes ---")
     let p = Point(x: 10, y: 20)
-    println(p.x)
+    println("Point x: ${p.x}")
+    println("Point y: ${p.y}")
     let c = Counter()
     c.increment()
-    println(c.get())
+    println("Counter value: ${c.get()}")
     let _c2 = Counter()
-    println(Counter.count)
+    println("Counter count: ${Counter.count}")
 }

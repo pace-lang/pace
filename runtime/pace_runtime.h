@@ -15,6 +15,7 @@ void pace_print_float(double val);
 void pace_print_bool(int val);
 void pace_print_string(const char* val);
 void pace_println();
+char* pace_format_string(const char* fmt, ...);
 
 // ARC object header
 typedef struct {

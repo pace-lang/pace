@@ -288,6 +288,18 @@ impl<'a> MirBuilder<'a> {
                 ));
                 temp
             }
+            Expr::InterpolatedString(exprs, _) => {
+                let mut args = Vec::new();
+                for expr in exprs {
+                    args.push(self.build_expr(expr));
+                }
+                let temp = self.new_local(Ty::String);
+                self.push_stmt(Statement::Assign(
+                    Lvalue::Local(temp),
+                    Rvalue::BuiltinCall("interpolate_string".to_string(), args),
+                ));
+                temp
+            }
             Expr::OptionalMemberAccess { object, member, .. } => {
                 let obj = self.build_expr(object);
                 let obj_ty = self.locals[obj.0 as usize].clone();

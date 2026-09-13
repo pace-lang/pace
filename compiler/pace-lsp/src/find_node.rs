@@ -112,6 +112,13 @@ fn find_ident_in_expr(expr: &Expr, offset: usize) -> Option<HirId> {
                 return Some(*id);
             }
         }
+        Expr::InterpolatedString(exprs, _) => {
+            for expr in exprs {
+                if let Some(id) = find_ident_in_expr(expr, offset) {
+                    return Some(id);
+                }
+            }
+        }
         Expr::Binary { left, right, .. } => {
             if let Some(id) = find_ident_in_expr(left, offset) {
                 return Some(id);

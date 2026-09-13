@@ -8,6 +8,13 @@ impl LoweringContext {
             ast::Expr::IntLiteral(val, span) => Ok(Expr::IntLiteral(val, span)),
             ast::Expr::FloatLiteral(val, span) => Ok(Expr::FloatLiteral(val, span)),
             ast::Expr::StringLiteral(val, span) => Ok(Expr::StringLiteral(val, span)),
+            ast::Expr::InterpolatedString(exprs, span) => {
+                let mut lowered_exprs = Vec::new();
+                for expr in exprs {
+                    lowered_exprs.push(self.lower_expr(expr)?);
+                }
+                Ok(Expr::InterpolatedString(lowered_exprs, span))
+            },
             ast::Expr::Ident(ident, generic_args) => {
                 if ident.name == "true" {
                     return Ok(Expr::BoolLiteral(true, ident.span));

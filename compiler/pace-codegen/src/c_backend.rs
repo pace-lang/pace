@@ -432,6 +432,39 @@ impl CGenerator {
                 self.output.push_str(")");
             }
             Rvalue::BuiltinCall(name, args) => {
+                if name == "interpolate_string" {
+                    let mut format_str = String::new();
+                    let mut type_args = Vec::new();
+                    for arg in args {
+                        let mut ty = &locals[arg.0 as usize];
+                        if let Ty::Optional(inner) = ty {
+                            ty = inner;
+                        }
+                        if matches!(ty, Ty::Int) {
+                            format_str.push_str("%lld");
+                            type_args.push(format!("_{}", arg.0));
+                        } else if matches!(ty, Ty::Float) {
+                            format_str.push_str("%f");
+                            type_args.push(format!("_{}", arg.0));
+                        } else if matches!(ty, Ty::String) {
+                            format_str.push_str("%s");
+                            type_args.push(format!("_{}", arg.0));
+                        } else if matches!(ty, Ty::Bool) {
+                            format_str.push_str("%s");
+                            type_args.push(format!("_{} ? \"true\" : \"false\"", arg.0));
+                        } else {
+                            format_str.push_str("%p");
+                            type_args.push(format!("(void*)_{}", arg.0));
+                        }
+                    }
+                    write!(&mut self.output, "pace_format_string(\"{}\"", format_str).unwrap();
+                    for t_arg in type_args {
+                        write!(&mut self.output, ", {}", t_arg).unwrap();
+                    }
+                    self.output.push_str(")");
+                    return;
+                }
+
                 let c_name = if name == "print" || name == "println" {
                     if let Some(arg) = args.first() {
                         let mut ty = &locals[arg.0 as usize];

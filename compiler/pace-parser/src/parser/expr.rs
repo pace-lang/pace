@@ -199,7 +199,81 @@ impl<'a> Parser<'a> {
         match tok.kind {
             TokenKind::Int(val) => Ok(Expr::IntLiteral(val.to_string(), tok.span)),
             TokenKind::Float(val) => Ok(Expr::FloatLiteral(val.to_string(), tok.span)),
-            TokenKind::String(val) => Ok(Expr::StringLiteral(val.to_string(), tok.span)),
+            TokenKind::String(val) => {
+                let inner = &val[1..val.len() - 1]; // Remove outer quotes
+                if !inner.contains('$') {
+                    return Ok(Expr::StringLiteral(val.to_string(), tok.span));
+                }
+
+                let mut exprs = Vec::new();
+                let mut chars = inner.char_indices().peekable();
+                let mut current_str = String::new();
+
+                while let Some((_, c)) = chars.next() {
+                    if c == '$' {
+                        if !current_str.is_empty() {
+                            exprs.push(Expr::StringLiteral(format!("\"{}\"", current_str), tok.span));
+                            current_str.clear();
+                        }
+
+                        if let Some(&(_, '{')) = chars.peek() {
+                            chars.next(); // consume '{'
+                            let mut expr_str = String::new();
+                            let mut brace_count = 1;
+                            while let Some((_, inner_c)) = chars.next() {
+                                if inner_c == '{' {
+                                    brace_count += 1;
+                                } else if inner_c == '}' {
+                                    brace_count -= 1;
+                                    if brace_count == 0 {
+                                        break;
+                                    }
+                                }
+                                expr_str.push(inner_c);
+                            }
+
+                            let sub_lexer = pace_lexer::Lexer::new(&expr_str, pace_span::FileId::DUMMY);
+                            let mut sub_parser = crate::Parser::new(sub_lexer);
+                            let (decls, _, _) = sub_parser.parse_program();
+                            if !decls.is_empty() {
+                                if let pace_ast::Decl::Expr(e, _) = &decls[0] {
+                                    exprs.push(e.clone());
+                                }
+                            }
+                        } else {
+                            // Parse $var
+                            let mut var_str = String::new();
+                            while let Some(&(_, inner_c)) = chars.peek() {
+                                if inner_c.is_alphanumeric() || inner_c == '_' {
+                                    var_str.push(inner_c);
+                                    chars.next();
+                                } else {
+                                    break;
+                                }
+                            }
+                            if !var_str.is_empty() {
+                                exprs.push(Expr::Ident(
+                                    Ident {
+                                        name: var_str,
+                                        span: tok.span,
+                                    },
+                                    None,
+                                ));
+                            } else {
+                                current_str.push('$');
+                            }
+                        }
+                    } else {
+                        current_str.push(c);
+                    }
+                }
+
+                if !current_str.is_empty() {
+                    exprs.push(Expr::StringLiteral(format!("\"{}\"", current_str), tok.span));
+                }
+
+                Ok(Expr::InterpolatedString(exprs, tok.span))
+            }
             TokenKind::Ident(name) => {
                 let ident = Ident {
                     name: name.to_string(),

@@ -1,6 +1,7 @@
 #include "pace_runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 void PACE_RETAIN(long long obj) {
     // Basic ARC stub for MVP
@@ -12,6 +13,18 @@ void PACE_RELEASE(long long obj) {
 
 void pace_println() {
     printf("\n");
+}
+
+char* pace_format_string(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int size = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+    char* buf = (char*)malloc(size + 1);
+    va_start(args, fmt);
+    vsnprintf(buf, size + 1, fmt, args);
+    va_end(args);
+    return buf;
 }
 
 void* pace_alloc(size_t size, pace_destructor_t deinit) {

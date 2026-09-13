@@ -1362,6 +1362,12 @@ impl TypeChecker {
             Expr::FloatLiteral(..) => Ok(Ty::Float),
             Expr::BoolLiteral(..) => Ok(Ty::Bool),
             Expr::StringLiteral(..) => Ok(Ty::String),
+            Expr::InterpolatedString(exprs, _) => {
+                for expr in exprs {
+                    self.check_expr(expr)?;
+                }
+                Ok(Ty::String)
+            }
             Expr::Super(span) => {
                 // Find "self" in current environment
                 for (id, ty) in &self.env {

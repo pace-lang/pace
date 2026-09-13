@@ -516,6 +516,19 @@ impl Formatter {
             Expr::StringLiteral(val, _) => {
                 self.write(val);
             }
+            Expr::InterpolatedString(exprs, _) => {
+                self.write("\"");
+                for expr in exprs {
+                    if let Expr::StringLiteral(val, _) = expr {
+                        self.write(val.trim_matches('"'));
+                    } else {
+                        self.write("${");
+                        self.format_expr(expr);
+                        self.write("}");
+                    }
+                }
+                self.write("\"");
+            }
             Expr::Null(_) => self.write("null"),
             Expr::Ident(ident, generic_args) => {
                 self.write(&ident.name);
