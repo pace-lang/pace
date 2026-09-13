@@ -1,6 +1,6 @@
+use super::LoweringContext;
 use crate::hir::*;
 use pace_ast as ast;
-use super::LoweringContext;
 
 impl LoweringContext {
     pub(crate) fn lower_expr(&mut self, expr: ast::Expr) -> Result<Expr, String> {
@@ -22,8 +22,14 @@ impl LoweringContext {
                     self.scope.insert(ident.name.clone(), id);
                     id
                 };
-                let lowered_args = generic_args.map(|args| args.into_iter().map(|arg| arg.clone()).collect());
-                Ok(Expr::Ident(id, ident.name.clone(), lowered_args, ident.span))
+                let lowered_args =
+                    generic_args.map(|args| args.into_iter().map(|arg| arg.clone()).collect());
+                Ok(Expr::Ident(
+                    id,
+                    ident.name.clone(),
+                    lowered_args,
+                    ident.span,
+                ))
             }
             ast::Expr::Super(span) => Ok(Expr::Super(span)),
             ast::Expr::Binary {

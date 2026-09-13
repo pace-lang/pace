@@ -1,4 +1,4 @@
-fn test_conditionals() {
+fn testConditionals() {
     println("--- Testing Conditionals ---")
     let x = 15
     if x < 10 {

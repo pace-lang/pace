@@ -1,7 +1,39 @@
 use crate::mir::*;
 use pace_hir::{Expr, HirId};
-use pace_ty::Ty;
+use pace_ty::{Ty, TypeChecker};
 use std::collections::HashMap;
+
+fn tc_get_type(tc: &TypeChecker, ty: &pace_ast::Type) -> Option<Ty> {
+    tc.get_type(ty).ok().or_else(|| {
+        if let pace_ast::Type::Named(id) = ty {
+            let suffix = format!("_{}", id.name);
+            for (mangled, &(hir_id, kind)) in &tc.named_types {
+                if mangled == &id.name || mangled.ends_with(&suffix) {
+                    if kind == 1 {
+                        return Some(Ty::Class(hir_id));
+                    }
+                    if kind == 0 {
+                        return Some(Ty::Struct(hir_id));
+                    }
+                    return Some(Ty::Enum(hir_id));
+                }
+            }
+        }
+        None
+    })
+}
+
+fn get_mangled_name(tc: &TypeChecker, name: &str) -> String {
+    if name == "main" {
+        return name.to_string();
+    }
+    for k in tc.global_functions.keys().chain(tc.methods_env.keys()) {
+        if k == name || k.ends_with(&format!("_{}", name)) {
+            return k.clone();
+        }
+    }
+    name.to_string()
+}
 
 pub struct MirBuilder<'a> {
     pub blocks: Vec<BasicBlock>,
@@ -22,6 +54,7 @@ pub struct MirBuilder<'a> {
     pub current_self_local: Option<Local>,
     pub class_parents: &'a HashMap<HirId, HirId>,
     pub global_functions_env: &'a HashMap<String, Ty>,
+    pub resolved_global_names: &'a HashMap<pace_hir::HirId, String>,
 }
 
 impl<'a> MirBuilder<'a> {
@@ -38,6 +71,7 @@ impl<'a> MirBuilder<'a> {
         methods_env: &'a HashMap<String, Ty>,
         class_parents: &'a HashMap<HirId, HirId>,
         global_functions_env: &'a HashMap<String, Ty>,
+        resolved_global_names: &'a HashMap<pace_hir::HirId, String>,
     ) -> Self {
         let initial_block = BasicBlock {
             statements: Vec::new(),
@@ -62,6 +96,7 @@ impl<'a> MirBuilder<'a> {
             methods_env,
             class_parents,
             global_functions_env,
+            resolved_global_names,
         }
     }
 
@@ -201,11 +236,11 @@ impl<'a> MirBuilder<'a> {
                 left, op, right, ..
             } => {
                 let lhs = self.build_expr(left);
-                
+
                 // For short-circuiting like ??, &&, ||, we should ideally use basic blocks
                 // but for MVP, we just emit a binary op if C supports it, or lower to ternary
                 let rhs = self.build_expr(right);
-                
+
                 let ret_ty = if *op == pace_ast::BinaryOp::NullCoalesce {
                     self.locals[rhs.0 as usize].clone()
                 } else if *op == pace_ast::BinaryOp::And || *op == pace_ast::BinaryOp::Or {
@@ -213,7 +248,7 @@ impl<'a> MirBuilder<'a> {
                 } else {
                     Ty::Int
                 };
-                
+
                 let temp = self.new_local(ret_ty);
                 self.push_stmt(Statement::Assign(
                     Lvalue::Local(temp),
@@ -256,13 +291,13 @@ impl<'a> MirBuilder<'a> {
             Expr::OptionalMemberAccess { object, member, .. } => {
                 let obj = self.build_expr(object);
                 let obj_ty = self.locals[obj.0 as usize].clone();
-                
-                let inner_ty = if let Ty::Optional(inner) = obj_ty {
+
+                let _inner_ty = if let Ty::Optional(inner) = obj_ty {
                     *inner
                 } else {
                     Ty::Void // Fallback
                 };
-                
+
                 // We mock the field access type. In a real compiler we'd resolve it fully here.
                 let temp = self.new_local(Ty::Optional(Box::new(Ty::Void))); // We just use Option<Void> as a placeholder, Codegen will emit properly
                 self.push_stmt(Statement::Assign(
@@ -274,7 +309,15 @@ impl<'a> MirBuilder<'a> {
             Expr::MemberAccess { object, member, .. } => {
                 // If the object is a type (class/struct), it's a static access
                 if let Expr::Ident(id, _name, generic_args, _) = &**object {
-                    let mut is_type_name = self.named_types.contains_key(_name) || generic_args.is_some();
+                    let is_type_name = self
+                        .resolved_global_names
+                        .get(id)
+                        .map_or(false, |m| self.named_types.contains_key(m))
+                        || self
+                            .named_types
+                            .keys()
+                            .any(|k| k.ends_with(&format!("_{}", _name)) || k == _name)
+                        || generic_args.is_some();
                     let mut ty_opt = self.global_env.get(id).cloned();
                     if ty_opt.is_none() {
                         ty_opt = self.local_types.get(id).cloned();
@@ -381,7 +424,39 @@ impl<'a> MirBuilder<'a> {
                 let mut global_name = String::new();
 
                 if let Expr::Ident(id, name, _, _) = &**callee {
-                    if let Some(name) = self.global_fns.get(name) {
+                    if let Some(mangled) = self.resolved_global_names.get(id) {
+                        if let Some(&(nid, kind)) = self.named_types.get(mangled) {
+                            if kind == 0 || kind == 1 {
+                                is_instantiation = true;
+                                inst_ty = Some(if kind == 0 {
+                                    Ty::Struct(nid)
+                                } else {
+                                    Ty::Class(nid)
+                                });
+                                struct_name = mangled.clone();
+                            } else {
+                                is_global = true;
+                                global_name = mangled.clone();
+                            }
+                        } else if let Some(ty) = self.local_types.get(id) {
+                            if let Ty::Struct(nid) | Ty::Class(nid) = ty {
+                                is_instantiation = true;
+                                inst_ty = Some(ty.clone());
+                                for (n, &(tid, _)) in self.named_types {
+                                    if *nid == tid {
+                                        struct_name = n.clone();
+                                        break;
+                                    }
+                                }
+                            } else {
+                                is_global = true;
+                                global_name = mangled.clone();
+                            }
+                        } else {
+                            is_global = true;
+                            global_name = mangled.clone();
+                        }
+                    } else if let Some(name) = self.global_fns.get(name) {
                         is_global = true;
                         global_name = name.clone();
                     } else if let Some(ty) = self.global_env.get(id) {
@@ -436,7 +511,44 @@ impl<'a> MirBuilder<'a> {
                 } else if let Expr::MemberAccess { object, member, .. } = &**callee {
                     let mut is_static_method = false;
                     if let Expr::Ident(id, name, generic_args, _) = &**object {
-                        let mut is_type_name = self.named_types.contains_key(name) || generic_args.is_some();
+                        let is_type_name = self
+                            .resolved_global_names
+                            .get(id)
+                            .map_or(false, |m| self.named_types.contains_key(m))
+                            || generic_args.is_some();
+                        if is_type_name {
+                            is_static_method = true;
+                            is_global = true;
+                            if let Some(mangled) = self.resolved_global_names.get(id) {
+                                global_name = format!("{}_{}", mangled, member);
+                            } else {
+                                global_name = format!("{}_{}", name, member);
+                            }
+                        } else if let Some(mangled) = self.resolved_global_names.get(id) {
+                            // Check if it's a module alias mapping to a global function or method
+                            let possible_global = format!("{}_{}", mangled, member);
+                            if self.global_functions_env.contains_key(&possible_global)
+                                || self.methods_env.contains_key(&possible_global)
+                            {
+                                is_static_method = true;
+                                is_global = true;
+                                global_name = possible_global;
+                            } else {
+                                // Might be a generic instantiation from a module alias
+                                let mut found_type = false;
+                                for (tname, _) in self.named_types {
+                                    if tname == &possible_global {
+                                        found_type = true;
+                                        break;
+                                    }
+                                }
+                                if found_type {
+                                    is_static_method = true;
+                                    is_global = true;
+                                    global_name = possible_global;
+                                }
+                            }
+                        }
                         let mut ty_opt = self.global_env.get(id).cloned();
                         if ty_opt.is_none() {
                             ty_opt = self.local_types.get(id).cloned();
@@ -626,19 +738,24 @@ impl<'a> MirBuilder<'a> {
                     let mut is_enum_variant = false;
                     let mut enum_id = None;
 
-                    if let Expr::Ident(id, _name, _, _) = &**callee {
-                        if let Some(Ty::Function(_, ret)) = self.global_functions_env.get(_name) {
-                            if let Ty::Enum(eid) = **ret {
-                                is_enum_variant = true;
-                                enum_id = Some(eid);
-                            } else {
-                                ret_ty = *ret.clone();
-                            }
-                        }
-                    } else if let Expr::MemberAccess {
-                        object, member: _, ..
-                    } = &**callee
+                    if let Some(Ty::Function(_, ret)) = self.global_functions_env.get(&global_name)
                     {
+                        if let Ty::Enum(eid) = **ret {
+                            is_enum_variant = true;
+                            enum_id = Some(eid);
+                        } else {
+                            ret_ty = *ret.clone();
+                        }
+                    } else if let Some(Ty::Function(_, ret)) = self.methods_env.get(&global_name) {
+                        if let Ty::Enum(eid) = **ret {
+                            is_enum_variant = true;
+                            enum_id = Some(eid);
+                        } else {
+                            ret_ty = *ret.clone();
+                        }
+                    }
+
+                    if let Expr::MemberAccess { object, .. } = &**callee {
                         if let Expr::Ident(id, name, _, _) = &**object {
                             if let Some(Ty::Enum(eid)) = self.global_env.get(id) {
                                 is_enum_variant = true;
@@ -646,27 +763,15 @@ impl<'a> MirBuilder<'a> {
                             } else if let Some(&(eid, 2)) = self.named_types.get(name) {
                                 is_enum_variant = true;
                                 enum_id = Some(eid);
-                            } else if let Some(expected) = &self.current_expected_ty {
-                                if let Ty::Enum(eid) = expected {
-                                    is_enum_variant = true;
-                                    enum_id = Some(*eid);
-                                } else if let Some(Ty::Function(_, ret)) =
-                                    self.methods_env.get(&global_name)
-                                {
-                                    ret_ty = *ret.clone();
-                                }
-                            } else if let Some(Ty::Function(_, ret)) =
-                                self.methods_env.get(&global_name)
-                            {
-                                ret_ty = *ret.clone();
                             }
-                        } else if let Some(Ty::Function(_, ret)) =
-                            self.methods_env.get(&global_name)
-                        {
-                            ret_ty = *ret.clone();
                         }
-                    } else if let Some(Ty::Function(_, ret)) = self.methods_env.get(&global_name) {
-                        ret_ty = *ret.clone();
+                    }
+
+                    if let Some(expected) = &self.current_expected_ty {
+                        if let Ty::Enum(eid) = expected {
+                            is_enum_variant = true;
+                            enum_id = Some(*eid);
+                        }
                     }
 
                     if is_enum_variant {
@@ -941,11 +1046,21 @@ impl<'a> MirBuilder<'a> {
             Expr::Assign { target, value, .. } => {
                 let mut is_static_assign = false;
                 let mut static_name = String::new();
-                let mut lvalue = match &**target {
-                    Expr::Ident(id, _name, _, _) => Lvalue::Local(*self.hir_to_local.get(id).unwrap()),
+                let lvalue = match &**target {
+                    Expr::Ident(id, _name, _, _) => {
+                        Lvalue::Local(*self.hir_to_local.get(id).unwrap())
+                    }
                     Expr::MemberAccess { object, member, .. } => {
                         if let Expr::Ident(id, name, generic_args, _) = &**object {
-                            let mut is_type_name = self.named_types.contains_key(name) || generic_args.is_some();
+                            let is_type_name = self
+                                .resolved_global_names
+                                .get(id)
+                                .map_or(false, |m| self.named_types.contains_key(m))
+                                || self
+                                    .named_types
+                                    .keys()
+                                    .any(|k| k.ends_with(&format!("_{}", name)) || k == name)
+                                || generic_args.is_some();
                             if is_type_name {
                                 let mut ty_opt = self.global_env.get(id).cloned();
                                 if ty_opt.is_none() {
@@ -1045,7 +1160,7 @@ impl<'a> MirBuilder<'a> {
                 declarations.push(decl.clone());
             }
         }
-        
+
         let mut global_fns = HashMap::new();
         for decl in declarations.iter().chain(tc.instantiated_generics.iter()) {
             if let pace_hir::Decl::Function { name, .. } = decl {
@@ -1080,6 +1195,7 @@ impl<'a> MirBuilder<'a> {
             &tc.methods_env,
             &tc.class_parents,
             &tc.global_functions,
+            &tc.resolved_global_names,
         );
         let mut _main_last_local = Local(0);
 
@@ -1121,6 +1237,7 @@ impl<'a> MirBuilder<'a> {
                     main_builder.push_stmt(Statement::GlobalWrite(global_name, rval_local));
                 }
                 pace_hir::Decl::Struct {
+                    id,
                     name,
                     static_fields,
                     const_fields,
@@ -1129,27 +1246,36 @@ impl<'a> MirBuilder<'a> {
                     ..
                 }
                 | pace_hir::Decl::Class {
+                    id,
                     name,
+                    methods,
                     static_fields,
                     const_fields,
-                    methods,
                     generic_params,
                     ..
                 } => {
+                    let mut mangled_name = name.clone();
+                    for (k, &(tid, _)) in &tc.named_types {
+                        if tid == *id {
+                            mangled_name = k.clone();
+                            break;
+                        }
+                    }
                     if generic_params.is_some() {
                         continue;
                     }
+
                     for (sf_name, sf_ty, sf_expr) in static_fields {
-                        let global_name = format!("{}_{}", name, sf_name);
-                        let ty = tc.get_type(sf_ty).unwrap_or(Ty::Int);
+                        let global_name = format!("{}_{}", mangled_name, sf_name);
+                        let ty = tc_get_type(tc, sf_ty).unwrap_or(Ty::Int);
                         global_vars.push((global_name.clone(), ty.clone()));
 
                         let rval_local = main_builder.build_expr(sf_expr);
                         main_builder.push_stmt(Statement::GlobalWrite(global_name, rval_local));
                     }
                     for (cf_name, cf_ty, cf_expr) in const_fields {
-                        let global_name = format!("{}_{}", name, cf_name);
-                        let ty = tc.get_type(cf_ty).unwrap_or(Ty::Int);
+                        let global_name = format!("{}_{}", mangled_name, cf_name);
+                        let ty = tc_get_type(tc, cf_ty).unwrap_or(Ty::Int);
                         global_vars.push((global_name.clone(), ty.clone()));
 
                         let rval_local = main_builder.build_expr(cf_expr);
@@ -1177,10 +1303,11 @@ impl<'a> MirBuilder<'a> {
                                 &tc.methods_env,
                                 &tc.class_parents,
                                 &tc.global_functions,
+                                &tc.resolved_global_names,
                             );
                             let mut mir_params = Vec::new();
                             for (param_id, param_name, pty) in params {
-                                let ty = tc.get_type(pty).unwrap_or(Ty::Int);
+                                let ty = tc_get_type(tc, pty).unwrap_or(Ty::Int);
                                 let local = fn_builder.new_local(ty);
                                 if param_name == "self" {
                                     fn_builder.current_self_local = Some(local);
@@ -1190,7 +1317,7 @@ impl<'a> MirBuilder<'a> {
                             }
 
                             let ret_ty = if let Some(rty) = return_type {
-                                tc.get_type(rty).unwrap_or(Ty::Void)
+                                tc_get_type(tc, rty).unwrap_or(Ty::Void)
                             } else {
                                 Ty::Void
                             };
@@ -1198,7 +1325,7 @@ impl<'a> MirBuilder<'a> {
                             let fn_body = fn_builder.finish(&mir_params);
 
                             functions.push(MirFunction {
-                                name: name.clone(),
+                                name: get_mangled_name(tc, name),
                                 params: mir_params,
                                 return_type: ret_ty,
                                 body: fn_body,
@@ -1235,10 +1362,11 @@ impl<'a> MirBuilder<'a> {
                         &tc.methods_env,
                         &tc.class_parents,
                         &tc.global_functions,
+                        &tc.resolved_global_names,
                     );
                     let mut mir_params = Vec::new();
                     for (param_id, param_name, pty) in params {
-                        let ty = tc.get_type(pty).unwrap_or(Ty::Int);
+                        let ty = tc_get_type(tc, pty).unwrap_or(Ty::Int);
                         let local = fn_builder.new_local(ty);
                         if param_name == "self" {
                             fn_builder.current_self_local = Some(local);
@@ -1248,14 +1376,14 @@ impl<'a> MirBuilder<'a> {
                     }
 
                     let ret_ty = if let Some(rty) = return_type {
-                        tc.get_type(rty).unwrap_or(Ty::Void)
+                        tc_get_type(tc, rty).unwrap_or(Ty::Void)
                     } else {
                         Ty::Void
                     };
                     fn_builder.build_block(body);
                     let fn_body = fn_builder.finish(&mir_params);
                     functions.push(MirFunction {
-                        name: name.clone(),
+                        name: get_mangled_name(tc, name),
                         params: mir_params,
                         return_type: ret_ty,
                         body: fn_body,
@@ -1263,6 +1391,7 @@ impl<'a> MirBuilder<'a> {
                 }
                 pace_hir::Decl::Enum { .. } => {}
                 pace_hir::Decl::Trait { .. } => {}
+                pace_hir::Decl::Import { .. } => {}
             }
         }
 
@@ -1273,7 +1402,7 @@ impl<'a> MirBuilder<'a> {
                 let res_fields = v.fields.as_ref().map(|fields| {
                     fields
                         .iter()
-                        .map(|(name, ty)| (name.clone(), tc.get_type(ty).unwrap_or(Ty::Int)))
+                        .map(|(name, ty)| (name.clone(), tc_get_type(tc, ty).unwrap_or(Ty::Int)))
                         .collect()
                 });
                 res_variants.push((v.name.clone(), res_fields));

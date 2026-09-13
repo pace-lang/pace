@@ -47,16 +47,27 @@ pub struct Span {
 }
 
 impl Span {
-    pub const DUMMY: Span = Span { file_id: FileId::DUMMY, start: 0, end: 0 };
+    pub const DUMMY: Span = Span {
+        file_id: FileId::DUMMY,
+        start: 0,
+        end: 0,
+    };
 
     pub fn new(file_id: FileId, start: u32, end: u32) -> Self {
-        Self { file_id, start, end }
+        Self {
+            file_id,
+            start,
+            end,
+        }
     }
 
     /// Merges two spans into a single span that encompasses both.
     /// Panics if the spans belong to different files.
     pub fn merge(self, other: Self) -> Self {
-        assert_eq!(self.file_id, other.file_id, "Cannot merge spans from different files");
+        assert_eq!(
+            self.file_id, other.file_id,
+            "Cannot merge spans from different files"
+        );
         Self {
             file_id: self.file_id,
             start: self.start.min(other.start),
@@ -67,7 +78,10 @@ impl Span {
 
 impl From<Span> for SourceSpan {
     fn from(span: Span) -> Self {
-        SourceSpan::new((span.start as usize).into(), ((span.end - span.start) as usize).into())
+        SourceSpan::new(
+            (span.start as usize).into(),
+            ((span.end - span.start) as usize).into(),
+        )
     }
 }
 

@@ -15,8 +15,14 @@ mod tests {
             locals: vec![Ty::Int, Ty::String],
             blocks: vec![BasicBlock {
                 statements: vec![
-                    Statement::Assign(Lvalue::Local(Local(0)), Rvalue::IntConstant("42".to_string())),
-                    Statement::Assign(Lvalue::Local(Local(1)), Rvalue::StringConstant("hello".to_string())),
+                    Statement::Assign(
+                        Lvalue::Local(Local(0)),
+                        Rvalue::IntConstant("42".to_string()),
+                    ),
+                    Statement::Assign(
+                        Lvalue::Local(Local(1)),
+                        Rvalue::StringConstant("hello".to_string()),
+                    ),
                     Statement::Retain(Lvalue::Local(Local(1))),
                 ],
                 terminator: Some(Terminator::Return(Local(0))),

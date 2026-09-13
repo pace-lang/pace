@@ -67,5 +67,4 @@ impl LoweringContext {
             span: block.span,
         })
     }
-
 }

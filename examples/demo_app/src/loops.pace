@@ -1,4 +1,4 @@
-fn test_loops() {
+fn testLoops() {
     println("--- Testing Loops ---")
     var i = 0
     while i < 5 {

@@ -1,8 +1,8 @@
+use reqwest::blocking::Client;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
-use reqwest::blocking::Client;
 
 use crate::PaceToml;
 
@@ -49,7 +49,11 @@ impl DependencyResolver {
     pub fn resolve(&mut self, toml: &PaceToml) -> Result<PaceLock, String> {
         let mut queue = Vec::new();
         for (name, dep) in &toml.dependencies {
-            queue.push((name.clone(), dep.version().map(|s| s.to_string()), dep.path().map(|s| s.to_string())));
+            queue.push((
+                name.clone(),
+                dep.version().map(|s| s.to_string()),
+                dep.path().map(|s| s.to_string()),
+            ));
         }
 
         while let Some((name, version_req, path)) = queue.pop() {
@@ -58,11 +62,14 @@ impl DependencyResolver {
             }
 
             if let Some(p) = path {
-                self.resolved.insert(name, LockedPackage {
-                    version: version_req.unwrap_or_else(|| "0.1.0".to_string()),
-                    source: Some(format!("local+{}", p)),
-                    checksum: None,
-                });
+                self.resolved.insert(
+                    name,
+                    LockedPackage {
+                        version: version_req.unwrap_or_else(|| "0.1.0".to_string()),
+                        source: Some(format!("local+{}", p)),
+                        checksum: None,
+                    },
+                );
                 continue;
             }
 
@@ -72,16 +79,25 @@ impl DependencyResolver {
                 return Err(format!("Failed to find package {} in registry", name));
             }
             let info: RegistryResponse = resp.json().map_err(|e| e.to_string())?;
-            
-            // Simplified for first iteration: pick latest
-            let latest = info.latest_version.ok_or_else(|| format!("No versions found for {}", name))?;
-            let v_info = info.version_info.into_iter().find(|v| v.version == latest).unwrap();
 
-            self.resolved.insert(name.clone(), LockedPackage {
-                version: latest,
-                source: Some("registry".to_string()),
-                checksum: v_info.tarball_sha256,
-            });
+            // Simplified for first iteration: pick latest
+            let latest = info
+                .latest_version
+                .ok_or_else(|| format!("No versions found for {}", name))?;
+            let v_info = info
+                .version_info
+                .into_iter()
+                .find(|v| v.version == latest)
+                .unwrap();
+
+            self.resolved.insert(
+                name.clone(),
+                LockedPackage {
+                    version: latest,
+                    source: Some("registry".to_string()),
+                    checksum: v_info.tarball_sha256,
+                },
+            );
 
             for (dep_name, dep_ver) in v_info.dependencies {
                 queue.push((dep_name, Some(dep_ver), None));
@@ -97,7 +113,7 @@ impl DependencyResolver {
         let toml_str = toml::to_string(lock).map_err(|e| e.to_string())?;
         fs::write(path, toml_str).map_err(|e| e.to_string())
     }
-    
+
     pub fn read_lockfile(path: &Path) -> Result<PaceLock, String> {
         let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
         toml::from_str(&content).map_err(|e| e.to_string())

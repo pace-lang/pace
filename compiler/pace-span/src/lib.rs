@@ -1,3 +1,3 @@
 mod span;
 
-pub use span::{Span, FileId, SourceMap};
+pub use span::{FileId, SourceMap, Span};

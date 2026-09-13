@@ -11,8 +11,10 @@ class Dog extends Animal {
     }
 }
 
-fn test_inheritance() {
+fn testInheritance() {
     println("--- Testing Inheritance ---")
+    let a = Animal(name: "Generic")
+    a.speak()
     let d = Dog(name: "Buddy")
     d.speak()
 }

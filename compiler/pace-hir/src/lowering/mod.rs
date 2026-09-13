@@ -8,9 +8,9 @@ pub struct LoweringContext {
     scope: HashMap<String, HirId>,
 }
 
+mod decl;
 mod expr;
 mod stmt;
-mod decl;
 
 impl LoweringContext {
     pub fn new() -> Self {
@@ -28,7 +28,7 @@ impl LoweringContext {
 
     pub fn lower_program(&mut self, ast: ast::Program) -> Result<Program, String> {
         let mut modules = HashMap::new();
-        
+
         for (name, ast_module) in ast.modules {
             let mut declarations = Vec::new();
             for decl in ast_module.declarations {
@@ -36,14 +36,19 @@ impl LoweringContext {
                     declarations.push(d);
                 }
             }
-            
-            modules.insert(name.clone(), Module {
-                name: ast_module.name,
-                file_id: ast_module.file_id,
-                declarations,
-            });
-        }
-        Ok(Program { modules })
-    }
 
+            modules.insert(
+                name.clone(),
+                Module {
+                    name: ast_module.name,
+                    file_id: ast_module.file_id,
+                    declarations,
+                },
+            );
+        }
+        Ok(Program {
+            modules,
+            module_order: ast.module_order,
+        })
+    }
 }

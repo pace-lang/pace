@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use std::fs;
-use reqwest::blocking::Client;
 use flate2::read::GzDecoder;
+use reqwest::blocking::Client;
+use std::fs;
+use std::path::PathBuf;
 use tar::Archive;
 
 pub struct CacheManager {
@@ -22,26 +22,45 @@ impl CacheManager {
         self.cache_dir.join(format!("{}-{}", name, version))
     }
 
-    pub fn download_and_extract(&self, name: &str, version: &str, _tarball_sha256: &str) -> Result<PathBuf, String> {
+    pub fn download_and_extract(
+        &self,
+        name: &str,
+        version: &str,
+        _tarball_sha256: &str,
+    ) -> Result<PathBuf, String> {
         let pkg_dir = self.get_package_path(name, version);
         if pkg_dir.exists() {
             return Ok(pkg_dir); // Already cached
         }
 
-        let url = format!("http://localhost:3000/api/packages/{}/download/{}", name, version);
+        let url = format!(
+            "http://localhost:3000/api/packages/{}/download/{}",
+            name, version
+        );
         let client = Client::new();
-        let resp = client.get(&url).send().map_err(|e| format!("Failed to download {}: {}", name, e))?;
+        let resp = client
+            .get(&url)
+            .send()
+            .map_err(|e| format!("Failed to download {}: {}", name, e))?;
 
         if !resp.status().is_success() {
-            return Err(format!("Failed to download {}: HTTP {}", name, resp.status()));
+            return Err(format!(
+                "Failed to download {}: HTTP {}",
+                name,
+                resp.status()
+            ));
         }
 
-        let bytes = resp.bytes().map_err(|e| format!("Failed to read body: {}", e))?;
-        
+        let bytes = resp
+            .bytes()
+            .map_err(|e| format!("Failed to read body: {}", e))?;
+
         let tar = GzDecoder::new(&bytes[..]);
         let mut archive = Archive::new(tar);
-        
-        archive.unpack(&pkg_dir).map_err(|e| format!("Failed to extract {}: {}", name, e))?;
+
+        archive
+            .unpack(&pkg_dir)
+            .map_err(|e| format!("Failed to extract {}: {}", name, e))?;
 
         Ok(pkg_dir)
     }

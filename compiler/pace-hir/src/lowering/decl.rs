@@ -6,7 +6,11 @@ use super::LoweringContext;
 impl LoweringContext {
     pub(crate) fn lower_decl(&mut self, decl: ast::Decl) -> Result<Option<Decl>, String> {
         match decl {
-            ast::Decl::Import { .. } => Ok(None),
+            ast::Decl::Import { path, alias, span } => Ok(Some(Decl::Import {
+                path: path.into_iter().map(|i| i.name).collect(),
+                alias: alias.map(|i| i.name),
+                span,
+            })),
             ast::Decl::Let {
                 name,
                 ty,
@@ -87,10 +91,13 @@ impl LoweringContext {
                 for (field_name, _, field_val, _) in &fields {
                     if let Some(val) = field_val {
                         let lhs = ast::Expr::MemberAccess {
-                            object: Box::new(ast::Expr::Ident(ast::Ident {
-                                name: "self".to_string(),
-                                span: field_name.span,
-                            }, None)),
+                            object: Box::new(ast::Expr::Ident(
+                                ast::Ident {
+                                    name: "self".to_string(),
+                                    span: field_name.span,
+                                },
+                                None,
+                            )),
                             member: field_name.clone(),
                             span: field_name.span,
                         };
@@ -240,10 +247,13 @@ impl LoweringContext {
                 for (field_name, _, field_val, _) in &fields {
                     if let Some(val) = field_val {
                         let lhs = ast::Expr::MemberAccess {
-                            object: Box::new(ast::Expr::Ident(ast::Ident {
-                                name: "self".to_string(),
-                                span: field_name.span,
-                            }, None)),
+                            object: Box::new(ast::Expr::Ident(
+                                ast::Ident {
+                                    name: "self".to_string(),
+                                    span: field_name.span,
+                                },
+                                None,
+                            )),
                             member: field_name.clone(),
                             span: field_name.span,
                         };
@@ -532,5 +542,4 @@ impl LoweringContext {
             _ => Ok(None),
         }
     }
-
 }

@@ -39,6 +39,9 @@ mod tests {
         let methods_env = HashMap::new();
         let class_parents = HashMap::new();
 
+        let global_functions_env = HashMap::new();
+        let resolved_global_names = HashMap::new();
+
         let mut builder = MirBuilder::new(
             global_fns,
             &struct_defs,
@@ -51,10 +54,12 @@ mod tests {
             &static_fields_env,
             &methods_env,
             &class_parents,
+            &global_functions_env,
+            &resolved_global_names,
         );
         builder.locals.push(pace_ty::Ty::Int);
         builder.hir_to_local.insert(HirId(1), Local(0));
-        
+
         let _result_local = builder.build_expr(&expr);
         let body = builder.finish(&[]);
 
@@ -87,7 +92,7 @@ mod tests {
             Statement::Assign(_, Rvalue::BinaryOp(BinaryOp::Add, Local(3), Local(4))) => {}
             _ => panic!("Expected Add(3, 4)"),
         }
-        
+
         match &stmts[5] {
             Statement::Assign(_, Rvalue::IntConstant(v)) => assert_eq!(v, "0"),
             _ => panic!("Expected IntConstant 0 for return"),

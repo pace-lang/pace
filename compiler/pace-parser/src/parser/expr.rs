@@ -1,7 +1,6 @@
 use pace_ast::{Expr, Ident, MatchArm, Pattern, Type};
 use pace_errors::Diagnostic;
 use pace_lexer::{Token, TokenKind};
-use pace_span::Span;
 
 use super::Parser;
 

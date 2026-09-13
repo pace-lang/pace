@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub mod resolve;
 pub mod cache;
+pub mod resolve;
 
 use std::collections::HashMap;
 
@@ -108,16 +108,23 @@ pub fn scaffold_project(path: &str, is_lib: bool) -> Result<(), String> {
         .map_err(|e| format!("Failed to write README.md: {}", e))?;
 
     if is_lib {
-        fs::write(project_dir.join("LICENSE"), "MIT License\n\nCopyright (c) 2026 ...\n")
-            .map_err(|e| format!("Failed to write LICENSE: {}", e))?;
-        fs::write(project_dir.join("CHANGELOG.md"), "# Changelog\n\n## [0.1.0] - Initial release\n")
-            .map_err(|e| format!("Failed to write CHANGELOG.md: {}", e))?;
+        fs::write(
+            project_dir.join("LICENSE"),
+            "MIT License\n\nCopyright (c) 2026 ...\n",
+        )
+        .map_err(|e| format!("Failed to write LICENSE: {}", e))?;
+        fs::write(
+            project_dir.join("CHANGELOG.md"),
+            "# Changelog\n\n## [0.1.0] - Initial release\n",
+        )
+        .map_err(|e| format!("Failed to write CHANGELOG.md: {}", e))?;
 
         let lib_content = "fn hello() {\n    println(\"⚡ Hello from your Pace library!\")\n}\n";
         fs::write(project_dir.join("src/lib.pace"), lib_content)
             .map_err(|e| format!("Failed to write src/lib.pace: {}", e))?;
     } else {
-        let main_content = "fn main() {\n    println(\"⚡ Pace is ready. Build something fast.\")\n}\n";
+        let main_content =
+            "fn main() {\n    println(\"⚡ Pace is ready. Build something fast.\")\n}\n";
         fs::write(project_dir.join("src/main.pace"), main_content)
             .map_err(|e| format!("Failed to write src/main.pace: {}", e))?;
     }

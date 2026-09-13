@@ -1,7 +1,6 @@
-use pace_ast::{Block, Decl, Expr, Stmt, Ident};
+use pace_ast::{Block, Ident, Stmt};
 use pace_errors::Diagnostic;
-use pace_lexer::{Token, TokenKind};
-use pace_span::Span;
+use pace_lexer::TokenKind;
 
 use super::Parser;
 
@@ -139,5 +138,4 @@ impl<'a> Parser<'a> {
             Ok(Stmt::ExprStmt(expr, span))
         }
     }
-
 }

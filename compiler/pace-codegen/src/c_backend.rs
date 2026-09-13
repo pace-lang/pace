@@ -376,7 +376,12 @@ impl CGenerator {
             }
             Rvalue::BinaryOp(op, lhs, rhs) => {
                 if matches!(op, BinaryOp::NullCoalesce) {
-                    write!(&mut self.output, "_{} != 0 ? _{} : _{}", lhs.0, lhs.0, rhs.0).unwrap();
+                    write!(
+                        &mut self.output,
+                        "_{} != 0 ? _{} : _{}",
+                        lhs.0, lhs.0, rhs.0
+                    )
+                    .unwrap();
                 } else if matches!(op, BinaryOp::And) {
                     write!(&mut self.output, "_{} && _{}", lhs.0, rhs.0).unwrap();
                 } else if matches!(op, BinaryOp::Or) {
@@ -401,9 +406,19 @@ impl CGenerator {
             Rvalue::OptionalFieldAccess(obj, field) => {
                 let is_ptr = matches!(locals[obj.0 as usize], Ty::Class(_) | Ty::Optional(_));
                 if is_ptr {
-                    write!(&mut self.output, "_{} != 0 ? _{}->{} : 0", obj.0, obj.0, field).unwrap();
+                    write!(
+                        &mut self.output,
+                        "_{} != 0 ? _{}->{} : 0",
+                        obj.0, obj.0, field
+                    )
+                    .unwrap();
                 } else {
-                    write!(&mut self.output, "_{} != 0 ? _{}.{} : 0", obj.0, obj.0, field).unwrap(); // assuming structs might be checked for 0? Not really safe in C, but works for pointer MVP
+                    write!(
+                        &mut self.output,
+                        "_{} != 0 ? _{}.{} : 0",
+                        obj.0, obj.0, field
+                    )
+                    .unwrap(); // assuming structs might be checked for 0? Not really safe in C, but works for pointer MVP
                 }
             }
             Rvalue::Call(callee, args) => {

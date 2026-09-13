@@ -12,40 +12,104 @@ use pace_ty::TypeChecker;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+#[derive(Debug, Default)]
+struct DependencyGraph {
+    edges: std::collections::HashMap<String, Vec<String>>,
+}
+
+impl DependencyGraph {
+    fn add_edge(&mut self, from: String, to: String) {
+        self.edges.entry(from).or_default().push(to);
+    }
+
+    fn topological_sort(&self, modules: &[String]) -> Result<Vec<String>, String> {
+        let mut order = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+        let mut temp_mark = std::collections::HashSet::new();
+
+        fn visit(
+            node: &str,
+            edges: &std::collections::HashMap<String, Vec<String>>,
+            visited: &mut std::collections::HashSet<String>,
+            temp_mark: &mut std::collections::HashSet<String>,
+            order: &mut Vec<String>,
+        ) -> Result<(), String> {
+            if temp_mark.contains(node) {
+                return Err(format!(
+                    "Circular dependency detected involving module '{}'",
+                    node
+                ));
+            }
+            if !visited.contains(node) {
+                temp_mark.insert(node.to_string());
+                if let Some(deps) = edges.get(node) {
+                    for dep in deps {
+                        visit(dep, edges, visited, temp_mark, order)?;
+                    }
+                }
+                temp_mark.remove(node);
+                visited.insert(node.to_string());
+                order.push(node.to_string());
+            }
+            Ok(())
+        }
+
+        // Sort the input modules to ensure deterministic traversal when there are multiple disconnected components
+        let mut sorted_modules = modules.to_vec();
+        sorted_modules.sort();
+
+        for node in &sorted_modules {
+            if !visited.contains(node) {
+                visit(node, &self.edges, &mut visited, &mut temp_mark, &mut order)?;
+            }
+        }
+        Ok(order)
+    }
+}
+
 fn parse_file_and_imports(
     file_path: &Path,
+    module_name_opt: Option<String>,
     visited: &mut HashSet<PathBuf>,
     modules: &mut std::collections::HashMap<String, pace_ast::Module>,
+    deps: &mut DependencyGraph,
     lockfile: Option<&pace_pkg::resolve::PaceLock>,
     cache: &pace_pkg::cache::CacheManager,
     source_map: &mut pace_span::SourceMap,
 ) -> Result<(), String> {
-    let canonical = file_path.canonicalize().unwrap_or_else(|_| file_path.to_path_buf());
+    let canonical = file_path
+        .canonicalize()
+        .unwrap_or_else(|_| file_path.to_path_buf());
     if !visited.insert(canonical.clone()) {
         return Ok(());
     }
 
-    let source = fs::read_to_string(file_path).map_err(|e| format!("Failed to read {}: {}", file_path.display(), e))?;
+    let source = fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read {}: {}", file_path.display(), e))?;
     let file_id = source_map.add_file(file_path.display().to_string(), source.clone());
     let lexer = Lexer::new(&source, file_id);
     let mut parser = Parser::new(lexer);
-    
+
     let ast = parser.parse_program().map_err(|diag| {
         let mut reporter = pace_errors::Reporter::new();
         reporter.report(diag);
         reporter.emit_all(source_map);
-        format!("Compilation failed due to syntax errors in {}", file_path.display())
+        format!(
+            "Compilation failed due to syntax errors in {}",
+            file_path.display()
+        )
     })?;
 
     let mut module_decls = Vec::new();
-    let module_name = file_path.file_stem().unwrap().to_string_lossy().to_string();
+    let module_name = module_name_opt
+        .unwrap_or_else(|| file_path.file_stem().unwrap().to_string_lossy().to_string());
 
     for decl in ast {
         module_decls.push(decl.clone());
 
         if let pace_ast::Decl::Import { path, .. } = &decl {
             let first_ident = &path[0].name;
-            
+
             // Try to resolve logically
             let mut import_path = file_path.parent().unwrap().to_path_buf();
             for (i, ident) in path.iter().enumerate() {
@@ -58,7 +122,9 @@ fn parse_file_and_imports(
 
             if !import_path.exists() {
                 if let Some(lock) = lockfile {
-                    let pkg_entry = lock.packages.get(first_ident)
+                    let pkg_entry = lock
+                        .packages
+                        .get(first_ident)
                         .map(|pkg| (first_ident.clone(), pkg));
 
                     if let Some((actual_name, pkg)) = pkg_entry {
@@ -86,20 +152,45 @@ fn parse_file_and_imports(
                     }
                 }
             }
-            
+
             if !import_path.exists() {
-                return Err(format!("Could not resolve import {:?} (tried {})", path.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join("."), import_path.display()));
+                return Err(format!(
+                    "Could not resolve import {:?} (tried {})",
+                    path.iter()
+                        .map(|i| i.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join("."),
+                    import_path.display()
+                ));
             }
 
-            parse_file_and_imports(&import_path, visited, modules, lockfile, cache, source_map)?;
+            let imported_module_name = path
+                .iter()
+                .map(|i| i.name.as_str())
+                .collect::<Vec<_>>()
+                .join("_");
+            deps.add_edge(module_name.clone(), imported_module_name.clone());
+            parse_file_and_imports(
+                &import_path,
+                Some(imported_module_name),
+                visited,
+                modules,
+                deps,
+                lockfile,
+                cache,
+                source_map,
+            )?;
         }
     }
-    
-    modules.insert(module_name.clone(), pace_ast::Module {
-        name: module_name,
-        file_id,
-        declarations: module_decls,
-    });
+
+    modules.insert(
+        module_name.clone(),
+        pace_ast::Module {
+            name: module_name,
+            file_id,
+            declarations: module_decls,
+        },
+    );
 
     Ok(())
 }
@@ -116,17 +207,34 @@ pub fn compile_file(
     }
 
     let cache = pace_pkg::cache::CacheManager::new();
-    let lockfile_path = pace_pkg::find_manifest(file_path).map(|m| m.parent().unwrap().join("pace.lock"));
-    let lockfile = lockfile_path.and_then(|p| pace_pkg::resolve::DependencyResolver::read_lockfile(&p).ok());
+    let lockfile_path =
+        pace_pkg::find_manifest(file_path).map(|m| m.parent().unwrap().join("pace.lock"));
+    let lockfile =
+        lockfile_path.and_then(|p| pace_pkg::resolve::DependencyResolver::read_lockfile(&p).ok());
 
     let mut visited = HashSet::new();
     let mut modules = std::collections::HashMap::new();
     let mut source_map = pace_span::SourceMap::new();
 
-    parse_file_and_imports(file_path, &mut visited, &mut modules, lockfile.as_ref(), &cache, &mut source_map)?;
+    let mut deps = DependencyGraph::default();
+
+    parse_file_and_imports(
+        file_path,
+        None,
+        &mut visited,
+        &mut modules,
+        &mut deps,
+        lockfile.as_ref(),
+        &cache,
+        &mut source_map,
+    )?;
+
+    let module_names: Vec<String> = modules.keys().cloned().collect();
+    let module_order = deps.topological_sort(&module_names)?;
 
     let ast = pace_ast::Program {
         modules,
+        module_order,
         span: pace_span::Span::DUMMY, // We could merge spans, but DUMMY is fine for the program root
     };
 

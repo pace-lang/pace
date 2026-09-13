@@ -37,6 +37,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub modules: HashMap<String, Module>,
+    pub module_order: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -60,80 +61,82 @@ impl Program {
 
         for module in self.modules.values_mut() {
             for decl in &mut module.declarations {
-            if let Decl::Struct {
-                name,
-                with,
-                methods,
-                span,
-                ..
-            }
-            | Decl::Class {
-                name,
-                with,
-                methods,
-                span,
-                ..
-            } = decl
-            {
-                for trait_name in with {
-                    if let Some(t_methods) = trait_methods.get(trait_name) {
-                        for t_method in t_methods {
-                            if let Decl::Function {
-                                name: t_m_name,
-                                body,
-                                ..
-                            } = t_method
-                            {
-                                // Extract actual method name (remove trait prefix)
-                                let actual_name = t_m_name.split('_').last().unwrap_or(t_m_name);
+                if let Decl::Struct {
+                    name,
+                    with,
+                    methods,
+                    span,
+                    ..
+                }
+                | Decl::Class {
+                    name,
+                    with,
+                    methods,
+                    span,
+                    ..
+                } = decl
+                {
+                    for trait_name in with {
+                        if let Some(t_methods) = trait_methods.get(trait_name) {
+                            for t_method in t_methods {
+                                if let Decl::Function {
+                                    name: t_m_name,
+                                    body,
+                                    ..
+                                } = t_method
+                                {
+                                    // Extract actual method name (remove trait prefix)
+                                    let actual_name =
+                                        t_m_name.split('_').last().unwrap_or(t_m_name);
 
-                                // Check if class already has this method
-                                let has_method = methods.iter().any(|m| {
-                                    if let Decl::Function { name: m_name, .. } = m {
-                                        m_name.split('_').last().unwrap_or(m_name) == actual_name
-                                    } else {
-                                        false
-                                    }
-                                });
-
-                                if !has_method {
-                                    if body.statements.is_empty() {
-                                        reporter.report(pace_errors::Diagnostic::error(format!("Class/Struct '{}' must implement required method '{}' from Trait '{}'", name, actual_name, trait_name))
-                                            .with_span(*span));
-                                    } else {
-                                        let struct_name = name.clone();
-                                        // Clone and inject default method
-                                        let mut new_method = t_method.clone();
-                                        if let Decl::Function {
-                                            ref mut name,
-                                            ref mut params,
-                                            ..
-                                        } = new_method
-                                        {
-                                            *name = format!("{}_{}", struct_name, actual_name);
-                                            if !params.is_empty() && params[0].1 == "self" {
-                                                params[0].2 =
-                                                    pace_ast::Type::Named(pace_ast::Ident {
-                                                        name: struct_name,
-                                                        span: *span,
-                                                    });
-                                            }
+                                    // Check if class already has this method
+                                    let has_method = methods.iter().any(|m| {
+                                        if let Decl::Function { name: m_name, .. } = m {
+                                            m_name.split('_').last().unwrap_or(m_name)
+                                                == actual_name
+                                        } else {
+                                            false
                                         }
-                                        methods.push(new_method);
+                                    });
+
+                                    if !has_method {
+                                        if body.statements.is_empty() {
+                                            reporter.report(pace_errors::Diagnostic::error(format!("Class/Struct '{}' must implement required method '{}' from Trait '{}'", name, actual_name, trait_name))
+                                            .with_span(*span));
+                                        } else {
+                                            let struct_name = name.clone();
+                                            // Clone and inject default method
+                                            let mut new_method = t_method.clone();
+                                            if let Decl::Function {
+                                                ref mut name,
+                                                ref mut params,
+                                                ..
+                                            } = new_method
+                                            {
+                                                *name = format!("{}_{}", struct_name, actual_name);
+                                                if !params.is_empty() && params[0].1 == "self" {
+                                                    params[0].2 =
+                                                        pace_ast::Type::Named(pace_ast::Ident {
+                                                            name: struct_name,
+                                                            span: *span,
+                                                        });
+                                                }
+                                            }
+                                            methods.push(new_method);
+                                        }
                                     }
                                 }
                             }
+                        } else {
+                            reporter.report(
+                                pace_errors::Diagnostic::error(format!(
+                                    "Trait '{}' not found",
+                                    trait_name
+                                ))
+                                .with_span(*span),
+                            );
                         }
-                    } else {
-                        reporter.report(
-                            pace_errors::Diagnostic::error(format!(
-                                "Trait '{}' not found",
-                                trait_name
-                            ))
-                            .with_span(*span),
-                        );
                     }
-        }
                 }
             }
         }
@@ -142,6 +145,11 @@ impl Program {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
+    Import {
+        path: Vec<String>,
+        alias: Option<String>,
+        span: Span,
+    },
     Let {
         id: HirId,
         name: String,

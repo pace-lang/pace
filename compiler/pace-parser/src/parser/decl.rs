@@ -1,7 +1,6 @@
-use pace_ast::{Decl, EnumVariant, Expr, GenericParam, Ident, Type};
+use pace_ast::{Decl, EnumVariant, GenericParam, Ident, Type};
 use pace_errors::Diagnostic;
 use pace_lexer::{Token, TokenKind};
-use pace_span::Span;
 
 use super::Parser;
 
@@ -10,16 +9,25 @@ impl<'a> Parser<'a> {
         if self.check(&TokenKind::Import) {
             let start_tok = self.expect(TokenKind::Import)?;
             let mut path = Vec::new();
-            
+
             loop {
                 match &self.current {
-                    Some(Token { kind: TokenKind::Ident(name), span }) => {
-                        path.push(Ident { name: name.to_string(), span: *span });
+                    Some(Token {
+                        kind: TokenKind::Ident(name),
+                        span,
+                    }) => {
+                        path.push(Ident {
+                            name: name.to_string(),
+                            span: *span,
+                        });
                         self.advance();
-                    },
-                    _ => return Err(Diagnostic::error("Expected identifier in import path").with_span(self.current_span())),
+                    }
+                    _ => {
+                        return Err(Diagnostic::error("Expected identifier in import path")
+                            .with_span(self.current_span()));
+                    }
                 }
-                
+
                 if self.check(&TokenKind::Dot) {
                     self.advance();
                 } else {
@@ -30,18 +38,30 @@ impl<'a> Parser<'a> {
             let alias = if self.check(&TokenKind::As) {
                 self.advance();
                 match &self.current {
-                    Some(Token { kind: TokenKind::Ident(name), span }) => {
-                        let ident = Ident { name: name.to_string(), span: *span };
+                    Some(Token {
+                        kind: TokenKind::Ident(name),
+                        span,
+                    }) => {
+                        let ident = Ident {
+                            name: name.to_string(),
+                            span: *span,
+                        };
                         self.advance();
                         Some(ident)
-                    },
-                    _ => return Err(Diagnostic::error("Expected identifier after 'as'").with_span(self.current_span())),
+                    }
+                    _ => {
+                        return Err(Diagnostic::error("Expected identifier after 'as'")
+                            .with_span(self.current_span()));
+                    }
                 }
             } else {
                 None
             };
-            
-            let end_span = alias.as_ref().map(|a| a.span).unwrap_or_else(|| path.last().unwrap().span);
+
+            let end_span = alias
+                .as_ref()
+                .map(|a| a.span)
+                .unwrap_or_else(|| path.last().unwrap().span);
 
             Ok(Decl::Import {
                 path,
@@ -988,5 +1008,4 @@ impl<'a> Parser<'a> {
             span: start_tok.span.merge(end_span),
         })
     }
-
 }

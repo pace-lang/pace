@@ -133,10 +133,13 @@ impl Reporter {
                 Severity::Note => Color::Cyan,
             };
 
-            let file_id = diag.span.map(|s| s.file_id).unwrap_or(pace_span::FileId::DUMMY);
+            let file_id = diag
+                .span
+                .map(|s| s.file_id)
+                .unwrap_or(pace_span::FileId::DUMMY);
             let file_name = source_map.get_path(file_id).unwrap_or("unknown");
             let source_text = source_map.get_source(file_id).unwrap_or("");
-            
+
             let span_start = diag.span.map(|s| s.start as usize).unwrap_or(0);
             let span_end = diag.span.map(|s| s.end as usize).unwrap_or(span_start + 1);
 
@@ -148,7 +151,8 @@ impl Reporter {
             }
 
             if let Some(span) = diag.span {
-                let mut label = Label::new((file_name, (span.start as usize)..(span.end as usize))).with_color(color);
+                let mut label = Label::new((file_name, (span.start as usize)..(span.end as usize)))
+                    .with_color(color);
 
                 if let Some(hint) = &diag.hint {
                     label = label.with_message(hint);

@@ -70,7 +70,7 @@ fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> Result<
 
         let manifest_path = root.join("pace.toml");
         let toml = pace_pkg::parse_manifest(&manifest_path)?;
-        
+
         let mut resolver = pace_pkg::resolve::DependencyResolver::new();
         let lock = resolver.resolve(&toml)?;
         resolver.write_lockfile(&root.join("pace.lock"), &lock)?;

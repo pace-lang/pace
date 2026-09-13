@@ -5,6 +5,13 @@ use crate::ty::Ty;
 
 use pace_errors::{Diagnostic, ErrorCode, Reporter};
 
+#[derive(Debug, Clone, Default)]
+pub struct ModuleScope {
+    pub visible_symbols: HashMap<String, String>, // e.g. "test_operators" -> "operators::test_operators"
+    pub aliases: HashMap<String, String>,         // e.g. "op" -> "operators"
+    pub wildcard_imports: Vec<String>,
+}
+
 pub struct TypeChecker {
     pub env: HashMap<HirId, Ty>,
     pub mutability_env: HashMap<HirId, bool>, // true = mutable, false = immutable
@@ -20,11 +27,14 @@ pub struct TypeChecker {
     pub trait_defs: HashMap<String, Decl>,
     pub static_fields_env: HashMap<String, Ty>, // format: "{class_name}_{field_name}"
     pub const_env: HashMap<String, Ty>,
-    pub named_types: HashMap<String, (HirId, u8)>, // maps name like "User" to (HirId, 0=struct, 1=class, 2=enum)
+    pub named_types: HashMap<String, (HirId, u8)>, // maps mangled name to (HirId, 0=struct, 1=class, 2=enum)
     pub generic_templates: HashMap<String, Decl>,
     pub generic_templates_by_id: HashMap<HirId, String>,
     pub current_expected_ty: Option<Ty>,
     pub current_fn_name: Option<String>,
+    pub current_module: Option<String>,
+    pub module_scopes: HashMap<String, ModuleScope>,
+    pub resolved_global_names: HashMap<HirId, String>,
     pub declared_bindings: Vec<(HirId, String, pace_span::Span)>,
     pub used_bindings: std::collections::HashSet<HirId>,
     pub used_bindings_by_name: std::collections::HashSet<String>,
@@ -54,6 +64,9 @@ impl TypeChecker {
             generic_templates_by_id: HashMap::new(),
             current_expected_ty: None,
             current_fn_name: None,
+            current_module: None,
+            module_scopes: HashMap::new(),
+            resolved_global_names: HashMap::new(),
             declared_bindings: Vec::new(),
             used_bindings: std::collections::HashSet::new(),
             used_bindings_by_name: std::collections::HashSet::new(),
@@ -165,7 +178,21 @@ impl TypeChecker {
                     "Bool" | "bool" => Ok(Ty::Bool),
                     "Void" | "void" => Ok(Ty::Void),
                     other => {
-                        if let Some(&(hir_id, kind)) = self.named_types.get(other) {
+                        let mangled_name = if let Some(curr) = &self.current_module {
+                            if let Some(scope) = self.module_scopes.get(curr) {
+                                scope
+                                    .visible_symbols
+                                    .get(other)
+                                    .cloned()
+                                    .unwrap_or_else(|| other.to_string())
+                            } else {
+                                other.to_string()
+                            }
+                        } else {
+                            other.to_string()
+                        };
+
+                        if let Some(&(hir_id, kind)) = self.named_types.get(&mangled_name) {
                             if kind == 1 {
                                 return Ok(Ty::Class(hir_id));
                             } else if kind == 0 {
@@ -175,7 +202,7 @@ impl TypeChecker {
                             }
                         }
                         // Check if it's a generic template being used without arguments
-                        if self.generic_templates.contains_key(other) {
+                        if self.generic_templates.contains_key(&mangled_name) {
                             return Err(format!("Type {} requires generic arguments", other));
                         }
                         Err(format!("Unknown type: {}", other))
@@ -197,16 +224,35 @@ impl TypeChecker {
     }
 
     pub fn check_program(&mut self, program: &Program) -> Result<(), String> {
-        let mut declarations: Vec<Decl> = Vec::new();
-        for module in program.modules.values() {
+        // 0. Initialize module scopes
+        for module_name in &program.module_order {
+            let module = program.modules.get(module_name).unwrap();
+            let mut scope = ModuleScope::default();
             for decl in &module.declarations {
-                declarations.push(decl.clone());
+                if let Decl::Import { path, alias, .. } = decl {
+                    if let Some(target_module) = path.first() {
+                        if let Some(a) = alias {
+                            scope.aliases.insert(a.clone(), target_module.clone());
+                        } else {
+                            scope.wildcard_imports.push(target_module.clone());
+                        }
+                    }
+                }
+            }
+            self.module_scopes.insert(module_name.clone(), scope);
+        }
+
+        let mut declarations: Vec<(String, Decl)> = Vec::new();
+        for module_name in &program.module_order {
+            let module = program.modules.get(module_name).unwrap();
+            for decl in &module.declarations {
+                declarations.push((module_name.clone(), decl.clone()));
             }
         }
 
         let mut has_main = false;
 
-        for decl in &declarations {
+        for (_, decl) in &declarations {
             if let Decl::Function { name, .. } = decl {
                 if name == "main" {
                     has_main = true;
@@ -230,7 +276,8 @@ impl TypeChecker {
         }
 
         // 1. Gather all top-level types (Structs/Classes/Functions)
-        for decl in &declarations {
+        for (module_name, decl) in &declarations {
+            self.current_module = Some(module_name.clone());
             match decl {
                 Decl::Struct {
                     id,
@@ -241,21 +288,32 @@ impl TypeChecker {
                     methods,
                     ..
                 } => {
+                    let mangled_name = format!("{}_{}", module_name, name);
                     if generic_params.is_some() {
-                        self.generic_templates.insert(name.clone(), decl.clone());
-                        self.generic_templates_by_id.insert(*id, name.clone());
+                        self.generic_templates
+                            .insert(mangled_name.clone(), decl.clone());
+                        self.generic_templates_by_id
+                            .insert(*id, mangled_name.clone());
+                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                            scope.visible_symbols.insert(name.clone(), mangled_name);
+                        }
                         continue;
                     }
-                    self.named_types.insert(name.clone(), (*id, 0));
+                    self.named_types.insert(mangled_name.clone(), (*id, 0));
+                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                        scope
+                            .visible_symbols
+                            .insert(name.clone(), mangled_name.clone());
+                    }
                     for (sf_name, sf_ty, _) in static_fields {
                         let resolved_ty = self.resolve_type(sf_ty).unwrap_or(Ty::Int);
                         self.static_fields_env
-                            .insert(format!("{}_{}", name, sf_name), resolved_ty);
+                            .insert(format!("{}_{}", mangled_name, sf_name), resolved_ty);
                     }
                     for (cf_name, cf_ty, _) in const_fields {
                         let resolved_ty = self.resolve_type(cf_ty).unwrap_or(Ty::Int);
                         self.const_env
-                            .insert(format!("{}_{}", name, cf_name), resolved_ty);
+                            .insert(format!("{}_{}", mangled_name, cf_name), resolved_ty);
                     }
                     for method in methods {
                         if let Decl::Function {
@@ -275,12 +333,18 @@ impl TypeChecker {
                             } else {
                                 Ty::Void
                             };
+                            let short_method_name =
+                                m_name.strip_prefix(&format!("{}_", name)).unwrap_or(m_name);
+                            let method_mangled_name =
+                                format!("{}_{}", mangled_name, short_method_name);
                             self.env.insert(
                                 *m_id,
                                 Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())),
                             );
-                            self.methods_env
-                                .insert(m_name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
+                            self.methods_env.insert(
+                                method_mangled_name,
+                                Ty::Function(param_tys, Box::new(ret_ty)),
+                            );
                         }
                     }
                 }
@@ -293,21 +357,32 @@ impl TypeChecker {
                     methods,
                     ..
                 } => {
+                    let mangled_name = format!("{}_{}", module_name, name);
                     if generic_params.is_some() {
-                        self.generic_templates.insert(name.clone(), decl.clone());
-                        self.generic_templates_by_id.insert(*id, name.clone());
+                        self.generic_templates
+                            .insert(mangled_name.clone(), decl.clone());
+                        self.generic_templates_by_id
+                            .insert(*id, mangled_name.clone());
+                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                            scope.visible_symbols.insert(name.clone(), mangled_name);
+                        }
                         continue;
                     }
-                    self.named_types.insert(name.clone(), (*id, 1));
+                    self.named_types.insert(mangled_name.clone(), (*id, 1));
+                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                        scope
+                            .visible_symbols
+                            .insert(name.clone(), mangled_name.clone());
+                    }
                     for (sf_name, sf_ty, _) in static_fields {
                         let resolved_ty = self.resolve_type(sf_ty).unwrap_or(Ty::Int);
                         self.static_fields_env
-                            .insert(format!("{}_{}", name, sf_name), resolved_ty);
+                            .insert(format!("{}_{}", mangled_name, sf_name), resolved_ty);
                     }
                     for (cf_name, cf_ty, _) in const_fields {
                         let resolved_ty = self.resolve_type(cf_ty).unwrap_or(Ty::Int);
                         self.const_env
-                            .insert(format!("{}_{}", name, cf_name), resolved_ty);
+                            .insert(format!("{}_{}", mangled_name, cf_name), resolved_ty);
                     }
                     for method in methods {
                         if let Decl::Function {
@@ -327,12 +402,18 @@ impl TypeChecker {
                             } else {
                                 Ty::Void
                             };
+                            let short_method_name =
+                                m_name.strip_prefix(&format!("{}_", name)).unwrap_or(m_name);
+                            let method_mangled_name =
+                                format!("{}_{}", mangled_name, short_method_name);
                             self.env.insert(
                                 *m_id,
                                 Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())),
                             );
-                            self.methods_env
-                                .insert(m_name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
+                            self.methods_env.insert(
+                                method_mangled_name,
+                                Ty::Function(param_tys, Box::new(ret_ty)),
+                            );
                         }
                     }
                 }
@@ -346,12 +427,21 @@ impl TypeChecker {
                     variants,
                     ..
                 } => {
+                    let mangled_name = format!("{}_{}", module_name, name);
                     if generic_params.is_some() {
-                        self.generic_templates.insert(name.clone(), decl.clone());
-                        self.generic_templates_by_id.insert(*id, name.clone());
+                        self.generic_templates
+                            .insert(mangled_name.clone(), decl.clone());
+                        self.generic_templates_by_id
+                            .insert(*id, mangled_name.clone());
+                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                            scope.visible_symbols.insert(name.clone(), mangled_name);
+                        }
                         continue;
                     }
-                    self.named_types.insert(name.clone(), (*id, 2));
+                    self.named_types.insert(mangled_name.clone(), (*id, 2));
+                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                        scope.visible_symbols.insert(name.clone(), mangled_name);
+                    }
                     for v in variants {
                         if let Some(fields) = &v.fields {
                             let mut param_tys = Vec::new();
@@ -370,7 +460,8 @@ impl TypeChecker {
         }
 
         // Pass 2: Register struct/class fields
-        for decl in &declarations {
+        for (module_name, decl) in &declarations {
+            self.current_module = Some(module_name.clone());
             match decl {
                 Decl::Struct {
                     id,
@@ -418,13 +509,24 @@ impl TypeChecker {
         }
 
         // Pass 2.5: Hierarchy Resolution & Field Inheritance
-        for decl in &declarations {
+        for (module_name, decl) in &declarations {
+            self.current_module = Some(module_name.clone());
             if let Decl::Class {
                 id, extends, span, ..
             } = decl
             {
                 if let Some(parent_name) = extends {
-                    if let Some(&(parent_id, 1)) = self.named_types.get(parent_name) {
+                    let mangled_parent_name =
+                        if let Some(scope) = self.module_scopes.get(module_name) {
+                            scope
+                                .visible_symbols
+                                .get(parent_name)
+                                .cloned()
+                                .unwrap_or_else(|| parent_name.clone())
+                        } else {
+                            parent_name.clone()
+                        };
+                    if let Some(&(parent_id, 1)) = self.named_types.get(&mangled_parent_name) {
                         if parent_id == *id {
                             self.reporter.report(
                                 pace_errors::Diagnostic::error("Class cannot inherit from itself")
@@ -474,9 +576,10 @@ impl TypeChecker {
         }
 
         // Pass 3: Register functions
-        for decl in &declarations {
+        for (module_name, decl) in &declarations {
+            self.current_module = Some(module_name.clone());
             if let Decl::Function {
-                id,
+                id: _,
                 name,
                 generic_params,
                 params,
@@ -496,17 +599,60 @@ impl TypeChecker {
                 } else {
                     Ty::Void
                 };
-                self.env
-                    .insert(*id, Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())));
-                self.global_functions.insert(name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
+                let mangled_name = if name == "main" {
+                    name.clone()
+                } else {
+                    format!("{}_{}", module_name, name)
+                };
+                self.global_functions.insert(
+                    mangled_name.clone(),
+                    Ty::Function(param_tys, Box::new(ret_ty)),
+                );
+
+                if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                    scope.visible_symbols.insert(name.clone(), mangled_name);
+                }
+            }
+        }
+
+        // Resolve wildcard imports
+        let mut wildcard_symbols_to_add: HashMap<String, Vec<(String, String)>> = HashMap::new();
+        for module_name in &program.module_order {
+            let scope = self.module_scopes.get(module_name).unwrap();
+            let mut symbols_to_add = Vec::new();
+            for target_module in &scope.wildcard_imports {
+                if let Some(target_scope) = self.module_scopes.get(target_module) {
+                    for (symbol_name, mangled_name) in &target_scope.visible_symbols {
+                        if !scope.visible_symbols.contains_key(symbol_name) {
+                            symbols_to_add.push((symbol_name.clone(), mangled_name.clone()));
+                        }
+                    }
+                }
+            }
+            wildcard_symbols_to_add.insert(module_name.clone(), symbols_to_add);
+        }
+        for module_name in &program.module_order {
+            if let Some(symbols) = wildcard_symbols_to_add.remove(module_name) {
+                if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                    for (name, mangled) in symbols {
+                        scope.visible_symbols.insert(name, mangled);
+                    }
+                }
             }
         }
 
         // Pass 3.5: Construct V-Tables and Validate Overrides
         let mut class_methods: HashMap<HirId, Vec<(String, Ty, String, bool, pace_span::Span)>> =
             HashMap::new();
-        for decl in &declarations {
-            if let Decl::Class { id, methods, .. } = decl {
+        for (module_name, decl) in &declarations {
+            self.current_module = Some(module_name.clone());
+            if let Decl::Class {
+                id,
+                name: decl_name,
+                methods,
+                ..
+            } = decl
+            {
                 let mut cm = Vec::new();
                 for m in methods {
                     if let Decl::Function {
@@ -516,9 +662,20 @@ impl TypeChecker {
                         ..
                     } = m
                     {
-                        if let Some(ty) = self.methods_env.get(name) {
-                            let base_name = name.split('_').last().unwrap().to_string();
-                            cm.push((base_name, ty.clone(), name.clone(), *is_override, *span));
+                        let mangled_class_name = format!("{}_{}", module_name, decl_name);
+                        let short_method_name = name.split('_').last().unwrap();
+                        let method_mangled_name =
+                            format!("{}_{}", mangled_class_name, short_method_name);
+
+                        if let Some(ty) = self.methods_env.get(&method_mangled_name) {
+                            let base_name = short_method_name.to_string();
+                            cm.push((
+                                base_name,
+                                ty.clone(),
+                                method_mangled_name,
+                                *is_override,
+                                *span,
+                            ));
                         }
                     }
                 }
@@ -587,7 +744,8 @@ impl TypeChecker {
             self.class_vtables.insert(id, vtable);
         }
 
-        for decl in &declarations {
+        for (module_name, decl) in &declarations {
+            self.current_module = Some(module_name.clone());
             self.check_decl(decl)?;
         }
 
@@ -661,7 +819,9 @@ impl TypeChecker {
                         if !type_matches {
                             if expected == Ty::Optional(Box::new(ty.clone())) {
                                 type_matches = true;
-                            } else if let (Ty::Optional(_), Ty::Optional(inner_val)) = (&expected, &ty) {
+                            } else if let (Ty::Optional(_), Ty::Optional(inner_val)) =
+                                (&expected, &ty)
+                            {
                                 if **inner_val == Ty::Void {
                                     type_matches = true;
                                 }
@@ -711,7 +871,9 @@ impl TypeChecker {
                         if !type_matches {
                             if expected == Ty::Optional(Box::new(ty.clone())) {
                                 type_matches = true;
-                            } else if let (Ty::Optional(_), Ty::Optional(inner_val)) = (&expected, &ty) {
+                            } else if let (Ty::Optional(_), Ty::Optional(inner_val)) =
+                                (&expected, &ty)
+                            {
                                 if **inner_val == Ty::Void {
                                     type_matches = true;
                                 }
@@ -761,6 +923,7 @@ impl TypeChecker {
 
     pub fn check_decl(&mut self, decl: &Decl) -> Result<(), String> {
         match decl {
+            &pace_hir::Decl::Import { .. } => Ok(()),
             Decl::Let {
                 id,
                 name,
@@ -1005,8 +1168,12 @@ impl TypeChecker {
                 }
                 if name.contains('_') && name != "main" && !name.ends_with("_init") {
                     // Only warn for functions not generated by the compiler
-                    let is_compiler_generated =
-                        self.named_types.keys().any(|k| name.starts_with(k));
+                    let is_compiler_generated = self.named_types.keys().any(|k| {
+                        name.starts_with(k)
+                            || k.split('_')
+                                .last()
+                                .map_or(false, |short_k| name.starts_with(&format!("{}_", short_k)))
+                    });
                     if !is_compiler_generated {
                         let offset = if *is_static { 10 } else { 3 };
                         let name_span = pace_span::Span::new(
@@ -1026,8 +1193,11 @@ impl TypeChecker {
                     }
                 }
                 let offset = if *is_static { 10 } else { 3 };
-                let name_span =
-                    pace_span::Span::new(span.file_id, span.start + offset as u32, span.start + (offset + name.len()) as u32);
+                let name_span = pace_span::Span::new(
+                    span.file_id,
+                    span.start + offset as u32,
+                    span.start + (offset + name.len()) as u32,
+                );
                 self.declared_bindings.push((*id, name.clone(), name_span));
                 self.initialized_bindings.insert(*id);
 
@@ -1202,7 +1372,7 @@ impl TypeChecker {
                 );
                 Err("Cannot use 'super' outside of a class method".to_string())
             }
-            Expr::Null(span) => {
+            Expr::Null(_span) => {
                 if let Some(expected) = &self.current_expected_ty {
                     if let Ty::Optional(_) = expected {
                         return Ok(expected.clone());
@@ -1229,12 +1399,28 @@ impl TypeChecker {
                         );
                     }
                 }
+                let mangled_name = if let Some(curr) = &self.current_module {
+                    if let Some(scope) = self.module_scopes.get(curr) {
+                        scope
+                            .visible_symbols
+                            .get(name)
+                            .cloned()
+                            .unwrap_or_else(|| name.clone())
+                    } else {
+                        name.clone()
+                    }
+                } else {
+                    name.clone()
+                };
+
                 if let Some(ty) = self.env.get(id).cloned() {
                     Ok(ty)
-                } else if let Some(ty) = self.global_functions.get(name).cloned() {
+                } else if let Some(ty) = self.global_functions.get(&mangled_name).cloned() {
                     self.used_bindings_by_name.insert(name.clone());
+                    self.resolved_global_names.insert(*id, mangled_name.clone());
+                    self.local_types.insert(*id, ty.clone());
                     Ok(ty)
-                } else if let Some(&(hir_id, kind)) = self.named_types.get(name) {
+                } else if let Some(&(hir_id, kind)) = self.named_types.get(&mangled_name) {
                     let ty = if kind == 0 {
                         Ty::Struct(hir_id)
                     } else if kind == 1 {
@@ -1244,13 +1430,18 @@ impl TypeChecker {
                     };
                     self.env.insert(*id, ty.clone());
                     self.local_types.insert(*id, ty.clone());
+                    self.resolved_global_names.insert(*id, mangled_name.clone());
                     Ok(ty)
-                } else if self.generic_templates.contains_key(name) {
+                } else if self.generic_templates.contains_key(&mangled_name) {
                     if let Some(args) = generic_args {
-                        if let Ok(inst_ty) = self.instantiate_generic(name, args) {
-                            self.env.insert(*id, inst_ty.clone());
-                            self.local_types.insert(*id, inst_ty.clone());
-                            return Ok(inst_ty);
+                        match self.instantiate_generic(&mangled_name, args) {
+                            Ok(inst_ty) => {
+                                self.env.insert(*id, inst_ty.clone());
+                                self.local_types.insert(*id, inst_ty.clone());
+                                self.resolved_global_names.insert(*id, mangled_name.clone());
+                                return Ok(inst_ty);
+                            }
+                            Err(_e) => {}
                         }
                     }
                     if let Some(expected) = &self.current_expected_ty {
@@ -1272,7 +1463,8 @@ impl TypeChecker {
                     }
                 } else {
                     let err_msg = format!("Cannot find value '{}' in this scope", name);
-                    self.reporter.report(Diagnostic::error(&err_msg).with_span(*span));
+                    self.reporter
+                        .report(Diagnostic::error(&err_msg).with_span(*span));
                     Err(err_msg)
                 }
             }
@@ -1306,18 +1498,22 @@ impl TypeChecker {
                     | pace_ast::BinaryOp::LtEq => {
                         Ok(Ty::Int) // Boolean represented as Int in MVP
                     }
-                    pace_ast::BinaryOp::And | pace_ast::BinaryOp::Or => {
-                        Ok(Ty::Bool)
-                    }
+                    pace_ast::BinaryOp::And | pace_ast::BinaryOp::Or => Ok(Ty::Bool),
                     pace_ast::BinaryOp::NullCoalesce => {
                         if let Ty::Optional(inner) = &left_ty {
                             if **inner == right_ty {
                                 Ok(right_ty.clone())
                             } else {
-                                Err(format!("Type mismatch in '??': left is {:?}, but right is {:?}", left_ty, right_ty))
+                                Err(format!(
+                                    "Type mismatch in '??': left is {:?}, but right is {:?}",
+                                    left_ty, right_ty
+                                ))
                             }
                         } else {
-                            Err(format!("Left side of '??' must be an optional type, found {:?}", left_ty))
+                            Err(format!(
+                                "Left side of '??' must be an optional type, found {:?}",
+                                left_ty
+                            ))
                         }
                     }
                 }
@@ -1325,27 +1521,7 @@ impl TypeChecker {
             Expr::OptionalMemberAccess { object, member, .. } => {
                 let obj_ty = self.check_expr(object)?;
                 if let Ty::Optional(inner) = obj_ty {
-                    // Temporarily mock a normal MemberAccess to reuse logic
-                    let mock_expr = Expr::MemberAccess {
-                        object: Box::new(Expr::IntLiteral("0".to_string(), pace_span::Span::new(pace_span::FileId::DUMMY, 0, 0))), // dummy
-                        member: "get".to_string(),
-                        span: pace_span::Span::new(pace_span::FileId::DUMMY, 0, 0),
-                    };
-                    // Hack: directly test the unwrapped type
-                    // In a real compiler we'd extract member check logic into a helper
-                    let prev_expected = self.current_expected_ty.take();
-                    // ... we can't easily do that here without refactoring.
-                    // Let's refactor member checking into a helper or just do basic lookup:
-                    
                     if let Ty::Struct(hir_id) | Ty::Class(hir_id) = *inner {
-                        let mut type_name = "";
-                        for (name, &(nid, _)) in &self.named_types {
-                            if nid == hir_id {
-                                type_name = name;
-                                break;
-                            }
-                        }
-
                         if let Ty::Struct(_) = *inner {
                             if let Some(fields) = self.struct_defs.get(&hir_id) {
                                 for (fname, fty, _) in fields {
@@ -1364,13 +1540,59 @@ impl TypeChecker {
                             }
                         }
                     }
-                    
+
                     Err(format!("Cannot optional chain on {:?}", inner))
                 } else {
-                    Err(format!("Left side of '?.' must be an optional type, found {:?}", obj_ty))
+                    Err(format!(
+                        "Left side of '?.' must be an optional type, found {:?}",
+                        obj_ty
+                    ))
                 }
             }
-            Expr::MemberAccess { object, member, .. } => {
+            Expr::MemberAccess {
+                object,
+                member,
+                span: _,
+            } => {
+                // Intercept module aliases (e.g. `d.hello` where `d` is an alias for `demo_lib`)
+                if let Expr::Ident(id, name, _, _) = &**object {
+                    if let Some(curr) = &self.current_module {
+                        if let Some(scope) = self.module_scopes.get(curr) {
+                            if let Some(target_module) = scope.aliases.get(name) {
+                                // It IS a module alias access!
+                                if let Some(target_scope) = self.module_scopes.get(target_module) {
+                                    if let Some(mangled_name) =
+                                        target_scope.visible_symbols.get(member)
+                                    {
+                                        // The object is a module reference. Record the target module so MirBuilder can use it.
+                                        self.resolved_global_names
+                                            .insert(*id, target_module.clone());
+                                        self.used_bindings_by_name.insert(member.clone());
+
+                                        // Return the type of the resolved global function or type
+                                        if let Some(ty) =
+                                            self.global_functions.get(mangled_name).cloned()
+                                        {
+                                            return Ok(ty);
+                                        } else if let Some(&(hir_id, kind)) =
+                                            self.named_types.get(mangled_name)
+                                        {
+                                            let ty = if kind == 0 {
+                                                Ty::Struct(hir_id)
+                                            } else if kind == 1 {
+                                                Ty::Class(hir_id)
+                                            } else {
+                                                Ty::Enum(hir_id)
+                                            };
+                                            return Ok(ty);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 let obj_ty = self.check_expr(object)?;
                 match obj_ty {
                     Ty::Struct(hir_id) => {
@@ -1388,6 +1610,7 @@ impl TypeChecker {
                             .ok_or("Struct definition not found")?;
                         for (fname, fty, _) in fields {
                             if fname == member {
+                                self.used_bindings_by_name.insert(fname.clone());
                                 return Ok(fty.clone());
                             }
                         }
@@ -1403,6 +1626,10 @@ impl TypeChecker {
                         // Check if it's a method
                         let method_name = format!("{}_{}", struct_name, member);
                         if let Some(mty) = self.methods_env.get(&method_name) {
+                            self.used_bindings_by_name.insert(method_name.clone());
+                            let short_struct = struct_name.split('_').last().unwrap();
+                            self.used_bindings_by_name
+                                .insert(format!("{}_{}", short_struct, member));
                             return Ok(mty.clone());
                         }
 
@@ -1423,6 +1650,7 @@ impl TypeChecker {
                             .ok_or("Class definition not found")?;
                         for (fname, fty, _) in fields {
                             if fname == member {
+                                self.used_bindings_by_name.insert(fname.clone());
                                 return Ok(fty.clone());
                             }
                         }
@@ -1438,6 +1666,10 @@ impl TypeChecker {
                         // Check if it's a method
                         let method_name = format!("{}_{}", class_name, member);
                         if let Some(mty) = self.methods_env.get(&method_name) {
+                            self.used_bindings_by_name.insert(method_name.clone());
+                            let short_class = class_name.split('_').last().unwrap();
+                            self.used_bindings_by_name
+                                .insert(format!("{}_{}", short_class, member));
                             return Ok(mty.clone());
                         }
 
@@ -1472,7 +1704,7 @@ impl TypeChecker {
             }
             Expr::Call { callee, args, span } => {
                 let mut generic_instantiation = None;
-                if let Expr::Ident(id, name, generic_args, _) = &**callee {
+                if let Expr::Ident(_, name, generic_args, _) = &**callee {
                     if let Some(explicit_args) = generic_args {
                         if let Ok(func_ty) = self.instantiate_generic(name, explicit_args) {
                             generic_instantiation = Some(func_ty);
@@ -2123,12 +2355,24 @@ impl TypeChecker {
         }
 
         let mut new_decl = template.clone();
-        
-        mapping.insert(template_name.to_string(), pace_ast::Type::Named(pace_ast::Ident {
-            name: mono_name.clone(),
-            span: pace_span::Span::DUMMY,
-        }));
-        
+
+        mapping.insert(
+            template_name.to_string(),
+            pace_ast::Type::Named(pace_ast::Ident {
+                name: mono_name.clone(),
+                span: pace_span::Span::DUMMY,
+            }),
+        );
+
+        let short_template_name = template_name.split('_').last().unwrap().to_string();
+        mapping.insert(
+            short_template_name,
+            pace_ast::Type::Named(pace_ast::Ident {
+                name: mono_name.clone(),
+                span: pace_span::Span::DUMMY,
+            }),
+        );
+
         match &mut new_decl {
             pace_hir::Decl::Struct {
                 id,
@@ -2163,8 +2407,18 @@ impl TypeChecker {
                     *ty = substitute_type(ty, &mapping);
                 }
                 for method in methods.iter_mut() {
-                    if let pace_hir::Decl::Function { name: m_name, params, return_type, .. } = method {
-                        let base_method_name = m_name.strip_prefix(&format!("{}_", template_name)).unwrap_or(m_name).to_string();
+                    if let pace_hir::Decl::Function {
+                        name: m_name,
+                        params,
+                        return_type,
+                        ..
+                    } = method
+                    {
+                        let short_template_name = template_name.split('_').last().unwrap();
+                        let base_method_name = m_name
+                            .strip_prefix(&format!("{}_", short_template_name))
+                            .unwrap_or(m_name)
+                            .to_string();
                         *m_name = format!("{}_{}", mono_name, base_method_name);
                         for (_, _, param_ty) in params.iter_mut() {
                             *param_ty = substitute_type(param_ty, &mapping);
@@ -2240,7 +2494,9 @@ impl TypeChecker {
         }
 
         match &new_decl {
-            pace_hir::Decl::Struct { id, name, fields, .. } => {
+            pace_hir::Decl::Struct {
+                id, name, fields, ..
+            } => {
                 self.named_types.insert(name.clone(), (*id, 0));
                 let mut resolved_fields = Vec::new();
                 for (f_name, f_ty, _, is_pub) in fields {
@@ -2249,7 +2505,13 @@ impl TypeChecker {
                 }
                 self.struct_defs.insert(*id, resolved_fields);
             }
-            pace_hir::Decl::Class { id, name, fields, methods, .. } => {
+            pace_hir::Decl::Class {
+                id,
+                name,
+                fields,
+                methods,
+                ..
+            } => {
                 self.named_types.insert(name.clone(), (*id, 1));
                 let mut resolved_fields = Vec::new();
                 for (f_name, f_ty, _, is_pub) in fields {
@@ -2257,9 +2519,15 @@ impl TypeChecker {
                     resolved_fields.push((f_name.clone(), ty, *is_pub));
                 }
                 self.class_defs.insert(*id, resolved_fields);
-                
+
                 for method in methods {
-                    if let pace_hir::Decl::Function { name: m_name, params, return_type, .. } = method {
+                    if let pace_hir::Decl::Function {
+                        name: m_name,
+                        params,
+                        return_type,
+                        ..
+                    } = method
+                    {
                         let mut param_tys = Vec::new();
                         for (_, _, pty) in params {
                             if let Ok(ty) = self.resolve_type(pty) {
@@ -2271,7 +2539,8 @@ impl TypeChecker {
                         } else {
                             Ty::Void
                         };
-                        self.methods_env.insert(m_name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
+                        self.methods_env
+                            .insert(m_name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
                     }
                 }
 
@@ -2279,14 +2548,19 @@ impl TypeChecker {
                 for method in methods {
                     if let pace_hir::Decl::Function { name: m_name, .. } = method {
                         if let Some(ty) = self.methods_env.get(m_name) {
-                            let base_name = m_name.strip_prefix(&format!("{}_", name)).unwrap_or(m_name).to_string();
+                            let base_name = m_name
+                                .strip_prefix(&format!("{}_", name))
+                                .unwrap_or(m_name)
+                                .to_string();
                             vtable.push((base_name, ty.clone(), m_name.clone()));
                         }
                     }
                 }
                 self.class_vtables.insert(*id, vtable);
             }
-            pace_hir::Decl::Enum { id, name, variants, .. } => {
+            pace_hir::Decl::Enum {
+                id, name, variants, ..
+            } => {
                 self.named_types.insert(name.clone(), (*id, 2));
                 self.enum_defs.insert(*id, variants.clone());
             }
@@ -2314,7 +2588,7 @@ impl TypeChecker {
                 }
                 Ok(Ty::Enum(id))
             }
-            pace_hir::Decl::Function { id, .. } => Ok(Ty::Function(
+            pace_hir::Decl::Function { id: _, .. } => Ok(Ty::Function(
                 vec![], // A bit hacky, but Expr::Call doesn't actually use this Ty::Function for the callee type if it's already instantiated
                 Box::new(Ty::Void),
             )),

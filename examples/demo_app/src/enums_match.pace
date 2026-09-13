@@ -4,7 +4,7 @@ enum TrafficLight {
     Green
 }
 
-fn test_enums_match() {
+fn testEnumsMatch() {
     println("--- Testing Enums & Match ---")
     let light = Red
     match light {

@@ -2,7 +2,7 @@ class User {
     name: string
 }
 
-fn test_null_safety() {
+fn testNullSafety() {
     println("--- Testing Null Safety ---")
     
     // Pace defaults to non-nullable types and avoids raw nulls natively.
@@ -11,7 +11,7 @@ fn test_null_safety() {
     let user: User? = null
     
     // Test safe navigation
-    let name = user?.name
+    let _name = user?.name
     
     // Test null coalescing
     let safe_name = user?.name ?? "Guest"

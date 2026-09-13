@@ -8,13 +8,13 @@ enum Result<T, E> {
     Err(err: E)
 }
 
-fn test_option_result() {
+fn testOptionResult() {
     println("--- Testing Option & Result ---")
     let some_val = Option<int>.Some(val: 42)
-    let none_val = Option<int>.None
+    let _none_val = Option<int>.None
 
-    let res_ok = Result<int, string>.Ok(val: 100)
-    let res_err = Result<int, string>.Err(err: "Error occurred")
+    let _res_ok = Result<int, string>.Ok(val: 100)
+    let _res_err = Result<int, string>.Err(err: "Error occurred")
     match some_val {
         Some(val) => println(val)
         None => println("None")

@@ -1,4 +1,4 @@
-fn test_operators() {
+fn testOperators() {
     println("--- Testing Operators ---")
     let a = 10
     let b = 5
@@ -10,12 +10,12 @@ fn test_operators() {
     let div = a / b
 
     // Relational
-    let eq = a == b
-    let neq = a != b
-    let gt = a > b
-    let lt = a < b
-    let gte = a >= b
-    let lte = a <= b
+    let _eq = a == b
+    let _neq = a != b
+    let _gt = a > b
+    let _lt = a < b
+    let _gte = a >= b
+    let _lte = a <= b
 
     println(add)
     println(sub)

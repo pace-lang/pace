@@ -1,6 +1,6 @@
 use crate::token::TokenKind;
 use logos::Logos;
-use pace_span::{Span, FileId};
+use pace_span::{FileId, Span};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token<'a> {
