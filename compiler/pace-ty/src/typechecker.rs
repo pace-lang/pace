@@ -30,6 +30,7 @@ pub struct TypeChecker {
     pub static_fields_privacy: HashMap<String, bool>, // format: "{class_name}_{field_name}"
     pub const_env: HashMap<String, Ty>,
     pub named_types: HashMap<String, (HirId, u8)>, // maps mangled name to (HirId, 0=struct, 1=class, 2=enum)
+    pub display_names: HashMap<String, String>,
     pub generic_templates: HashMap<String, Decl>,
     pub generic_templates_by_id: HashMap<HirId, String>,
     pub current_expected_ty: Option<Ty>,
@@ -67,6 +68,7 @@ impl TypeChecker {
             static_fields_privacy: HashMap::new(),
             const_env: HashMap::new(),
             named_types: HashMap::new(),
+            display_names: HashMap::new(),
             generic_templates: HashMap::new(),
             generic_templates_by_id: HashMap::new(),
             current_expected_ty: None,
@@ -2389,6 +2391,14 @@ impl TypeChecker {
             );
         }
 
+        let mut clean_args = Vec::new();
+        for arg in &final_args {
+            let resolved = self.resolve_type(arg)?;
+            clean_args.push(self.display_ty(&resolved));
+        }
+        let display_name = format!("{}<{}>", template_name, clean_args.join(", "));
+        self.display_names.insert(mono_name.clone(), display_name);
+
         if let Some(&(hir_id, kind)) = self.named_types.get(&mono_name) {
             if kind == 1 {
                 return Ok(Ty::Class(hir_id));
@@ -2657,6 +2667,9 @@ impl TypeChecker {
                 // Try to find the name in named_types (reverse lookup)
                 for (name, (nid, _)) in &self.named_types {
                     if nid == id {
+                        if let Some(clean) = self.display_names.get(name) {
+                            return clean.clone();
+                        }
                         return name.clone();
                     }
                 }

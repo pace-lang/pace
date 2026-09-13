@@ -15,7 +15,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(mut lexer: Lexer<'a>) -> Self {
+    pub fn new(lexer: Lexer<'a>) -> Self {
         let mut parser = Self { lexer, current: None, diagnostics: Vec::new(), comments: Vec::new() };
         parser.advance();
         parser

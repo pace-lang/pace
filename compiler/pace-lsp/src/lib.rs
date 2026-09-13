@@ -8,7 +8,7 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 use pace_lexer::Lexer;
 use pace_parser::parser::Parser;
 use pace_span::SourceMap;
-use std::path::PathBuf;
+
 
 mod find_node;
 
@@ -43,6 +43,7 @@ impl LanguageServer for Backend {
                     trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
                     ..Default::default()
                 }),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 ..ServerCapabilities::default()
             },
         })
@@ -57,6 +58,34 @@ impl LanguageServer for Backend {
     async fn shutdown(&self) -> Result<()> {
         Ok(())
     }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let uri = params.text_document.uri;
+        if let Some((ast, source_map, _diags, text)) = self.analyze_uri(&uri.as_str()).await {
+            let file_path = uri.to_file_path().unwrap().to_string_lossy().to_string();
+            let mut symbols = Vec::new();
+            if let Some(fid) = source_map.get_file_id(&file_path) {
+                for module in ast.modules.values() {
+                    for decl in &module.declarations {
+                        if let Some(sym) = decl_to_document_symbol(&decl, &text, fid) {
+                            symbols.push(sym);
+                        }
+                    }
+                }
+            }
+            if symbols.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(DocumentSymbolResponse::Nested(symbols)))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri.to_string();
@@ -224,23 +253,87 @@ impl LanguageServer for Backend {
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri.to_string();
-        let _position = params.text_document_position.position;
+        let position = params.text_document_position.position;
         let mut items = Vec::new();
 
-        if let Some((ast, _source_map, diags, _text)) = self.analyze_uri(&uri).await {
-            if diags.is_empty() {
-                let mut lowerer = pace_hir::LoweringContext::new();
-                if let Ok(hir) = lowerer.lower_program(ast) {
-                    let mut tc = pace_ty::TypeChecker::new();
-                    let _ = tc.check_program(&hir);
+        if let Some((ast, source_map, _diags, text)) = self.analyze_uri(&uri).await {
+            let mut lowerer = pace_hir::LoweringContext::new();
+            if let Ok(hir) = lowerer.lower_program(ast) {
+                let mut tc = pace_ty::TypeChecker::new();
+                let _ = tc.check_program(&hir);
 
-                    for (_, name, _) in tc.declared_bindings {
-                        items.push(CompletionItem {
-                            label: name.clone(),
-                            kind: Some(CompletionItemKind::VARIABLE),
-                            detail: Some("Local Variable".to_string()),
-                            ..Default::default()
-                        });
+                let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
+                if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref()) {
+                    let offset = find_node::position_to_offset(&text, position);
+                    let is_dot_completion = offset > 0 && text.chars().nth(offset - 1) == Some('.');
+                    
+                    if is_dot_completion {
+                        let mut prev_offset = offset - 1;
+                        while prev_offset > 0 && text.chars().nth(prev_offset - 1).unwrap_or(' ').is_whitespace() {
+                            prev_offset -= 1;
+                        }
+                        if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, prev_offset - 1) {
+                            if let Some(ty) = tc.local_types.get(&id) {
+                                let mut add_fields = |fields: &Vec<(String, pace_ty::Ty, bool, bool)>| {
+                                    for (fname, _, _, is_private) in fields {
+                                        items.push(CompletionItem {
+                                            label: fname.clone(),
+                                            kind: Some(CompletionItemKind::FIELD),
+                                            detail: Some(if *is_private { "private field".to_string() } else { "field".to_string() }),
+                                            ..Default::default()
+                                        });
+                                    }
+                                };
+                                match ty {
+                                    pace_ty::Ty::Struct(sid) => {
+                                        if let Some(fields) = tc.struct_defs.get(sid) {
+                                            add_fields(fields);
+                                        }
+                                        if let Some(struct_name) = tc.named_types.iter().find_map(|(k, &(vid, _))| if vid == *sid { Some(k) } else { None }) {
+                                            for (mname, _) in &tc.methods_env {
+                                                if mname.starts_with(&format!("{}_", struct_name)) {
+                                                    let method_short_name = mname.trim_start_matches(&format!("{}_", struct_name));
+                                                    items.push(CompletionItem {
+                                                        label: method_short_name.to_string(),
+                                                        kind: Some(CompletionItemKind::METHOD),
+                                                        detail: Some("method".to_string()),
+                                                        ..Default::default()
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                    pace_ty::Ty::Class(cid) => {
+                                        if let Some(fields) = tc.class_defs.get(cid) {
+                                            add_fields(fields);
+                                        }
+                                        if let Some(class_name) = tc.named_types.iter().find_map(|(k, &(vid, _))| if vid == *cid { Some(k) } else { None }) {
+                                            for (mname, _) in &tc.methods_env {
+                                                if mname.starts_with(&format!("{}_", class_name)) {
+                                                    let method_short_name = mname.trim_start_matches(&format!("{}_", class_name));
+                                                    items.push(CompletionItem {
+                                                        label: method_short_name.to_string(),
+                                                        kind: Some(CompletionItemKind::METHOD),
+                                                        detail: Some("method".to_string()),
+                                                        ..Default::default()
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    } else {
+                        for (_, name, _) in tc.declared_bindings {
+                            items.push(CompletionItem {
+                                label: name.clone(),
+                                kind: Some(CompletionItemKind::VARIABLE),
+                                detail: Some("Local Variable".to_string()),
+                                ..Default::default()
+                            });
+                        }
                     }
                 }
             }
@@ -375,7 +468,7 @@ impl LanguageServer for Backend {
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
         let uri = params.text_document.uri.to_string();
 
-        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
+        if let Some((ast, source_map, diags, _text)) = self.analyze_uri(&uri).await {
             if diags.is_empty() {
                 let mut lowerer = pace_hir::LoweringContext::new();
                 if let Ok(hir) = lowerer.lower_program(ast) {
@@ -527,6 +620,34 @@ impl LanguageServer for Backend {
                     }
                 }
             }
+
+            if diag.message.starts_with("unused variable or function: `") {
+                if let Some(start) = diag.message.find('`') {
+                    if let Some(end) = diag.message[start + 1..].find('`') {
+                        let var_name = &diag.message[start + 1..start + 1 + end];
+                        
+                        let mut changes = HashMap::new();
+                        let uri = params.text_document.uri.clone();
+                        let edit = TextEdit {
+                            range: diag.range,
+                            new_text: format!("_{}", var_name),
+                        };
+                        changes.insert(uri, vec![edit]);
+                        
+                        actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                            title: format!("Rename to '_{}'", var_name),
+                            kind: Some(CodeActionKind::QUICKFIX),
+                            diagnostics: Some(vec![diag.clone()]),
+                            edit: Some(WorkspaceEdit {
+                                changes: Some(changes),
+                                document_changes: None,
+                                change_annotations: None,
+                            }),
+                            ..Default::default()
+                        }));
+                    }
+                }
+            }
         }
 
         if actions.is_empty() {
@@ -652,4 +773,231 @@ pub async fn start_server() {
     });
 
     Server::new(stdin, stdout, socket).serve(service).await;
+}
+
+
+fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span::FileId) -> Option<DocumentSymbol> {
+    use pace_ast::Decl;
+    
+    // Helper closure to check file id and prevent panics
+    let is_valid = |span: &pace_span::Span| span.file_id == file_id;
+    
+    match decl {
+        Decl::Function { name, span, .. } if is_valid(span) => {
+            #[allow(deprecated)]
+            Some(DocumentSymbol {
+                name: name.name.clone(),
+                detail: None,
+                kind: SymbolKind::FUNCTION,
+                tags: None,
+                deprecated: None,
+                range: Range::new(
+                    offset_to_position(text, span.start as usize),
+                    offset_to_position(text, span.end as usize),
+                ),
+                selection_range: Range::new(
+                    offset_to_position(text, name.span.start as usize),
+                    offset_to_position(text, name.span.end as usize),
+                ),
+                children: None,
+            })
+        }
+        Decl::Struct { name, span, fields, methods, .. } if is_valid(span) => {
+            let mut children = Vec::new();
+            for (fname, _, _, _, _) in fields {
+                if !is_valid(&fname.span) { continue; }
+                #[allow(deprecated)]
+                children.push(DocumentSymbol {
+                    name: fname.name.clone(),
+                    detail: None,
+                    kind: SymbolKind::FIELD,
+                    tags: None,
+                    deprecated: None,
+                    range: Range::new(
+                        offset_to_position(text, fname.span.start as usize),
+                        offset_to_position(text, fname.span.end as usize),
+                    ),
+                    selection_range: Range::new(
+                        offset_to_position(text, fname.span.start as usize),
+                        offset_to_position(text, fname.span.end as usize),
+                    ),
+                    children: None,
+                });
+            }
+            for m in methods {
+                if let Some(mut m_sym) = decl_to_document_symbol(m, text, file_id) {
+                    m_sym.kind = SymbolKind::METHOD;
+                    children.push(m_sym);
+                }
+            }
+            #[allow(deprecated)]
+            Some(DocumentSymbol {
+                name: name.name.clone(),
+                detail: None,
+                kind: SymbolKind::STRUCT,
+                tags: None,
+                deprecated: None,
+                range: Range::new(
+                    offset_to_position(text, span.start as usize),
+                    offset_to_position(text, span.end as usize),
+                ),
+                selection_range: Range::new(
+                    offset_to_position(text, name.span.start as usize),
+                    offset_to_position(text, name.span.end as usize),
+                ),
+                children: Some(children),
+            })
+        }
+        Decl::Class { name, span, fields, methods, .. } if is_valid(span) => {
+            let mut children = Vec::new();
+            for (fname, _, _, _, _) in fields {
+                if !is_valid(&fname.span) { continue; }
+                #[allow(deprecated)]
+                children.push(DocumentSymbol {
+                    name: fname.name.clone(),
+                    detail: None,
+                    kind: SymbolKind::FIELD,
+                    tags: None,
+                    deprecated: None,
+                    range: Range::new(
+                        offset_to_position(text, fname.span.start as usize),
+                        offset_to_position(text, fname.span.end as usize),
+                    ),
+                    selection_range: Range::new(
+                        offset_to_position(text, fname.span.start as usize),
+                        offset_to_position(text, fname.span.end as usize),
+                    ),
+                    children: None,
+                });
+            }
+            for m in methods {
+                if let Some(mut m_sym) = decl_to_document_symbol(m, text, file_id) {
+                    m_sym.kind = SymbolKind::METHOD;
+                    children.push(m_sym);
+                }
+            }
+            #[allow(deprecated)]
+            Some(DocumentSymbol {
+                name: name.name.clone(),
+                detail: None,
+                kind: SymbolKind::CLASS,
+                tags: None,
+                deprecated: None,
+                range: Range::new(
+                    offset_to_position(text, span.start as usize),
+                    offset_to_position(text, span.end as usize),
+                ),
+                selection_range: Range::new(
+                    offset_to_position(text, name.span.start as usize),
+                    offset_to_position(text, name.span.end as usize),
+                ),
+                children: Some(children),
+            })
+        }
+        Decl::Enum { name, span, variants, .. } if is_valid(span) => {
+            let mut children = Vec::new();
+            for v in variants {
+                if !is_valid(&v.name.span) { continue; }
+                #[allow(deprecated)]
+                children.push(DocumentSymbol {
+                    name: v.name.name.clone(),
+                    detail: None,
+                    kind: SymbolKind::ENUM_MEMBER,
+                    tags: None,
+                    deprecated: None,
+                    range: Range::new(
+                        offset_to_position(text, v.name.span.start as usize),
+                        offset_to_position(text, v.name.span.end as usize),
+                    ),
+                    selection_range: Range::new(
+                        offset_to_position(text, v.name.span.start as usize),
+                        offset_to_position(text, v.name.span.end as usize),
+                    ),
+                    children: None,
+                });
+            }
+            #[allow(deprecated)]
+            Some(DocumentSymbol {
+                name: name.name.clone(),
+                detail: None,
+                kind: SymbolKind::ENUM,
+                tags: None,
+                deprecated: None,
+                range: Range::new(
+                    offset_to_position(text, span.start as usize),
+                    offset_to_position(text, span.end as usize),
+                ),
+                selection_range: Range::new(
+                    offset_to_position(text, name.span.start as usize),
+                    offset_to_position(text, name.span.end as usize),
+                ),
+                children: Some(children),
+            })
+        }
+        Decl::Trait { name, span, methods, .. } if is_valid(span) => {
+            let mut children = Vec::new();
+            for m in methods {
+                if let Some(mut m_sym) = decl_to_document_symbol(m, text, file_id) {
+                    m_sym.kind = SymbolKind::METHOD;
+                    children.push(m_sym);
+                }
+            }
+            #[allow(deprecated)]
+            Some(DocumentSymbol {
+                name: name.name.clone(),
+                detail: None,
+                kind: SymbolKind::INTERFACE,
+                tags: None,
+                deprecated: None,
+                range: Range::new(
+                    offset_to_position(text, span.start as usize),
+                    offset_to_position(text, span.end as usize),
+                ),
+                selection_range: Range::new(
+                    offset_to_position(text, name.span.start as usize),
+                    offset_to_position(text, name.span.end as usize),
+                ),
+                children: Some(children),
+            })
+        }
+        Decl::Let { name, span, .. } | Decl::Var { name, span, .. } if is_valid(span) => {
+            #[allow(deprecated)]
+            Some(DocumentSymbol {
+                name: name.name.clone(),
+                detail: None,
+                kind: SymbolKind::VARIABLE,
+                tags: None,
+                deprecated: None,
+                range: Range::new(
+                    offset_to_position(text, span.start as usize),
+                    offset_to_position(text, span.end as usize),
+                ),
+                selection_range: Range::new(
+                    offset_to_position(text, name.span.start as usize),
+                    offset_to_position(text, name.span.end as usize),
+                ),
+                children: None,
+            })
+        }
+        Decl::Const { name, span, .. } if is_valid(span) => {
+            #[allow(deprecated)]
+            Some(DocumentSymbol {
+                name: name.name.clone(),
+                detail: None,
+                kind: SymbolKind::CONSTANT,
+                tags: None,
+                deprecated: None,
+                range: Range::new(
+                    offset_to_position(text, span.start as usize),
+                    offset_to_position(text, span.end as usize),
+                ),
+                selection_range: Range::new(
+                    offset_to_position(text, name.span.start as usize),
+                    offset_to_position(text, name.span.end as usize),
+                ),
+                children: None,
+            })
+        }
+        _ => None,
+    }
 }
