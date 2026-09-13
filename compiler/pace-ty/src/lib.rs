@@ -19,8 +19,21 @@ mod tests {
         let (ast, diags, _comments) = parser.parse_program();
         assert!(diags.is_empty(), "Parse errors");
 
+        let mut modules = std::collections::HashMap::new();
+        modules.insert("main".to_string(), pace_ast::Module {
+            name: "main".to_string(),
+            file_id: pace_span::FileId::DUMMY,
+            declarations: ast,
+            comments: vec![],
+        });
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec!["main".to_string()],
+            span: pace_span::Span::DUMMY,
+        };
+
         let mut lowerer = LoweringContext::new();
-        let hir = lowerer.lower_program(ast).unwrap();
+        let hir = lowerer.lower_program(program).unwrap();
 
         let mut tc = TypeChecker::new();
         tc.check_program(&hir).expect("Typecheck failed");
@@ -34,8 +47,21 @@ mod tests {
         let (ast, diags, _comments) = parser.parse_program();
         assert!(diags.is_empty(), "Parse errors");
 
+        let mut modules = std::collections::HashMap::new();
+        modules.insert("main".to_string(), pace_ast::Module {
+            name: "main".to_string(),
+            file_id: pace_span::FileId::DUMMY,
+            declarations: ast,
+            comments: vec![],
+        });
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec!["main".to_string()],
+            span: pace_span::Span::DUMMY,
+        };
+
         let mut lowerer = LoweringContext::new();
-        let hir = lowerer.lower_program(ast).unwrap();
+        let hir = lowerer.lower_program(program).unwrap();
 
         let mut tc = TypeChecker::new();
         let result = tc.check_program(&hir);

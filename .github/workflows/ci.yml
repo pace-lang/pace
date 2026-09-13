@@ -26,6 +26,8 @@ jobs:
 
       - name: Check
         run: cargo check
+        working-directory: compiler
 
       - name: Test
         run: cargo test
+        working-directory: compiler

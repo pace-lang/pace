@@ -61,7 +61,7 @@ mod tests {
                 }
                 assert_eq!(body.statements.len(), 1);
                 match &body.statements[0] {
-                    Stmt::Return(Some(Expr::Ident(id)), _) => assert_eq!(id.name, "a"),
+                    Stmt::Return(Some(Expr::Ident(id, _)), _) => assert_eq!(id.name, "a"),
                     _ => panic!("Expected Return statement with Ident"),
                 }
             }
