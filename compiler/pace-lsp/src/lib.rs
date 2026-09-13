@@ -30,6 +30,14 @@ impl LanguageServer for Backend {
                 document_formatting_provider: Some(OneOf::Left(true)),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Left(true)),
+                document_highlight_provider: Some(OneOf::Left(true)),
+                inlay_hint_provider: Some(OneOf::Left(true)),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+                signature_help_provider: Some(SignatureHelpOptions {
+                    trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
+                    ..Default::default()
+                }),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
                     trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
@@ -121,26 +129,62 @@ impl LanguageServer for Backend {
         let uri = params.text_document_position_params.text_document.uri.to_string();
         let position = params.text_document_position_params.position;
 
-        if let Some((ast, _source_map, diags, text)) = self.analyze_uri(&uri).await {
+        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
             if diags.is_empty() {
                 let mut lowerer = pace_hir::LoweringContext::new();
                 if let Ok(hir) = lowerer.lower_program(ast) {
                     let mut tc = pace_ty::TypeChecker::new();
                     let _ = tc.check_program(&hir);
 
-                let offset = find_node::position_to_offset(&text, position);
-                if let Some(id) = find_node::find_ident_at_offset(&hir, offset) {
-                    for (decl_id, _, span) in tc.declared_bindings {
-                        if decl_id == id {
-                            let start = offset_to_position(&text, span.start as usize);
-                            let end = offset_to_position(&text, span.end as usize);
-                            return Ok(Some(GotoDefinitionResponse::Scalar(Location {
-                                uri: Url::parse(&uri).unwrap(),
-                                range: Range { start, end },
-                            })));
+                    let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
+                    if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref()) {
+                        let offset = find_node::position_to_offset(&text, position);
+                        if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset) {
+                            let mut target_span = None;
+                            
+                            // 1. Check local bindings
+                            for (decl_id, _, span) in &tc.declared_bindings {
+                                if *decl_id == id {
+                                    target_span = Some(*span);
+                                    break;
+                                }
+                            }
+
+                            // 2. Check global definitions
+                            if target_span.is_none() {
+                                if let Some(mangled_name) = tc.resolved_global_names.get(&id) {
+                            // Find the declaration in HIR
+                            for module in hir.modules.values() {
+                                for decl in &module.declarations {
+                                    let (decl_name, decl_span) = match decl {
+                                        pace_hir::Decl::Function { name, span, .. } => (name, span),
+                                        pace_hir::Decl::Class { name, span, .. } => (name, span),
+                                        pace_hir::Decl::Struct { name, span, .. } => (name, span),
+                                        pace_hir::Decl::Enum { name, span, .. } => (name, span),
+                                        pace_hir::Decl::Trait { name, span, .. } => (name, span),
+                                        _ => continue,
+                                    };
+                                    if decl_name == mangled_name {
+                                        target_span = Some(*decl_span);
+                                        break;
+                                    }
+                                }
+                            }
+                                }
+                            }
+                            if let Some(span) = target_span {
+                                let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                                let start = offset_to_position(span_text, span.start as usize);
+                                let end = offset_to_position(span_text, span.end as usize);
+                                
+                                let file_path = source_map.get_path(span.file_id).unwrap_or_default();
+                                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                                    uri: Url::from_file_path(file_path).unwrap(),
+                                    range: Range { start, end },
+                                })));
+                            }
                         }
                     }
-                }
                 }
             }
         }
@@ -152,22 +196,25 @@ impl LanguageServer for Backend {
         let uri = params.text_document_position_params.text_document.uri.to_string();
         let position = params.text_document_position_params.position;
 
-        if let Some((ast, _source_map, diags, text)) = self.analyze_uri(&uri).await {
+        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
             if diags.is_empty() {
                 let mut lowerer = pace_hir::LoweringContext::new();
                 if let Ok(hir) = lowerer.lower_program(ast) {
                     let mut tc = pace_ty::TypeChecker::new();
                     let _ = tc.check_program(&hir);
 
-                let offset = find_node::position_to_offset(&text, position);
-                if let Some(id) = find_node::find_ident_at_offset(&hir, offset) {
-                    if let Some(ty) = tc.local_types.get(&id).or_else(|| tc.env.get(&id)) {
-                        return Ok(Some(Hover {
-                            contents: HoverContents::Scalar(MarkedString::String(format!("{:?}", ty))),
-                            range: None,
-                        }));
+                    let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
+                    if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref()) {
+                        let offset = find_node::position_to_offset(&text, position);
+                        if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset) {
+                            if let Some(ty) = tc.local_types.get(&id).or_else(|| tc.env.get(&id)) {
+                                return Ok(Some(Hover {
+                                    contents: HoverContents::Scalar(MarkedString::String(tc.display_ty(ty))),
+                                    range: None,
+                                }));
+                            }
+                        }
                     }
-                }
                 }
             }
         }
@@ -187,19 +234,306 @@ impl LanguageServer for Backend {
                     let mut tc = pace_ty::TypeChecker::new();
                     let _ = tc.check_program(&hir);
 
-                for (_, name, _) in tc.declared_bindings {
-                    items.push(CompletionItem {
-                        label: name.clone(),
-                        kind: Some(CompletionItemKind::VARIABLE),
-                        detail: Some("Local Variable".to_string()),
-                        ..Default::default()
-                    });
-                }
+                    for (_, name, _) in tc.declared_bindings {
+                        items.push(CompletionItem {
+                            label: name.clone(),
+                            kind: Some(CompletionItemKind::VARIABLE),
+                            detail: Some("Local Variable".to_string()),
+                            ..Default::default()
+                        });
+                    }
                 }
             }
         }
     
         Ok(Some(CompletionResponse::Array(items)))
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri.to_string();
+        let position = params.text_document_position.position;
+        let new_name = params.new_name;
+
+        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
+            if diags.is_empty() {
+                let mut lowerer = pace_hir::LoweringContext::new();
+                if let Ok(hir) = lowerer.lower_program(ast) {
+                    let mut tc = pace_ty::TypeChecker::new();
+                    let _ = tc.check_program(&hir);
+
+                    let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
+                    if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref()) {
+                        let offset = find_node::position_to_offset(&text, position);
+                        if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset) {
+                        let mut changes = HashMap::new();
+                        let mut edits = Vec::new();
+                        
+                        // Add the declaration itself
+                        if let Some((_, _, span)) = tc.declared_bindings.iter().find(|(d_id, _, _)| *d_id == id) {
+                            let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                            let pos = offset_to_position(span_text, span.start as usize);
+                            
+                            edits.push(TextEdit {
+                                range: Range {
+                                    start: pos,
+                                    end: Position { line: pos.line, character: pos.character + new_name.len() as u32 }, // approx
+                                },
+                                new_text: new_name.clone(),
+                            });
+                        }
+
+                        // Add references
+                        if let Some(refs) = tc.symbol_references.get(&id) {
+                            for span in refs {
+                                let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                                let pos = offset_to_position(span_text, span.start as usize);
+                                
+                                let file_path = source_map.get_path(span.file_id).unwrap_or_default();
+                                let file_uri = Url::from_file_path(file_path).unwrap();
+                                
+                                let edit = TextEdit {
+                                    range: Range {
+                                        start: pos,
+                                        end: Position { line: pos.line, character: pos.character + new_name.len() as u32 }, // approx
+                                    },
+                                    new_text: new_name.clone(),
+                                };
+                                changes.entry(file_uri).or_insert_with(Vec::new).push(edit);
+                            }
+                        }
+                        
+                        // Also push the edits for current file if any
+                        if let Ok(url) = Url::parse(&uri) {
+                            changes.entry(url).or_insert_with(Vec::new).extend(edits);
+                        }
+                        
+                            return Ok(Some(WorkspaceEdit {
+                                changes: Some(changes),
+                                document_changes: None,
+                                change_annotations: None,
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    async fn document_highlight(&self, params: DocumentHighlightParams) -> Result<Option<Vec<DocumentHighlight>>> {
+        let uri = params.text_document_position_params.text_document.uri.to_string();
+        let position = params.text_document_position_params.position;
+
+        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
+            if diags.is_empty() {
+                let mut lowerer = pace_hir::LoweringContext::new();
+                if let Ok(hir) = lowerer.lower_program(ast) {
+                    let mut tc = pace_ty::TypeChecker::new();
+                    let _ = tc.check_program(&hir);
+
+                    let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
+                    if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref()) {
+                        let offset = find_node::position_to_offset(&text, position);
+                        if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset) {
+                        let mut highlights = Vec::new();
+
+                        if let Some((_, _, span)) = tc.declared_bindings.iter().find(|(d_id, _, _)| *d_id == id) {
+                            let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                            let pos = offset_to_position(span_text, span.start as usize);
+                            highlights.push(DocumentHighlight {
+                                range: Range {
+                                    start: pos,
+                                    end: Position { line: pos.line, character: pos.character + 5 }, // approx
+                                },
+                                kind: Some(DocumentHighlightKind::WRITE),
+                            });
+                        }
+
+                        if let Some(refs) = tc.symbol_references.get(&id) {
+                            for span in refs {
+                                let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                                let pos = offset_to_position(span_text, span.start as usize);
+                                highlights.push(DocumentHighlight {
+                                    range: Range {
+                                        start: pos,
+                                        end: Position { line: pos.line, character: pos.character + 5 }, // approx
+                                    },
+                                    kind: Some(DocumentHighlightKind::READ),
+                                });
+                            }
+                        }
+
+                            return Ok(Some(highlights));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
+        let uri = params.text_document.uri.to_string();
+
+        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
+            if diags.is_empty() {
+                let mut lowerer = pace_hir::LoweringContext::new();
+                if let Ok(hir) = lowerer.lower_program(ast) {
+                    let mut tc = pace_ty::TypeChecker::new();
+                    let _ = tc.check_program(&hir);
+
+                    let mut hints = Vec::new();
+                    for (span, hint_str) in tc.inlay_hints {
+                        // Inlay hints apply to the current file
+                        if let Some(file_path) = source_map.get_path(span.file_id) {
+                            if let Ok(file_uri) = Url::from_file_path(file_path) {
+                                if file_uri.to_string() == uri {
+                                    let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                                    // The span covers the whole `let x = ...` stmt.
+                                    // Let's just place the hint at the end of the `let x` part. 
+                                    // Actually, placing it at the `span.start + 4 + name.len()` is tricky without the name.
+                                    // Let's just place it at `span.start` for simplicity and let the user see it there,
+                                    // or we could search for "=" and place it before it.
+                                    let stmt_text = &span_text[span.start as usize..span.end as usize];
+                                    let offset = if let Some(eq_idx) = stmt_text.find('=') {
+                                        span.start as usize + eq_idx
+                                    } else {
+                                        span.start as usize
+                                    };
+                                    
+                                    let pos = offset_to_position(span_text, offset);
+                                    hints.push(InlayHint {
+                                        position: pos,
+                                        label: InlayHintLabel::String(hint_str.clone()),
+                                        kind: Some(InlayHintKind::TYPE),
+                                        text_edits: None,
+                                        tooltip: None,
+                                        padding_left: Some(true),
+                                        padding_right: Some(true),
+                                        data: None,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    return Ok(Some(hints));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
+        let uri = params.text_document_position_params.text_document.uri.to_string();
+        let position = params.text_document_position_params.position;
+
+        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
+            if diags.is_empty() {
+                let mut lowerer = pace_hir::LoweringContext::new();
+                if let Ok(hir) = lowerer.lower_program(ast) {
+                    let mut tc = pace_ty::TypeChecker::new();
+                    let _ = tc.check_program(&hir);
+
+                    let offset = find_node::position_to_offset(&text, position);
+                    
+                    // Find the innermost function call whose span contains the offset
+                    let mut best_call = None;
+                    let mut best_len = usize::MAX;
+                    for (span, ty) in &tc.function_calls {
+                        let span_len = span.end.saturating_sub(span.start) as usize;
+                        if offset >= span.start as usize && offset <= span.end as usize {
+                            if span_len < best_len {
+                                best_len = span_len;
+                                best_call = Some((*span, ty.clone()));
+                            }
+                        }
+                    }
+
+                    if let Some((span, pace_ty::Ty::Function(args, ret))) = best_call {
+                        let mut param_infos = Vec::new();
+                        for arg_ty in args {
+                            param_infos.push(ParameterInformation {
+                                label: ParameterLabel::Simple(tc.display_ty(&arg_ty)),
+                                documentation: None,
+                            });
+                        }
+                        
+                        let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                        let call_text = &span_text[span.start as usize..offset];
+                        let active_param = call_text.chars().filter(|&c| c == ',').count() as u32;
+
+                        let sig_info = SignatureInformation {
+                            label: format!("fn(…) -> {}", tc.display_ty(&ret)),
+                            documentation: None,
+                            parameters: Some(param_infos),
+                            active_parameter: Some(active_param),
+                        };
+
+                        return Ok(Some(SignatureHelp {
+                            signatures: vec![sig_info],
+                            active_signature: Some(0),
+                            active_parameter: Some(active_param),
+                        }));
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let mut actions = Vec::new();
+        
+        for diag in params.context.diagnostics {
+            if diag.message.contains("must be assigned before it can be used") {
+                // Not much we can do automatically here
+            }
+            if diag.message.contains("Type mismatch") {
+                // Type mismatch
+            }
+            
+            // Unused variables often have "unused variable: `x`" (if rustc-like) 
+            // but in pace we don't have unused var warnings yet from typechecker.
+            
+            // As a simple placeholder Code Action for Phase 4:
+            // Let's suggest adding an import if we see "Cannot find value 'xyz'"
+            if diag.message.starts_with("Cannot find value '") {
+                if let Some(start) = diag.message.find('\'') {
+                    if let Some(end) = diag.message[start + 1..].find('\'') {
+                        let var_name = &diag.message[start + 1..start + 1 + end];
+                        
+                        let mut changes = HashMap::new();
+                        let uri = params.text_document.uri.clone();
+                        let edit = TextEdit {
+                            range: Range {
+                                start: Position { line: 0, character: 0 },
+                                end: Position { line: 0, character: 0 },
+                            },
+                            new_text: format!("import {}\n", var_name),
+                        };
+                        changes.insert(uri, vec![edit]);
+                        
+                        actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                            title: format!("Import '{}'", var_name),
+                            kind: Some(CodeActionKind::QUICKFIX),
+                            diagnostics: Some(vec![diag.clone()]),
+                            edit: Some(WorkspaceEdit {
+                                changes: Some(changes),
+                                document_changes: None,
+                                change_annotations: None,
+                            }),
+                            ..Default::default()
+                        }));
+                    }
+                }
+            }
+        }
+
+        if actions.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(actions))
+        }
     }
 }
 

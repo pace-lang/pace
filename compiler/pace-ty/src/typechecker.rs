@@ -41,6 +41,9 @@ pub struct TypeChecker {
     pub initialized_bindings: std::collections::HashSet<HirId>,
     pub local_types: HashMap<HirId, Ty>, // Persisted types of all variables
     pub instantiated_generics: Vec<Decl>,
+    pub symbol_references: HashMap<HirId, Vec<pace_span::Span>>,
+    pub inlay_hints: Vec<(pace_span::Span, String)>,
+    pub function_calls: Vec<(pace_span::Span, Ty)>,
     pub reporter: Reporter,
 }
 
@@ -73,6 +76,9 @@ impl TypeChecker {
             initialized_bindings: std::collections::HashSet::new(),
             local_types: HashMap::new(),
             instantiated_generics: Vec::new(),
+            symbol_references: HashMap::new(),
+            inlay_hints: Vec::new(),
+            function_calls: Vec::new(),
             loop_depth: 0,
             next_id: 1000000,
             reporter: Reporter::new(),
@@ -804,7 +810,11 @@ impl TypeChecker {
                         self.current_expected_ty = expected_ty.clone();
                         let res = self.check_expr(val);
                         self.current_expected_ty = prev_expected;
-                        res?
+                        let inferred = res?;
+                        if explicit_ty.is_none() && inferred != Ty::Void {
+                            self.inlay_hints.push((*span, format!(": {:?}", inferred)));
+                        }
+                        inferred
                     } else {
                         // Uninitialized variable
                         let expected = expected_ty.clone().unwrap();
@@ -854,7 +864,11 @@ impl TypeChecker {
                 } => {
                     let mut ty = if let Some(val) = value {
                         self.initialized_bindings.insert(*id);
-                        self.check_expr(val)?
+                        let inferred = self.check_expr(val)?;
+                        if explicit_ty.is_none() && inferred != Ty::Void {
+                            self.inlay_hints.push((*span, format!(": {:?}", inferred)));
+                        }
+                        inferred
                     } else {
                         // Uninitialized variable
                         let explicit = explicit_ty.as_ref().unwrap(); // Guaranteed by parser
@@ -1414,6 +1428,7 @@ impl TypeChecker {
                 };
 
                 if let Some(ty) = self.env.get(id).cloned() {
+                    self.symbol_references.entry(*id).or_default().push(*span);
                     Ok(ty)
                 } else if let Some(ty) = self.global_functions.get(&mangled_name).cloned() {
                     self.used_bindings_by_name.insert(name.clone());
@@ -2076,6 +2091,7 @@ impl TypeChecker {
                 for (_, arg) in args {
                     self.check_expr(arg)?;
                 }
+                self.function_calls.push((*span, callee_ty.clone()));
                 if let Ty::Function(_, ret_ty) = callee_ty {
                     return Ok(*ret_ty);
                 }
@@ -2593,6 +2609,30 @@ impl TypeChecker {
                 Box::new(Ty::Void),
             )),
             _ => Err("Unsupported declaration".to_string()),
+        }
+    }
+
+    pub fn display_ty(&self, ty: &Ty) -> String {
+        match ty {
+            Ty::Int => "int".to_string(),
+            Ty::Float => "float".to_string(),
+            Ty::String => "string".to_string(),
+            Ty::Bool => "bool".to_string(),
+            Ty::Void => "void".to_string(),
+            Ty::Optional(inner) => format!("?{}", self.display_ty(inner)),
+            Ty::Function(args, ret) => {
+                let args_str = args.iter().map(|a| self.display_ty(a)).collect::<Vec<_>>().join(", ");
+                format!("fn({}) -> {}", args_str, self.display_ty(ret))
+            },
+            Ty::Struct(id) | Ty::Class(id) | Ty::Enum(id) => {
+                // Try to find the name in named_types (reverse lookup)
+                for (name, (nid, _)) in &self.named_types {
+                    if nid == id {
+                        return name.clone();
+                    }
+                }
+                format!("{:?}", ty)
+            }
         }
     }
 }

@@ -20,8 +20,11 @@ pub fn position_to_offset(text: &str, position: tower_lsp::lsp_types::Position) 
     offset
 }
 
-pub fn find_ident_at_offset(program: &Program, offset: usize) -> Option<HirId> {
+pub fn find_ident_at_offset(program: &Program, file_id: pace_span::FileId, offset: usize) -> Option<HirId> {
     for module in program.modules.values() {
+        if module.file_id != file_id {
+            continue;
+        }
         for decl in &module.declarations {
             if let Some(id) = find_ident_in_decl(decl, offset) {
                 return Some(id);
@@ -33,13 +36,23 @@ pub fn find_ident_at_offset(program: &Program, offset: usize) -> Option<HirId> {
 
 fn find_ident_in_decl(decl: &Decl, offset: usize) -> Option<HirId> {
     match decl {
-        Decl::Let { value, .. } | Decl::Var { value, .. } => {
+        Decl::Let { id, value, span, .. } | Decl::Var { id, value, span, .. } => {
             if let Some(v) = value {
-                return find_ident_in_expr(v, offset);
+                if let Some(vid) = find_ident_in_expr(v, offset) {
+                    return Some(vid);
+                }
+            }
+            if offset >= span.start as usize && offset <= span.end as usize {
+                return Some(*id);
             }
         }
-        Decl::Const { value, .. } => {
-            return find_ident_in_expr(value, offset);
+        Decl::Const { id, value, span, .. } => {
+            if let Some(vid) = find_ident_in_expr(value, offset) {
+                return Some(vid);
+            }
+            if offset >= span.start as usize && offset <= span.end as usize {
+                return Some(*id);
+            }
         }
         Decl::Function { body, .. } => {
             return find_ident_in_block(body, offset);
@@ -70,9 +83,14 @@ fn find_ident_in_block(block: &Block, offset: usize) -> Option<HirId> {
 
 fn find_ident_in_stmt(stmt: &Stmt, offset: usize) -> Option<HirId> {
     match stmt {
-        Stmt::Let { value, .. } | Stmt::Var { value, .. } => {
+        Stmt::Let { id, value, span, .. } | Stmt::Var { id, value, span, .. } => {
             if let Some(v) = value {
-                return find_ident_in_expr(v, offset);
+                if let Some(vid) = find_ident_in_expr(v, offset) {
+                    return Some(vid);
+                }
+            }
+            if offset >= span.start as usize && offset <= span.end as usize {
+                return Some(*id);
             }
         }
         Stmt::ExprStmt(expr, _) => {
