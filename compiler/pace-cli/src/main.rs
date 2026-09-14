@@ -87,7 +87,8 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> R
     if let Some(f) = file {
         let p = PathBuf::from(&f);
         let name = p.file_stem().unwrap().to_str().unwrap().to_string();
-        pace_driver::compile_file(&p, Path::new("."), &name, run, check)
+        let empty_deps = std::collections::HashMap::new();
+        pace_driver::compile_file(&p, Path::new("."), &name, run, check, &empty_deps)
     } else {
         let (root, project_name) = get_project_info()?;
 
@@ -123,8 +124,21 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> R
             return Err("Neither src/main.pace nor src/lib.pace found".to_string());
         };
 
+        let cache = pace_pkg::cache::CacheManager::new();
+        let mut dependencies = std::collections::HashMap::new();
+        for (pkg_name, pkg_info) in &lock.packages {
+            let mut pkg_path = cache.get_package_path(pkg_name, &pkg_info.version);
+            if let Some(source) = &pkg_info.source {
+                if source.starts_with("local+") {
+                    let local_path = source.strip_prefix("local+").unwrap();
+                    pkg_path = root.join(local_path);
+                }
+            }
+            dependencies.insert(pkg_name.clone(), pkg_path);
+        }
+
         let build_dir = root.join("build");
-        pace_driver::compile_file(&target_file, &build_dir, &project_name, run, check)
+        pace_driver::compile_file(&target_file, &build_dir, &project_name, run, check, &dependencies)
     }
 }
 

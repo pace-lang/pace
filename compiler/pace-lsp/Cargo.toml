@@ -10,6 +10,7 @@ pace-driver = { path = "../pace-driver" }
 pace-fmt = { path = "../pace-fmt" }
 pace-errors = { path = "../pace-errors" }
 pace-span = { path = "../pace-span" }
+pace-pkg = { path = "../pace-pkg" }
 pace-ast = { path = "../pace-ast" }
 pace-parser = { path = "../pace-parser" }
 pace-lexer = { path = "../pace-lexer" }

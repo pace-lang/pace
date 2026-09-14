@@ -73,8 +73,7 @@ fn parse_file_and_imports(
     visited: &mut HashSet<PathBuf>,
     modules: &mut std::collections::HashMap<String, pace_ast::Module>,
     deps: &mut DependencyGraph,
-    lockfile: Option<&pace_pkg::resolve::PaceLock>,
-    cache: &pace_pkg::cache::CacheManager,
+    dependencies: &std::collections::HashMap<String, PathBuf>,
     source_map: &mut pace_span::SourceMap,
     overrides: &std::collections::HashMap<PathBuf, String>,
     all_diags: &mut Vec<pace_errors::Diagnostic>,
@@ -120,35 +119,19 @@ fn parse_file_and_imports(
             }
 
             if !import_path.exists() {
-                if let Some(lock) = lockfile {
-                    let pkg_entry = lock
-                        .packages
-                        .get(first_ident)
-                        .map(|pkg| (first_ident.clone(), pkg));
-
-                    if let Some((actual_name, pkg)) = pkg_entry {
-                        let mut pkg_path = cache.get_package_path(&actual_name, &pkg.version);
-                        if let Some(source) = &pkg.source {
-                            if source.starts_with("local+") {
-                                let local_path = source.strip_prefix("local+").unwrap();
-                                if let Some(manifest) = pace_pkg::find_manifest(file_path) {
-                                    pkg_path = manifest.parent().unwrap().join(local_path);
-                                }
-                            }
+                if let Some(pkg_path) = dependencies.get(first_ident) {
+                    let mut resolved_path = pkg_path.join("src");
+                    for (i, ident) in path.iter().skip(1).enumerate() {
+                        if i == path.len() - 2 {
+                            resolved_path.push(format!("{}.pace", ident.name));
+                        } else {
+                            resolved_path.push(&ident.name);
                         }
-                        let mut resolved_path = pkg_path.join("src");
-                        for (i, ident) in path.iter().skip(1).enumerate() {
-                            if i == path.len() - 2 {
-                                resolved_path.push(format!("{}.pace", ident.name));
-                            } else {
-                                resolved_path.push(&ident.name);
-                            }
-                        }
-                        if path.len() == 1 {
-                            resolved_path.push("lib.pace");
-                        }
-                        import_path = resolved_path;
                     }
+                    if path.len() == 1 {
+                        resolved_path.push("lib.pace");
+                    }
+                    import_path = resolved_path;
                 }
             }
 
@@ -175,8 +158,7 @@ fn parse_file_and_imports(
                 visited,
                 modules,
                 deps,
-                lockfile,
-                cache,
+                dependencies,
                 source_map,
                 overrides,
                 all_diags,
@@ -200,16 +182,11 @@ fn parse_file_and_imports(
 pub fn analyze_workspace(
     file_path: &Path,
     overrides: &std::collections::HashMap<PathBuf, String>,
+    dependencies: &std::collections::HashMap<String, PathBuf>,
 ) -> Result<(pace_ast::Program, pace_span::SourceMap, Vec<pace_errors::Diagnostic>), String> {
     if !file_path.exists() && !overrides.contains_key(file_path) {
         return Err(format!("File not found: {}", file_path.display()));
     }
-
-    let cache = pace_pkg::cache::CacheManager::new();
-    let lockfile_path =
-        pace_pkg::find_manifest(file_path).map(|m| m.parent().unwrap().join("pace.lock"));
-    let lockfile =
-        lockfile_path.and_then(|p| pace_pkg::resolve::DependencyResolver::read_lockfile(&p).ok());
 
     let mut visited = HashSet::new();
     let mut modules = std::collections::HashMap::new();
@@ -223,8 +200,7 @@ pub fn analyze_workspace(
         &mut visited,
         &mut modules,
         &mut deps,
-        lockfile.as_ref(),
-        &cache,
+        dependencies,
         &mut source_map,
         overrides,
         &mut all_diags,
@@ -248,9 +224,10 @@ pub fn compile_file(
     output_name: &str,
     run: bool,
     check_only: bool,
+    dependencies: &std::collections::HashMap<String, PathBuf>,
 ) -> Result<(), String> {
     let empty_overrides = std::collections::HashMap::new();
-    let (ast, source_map, diags) = analyze_workspace(file_path, &empty_overrides)?;
+    let (ast, source_map, diags) = analyze_workspace(file_path, &empty_overrides, dependencies)?;
 
     if !diags.is_empty() {
         let mut reporter = pace_errors::Reporter::new();

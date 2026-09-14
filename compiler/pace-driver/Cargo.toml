@@ -12,6 +12,5 @@ pace-ty = { path = "../pace-ty" }
 pace-mir = { path = "../pace-mir" }
 pace-codegen = { path = "../pace-codegen" }
 pace-errors = { path = "../pace-errors" }
-pace-pkg = { path = "../pace-pkg" }
 pace-span = { path = "../pace-span" }
 pace-fmt = { path = "../pace-fmt" }

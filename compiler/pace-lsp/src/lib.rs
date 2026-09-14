@@ -736,7 +736,26 @@ impl Backend {
         let mut overrides = std::collections::HashMap::new();
         overrides.insert(file_path.clone(), text.clone());
 
-        match pace_driver::analyze_workspace(&file_path, &overrides) {
+        let mut dependencies = std::collections::HashMap::new();
+        if let Some(manifest_path) = pace_pkg::find_manifest(&file_path) {
+            let root = manifest_path.parent().unwrap();
+            let lockfile_path = root.join("pace.lock");
+            if let Ok(lock) = pace_pkg::resolve::DependencyResolver::read_lockfile(&lockfile_path) {
+                let cache = pace_pkg::cache::CacheManager::new();
+                for (pkg_name, pkg_info) in &lock.packages {
+                    let mut pkg_path = cache.get_package_path(pkg_name, &pkg_info.version);
+                    if let Some(source) = &pkg_info.source {
+                        if source.starts_with("local+") {
+                            let local_path = source.strip_prefix("local+").unwrap();
+                            pkg_path = root.join(local_path);
+                        }
+                    }
+                    dependencies.insert(pkg_name.clone(), pkg_path);
+                }
+            }
+        }
+
+        match pace_driver::analyze_workspace(&file_path, &overrides, &dependencies) {
             Ok((ast, source_map, diags)) => Some((ast, source_map, diags, text)),
             Err(_) => None,
         }

@@ -1248,7 +1248,6 @@ dependencies = [
  "pace-lexer",
  "pace-mir",
  "pace-parser",
- "pace-pkg",
  "pace-span",
  "pace-ty",
 ]
@@ -1297,6 +1296,7 @@ dependencies = [
  "pace-hir",
  "pace-lexer",
  "pace-parser",
+ "pace-pkg",
  "pace-span",
  "pace-ty",
  "tokio",
