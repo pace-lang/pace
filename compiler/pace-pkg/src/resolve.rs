@@ -1,4 +1,6 @@
-use reqwest::blocking::Client;
+use reqwest::Client;
+use semver::{Version, VersionReq};
+use std::env;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -24,6 +26,7 @@ pub struct DependencyResolver {
     resolved: HashMap<String, LockedPackage>,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize)]
 struct RegistryResponse {
     latest_version: Option<String>,
@@ -41,12 +44,12 @@ impl DependencyResolver {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
-            registry_url: "http://localhost:3000/api/packages".to_string(),
+            registry_url: env::var("PACE_REGISTRY_URL").unwrap_or_else(|_| "https://registry.pace-lang.org/api/packages".to_string()),
             resolved: HashMap::new(),
         }
     }
 
-    pub fn resolve(&mut self, toml: &PaceToml) -> Result<PaceLock, String> {
+    pub async fn resolve(&mut self, toml: &PaceToml) -> Result<PaceLock, String> {
         let mut queue = Vec::new();
         for (name, dep) in &toml.dependencies {
             queue.push((
@@ -56,16 +59,29 @@ impl DependencyResolver {
             ));
         }
 
-        while let Some((name, version_req, path)) = queue.pop() {
-            if self.resolved.contains_key(&name) {
-                continue; // If already resolved, assume it's valid for now.
+        while let Some((name, version_req_str, path)) = queue.pop() {
+            let req = version_req_str
+                .as_deref()
+                .map(|s| VersionReq::parse(s).map_err(|e| format!("Invalid version requirement '{}' for {}: {}", s, name, e)))
+                .transpose()?;
+
+            if let Some(existing) = self.resolved.get(&name) {
+                if let Some(req) = &req {
+                    let existing_ver = existing.version.as_str();
+                    if let Ok(ver) = Version::parse(existing_ver) {
+                        if !req.matches(&ver) {
+                            return Err(format!("Conflict detected for package {}: already resolved to {} which does not satisfy {}", name, existing_ver, req));
+                        }
+                    }
+                }
+                continue;
             }
 
             if let Some(p) = path {
                 self.resolved.insert(
                     name,
                     LockedPackage {
-                        version: version_req.unwrap_or_else(|| "0.1.0".to_string()),
+                        version: version_req_str.unwrap_or_else(|| "0.1.0".to_string()),
                         source: Some(format!("local+{}", p)),
                         checksum: None,
                     },
@@ -74,32 +90,45 @@ impl DependencyResolver {
             }
 
             let url = format!("{}/{}", self.registry_url, name);
-            let resp = self.client.get(&url).send().map_err(|e| e.to_string())?;
+            let resp = self.client.get(&url).send().await.map_err(|e| e.to_string())?;
             if !resp.status().is_success() {
                 return Err(format!("Failed to find package {} in registry", name));
             }
-            let info: RegistryResponse = resp.json().map_err(|e| e.to_string())?;
+            let info: RegistryResponse = resp.json().await.map_err(|e| e.to_string())?;
 
-            // Simplified for first iteration: pick latest
-            let latest = info
-                .latest_version
-                .ok_or_else(|| format!("No versions found for {}", name))?;
-            let v_info = info
-                .version_info
-                .into_iter()
-                .find(|v| v.version == latest)
-                .unwrap();
+            let mut best_match: Option<VersionInfo> = None;
+            let mut highest_ver: Option<Version> = None;
+
+            for v_info in info.version_info {
+                let ver = match Version::parse(&v_info.version) {
+                    Ok(v) => v,
+                    Err(_) => continue, // skip invalid versions in registry
+                };
+                
+                if let Some(r) = &req {
+                    if !r.matches(&ver) {
+                        continue;
+                    }
+                }
+                
+                if highest_ver.is_none() || ver > *highest_ver.as_ref().unwrap() {
+                    highest_ver = Some(ver);
+                    best_match = Some(v_info);
+                }
+            }
+
+            let best_match = best_match.ok_or_else(|| format!("No compatible versions found for {} satisfying {:?}", name, version_req_str))?;
 
             self.resolved.insert(
                 name.clone(),
                 LockedPackage {
-                    version: latest,
+                    version: best_match.version.clone(),
                     source: Some("registry".to_string()),
-                    checksum: v_info.tarball_sha256,
+                    checksum: best_match.tarball_sha256.clone(),
                 },
             );
 
-            for (dep_name, dep_ver) in v_info.dependencies {
+            for (dep_name, dep_ver) in best_match.dependencies {
                 queue.push((dep_name, Some(dep_ver), None));
             }
         }

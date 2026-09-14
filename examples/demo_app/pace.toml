@@ -2,5 +2,9 @@
 name = "demo_app"
 version = "0.1.0"
 
+[environment]
+sdk = ">=0.1.0"
+
 [dependencies]
 demo_lib = { path = "../demo_lib" }
+dummy = "*"

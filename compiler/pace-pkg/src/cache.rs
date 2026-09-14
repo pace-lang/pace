@@ -1,5 +1,5 @@
 use flate2::read::GzDecoder;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use std::fs;
 use std::path::PathBuf;
 use tar::Archive;
@@ -22,7 +22,7 @@ impl CacheManager {
         self.cache_dir.join(format!("{}-{}", name, version))
     }
 
-    pub fn download_and_extract(
+    pub async fn download_and_extract(
         &self,
         name: &str,
         version: &str,
@@ -33,14 +33,16 @@ impl CacheManager {
             return Ok(pkg_dir); // Already cached
         }
 
-        let url = format!(
-            "http://localhost:3000/api/packages/{}/download/{}",
-            name, version
-        );
+        // Use configurable registry or default
+        let registry_url = std::env::var("PACE_REGISTRY_URL")
+            .unwrap_or_else(|_| "https://registry.pace-lang.org/api/packages".to_string());
+        
+        let url = format!("{}/{}/download/{}", registry_url, name, version);
         let client = Client::new();
         let resp = client
             .get(&url)
             .send()
+            .await
             .map_err(|e| format!("Failed to download {}: {}", name, e))?;
 
         if !resp.status().is_success() {
@@ -53,6 +55,7 @@ impl CacheManager {
 
         let bytes = resp
             .bytes()
+            .await
             .map_err(|e| format!("Failed to read body: {}", e))?;
 
         let tar = GzDecoder::new(&bytes[..]);

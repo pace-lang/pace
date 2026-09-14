@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 pub mod cache;
 pub mod resolve;
+pub mod commands;
 
 use std::collections::HashMap;
 
@@ -11,7 +12,14 @@ use std::collections::HashMap;
 pub struct PaceToml {
     pub package: Package,
     #[serde(default)]
+    pub environment: Option<Environment>,
+    #[serde(default)]
     pub dependencies: HashMap<String, Dependency>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Environment {
+    pub sdk: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -89,11 +97,11 @@ pub fn scaffold_project(path: &str, is_lib: bool) -> Result<(), String> {
 
     let toml_content = if is_lib {
         format!(
-            "[package]\nname = \"{}\"\nversion = \"0.1.0\"\ndescription = \"A pace package\"\nlicense = \"MIT\"\nauthors = [\"Your Name <you@example.com>\"]\nrepository = \"https://github.com/your/repo\"\n",
+            "[package]\nname = \"{}\"\nversion = \"0.1.0\"\ndescription = \"A pace package\"\nlicense = \"MIT\"\nauthors = [\"Your Name <you@example.com>\"]\nrepository = \"https://github.com/your/repo\"\n\n[environment]\nsdk = \">=0.1.0\"\n",
             pkg_name
         )
     } else {
-        format!("[package]\nname = \"{}\"\nversion = \"0.1.0\"\n", pkg_name)
+        format!("[package]\nname = \"{}\"\nversion = \"0.1.0\"\n\n[environment]\nsdk = \">=0.1.0\"\n", pkg_name)
     };
 
     fs::write(project_dir.join("pace.toml"), toml_content)

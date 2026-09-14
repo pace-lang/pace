@@ -55,6 +55,21 @@ enum Commands {
     /// Start the Language Server (Internal use by editors)
     #[command(hide = true)]
     Lsp,
+    /// Add a dependency to the project
+    Add {
+        /// Name of the package
+        name: String,
+        /// Optional version constraint (e.g. "^1.0.0")
+        version: Option<String>,
+    },
+    /// Update dependencies
+    Update {
+        /// Update to the absolute latest versions, modifying pace.toml
+        #[arg(long)]
+        latest: bool,
+    },
+    /// List outdated dependencies
+    Outdated,
 }
 
 fn get_project_info() -> Result<(PathBuf, String), String> {
@@ -68,7 +83,7 @@ fn get_project_info() -> Result<(PathBuf, String), String> {
     Ok((root, toml.package.name))
 }
 
-fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> Result<(), String> {
+async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> Result<(), String> {
     if let Some(f) = file {
         let p = PathBuf::from(&f);
         let name = p.file_stem().unwrap().to_str().unwrap().to_string();
@@ -79,8 +94,22 @@ fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> Result<
         let manifest_path = root.join("pace.toml");
         let toml = pace_pkg::parse_manifest(&manifest_path)?;
 
+        if let Some(env) = &toml.environment {
+            let req = semver::VersionReq::parse(&env.sdk)
+                .map_err(|_| format!("Invalid SDK version requirement: {}", env.sdk))?;
+            let compiler_version = semver::Version::parse(env!("CARGO_PKG_VERSION"))
+                .unwrap_or_else(|_| semver::Version::new(0, 1, 0));
+            
+            if !req.matches(&compiler_version) {
+                return Err(format!(
+                    "The current project requires Pace SDK version {}, but you are using {}",
+                    env.sdk, compiler_version
+                ));
+            }
+        }
+
         let mut resolver = pace_pkg::resolve::DependencyResolver::new();
-        let lock = resolver.resolve(&toml)?;
+        let lock = resolver.resolve(&toml).await?;
         resolver.write_lockfile(&root.join("pace.lock"), &lock)?;
 
         let main_file = root.join("src/main.pace");
@@ -159,19 +188,19 @@ async fn main() {
             }
         }
         Commands::Build { file } => {
-            if let Err(e) = execute_build_or_run(file, false, false) {
+            if let Err(e) = execute_build_or_run(file, false, false).await {
                 eprintln!("{}", e);
                 std::process::exit(1);
             }
         }
         Commands::Check { file } => {
-            if let Err(e) = execute_build_or_run(file, false, true) {
+            if let Err(e) = execute_build_or_run(file, false, true).await {
                 eprintln!("{}", e);
                 std::process::exit(1);
             }
         }
         Commands::Run { file } => {
-            if let Err(e) = execute_build_or_run(file, true, false) {
+            if let Err(e) = execute_build_or_run(file, true, false).await {
                 eprintln!("{}", e);
                 std::process::exit(1);
             }
@@ -196,6 +225,24 @@ async fn main() {
         Commands::Fmt { file, stdout } => {
             if let Err(e) = execute_fmt(file, !stdout) {
                 eprintln!("{}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Add { name, version } => {
+            if let Err(e) = pace_pkg::commands::add_dependency(&name, version.as_deref()).await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Update { latest } => {
+            if let Err(e) = pace_pkg::commands::update_dependencies(latest).await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Outdated => {
+            if let Err(e) = pace_pkg::commands::list_outdated().await {
+                eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
         }
