@@ -30,6 +30,7 @@ impl LoweringContext {
         let mut modules = HashMap::new();
 
         for (name, ast_module) in ast.modules {
+            self.scope.clear(); // VERY IMPORTANT: Do not leak scope across modules!
             let mut declarations = Vec::new();
             for decl in ast_module.declarations {
                 if let Some(d) = self.lower_decl(decl)? {

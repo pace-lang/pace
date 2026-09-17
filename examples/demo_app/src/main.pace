@@ -2,6 +2,7 @@ import conditionals
 import demo_lib
 import enums_match
 import generics
+import hello_world as h
 import inheritance
 import loops
 import null_safety
@@ -25,4 +26,5 @@ fn main() {
     testGenerics()
     testOptionResult()
     testNullSafety()
+    h.hello()
 }

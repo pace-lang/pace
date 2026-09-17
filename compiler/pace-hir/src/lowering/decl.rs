@@ -530,7 +530,10 @@ impl LoweringContext {
                 is_private,
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name.clone(), id);
+                // We do NOT insert global functions into `self.scope` because they are resolved
+                // by the TypeChecker using names and module imports.
+                // However, if this is a method, we might need it? No, methods are resolved by TypeChecker too.
+                // Wait! Let's just NOT insert it into the global scope.
 
                 let outer_scope = self.scope.clone();
                 let mut lowered_params = Vec::new();

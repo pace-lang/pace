@@ -3,8 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub mod cache;
-pub mod resolve;
 pub mod commands;
+pub mod resolve;
 
 use std::collections::HashMap;
 
@@ -101,7 +101,10 @@ pub fn scaffold_project(path: &str, is_lib: bool) -> Result<(), String> {
             pkg_name
         )
     } else {
-        format!("[package]\nname = \"{}\"\nversion = \"0.1.0\"\n\n[environment]\nsdk = \">=0.1.0\"\n", pkg_name)
+        format!(
+            "[package]\nname = \"{}\"\nversion = \"0.1.0\"\n\n[environment]\nsdk = \">=0.1.0\"\n",
+            pkg_name
+        )
     };
 
     fs::write(project_dir.join("pace.toml"), toml_content)
@@ -127,7 +130,7 @@ pub fn scaffold_project(path: &str, is_lib: bool) -> Result<(), String> {
         )
         .map_err(|e| format!("Failed to write CHANGELOG.md: {}", e))?;
 
-        let lib_content = "fn hello() {\n    println(\"⚡ Hello from your Pace library!\")\n}\n";
+        let lib_content = "fn greet() {\n    println(\"⚡ Hello from your Pace library!\")\n}\n";
         fs::write(project_dir.join("src/lib.pace"), lib_content)
             .map_err(|e| format!("Failed to write src/lib.pace: {}", e))?;
     } else {

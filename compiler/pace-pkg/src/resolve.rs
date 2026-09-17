@@ -44,9 +44,13 @@ impl DependencyResolver {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
-            registry_url: env::var("PACE_REGISTRY_URL").unwrap_or_else(|_| "https://registry.pace-lang.org/api/packages".to_string()),
+            registry_url: env::var("PACE_REGISTRY_URL").unwrap_or_else(|_| "http://localhost:3000/api/packages".to_string()),
             resolved: HashMap::new(),
         }
+    }
+
+    pub fn load_lock(&mut self, lock: PaceLock) {
+        self.resolved = lock.packages;
     }
 
     pub async fn resolve(&mut self, toml: &PaceToml) -> Result<PaceLock, String> {
@@ -66,15 +70,20 @@ impl DependencyResolver {
                 .transpose()?;
 
             if let Some(existing) = self.resolved.get(&name) {
+                let mut matches = true;
                 if let Some(req) = &req {
                     let existing_ver = existing.version.as_str();
                     if let Ok(ver) = Version::parse(existing_ver) {
                         if !req.matches(&ver) {
-                            return Err(format!("Conflict detected for package {}: already resolved to {} which does not satisfy {}", name, existing_ver, req));
+                            matches = false;
                         }
                     }
                 }
-                continue;
+                if matches {
+                    continue;
+                } else {
+                    self.resolved.remove(&name);
+                }
             }
 
             if let Some(p) = path {
@@ -90,11 +99,55 @@ impl DependencyResolver {
             }
 
             let url = format!("{}/{}", self.registry_url, name);
-            let resp = self.client.get(&url).send().await.map_err(|e| e.to_string())?;
-            if !resp.status().is_success() {
-                return Err(format!("Failed to find package {} in registry", name));
+            let mut info_opt: Option<RegistryResponse> = None;
+            
+            if let Ok(resp) = self.client.get(&url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(info) = resp.json().await {
+                        info_opt = Some(info);
+                    }
+                }
             }
-            let info: RegistryResponse = resp.json().await.map_err(|e| e.to_string())?;
+
+            let info = if let Some(i) = info_opt {
+                i
+            } else {
+                let mut v_info = Vec::new();
+                let cache_dir = home::home_dir().unwrap().join(".pace").join("cache");
+                let prefix = format!("{}-", name);
+                if let Ok(entries) = fs::read_dir(cache_dir) {
+                    for entry in entries.filter_map(|e| e.ok()) {
+                        let fname = entry.file_name().to_string_lossy().to_string();
+                        if fname.starts_with(&prefix) {
+                            let ver_str = fname.strip_prefix(&prefix).unwrap();
+                            if let Ok(_) = Version::parse(ver_str) {
+                                let mut deps = HashMap::new();
+                                if let Ok(manifest) = crate::parse_manifest(&entry.path().join("pace.toml")) {
+                                    for (dname, dep) in manifest.dependencies {
+                                        if let Some(v) = dep.version() {
+                                            deps.insert(dname, v.to_string());
+                                        }
+                                    }
+                                }
+                                v_info.push(VersionInfo {
+                                    version: ver_str.to_string(),
+                                    dependencies: deps,
+                                    tarball_sha256: None,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                if v_info.is_empty() {
+                    return Err(format!("Failed to find package {} in registry or local cache", name));
+                }
+
+                RegistryResponse {
+                    latest_version: None,
+                    version_info: v_info,
+                }
+            };
 
             let mut best_match: Option<VersionInfo> = None;
             let mut highest_ver: Option<Version> = None;

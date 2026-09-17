@@ -591,7 +591,7 @@ impl TypeChecker {
         for (module_name, decl) in &declarations {
             self.current_module = Some(module_name.clone());
             if let Decl::Function {
-                id: _,
+                id: func_id,
                 name,
                 generic_params,
                 params,
@@ -620,6 +620,7 @@ impl TypeChecker {
                     mangled_name.clone(),
                     Ty::Function(param_tys, Box::new(ret_ty)),
                 );
+                self.resolved_global_names.insert(*func_id, mangled_name.clone());
 
                 if let Some(scope) = self.module_scopes.get_mut(module_name) {
                     scope.visible_symbols.insert(name.clone(), mangled_name);

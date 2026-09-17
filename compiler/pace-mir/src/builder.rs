@@ -1351,7 +1351,7 @@ impl<'a> MirBuilder<'a> {
                 }
                 pace_hir::Decl::Function {
                     name,
-                    id: _,
+                    id: func_id,
                     params,
                     return_type,
                     body,
@@ -1395,7 +1395,7 @@ impl<'a> MirBuilder<'a> {
                     fn_builder.build_block(body);
                     let fn_body = fn_builder.finish(&mir_params);
                     functions.push(MirFunction {
-                        name: get_mangled_name(tc, name),
+                        name: tc.resolved_global_names.get(&func_id).cloned().unwrap_or_else(|| get_mangled_name(tc, name)),
                         params: mir_params,
                         return_type: ret_ty,
                         body: fn_body,

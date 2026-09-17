@@ -70,6 +70,13 @@ enum Commands {
     },
     /// List outdated dependencies
     Outdated,
+    /// Publish the package
+    Publish,
+    /// Login to the registry
+    Login {
+        /// Authentication token
+        token: String,
+    },
 }
 
 fn get_project_info() -> Result<(PathBuf, String), String> {
@@ -110,8 +117,14 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> R
         }
 
         let mut resolver = pace_pkg::resolve::DependencyResolver::new();
+        let lockfile_path = root.join("pace.lock");
+        if lockfile_path.exists() {
+            if let Ok(lock) = pace_pkg::resolve::DependencyResolver::read_lockfile(&lockfile_path) {
+                resolver.load_lock(lock);
+            }
+        }
         let lock = resolver.resolve(&toml).await?;
-        resolver.write_lockfile(&root.join("pace.lock"), &lock)?;
+        resolver.write_lockfile(&lockfile_path, &lock)?;
 
         let main_file = root.join("src/main.pace");
         let lib_file = root.join("src/lib.pace");
@@ -256,6 +269,18 @@ async fn main() {
         }
         Commands::Outdated => {
             if let Err(e) = pace_pkg::commands::list_outdated().await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Publish => {
+            if let Err(e) = pace_pkg::commands::publish().await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Login { token } => {
+            if let Err(e) = pace_pkg::commands::login(&token) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
