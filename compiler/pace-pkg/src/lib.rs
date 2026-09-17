@@ -14,6 +14,8 @@ pub struct PaceToml {
     pub environment: Environment,
     #[serde(default)]
     pub dependencies: HashMap<String, Dependency>,
+    #[serde(default, rename = "dev-dependencies")]
+    pub dev_dependencies: HashMap<String, Dependency>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -21,7 +23,7 @@ pub struct Environment {
     pub sdk: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Dependency {
     Version(String),

@@ -115,6 +115,13 @@ impl DependencyResolver {
                 dep.path().map(|s| s.to_string()),
             ));
         }
+        for (name, dep) in &toml.dev_dependencies {
+            queue.push((
+                name.clone(),
+                dep.version().map(|s| s.to_string()),
+                dep.path().map(|s| s.to_string()),
+            ));
+        }
 
         while let Some((name, version_req_str, path)) = queue.pop() {
             let req = version_req_str

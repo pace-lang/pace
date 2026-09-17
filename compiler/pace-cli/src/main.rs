@@ -61,6 +61,9 @@ enum Commands {
         name: String,
         /// Optional version constraint (e.g. "^1.0.0")
         version: Option<String>,
+        /// Add as a dev dependency
+        #[arg(long, short)]
+        dev: bool,
     },
     /// Update dependencies
     Update {
@@ -262,8 +265,8 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Add { name, version } => {
-            if let Err(e) = pace_pkg::commands::add_dependency(&name, version.as_deref()).await {
+        Commands::Add { name, version, dev } => {
+            if let Err(e) = pace_pkg::commands::add_dependency(&name, version.as_deref(), dev).await {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }

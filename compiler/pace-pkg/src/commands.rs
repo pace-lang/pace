@@ -3,7 +3,7 @@ use std::env;
 use std::fs;
 use toml_edit::{DocumentMut, value};
 
-pub async fn add_dependency(name: &str, version: Option<&str>) -> Result<(), String> {
+pub async fn add_dependency(name: &str, version: Option<&str>, dev: bool) -> Result<(), String> {
     let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
     let manifest_path = find_manifest(&current_dir)
         .ok_or("No pace.toml found in this directory or any parent directory")?;
@@ -36,12 +36,13 @@ pub async fn add_dependency(name: &str, version: Option<&str>) -> Result<(), Str
         }
     };
     
-    // Add to [dependencies] table
-    if !doc.contains_key("dependencies") {
-        doc["dependencies"] = toml_edit::table();
+    let table_name = if dev { "dev-dependencies" } else { "dependencies" };
+
+    if !doc.contains_key(table_name) {
+        doc[table_name] = toml_edit::table();
     }
     
-    if let Some(deps) = doc["dependencies"].as_table_mut() {
+    if let Some(deps) = doc[table_name].as_table_mut() {
         deps.insert(name, value(&ver));
     }
 
@@ -90,6 +91,15 @@ pub async fn update_dependencies(latest: bool) -> Result<(), String> {
                 }
             }
         }
+        for (_, dep) in toml.dev_dependencies.iter_mut() {
+            if let crate::Dependency::Version(_) = dep {
+                *dep = crate::Dependency::Version("*".to_string());
+            } else if let crate::Dependency::Detailed { version, path } = dep {
+                if path.is_none() {
+                    *version = Some("*".to_string());
+                }
+            }
+        }
     }
 
     let root = manifest_path.parent().unwrap();
@@ -117,6 +127,18 @@ pub async fn update_dependencies(latest: bool) -> Result<(), String> {
                 }
                 if deps.contains_key(pkg_name) {
                     deps.insert(pkg_name, value(format!("^{}", pkg_info.version)));
+                }
+            }
+        }
+        if let Some(dev_deps) = doc["dev-dependencies"].as_table_mut() {
+            for (pkg_name, pkg_info) in &lock.packages {
+                if let Some(source) = &pkg_info.source {
+                    if source.starts_with("local+") {
+                        continue;
+                    }
+                }
+                if dev_deps.contains_key(pkg_name) {
+                    dev_deps.insert(pkg_name, value(format!("^{}", pkg_info.version)));
                 }
             }
         }
@@ -193,6 +215,8 @@ pub async fn list_outdated() -> Result<(), String> {
         }
 
         let required = if let Some(dep) = toml.dependencies.get(pkg_name) {
+            dep.version().unwrap_or("*").to_string()
+        } else if let Some(dep) = toml.dev_dependencies.get(pkg_name) {
             dep.version().unwrap_or("*").to_string()
         } else {
             // Transitive dependency
