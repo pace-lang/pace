@@ -103,21 +103,18 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> R
 
         let manifest_path = root.join("pace.toml");
         let toml = pace_pkg::parse_manifest(&manifest_path)?;
-
-        if let Some(env) = &toml.environment {
-            let req = semver::VersionReq::parse(&env.sdk)
-                .map_err(|_| format!("Invalid SDK version requirement: {}", env.sdk))?;
-            let compiler_version = semver::Version::parse(env!("CARGO_PKG_VERSION"))
-                .unwrap_or_else(|_| semver::Version::new(0, 1, 0));
-            
-            if !req.matches(&compiler_version) {
-                return Err(format!(
-                    "The current project requires Pace SDK version {}, but you are using {}",
-                    env.sdk, compiler_version
-                ));
-            }
+        let env = &toml.environment;
+        let req = semver::VersionReq::parse(&env.sdk)
+            .map_err(|_| format!("Invalid SDK version requirement: {}", env.sdk))?;
+        let compiler_version = semver::Version::parse(env!("CARGO_PKG_VERSION"))
+            .unwrap_or_else(|_| semver::Version::new(0, 1, 0));
+        
+        if !req.matches(&compiler_version) {
+            return Err(format!(
+                "The current project requires Pace SDK version {}, but you are using {}",
+                env.sdk, compiler_version
+            ));
         }
-
         let mut resolver = pace_pkg::resolve::DependencyResolver::new();
         let lockfile_path = root.join("pace.lock");
         if lockfile_path.exists() {

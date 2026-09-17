@@ -11,8 +11,7 @@ use std::collections::HashMap;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PaceToml {
     pub package: Package,
-    #[serde(default)]
-    pub environment: Option<Environment>,
+    pub environment: Environment,
     #[serde(default)]
     pub dependencies: HashMap<String, Dependency>,
 }
