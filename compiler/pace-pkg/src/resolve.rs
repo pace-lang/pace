@@ -28,16 +28,16 @@ pub struct DependencyResolver {
 
 #[allow(dead_code)]
 #[derive(Deserialize)]
-struct RegistryResponse {
-    latest_version: Option<String>,
-    version_info: Vec<VersionInfo>,
+pub struct RegistryResponse {
+    pub latest_version: Option<String>,
+    pub version_info: Vec<VersionInfo>,
 }
 
 #[derive(Deserialize)]
-struct VersionInfo {
-    version: String,
-    dependencies: HashMap<String, String>,
-    tarball_sha256: Option<String>,
+pub struct VersionInfo {
+    pub version: String,
+    pub dependencies: HashMap<String, String>,
+    pub tarball_sha256: Option<String>,
 }
 
 impl DependencyResolver {
@@ -51,6 +51,59 @@ impl DependencyResolver {
 
     pub fn load_lock(&mut self, lock: PaceLock) {
         self.resolved = lock.packages;
+    }
+
+    pub async fn get_package_info(&self, name: &str) -> Result<RegistryResponse, String> {
+        let url = format!("{}/{}", self.registry_url, name);
+        let mut info_opt: Option<RegistryResponse> = None;
+        
+        if let Ok(resp) = self.client.get(&url).send().await {
+            if resp.status().is_success() {
+                if let Ok(info) = resp.json().await {
+                    info_opt = Some(info);
+                }
+            }
+        }
+
+        if let Some(i) = info_opt {
+            Ok(i)
+        } else {
+            let mut v_info = Vec::new();
+            let cache_dir = home::home_dir().unwrap().join(".pace").join("cache");
+            let prefix = format!("{}-", name);
+            if let Ok(entries) = fs::read_dir(cache_dir) {
+                for entry in entries.filter_map(|e| e.ok()) {
+                    let fname = entry.file_name().to_string_lossy().to_string();
+                    if fname.starts_with(&prefix) {
+                        let ver_str = fname.strip_prefix(&prefix).unwrap();
+                        if let Ok(_) = Version::parse(ver_str) {
+                            let mut deps = HashMap::new();
+                            if let Ok(manifest) = crate::parse_manifest(&entry.path().join("pace.toml")) {
+                                for (dname, dep) in manifest.dependencies {
+                                    if let Some(v) = dep.version() {
+                                        deps.insert(dname, v.to_string());
+                                    }
+                                }
+                            }
+                            v_info.push(VersionInfo {
+                                version: ver_str.to_string(),
+                                dependencies: deps,
+                                tarball_sha256: None,
+                            });
+                        }
+                    }
+                }
+            }
+
+            if v_info.is_empty() {
+                return Err(format!("Failed to find package {} in registry or local cache", name));
+            }
+
+            Ok(RegistryResponse {
+                latest_version: None,
+                version_info: v_info,
+            })
+        }
     }
 
     pub async fn resolve(&mut self, toml: &PaceToml) -> Result<PaceLock, String> {
@@ -98,56 +151,7 @@ impl DependencyResolver {
                 continue;
             }
 
-            let url = format!("{}/{}", self.registry_url, name);
-            let mut info_opt: Option<RegistryResponse> = None;
-            
-            if let Ok(resp) = self.client.get(&url).send().await {
-                if resp.status().is_success() {
-                    if let Ok(info) = resp.json().await {
-                        info_opt = Some(info);
-                    }
-                }
-            }
-
-            let info = if let Some(i) = info_opt {
-                i
-            } else {
-                let mut v_info = Vec::new();
-                let cache_dir = home::home_dir().unwrap().join(".pace").join("cache");
-                let prefix = format!("{}-", name);
-                if let Ok(entries) = fs::read_dir(cache_dir) {
-                    for entry in entries.filter_map(|e| e.ok()) {
-                        let fname = entry.file_name().to_string_lossy().to_string();
-                        if fname.starts_with(&prefix) {
-                            let ver_str = fname.strip_prefix(&prefix).unwrap();
-                            if let Ok(_) = Version::parse(ver_str) {
-                                let mut deps = HashMap::new();
-                                if let Ok(manifest) = crate::parse_manifest(&entry.path().join("pace.toml")) {
-                                    for (dname, dep) in manifest.dependencies {
-                                        if let Some(v) = dep.version() {
-                                            deps.insert(dname, v.to_string());
-                                        }
-                                    }
-                                }
-                                v_info.push(VersionInfo {
-                                    version: ver_str.to_string(),
-                                    dependencies: deps,
-                                    tarball_sha256: None,
-                                });
-                            }
-                        }
-                    }
-                }
-
-                if v_info.is_empty() {
-                    return Err(format!("Failed to find package {} in registry or local cache", name));
-                }
-
-                RegistryResponse {
-                    latest_version: None,
-                    version_info: v_info,
-                }
-            };
+            let info = self.get_package_info(&name).await?;
 
             let mut best_match: Option<VersionInfo> = None;
             let mut highest_ver: Option<Version> = None;

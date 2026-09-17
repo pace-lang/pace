@@ -68,6 +68,8 @@ enum Commands {
         #[arg(long)]
         latest: bool,
     },
+    /// Install dependencies from pace.toml
+    Install,
     /// List outdated dependencies
     Outdated,
     /// Publish the package
@@ -145,6 +147,14 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> R
                 if source.starts_with("local+") {
                     let local_path = source.strip_prefix("local+").unwrap();
                     pkg_path = root.join(local_path);
+                } else if !pkg_path.exists() {
+                    // Automatically download if missing from cache
+                    if let Some(checksum) = &pkg_info.checksum {
+                        println!("Downloading {} v{}...", pkg_name, pkg_info.version);
+                        if let Err(e) = cache.download_and_extract(pkg_name, &pkg_info.version, checksum).await {
+                            eprintln!("Warning: failed to download {}: {}", pkg_name, e);
+                        }
+                    }
                 }
             }
             dependencies.insert(pkg_name.clone(), pkg_path);
@@ -257,6 +267,13 @@ async fn main() {
         }
         Commands::Add { name, version } => {
             if let Err(e) = pace_pkg::commands::add_dependency(&name, version.as_deref()).await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Install => {
+            // Install behaves the same as update without `--latest`
+            if let Err(e) = pace_pkg::commands::update_dependencies(false).await {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }

@@ -80,15 +80,29 @@ pub async fn update_dependencies(latest: bool) -> Result<(), String> {
     let mut resolver = DependencyResolver::new();
 
     if latest {
-        // If latest, we strip version constraints
+        // If latest, we strip version constraints for registry dependencies
         for (_, dep) in toml.dependencies.iter_mut() {
-            *dep = crate::Dependency::Version("*".to_string());
+            if let crate::Dependency::Version(_) = dep {
+                *dep = crate::Dependency::Version("*".to_string());
+            } else if let crate::Dependency::Detailed { version, path } = dep {
+                if path.is_none() {
+                    *version = Some("*".to_string());
+                }
+            }
         }
     }
 
-    let lock = resolver.resolve(&toml).await?;
     let root = manifest_path.parent().unwrap();
-    resolver.write_lockfile(&root.join("pace.lock"), &lock)?;
+    let lockfile_path = root.join("pace.lock");
+
+    let old_lock = if lockfile_path.exists() {
+        DependencyResolver::read_lockfile(&lockfile_path).ok()
+    } else {
+        None
+    };
+
+    let lock = resolver.resolve(&toml).await?;
+    resolver.write_lockfile(&lockfile_path, &lock)?;
 
     if latest {
         let content = fs::read_to_string(&manifest_path).map_err(|e| format!("Failed to read pace.toml: {}", e))?;
@@ -96,6 +110,11 @@ pub async fn update_dependencies(latest: bool) -> Result<(), String> {
 
         if let Some(deps) = doc["dependencies"].as_table_mut() {
             for (pkg_name, pkg_info) in &lock.packages {
+                if let Some(source) = &pkg_info.source {
+                    if source.starts_with("local+") {
+                        continue;
+                    }
+                }
                 if deps.contains_key(pkg_name) {
                     deps.insert(pkg_name, value(format!("^{}", pkg_info.version)));
                 }
@@ -111,15 +130,114 @@ pub async fn update_dependencies(latest: bool) -> Result<(), String> {
         }
     }
 
-    println!("Dependencies updated.");
+    let mut changed = false;
+    if let Some(old_lock) = old_lock {
+        for (name, new_pkg) in &lock.packages {
+            if let Some(old_pkg) = old_lock.packages.get(name) {
+                if new_pkg.version != old_pkg.version {
+                    println!("    Updating {} v{} -> v{}", name, old_pkg.version, new_pkg.version);
+                    changed = true;
+                }
+            } else {
+                println!("      Adding {} v{}", name, new_pkg.version);
+                changed = true;
+            }
+        }
+        for name in old_lock.packages.keys() {
+            if !lock.packages.contains_key(name) {
+                println!("    Removing {}", name);
+                changed = true;
+            }
+        }
+    } else {
+        for (name, new_pkg) in &lock.packages {
+            println!("      Adding {} v{}", name, new_pkg.version);
+            changed = true;
+        }
+    }
+
+    if !changed {
+        println!("Dependencies are up to date.");
+    }
+
     Ok(())
 }
 
 pub async fn list_outdated() -> Result<(), String> {
-    println!("Checking for outdated dependencies...");
-    // For a real implementation, we would read the lockfile and compare with the registry.
-    // Simplifying for now.
-    println!("Everything is up to date.");
+    let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
+    let manifest_path = find_manifest(&current_dir)
+        .ok_or("No pace.toml found in this directory or any parent directory")?;
+
+    let root = manifest_path.parent().unwrap();
+    let lockfile_path = root.join("pace.lock");
+    if !lockfile_path.exists() {
+        println!("No pace.lock found. Run `pace build` or `pace update` first.");
+        return Ok(());
+    }
+
+    let toml = parse_manifest(&manifest_path)?;
+    let lock = DependencyResolver::read_lockfile(&lockfile_path)?;
+    let resolver = DependencyResolver::new();
+
+    println!("{:<20} {:<15} {:<15} {:<15}", "Package", "Current", "Update", "Latest");
+    println!("{:-<20} {:-<15} {:-<15} {:-<15}", "", "", "", "");
+
+    let mut found_outdated = false;
+
+    for (pkg_name, locked_pkg) in &lock.packages {
+        // Skip local path dependencies
+        if let Some(src) = &locked_pkg.source {
+            if src.starts_with("local+") {
+                continue;
+            }
+        }
+
+        let required = if let Some(dep) = toml.dependencies.get(pkg_name) {
+            dep.version().unwrap_or("*").to_string()
+        } else {
+            // Transitive dependency
+            "".to_string()
+        };
+
+        if let Ok(info) = resolver.get_package_info(pkg_name).await {
+            let mut highest_ver = semver::Version::parse("0.0.0").unwrap();
+            let mut highest_compatible_ver = semver::Version::parse("0.0.0").unwrap();
+            let req_parsed = semver::VersionReq::parse(&required).ok();
+
+            for v_info in &info.version_info {
+                if let Ok(ver) = semver::Version::parse(&v_info.version) {
+                    if ver > highest_ver {
+                        highest_ver = ver.clone();
+                    }
+                    if let Some(req) = &req_parsed {
+                        if req.matches(&ver) && ver > highest_compatible_ver {
+                            highest_compatible_ver = ver.clone();
+                        }
+                    }
+                }
+            }
+
+            let locked_ver = semver::Version::parse(&locked_pkg.version).unwrap_or_else(|_| semver::Version::parse("0.0.0").unwrap());
+            
+            let update_str = if required.is_empty() {
+                "".to_string()
+            } else if highest_compatible_ver > semver::Version::parse("0.0.0").unwrap() {
+                highest_compatible_ver.to_string()
+            } else {
+                required.clone()
+            };
+
+            if highest_ver > locked_ver {
+                found_outdated = true;
+                println!("{:<20} {:<15} {:<15} {:<15}", pkg_name, locked_pkg.version, update_str, highest_ver.to_string());
+            }
+        }
+    }
+
+    if !found_outdated {
+        println!("Everything is up to date.");
+    }
+
     Ok(())
 }
 
