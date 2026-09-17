@@ -65,6 +65,11 @@ enum Commands {
         #[arg(long, short)]
         dev: bool,
     },
+    /// Remove a dependency from the project
+    Remove {
+        /// Name of the package to remove
+        name: String,
+    },
     /// Update dependencies
     Update {
         /// Update to the absolute latest versions, modifying pace.toml
@@ -81,6 +86,12 @@ enum Commands {
     Login {
         /// Authentication token
         token: String,
+    },
+    /// Clean the build artifacts and cache
+    Clean {
+        /// Also clean the global package cache
+        #[arg(long)]
+        cache: bool,
     },
 }
 
@@ -298,6 +309,18 @@ async fn main() {
         }
         Commands::Login { token } => {
             if let Err(e) = pace_pkg::commands::login(&token) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Remove { name } => {
+            if let Err(e) = pace_pkg::commands::remove_dependency(&name).await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Clean { cache } => {
+            if let Err(e) = pace_pkg::commands::clean(cache) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }

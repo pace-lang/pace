@@ -72,6 +72,81 @@ pub async fn add_dependency(name: &str, version: Option<&str>, dev: bool) -> Res
     Ok(())
 }
 
+pub async fn remove_dependency(name: &str) -> Result<(), String> {
+    let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
+    let manifest_path = find_manifest(&current_dir)
+        .ok_or("No pace.toml found in this directory or any parent directory")?;
+
+    let content = fs::read_to_string(&manifest_path).map_err(|e| format!("Failed to read pace.toml: {}", e))?;
+    let mut doc = content.parse::<DocumentMut>().map_err(|e| format!("Failed to parse pace.toml: {}", e))?;
+
+    let mut removed = false;
+
+    if let Some(deps) = doc.get_mut("dependencies").and_then(|i| i.as_table_mut()) {
+        if deps.remove(name).is_some() {
+            removed = true;
+        }
+    }
+
+    if let Some(dev_deps) = doc.get_mut("dev-dependencies").and_then(|i| i.as_table_mut()) {
+        if dev_deps.remove(name).is_some() {
+            removed = true;
+        }
+    }
+
+    if !removed {
+        return Err(format!("Package '{}' is not a dependency", name));
+    }
+
+    let doc_str = doc.to_string();
+    let toml: crate::PaceToml = toml::from_str(&doc_str)
+        .map_err(|e| format!("Failed to parse updated pace.toml: {}", e))?;
+
+    let mut resolver = DependencyResolver::new();
+    let lock = match resolver.resolve(&toml).await {
+        Ok(l) => l,
+        Err(e) => return Err(format!("Dependency resolution failed after removal: {}", e)),
+    };
+
+    fs::write(&manifest_path, doc_str).map_err(|e| format!("Failed to write pace.toml: {}", e))?;
+    let root = manifest_path.parent().unwrap();
+    resolver.write_lockfile(&root.join("pace.lock"), &lock)?;
+
+    println!("Removed {}", name);
+    Ok(())
+}
+
+pub fn clean(cache: bool) -> Result<(), String> {
+    if cache {
+        if let Some(home) = dirs::home_dir() {
+            let cache_dir = home.join(".pace").join("cache");
+            if cache_dir.exists() {
+                fs::remove_dir_all(&cache_dir).map_err(|e| format!("Failed to clean cache directory: {}", e))?;
+                println!("Cleaned global cache at {}", cache_dir.display());
+            } else {
+                println!("Global cache is already empty.");
+            }
+        }
+    }
+
+    let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
+    if let Some(manifest_path) = find_manifest(&current_dir) {
+        let build_dir = manifest_path.parent().unwrap().join("build");
+        if build_dir.exists() {
+            fs::remove_dir_all(&build_dir).map_err(|e| format!("Failed to clean build directory: {}", e))?;
+            println!("Cleaned build directory at {}", build_dir.display());
+        } else {
+            println!("Build directory is already empty.");
+        }
+    } else {
+        if !cache {
+            return Err("No pace.toml found in this directory or any parent directory".to_string());
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn update_dependencies(latest: bool) -> Result<(), String> {
     let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
     let manifest_path = find_manifest(&current_dir)
