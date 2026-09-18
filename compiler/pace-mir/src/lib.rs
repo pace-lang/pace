@@ -1,3 +1,4 @@
+pub mod opt;
 pub mod builder;
 pub mod mir;
 

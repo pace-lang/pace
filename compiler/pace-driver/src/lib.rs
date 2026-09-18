@@ -279,7 +279,10 @@ pub fn compile_file(
     }
 
     // 4. Build MIR
-    let mir = MirBuilder::build_program(&hir, &mut tc);
+    let mut mir = MirBuilder::build_program(&hir, &mut tc);
+    
+    // 4.5 Optimize MIR
+    pace_mir::opt::ConstantFolder::new().optimize_program(&mut mir);
 
     // 5. Generate C Code
     let mut codegen = CGenerator::new();
