@@ -23,7 +23,7 @@ impl<'a> Lexer<'a> {
             base_offset: 0,
         }
     }
-    
+
     pub fn with_offset(source: &'a str, file_id: FileId, base_offset: usize) -> Self {
         Self {
             inner: TokenKind::lexer(source),

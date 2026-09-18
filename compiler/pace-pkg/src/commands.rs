@@ -1,4 +1,4 @@
-use crate::{resolve::DependencyResolver, cache::CacheManager, parse_manifest, find_manifest};
+use crate::{cache::CacheManager, find_manifest, parse_manifest, resolve::DependencyResolver};
 use std::env;
 use std::fs;
 use toml_edit::{DocumentMut, value};
@@ -8,8 +8,11 @@ pub async fn add_dependency(name: &str, version: Option<&str>, dev: bool) -> Res
     let manifest_path = find_manifest(&current_dir)
         .ok_or("No pace.toml found in this directory or any parent directory")?;
 
-    let content = fs::read_to_string(&manifest_path).map_err(|e| format!("Failed to read pace.toml: {}", e))?;
-    let mut doc = content.parse::<DocumentMut>().map_err(|e| format!("Failed to parse pace.toml: {}", e))?;
+    let content = fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("Failed to read pace.toml: {}", e))?;
+    let mut doc = content
+        .parse::<DocumentMut>()
+        .map_err(|e| format!("Failed to parse pace.toml: {}", e))?;
 
     let ver = if let Some(v) = version {
         v.to_string()
@@ -17,14 +20,16 @@ pub async fn add_dependency(name: &str, version: Option<&str>, dev: bool) -> Res
         println!("Fetching latest version of {}...", name);
         let registry_url = env::var("PACE_REGISTRY_URL")
             .unwrap_or_else(|_| "http://localhost:3000/api/packages".to_string());
-        
+
         let client = reqwest::Client::new();
         let url = format!("{}/{}", registry_url, name);
         let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
-        
+
         if res.status().is_success() {
             #[derive(serde::Deserialize)]
-            struct PkgInfo { latest_version: Option<String> }
+            struct PkgInfo {
+                latest_version: Option<String>,
+            }
             let info: PkgInfo = res.json().await.map_err(|e| e.to_string())?;
             if let Some(lv) = info.latest_version {
                 format!("^{}", lv)
@@ -35,13 +40,17 @@ pub async fn add_dependency(name: &str, version: Option<&str>, dev: bool) -> Res
             return Err(format!("Package '{}' not found in registry", name));
         }
     };
-    
-    let table_name = if dev { "dev-dependencies" } else { "dependencies" };
+
+    let table_name = if dev {
+        "dev-dependencies"
+    } else {
+        "dependencies"
+    };
 
     if !doc.contains_key(table_name) {
         doc[table_name] = toml_edit::table();
     }
-    
+
     if let Some(deps) = doc[table_name].as_table_mut() {
         deps.insert(name, value(&ver));
     }
@@ -53,7 +62,12 @@ pub async fn add_dependency(name: &str, version: Option<&str>, dev: bool) -> Res
     let mut resolver = DependencyResolver::new();
     let lock = match resolver.resolve(&toml).await {
         Ok(l) => l,
-        Err(e) => return Err(format!("Dependency resolution failed with version {}: {}", ver, e)),
+        Err(e) => {
+            return Err(format!(
+                "Dependency resolution failed with version {}: {}",
+                ver, e
+            ));
+        }
     };
 
     // If resolution succeeds, write pace.toml and pace.lock
@@ -64,7 +78,9 @@ pub async fn add_dependency(name: &str, version: Option<&str>, dev: bool) -> Res
     let cache = CacheManager::new();
     for (pkg_name, pkg_info) in &lock.packages {
         if let Some(checksum) = &pkg_info.checksum {
-            cache.download_and_extract(pkg_name, &pkg_info.version, checksum).await?;
+            cache
+                .download_and_extract(pkg_name, &pkg_info.version, checksum)
+                .await?;
         }
     }
 
@@ -77,21 +93,26 @@ pub async fn remove_dependency(name: &str) -> Result<(), String> {
     let manifest_path = find_manifest(&current_dir)
         .ok_or("No pace.toml found in this directory or any parent directory")?;
 
-    let content = fs::read_to_string(&manifest_path).map_err(|e| format!("Failed to read pace.toml: {}", e))?;
-    let mut doc = content.parse::<DocumentMut>().map_err(|e| format!("Failed to parse pace.toml: {}", e))?;
+    let content = fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("Failed to read pace.toml: {}", e))?;
+    let mut doc = content
+        .parse::<DocumentMut>()
+        .map_err(|e| format!("Failed to parse pace.toml: {}", e))?;
 
     let mut removed = false;
 
-    if let Some(deps) = doc.get_mut("dependencies").and_then(|i| i.as_table_mut()) {
-        if deps.remove(name).is_some() {
-            removed = true;
-        }
+    if let Some(deps) = doc.get_mut("dependencies").and_then(|i| i.as_table_mut())
+        && deps.remove(name).is_some()
+    {
+        removed = true;
     }
 
-    if let Some(dev_deps) = doc.get_mut("dev-dependencies").and_then(|i| i.as_table_mut()) {
-        if dev_deps.remove(name).is_some() {
-            removed = true;
-        }
+    if let Some(dev_deps) = doc
+        .get_mut("dev-dependencies")
+        .and_then(|i| i.as_table_mut())
+        && dev_deps.remove(name).is_some()
+    {
+        removed = true;
     }
 
     if !removed {
@@ -117,15 +138,14 @@ pub async fn remove_dependency(name: &str) -> Result<(), String> {
 }
 
 pub fn clean(cache: bool) -> Result<(), String> {
-    if cache {
-        if let Some(home) = dirs::home_dir() {
-            let cache_dir = home.join(".pace").join("cache");
-            if cache_dir.exists() {
-                fs::remove_dir_all(&cache_dir).map_err(|e| format!("Failed to clean cache directory: {}", e))?;
-                println!("Cleaned global cache at {}", cache_dir.display());
-            } else {
-                println!("Global cache is already empty.");
-            }
+    if cache && let Some(home) = dirs::home_dir() {
+        let cache_dir = home.join(".pace").join("cache");
+        if cache_dir.exists() {
+            fs::remove_dir_all(&cache_dir)
+                .map_err(|e| format!("Failed to clean cache directory: {}", e))?;
+            println!("Cleaned global cache at {}", cache_dir.display());
+        } else {
+            println!("Global cache is already empty.");
         }
     }
 
@@ -133,7 +153,8 @@ pub fn clean(cache: bool) -> Result<(), String> {
     if let Some(manifest_path) = find_manifest(&current_dir) {
         let build_dir = manifest_path.parent().unwrap().join("build");
         if build_dir.exists() {
-            fs::remove_dir_all(&build_dir).map_err(|e| format!("Failed to clean build directory: {}", e))?;
+            fs::remove_dir_all(&build_dir)
+                .map_err(|e| format!("Failed to clean build directory: {}", e))?;
             println!("Cleaned build directory at {}", build_dir.display());
         } else {
             println!("Build directory is already empty.");
@@ -157,22 +178,22 @@ pub async fn update_dependencies(latest: bool) -> Result<(), String> {
 
     if latest {
         // If latest, we strip version constraints for registry dependencies
-        for (_, dep) in toml.dependencies.iter_mut() {
+        for dep in toml.dependencies.values_mut() {
             if let crate::Dependency::Version(_) = dep {
                 *dep = crate::Dependency::Version("*".to_string());
-            } else if let crate::Dependency::Detailed { version, path } = dep {
-                if path.is_none() {
-                    *version = Some("*".to_string());
-                }
+            } else if let crate::Dependency::Detailed { version, path } = dep
+                && path.is_none()
+            {
+                *version = Some("*".to_string());
             }
         }
-        for (_, dep) in toml.dev_dependencies.iter_mut() {
+        for dep in toml.dev_dependencies.values_mut() {
             if let crate::Dependency::Version(_) = dep {
                 *dep = crate::Dependency::Version("*".to_string());
-            } else if let crate::Dependency::Detailed { version, path } = dep {
-                if path.is_none() {
-                    *version = Some("*".to_string());
-                }
+            } else if let crate::Dependency::Detailed { version, path } = dep
+                && path.is_none()
+            {
+                *version = Some("*".to_string());
             }
         }
     }
@@ -190,15 +211,18 @@ pub async fn update_dependencies(latest: bool) -> Result<(), String> {
     resolver.write_lockfile(&lockfile_path, &lock)?;
 
     if latest {
-        let content = fs::read_to_string(&manifest_path).map_err(|e| format!("Failed to read pace.toml: {}", e))?;
-        let mut doc = content.parse::<DocumentMut>().map_err(|e| format!("Failed to parse pace.toml: {}", e))?;
+        let content = fs::read_to_string(&manifest_path)
+            .map_err(|e| format!("Failed to read pace.toml: {}", e))?;
+        let mut doc = content
+            .parse::<DocumentMut>()
+            .map_err(|e| format!("Failed to parse pace.toml: {}", e))?;
 
         if let Some(deps) = doc["dependencies"].as_table_mut() {
             for (pkg_name, pkg_info) in &lock.packages {
-                if let Some(source) = &pkg_info.source {
-                    if source.starts_with("local+") {
-                        continue;
-                    }
+                if let Some(source) = &pkg_info.source
+                    && source.starts_with("local+")
+                {
+                    continue;
                 }
                 if deps.contains_key(pkg_name) {
                     deps.insert(pkg_name, value(format!("^{}", pkg_info.version)));
@@ -207,23 +231,26 @@ pub async fn update_dependencies(latest: bool) -> Result<(), String> {
         }
         if let Some(dev_deps) = doc["dev-dependencies"].as_table_mut() {
             for (pkg_name, pkg_info) in &lock.packages {
-                if let Some(source) = &pkg_info.source {
-                    if source.starts_with("local+") {
-                        continue;
-                    }
+                if let Some(source) = &pkg_info.source
+                    && source.starts_with("local+")
+                {
+                    continue;
                 }
                 if dev_deps.contains_key(pkg_name) {
                     dev_deps.insert(pkg_name, value(format!("^{}", pkg_info.version)));
                 }
             }
         }
-        fs::write(&manifest_path, doc.to_string()).map_err(|e| format!("Failed to write pace.toml: {}", e))?;
+        fs::write(&manifest_path, doc.to_string())
+            .map_err(|e| format!("Failed to write pace.toml: {}", e))?;
     }
 
     let cache = CacheManager::new();
     for (pkg_name, pkg_info) in &lock.packages {
         if let Some(checksum) = &pkg_info.checksum {
-            cache.download_and_extract(pkg_name, &pkg_info.version, checksum).await?;
+            cache
+                .download_and_extract(pkg_name, &pkg_info.version, checksum)
+                .await?;
         }
     }
 
@@ -232,7 +259,10 @@ pub async fn update_dependencies(latest: bool) -> Result<(), String> {
         for (name, new_pkg) in &lock.packages {
             if let Some(old_pkg) = old_lock.packages.get(name) {
                 if new_pkg.version != old_pkg.version {
-                    println!("    Updating {} v{} -> v{}", name, old_pkg.version, new_pkg.version);
+                    println!(
+                        "    Updating {} v{} -> v{}",
+                        name, old_pkg.version, new_pkg.version
+                    );
                     changed = true;
                 }
             } else {
@@ -276,17 +306,20 @@ pub async fn list_outdated() -> Result<(), String> {
     let lock = DependencyResolver::read_lockfile(&lockfile_path)?;
     let resolver = DependencyResolver::new();
 
-    println!("{:<20} {:<15} {:<15} {:<15}", "Package", "Current", "Update", "Latest");
+    println!(
+        "{:<20} {:<15} {:<15} {:<15}",
+        "Package", "Current", "Update", "Latest"
+    );
     println!("{:-<20} {:-<15} {:-<15} {:-<15}", "", "", "", "");
 
     let mut found_outdated = false;
 
     for (pkg_name, locked_pkg) in &lock.packages {
         // Skip local path dependencies
-        if let Some(src) = &locked_pkg.source {
-            if src.starts_with("local+") {
-                continue;
-            }
+        if let Some(src) = &locked_pkg.source
+            && src.starts_with("local+")
+        {
+            continue;
         }
 
         let required = if let Some(dep) = toml.dependencies.get(pkg_name) {
@@ -308,16 +341,18 @@ pub async fn list_outdated() -> Result<(), String> {
                     if ver > highest_ver {
                         highest_ver = ver.clone();
                     }
-                    if let Some(req) = &req_parsed {
-                        if req.matches(&ver) && ver > highest_compatible_ver {
-                            highest_compatible_ver = ver.clone();
-                        }
+                    if let Some(req) = &req_parsed
+                        && req.matches(&ver)
+                        && ver > highest_compatible_ver
+                    {
+                        highest_compatible_ver = ver.clone();
                     }
                 }
             }
 
-            let locked_ver = semver::Version::parse(&locked_pkg.version).unwrap_or_else(|_| semver::Version::parse("0.0.0").unwrap());
-            
+            let locked_ver = semver::Version::parse(&locked_pkg.version)
+                .unwrap_or_else(|_| semver::Version::parse("0.0.0").unwrap());
+
             let update_str = if required.is_empty() {
                 "".to_string()
             } else if highest_compatible_ver > semver::Version::parse("0.0.0").unwrap() {
@@ -328,7 +363,13 @@ pub async fn list_outdated() -> Result<(), String> {
 
             if highest_ver > locked_ver {
                 found_outdated = true;
-                println!("{:<20} {:<15} {:<15} {:<15}", pkg_name, locked_pkg.version, update_str, highest_ver.to_string());
+                println!(
+                    "{:<20} {:<15} {:<15} {:<15}",
+                    pkg_name,
+                    locked_pkg.version,
+                    update_str,
+                    highest_ver.to_string()
+                );
             }
         }
     }
@@ -340,24 +381,23 @@ pub async fn list_outdated() -> Result<(), String> {
     Ok(())
 }
 
-use reqwest::multipart;
-use std::io::Write;
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
+use reqwest::multipart;
 
 pub fn login(token: &str) -> Result<(), String> {
     let pace_dir = home::home_dir().unwrap().join(".pace");
     if !pace_dir.exists() {
         fs::create_dir_all(&pace_dir).map_err(|e| format!("Failed to create .pace dir: {}", e))?;
     }
-    
+
     let creds_path = pace_dir.join("credentials.toml");
     let mut doc = toml_edit::DocumentMut::new();
     doc["token"] = toml_edit::value(token);
-    
+
     fs::write(&creds_path, doc.to_string())
         .map_err(|e| format!("Failed to save credentials: {}", e))?;
-        
+
     println!("Successfully logged in.");
     Ok(())
 }
@@ -382,7 +422,9 @@ pub async fn publish() -> Result<(), String> {
         let creds_path = home::home_dir().unwrap().join(".pace/credentials.toml");
         if creds_path.exists() {
             let content = fs::read_to_string(&creds_path).unwrap_or_default();
-            let doc = content.parse::<toml_edit::DocumentMut>().unwrap_or_default();
+            let doc = content
+                .parse::<toml_edit::DocumentMut>()
+                .unwrap_or_default();
             if let Some(t) = doc.get("token").and_then(|t| t.as_str()) {
                 return Ok(t.to_string());
             }
@@ -391,30 +433,42 @@ pub async fn publish() -> Result<(), String> {
     })?;
 
     // Create a temporary file for the tarball
-    let tarball_path = root.join("target").join(format!("{}-{}.tar.gz", toml.package.name, toml.package.version));
+    let tarball_path = root.join("target").join(format!(
+        "{}-{}.tar.gz",
+        toml.package.name, toml.package.version
+    ));
     if let Some(p) = tarball_path.parent() {
         fs::create_dir_all(p).map_err(|e| e.to_string())?;
     }
 
-    let tar_gz = fs::File::create(&tarball_path).map_err(|e| format!("Failed to create tarball: {}", e))?;
+    let tar_gz =
+        fs::File::create(&tarball_path).map_err(|e| format!("Failed to create tarball: {}", e))?;
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
 
     let walker = walkdir::WalkDir::new(root).into_iter();
     for entry in walker.filter_entry(|e| {
         let name = e.file_name().to_string_lossy();
-        name != "target" && name != "build" && name != ".git" && name != "pace.lock" && name != ".pace"
+        name != "target"
+            && name != "build"
+            && name != ".git"
+            && name != "pace.lock"
+            && name != ".pace"
     }) {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
         let relative = path.strip_prefix(root).map_err(|e| e.to_string())?;
-        
+
         if path.is_file() {
-            tar.append_path_with_name(path, relative).map_err(|e| format!("Failed to add to tarball: {}", e))?;
+            tar.append_path_with_name(path, relative)
+                .map_err(|e| format!("Failed to add to tarball: {}", e))?;
         }
     }
-    let mut enc = tar.into_inner().map_err(|e| format!("Failed to finish tar: {}", e))?;
-    enc.try_finish().map_err(|e| format!("Failed to finish gzip: {}", e))?;
+    let mut enc = tar
+        .into_inner()
+        .map_err(|e| format!("Failed to finish tar: {}", e))?;
+    enc.try_finish()
+        .map_err(|e| format!("Failed to finish gzip: {}", e))?;
     drop(enc);
 
     let tarball_bytes = fs::read(&tarball_path).map_err(|e| e.to_string())?;
@@ -425,7 +479,7 @@ pub async fn publish() -> Result<(), String> {
 
     let registry_url = env::var("PACE_REGISTRY_URL")
         .unwrap_or_else(|_| "http://localhost:3000/api/packages".to_string());
-    
+
     let url = format!("{}/{}/publish", registry_url, toml.package.name);
 
     let form = multipart::Form::new()
@@ -434,10 +488,17 @@ pub async fn publish() -> Result<(), String> {
         .text("manifest", manifest_json)
         .text("readme", readme)
         .text("changelog", changelog)
-        .part("tarball", multipart::Part::bytes(tarball_bytes).file_name("package.tar.gz").mime_str("application/gzip").unwrap());
+        .part(
+            "tarball",
+            multipart::Part::bytes(tarball_bytes)
+                .file_name("package.tar.gz")
+                .mime_str("application/gzip")
+                .unwrap(),
+        );
 
     let client = reqwest::Client::new();
-    let res = client.post(&url)
+    let res = client
+        .post(&url)
         .header("Authorization", format!("Bearer {}", token))
         .multipart(form)
         .send()
@@ -445,7 +506,10 @@ pub async fn publish() -> Result<(), String> {
         .map_err(|e| format!("Failed to send publish request: {}", e))?;
 
     if res.status().is_success() {
-        println!("Successfully published {} v{}", toml.package.name, toml.package.version);
+        println!(
+            "Successfully published {} v{}",
+            toml.package.name, toml.package.version
+        );
         Ok(())
     } else {
         let status = res.status();

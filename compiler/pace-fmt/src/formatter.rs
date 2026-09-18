@@ -7,6 +7,12 @@ pub struct Formatter {
     comment_index: usize,
 }
 
+impl Default for Formatter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Formatter {
     pub fn new() -> Self {
         Self {
@@ -36,7 +42,6 @@ impl Formatter {
     fn write(&mut self, s: &str) {
         self.output.push_str(s);
     }
-
 
     fn newline(&mut self) {
         self.output.push('\n');
@@ -84,11 +89,19 @@ impl Formatter {
 
         imports.sort_by(|a, b| {
             let path_a = match a {
-                Decl::Import { path, .. } => path.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join("."),
+                Decl::Import { path, .. } => path
+                    .iter()
+                    .map(|i| i.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join("."),
                 _ => String::new(),
             };
             let path_b = match b {
-                Decl::Import { path, .. } => path.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join("."),
+                Decl::Import { path, .. } => path
+                    .iter()
+                    .map(|i| i.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join("."),
                 _ => String::new(),
             };
             path_a.cmp(&path_b)
@@ -117,7 +130,11 @@ impl Formatter {
         match decl {
             Decl::Import { path, alias, .. } => {
                 self.write("import ");
-                let path_str = path.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join(".");
+                let path_str = path
+                    .iter()
+                    .map(|i| i.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(".");
                 self.write(&path_str);
                 if let Some(a) = alias {
                     self.write(" as ");
@@ -125,7 +142,13 @@ impl Formatter {
                 }
                 self.newline();
             }
-            Decl::Let { name, ty, value, is_private, .. } => {
+            Decl::Let {
+                name,
+                ty,
+                value,
+                is_private,
+                ..
+            } => {
                 if *is_private {
                     self.write("private ");
                 }
@@ -141,7 +164,13 @@ impl Formatter {
                 }
                 self.newline();
             }
-            Decl::Var { name, ty, value, is_private, .. } => {
+            Decl::Var {
+                name,
+                ty,
+                value,
+                is_private,
+                ..
+            } => {
                 if *is_private {
                     self.write("private ");
                 }
@@ -157,7 +186,13 @@ impl Formatter {
                 }
                 self.newline();
             }
-            Decl::Const { name, ty, value, is_private, .. } => {
+            Decl::Const {
+                name,
+                ty,
+                value,
+                is_private,
+                ..
+            } => {
                 if *is_private {
                     self.write("private ");
                 }
@@ -171,7 +206,17 @@ impl Formatter {
                 self.format_expr(value);
                 self.newline();
             }
-            Decl::Function { name, generic_params, params, return_type, body, is_static, is_override, is_private, .. } => {
+            Decl::Function {
+                name,
+                generic_params,
+                params,
+                return_type,
+                body,
+                is_static,
+                is_override,
+                is_private,
+                ..
+            } => {
                 if *is_private {
                     self.write("private ");
                 }
@@ -204,7 +249,17 @@ impl Formatter {
                 self.format_block(body);
                 self.newline();
             }
-            Decl::Struct { name, generic_params, with, fields, static_fields, const_fields, methods, is_private, .. } => {
+            Decl::Struct {
+                name,
+                generic_params,
+                with,
+                fields,
+                static_fields,
+                const_fields,
+                methods,
+                is_private,
+                ..
+            } => {
                 if *is_private {
                     self.write("private ");
                 }
@@ -215,13 +270,23 @@ impl Formatter {
                 }
                 if !with.is_empty() {
                     self.write(" with ");
-                    let traits = with.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join(", ");
+                    let traits = with
+                        .iter()
+                        .map(|i| i.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     self.write(&traits);
                 }
                 self.write(" {\n");
                 self.indent();
 
-                for (c_name, c_ty, c_val, is_private) in const_fields {
+                for pace_ast::ConstFieldDef {
+                    name: c_name,
+                    ty: c_ty,
+                    value: c_val,
+                    is_private,
+                } in const_fields
+                {
                     self.print_pending_comments_before(c_name.span);
                     self.write_indent();
                     if *is_private {
@@ -235,7 +300,13 @@ impl Formatter {
                     self.format_expr(c_val);
                     self.newline();
                 }
-                for (s_name, s_ty, s_val, is_private) in static_fields {
+                for pace_ast::StaticFieldDef {
+                    name: s_name,
+                    ty: s_ty,
+                    value: s_val,
+                    is_private,
+                } in static_fields
+                {
                     self.print_pending_comments_before(s_name.span);
                     self.write_indent();
                     if *is_private {
@@ -249,7 +320,14 @@ impl Formatter {
                     self.format_expr(s_val);
                     self.newline();
                 }
-                for (f_name, f_ty, f_val, is_mut, is_private) in fields {
+                for pace_ast::FieldDef {
+                    name: f_name,
+                    ty: f_ty,
+                    default_value: f_val,
+                    is_mut,
+                    is_private,
+                } in fields
+                {
                     self.print_pending_comments_before(f_name.span);
                     self.write_indent();
                     if *is_private {
@@ -278,7 +356,18 @@ impl Formatter {
                 self.write_indent();
                 self.write("}\n");
             }
-            Decl::Class { name, generic_params, extends, with, fields, static_fields, const_fields, methods, is_private, .. } => {
+            Decl::Class {
+                name,
+                generic_params,
+                extends,
+                with,
+                fields,
+                static_fields,
+                const_fields,
+                methods,
+                is_private,
+                ..
+            } => {
                 if *is_private {
                     self.write("private ");
                 }
@@ -293,13 +382,23 @@ impl Formatter {
                 }
                 if !with.is_empty() {
                     self.write(" with ");
-                    let traits = with.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join(", ");
+                    let traits = with
+                        .iter()
+                        .map(|i| i.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     self.write(&traits);
                 }
                 self.write(" {\n");
                 self.indent();
 
-                for (c_name, c_ty, c_val, is_private) in const_fields {
+                for pace_ast::ConstFieldDef {
+                    name: c_name,
+                    ty: c_ty,
+                    value: c_val,
+                    is_private,
+                } in const_fields
+                {
                     self.print_pending_comments_before(c_name.span);
                     self.write_indent();
                     if *is_private {
@@ -313,7 +412,13 @@ impl Formatter {
                     self.format_expr(c_val);
                     self.newline();
                 }
-                for (s_name, s_ty, s_val, is_private) in static_fields {
+                for pace_ast::StaticFieldDef {
+                    name: s_name,
+                    ty: s_ty,
+                    value: s_val,
+                    is_private,
+                } in static_fields
+                {
                     self.print_pending_comments_before(s_name.span);
                     self.write_indent();
                     if *is_private {
@@ -327,7 +432,14 @@ impl Formatter {
                     self.format_expr(s_val);
                     self.newline();
                 }
-                for (f_name, f_ty, f_val, is_mut, is_private) in fields {
+                for pace_ast::FieldDef {
+                    name: f_name,
+                    ty: f_ty,
+                    default_value: f_val,
+                    is_mut,
+                    is_private,
+                } in fields
+                {
                     self.print_pending_comments_before(f_name.span);
                     self.write_indent();
                     if *is_private {
@@ -356,7 +468,13 @@ impl Formatter {
                 self.write_indent();
                 self.write("}\n");
             }
-            Decl::Trait { name, generic_params, methods, is_private, .. } => {
+            Decl::Trait {
+                name,
+                generic_params,
+                methods,
+                is_private,
+                ..
+            } => {
                 if *is_private {
                     self.write("private ");
                 }
@@ -374,7 +492,13 @@ impl Formatter {
                 self.write_indent();
                 self.write("}\n");
             }
-            Decl::Enum { name, generic_params, variants, is_private, .. } => {
+            Decl::Enum {
+                name,
+                generic_params,
+                variants,
+                is_private,
+                ..
+            } => {
                 if *is_private {
                     self.write("private ");
                 }
@@ -385,7 +509,7 @@ impl Formatter {
                 }
                 self.write(" {\n");
                 self.indent();
-                for (i, var) in variants.iter().enumerate() {
+                for var in variants.iter() {
                     self.write_indent();
                     self.write(&var.name.name);
                     if let Some(fields) = &var.fields {
@@ -400,11 +524,7 @@ impl Formatter {
                         }
                         self.write(")");
                     }
-                    if i < variants.len() - 1 {
-                        self.newline();
-                    } else {
-                        self.newline();
-                    }
+                    self.newline();
                 }
                 self.dedent();
                 self.write_indent();
@@ -468,7 +588,9 @@ impl Formatter {
         self.print_pending_comments_before(stmt.span());
         self.write_indent();
         match stmt {
-            Stmt::Let { name, ty, value, .. } => {
+            Stmt::Let {
+                name, ty, value, ..
+            } => {
                 self.write("let ");
                 self.write(&name.name);
                 if let Some(t) = ty {
@@ -481,7 +603,9 @@ impl Formatter {
                 }
                 self.newline();
             }
-            Stmt::Var { name, ty, value, .. } => {
+            Stmt::Var {
+                name, ty, value, ..
+            } => {
                 self.write("var ");
                 self.write(&name.name);
                 if let Some(t) = ty {
@@ -544,7 +668,9 @@ impl Formatter {
                 }
             }
             Expr::Super(_) => self.write("super"),
-            Expr::Binary { left, op, right, .. } => {
+            Expr::Binary {
+                left, op, right, ..
+            } => {
                 self.format_expr(left);
                 self.write(" ");
                 self.write(match op {
@@ -578,7 +704,14 @@ impl Formatter {
             Expr::Call { callee, args, .. } => {
                 self.format_expr(callee);
                 self.write("(");
-                for (i, (name, arg_expr)) in args.iter().enumerate() {
+                for (
+                    i,
+                    pace_ast::CallArg {
+                        label: name,
+                        expr: arg_expr,
+                    },
+                ) in args.iter().enumerate()
+                {
                     if i > 0 {
                         self.write(", ");
                     }
@@ -590,7 +723,12 @@ impl Formatter {
                 }
                 self.write(")");
             }
-            Expr::If { cond, then_block, else_block, .. } => {
+            Expr::If {
+                cond,
+                then_block,
+                else_block,
+                ..
+            } => {
                 self.write("if ");
                 self.format_expr(cond);
                 self.write(" ");

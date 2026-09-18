@@ -1,16 +1,23 @@
 use crate::hir::*;
 use pace_ast as ast;
+use pace_span::Symbol;
 use std::collections::HashMap;
 
 /// Lowers an AST (with string names) into HIR (with unique HirIds).
 pub struct LoweringContext {
     next_id: u32,
-    scope: HashMap<String, HirId>,
+    scope: HashMap<Symbol, HirId>,
 }
 
 mod decl;
 mod expr;
 mod stmt;
+
+impl Default for LoweringContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl LoweringContext {
     pub fn new() -> Self {
@@ -39,7 +46,7 @@ impl LoweringContext {
             }
 
             modules.insert(
-                name.clone(),
+                name,
                 Module {
                     name: ast_module.name,
                     file_id: ast_module.file_id,

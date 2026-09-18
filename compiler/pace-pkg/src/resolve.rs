@@ -1,8 +1,8 @@
 use reqwest::Client;
 use semver::{Version, VersionReq};
-use std::env;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::path::Path;
 
@@ -40,11 +40,18 @@ pub struct VersionInfo {
     pub tarball_sha256: Option<String>,
 }
 
+impl Default for DependencyResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DependencyResolver {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
-            registry_url: env::var("PACE_REGISTRY_URL").unwrap_or_else(|_| "http://localhost:3000/api/packages".to_string()),
+            registry_url: env::var("PACE_REGISTRY_URL")
+                .unwrap_or_else(|_| "http://localhost:3000/api/packages".to_string()),
             resolved: HashMap::new(),
         }
     }
@@ -56,13 +63,12 @@ impl DependencyResolver {
     pub async fn get_package_info(&self, name: &str) -> Result<RegistryResponse, String> {
         let url = format!("{}/{}", self.registry_url, name);
         let mut info_opt: Option<RegistryResponse> = None;
-        
-        if let Ok(resp) = self.client.get(&url).send().await {
-            if resp.status().is_success() {
-                if let Ok(info) = resp.json().await {
-                    info_opt = Some(info);
-                }
-            }
+
+        if let Ok(resp) = self.client.get(&url).send().await
+            && resp.status().is_success()
+            && let Ok(info) = resp.json().await
+        {
+            info_opt = Some(info);
         }
 
         if let Some(i) = info_opt {
@@ -76,9 +82,11 @@ impl DependencyResolver {
                     let fname = entry.file_name().to_string_lossy().to_string();
                     if fname.starts_with(&prefix) {
                         let ver_str = fname.strip_prefix(&prefix).unwrap();
-                        if let Ok(_) = Version::parse(ver_str) {
+                        if Version::parse(ver_str).is_ok() {
                             let mut deps = HashMap::new();
-                            if let Ok(manifest) = crate::parse_manifest(&entry.path().join("pace.toml")) {
+                            if let Ok(manifest) =
+                                crate::parse_manifest(&entry.path().join("pace.toml"))
+                            {
                                 for (dname, dep) in manifest.dependencies {
                                     if let Some(v) = dep.version() {
                                         deps.insert(dname, v.to_string());
@@ -96,7 +104,10 @@ impl DependencyResolver {
             }
 
             if v_info.is_empty() {
-                return Err(format!("Failed to find package {} in registry or local cache", name));
+                return Err(format!(
+                    "Failed to find package {} in registry or local cache",
+                    name
+                ));
             }
 
             Ok(RegistryResponse {
@@ -126,17 +137,21 @@ impl DependencyResolver {
         while let Some((name, version_req_str, path)) = queue.pop() {
             let req = version_req_str
                 .as_deref()
-                .map(|s| VersionReq::parse(s).map_err(|e| format!("Invalid version requirement '{}' for {}: {}", s, name, e)))
+                .map(|s| {
+                    VersionReq::parse(s).map_err(|e| {
+                        format!("Invalid version requirement '{}' for {}: {}", s, name, e)
+                    })
+                })
                 .transpose()?;
 
             if let Some(existing) = self.resolved.get(&name) {
                 let mut matches = true;
                 if let Some(req) = &req {
                     let existing_ver = existing.version.as_str();
-                    if let Ok(ver) = Version::parse(existing_ver) {
-                        if !req.matches(&ver) {
-                            matches = false;
-                        }
+                    if let Ok(ver) = Version::parse(existing_ver)
+                        && !req.matches(&ver)
+                    {
+                        matches = false;
                     }
                 }
                 if matches {
@@ -168,20 +183,25 @@ impl DependencyResolver {
                     Ok(v) => v,
                     Err(_) => continue, // skip invalid versions in registry
                 };
-                
-                if let Some(r) = &req {
-                    if !r.matches(&ver) {
-                        continue;
-                    }
+
+                if let Some(r) = &req
+                    && !r.matches(&ver)
+                {
+                    continue;
                 }
-                
+
                 if highest_ver.is_none() || ver > *highest_ver.as_ref().unwrap() {
                     highest_ver = Some(ver);
                     best_match = Some(v_info);
                 }
             }
 
-            let best_match = best_match.ok_or_else(|| format!("No compatible versions found for {} satisfying {:?}", name, version_req_str))?;
+            let best_match = best_match.ok_or_else(|| {
+                format!(
+                    "No compatible versions found for {} satisfying {:?}",
+                    name, version_req_str
+                )
+            })?;
 
             self.resolved.insert(
                 name.clone(),

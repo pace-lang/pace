@@ -25,7 +25,7 @@ impl<'a> Parser<'a> {
                         span,
                     }) => {
                         path.push(Ident {
-                            name: name.to_string(),
+                            name: pace_span::intern(name),
                             span: *span,
                         });
                         self.advance();
@@ -51,7 +51,7 @@ impl<'a> Parser<'a> {
                         span,
                     }) => {
                         let ident = Ident {
-                            name: name.to_string(),
+                            name: pace_span::intern(name),
                             span: *span,
                         };
                         self.advance();
@@ -85,7 +85,7 @@ impl<'a> Parser<'a> {
                     span,
                 }) => {
                     let ident = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     };
                     self.advance();
@@ -126,7 +126,11 @@ impl<'a> Parser<'a> {
                 ty,
                 value,
                 is_private,
-                span: if is_private { start_span.merge(span_end) } else { start_tok.span.merge(span_end) },
+                span: if is_private {
+                    start_span.merge(span_end)
+                } else {
+                    start_tok.span.merge(span_end)
+                },
             })
         } else if self.check(&TokenKind::Var) {
             let start_tok = self.expect(TokenKind::Var)?;
@@ -137,7 +141,7 @@ impl<'a> Parser<'a> {
                     span,
                 }) => {
                     let ident = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     };
                     self.advance();
@@ -178,7 +182,11 @@ impl<'a> Parser<'a> {
                 ty,
                 value,
                 is_private,
-                span: if is_private { start_span.merge(span_end) } else { start_tok.span.merge(span_end) },
+                span: if is_private {
+                    start_span.merge(span_end)
+                } else {
+                    start_tok.span.merge(span_end)
+                },
             })
         } else if self.check(&TokenKind::Const) {
             let start_tok = self.expect(TokenKind::Const)?;
@@ -189,7 +197,7 @@ impl<'a> Parser<'a> {
                     span,
                 }) => {
                     let ident = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     };
                     self.advance();
@@ -217,7 +225,11 @@ impl<'a> Parser<'a> {
                 ty,
                 value,
                 is_private,
-                span: if is_private { start_span.merge(end_span) } else { start_tok.span.merge(end_span) },
+                span: if is_private {
+                    start_span.merge(end_span)
+                } else {
+                    start_tok.span.merge(end_span)
+                },
             })
         } else if self.check(&TokenKind::Fn) {
             self.parse_fn_decl(is_private, start_span)
@@ -246,7 +258,7 @@ impl<'a> Parser<'a> {
                 }) = &self.current
                 {
                     let param_name = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     };
                     self.advance();
@@ -306,7 +318,7 @@ impl<'a> Parser<'a> {
                 }) = &self.current
                 {
                     traits.push(Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     });
                     self.advance();
@@ -324,7 +336,11 @@ impl<'a> Parser<'a> {
         Ok(traits)
     }
 
-    pub(crate) fn parse_struct_decl(&mut self, is_private: bool, start_span: pace_span::Span) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_struct_decl(
+        &mut self,
+        is_private: bool,
+        start_span: pace_span::Span,
+    ) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Struct)?;
 
         let name_tok = match &self.current {
@@ -333,7 +349,7 @@ impl<'a> Parser<'a> {
                 span,
             }) => {
                 let ident = Ident {
-                    name: name.to_string(),
+                    name: pace_span::intern(name),
                     span: *span,
                 };
                 self.advance();
@@ -370,7 +386,7 @@ impl<'a> Parser<'a> {
                 }) = &self.current
                 {
                     let field_name = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     };
                     self.advance();
@@ -381,7 +397,12 @@ impl<'a> Parser<'a> {
                     self.expect(TokenKind::Eq)?;
                     let field_value = self.parse_expr()?;
 
-                    const_fields.push((field_name, field_type, field_value, is_field_private));
+                    const_fields.push(pace_ast::ConstFieldDef {
+                        name: field_name,
+                        ty: field_type,
+                        value: field_value,
+                        is_private: is_field_private,
+                    });
 
                     if self.check(&TokenKind::Comma) {
                         self.advance();
@@ -408,7 +429,7 @@ impl<'a> Parser<'a> {
                 }) = &self.current
                 {
                     let field_name = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     };
                     self.advance();
@@ -419,7 +440,12 @@ impl<'a> Parser<'a> {
                     self.expect(TokenKind::Eq)?;
                     let field_value = self.parse_expr()?;
 
-                    static_fields.push((field_name, field_type, field_value, is_field_private));
+                    static_fields.push(pace_ast::StaticFieldDef {
+                        name: field_name,
+                        ty: field_type,
+                        value: field_value,
+                        is_private: is_field_private,
+                    });
 
                     if self.check(&TokenKind::Comma) {
                         self.advance();
@@ -459,7 +485,7 @@ impl<'a> Parser<'a> {
                         let init_span_start = span;
                         self.advance(); // consume 'init'
                         let ident = Ident {
-                            name: "init".to_string(),
+                            name: pace_span::intern("init"),
                             span: init_span_start,
                         };
 
@@ -471,7 +497,7 @@ impl<'a> Parser<'a> {
                                     kind: TokenKind::Ident(n),
                                     span,
                                 }) => Ident {
-                                    name: n.to_string(),
+                                    name: pace_span::intern(n),
                                     span: *span,
                                 },
                                 _ => {
@@ -505,7 +531,7 @@ impl<'a> Parser<'a> {
                     }
 
                     let field_name = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span,
                     };
                     self.advance();
@@ -519,7 +545,13 @@ impl<'a> Parser<'a> {
                         field_value = Some(self.parse_expr()?);
                     }
 
-                    fields.push((field_name, field_type, field_value, is_mut, is_field_private));
+                    fields.push(pace_ast::FieldDef {
+                        name: field_name,
+                        ty: field_type,
+                        default_value: field_value,
+                        is_mut,
+                        is_private: is_field_private,
+                    });
                 } else {
                     return Err(Diagnostic::error("Expected field name after let/var")
                         .with_span(self.current_span()));
@@ -545,11 +577,19 @@ impl<'a> Parser<'a> {
             const_fields,
             methods,
             is_private,
-            span: if is_private { start_span.merge(end_tok.span) } else { start_tok.span.merge(end_tok.span) },
+            span: if is_private {
+                start_span.merge(end_tok.span)
+            } else {
+                start_tok.span.merge(end_tok.span)
+            },
         })
     }
 
-    pub(crate) fn parse_trait_decl(&mut self, is_private: bool, start_span: pace_span::Span) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_trait_decl(
+        &mut self,
+        is_private: bool,
+        start_span: pace_span::Span,
+    ) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Trait)?;
 
         let name_tok = match &self.current {
@@ -558,7 +598,7 @@ impl<'a> Parser<'a> {
                 span,
             }) => {
                 let ident = Ident {
-                    name: name.to_string(),
+                    name: pace_span::intern(name),
                     span: *span,
                 };
                 self.advance();
@@ -597,11 +637,19 @@ impl<'a> Parser<'a> {
             generic_params,
             methods,
             is_private,
-            span: if is_private { start_span.merge(end_tok.span) } else { start_tok.span.merge(end_tok.span) },
+            span: if is_private {
+                start_span.merge(end_tok.span)
+            } else {
+                start_tok.span.merge(end_tok.span)
+            },
         })
     }
 
-    pub(crate) fn parse_class_decl(&mut self, is_private: bool, start_span: pace_span::Span) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_class_decl(
+        &mut self,
+        is_private: bool,
+        start_span: pace_span::Span,
+    ) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Class)?;
 
         let name_tok = match &self.current {
@@ -610,7 +658,7 @@ impl<'a> Parser<'a> {
                 span,
             }) => {
                 let ident = Ident {
-                    name: name.to_string(),
+                    name: pace_span::intern(name),
                     span: *span,
                 };
                 self.advance();
@@ -633,7 +681,7 @@ impl<'a> Parser<'a> {
             }) = &self.current
             {
                 extends = Some(Ident {
-                    name: name.to_string(),
+                    name: pace_span::intern(name),
                     span: *span,
                 });
                 self.advance();
@@ -666,7 +714,7 @@ impl<'a> Parser<'a> {
                 }) = &self.current
                 {
                     let field_name = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     };
                     self.advance();
@@ -677,7 +725,12 @@ impl<'a> Parser<'a> {
                     self.expect(TokenKind::Eq)?;
                     let field_value = self.parse_expr()?;
 
-                    const_fields.push((field_name, field_type, field_value, is_field_private));
+                    const_fields.push(pace_ast::ConstFieldDef {
+                        name: field_name,
+                        ty: field_type,
+                        value: field_value,
+                        is_private: is_field_private,
+                    });
 
                     if self.check(&TokenKind::Comma) {
                         self.advance();
@@ -704,7 +757,7 @@ impl<'a> Parser<'a> {
                 }) = &self.current
                 {
                     let field_name = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     };
                     self.advance();
@@ -715,7 +768,12 @@ impl<'a> Parser<'a> {
                     self.expect(TokenKind::Eq)?;
                     let field_value = self.parse_expr()?;
 
-                    static_fields.push((field_name, field_type, field_value, is_field_private));
+                    static_fields.push(pace_ast::StaticFieldDef {
+                        name: field_name,
+                        ty: field_type,
+                        value: field_value,
+                        is_private: is_field_private,
+                    });
 
                     if self.check(&TokenKind::Comma) {
                         self.advance();
@@ -772,7 +830,7 @@ impl<'a> Parser<'a> {
                         let init_span_start = span;
                         self.advance(); // consume 'init'
                         let ident = Ident {
-                            name: "init".to_string(),
+                            name: pace_span::intern("init"),
                             span: init_span_start,
                         };
 
@@ -784,7 +842,7 @@ impl<'a> Parser<'a> {
                                     kind: TokenKind::Ident(n),
                                     span,
                                 }) => Ident {
-                                    name: n.to_string(),
+                                    name: pace_span::intern(n),
                                     span: *span,
                                 },
                                 _ => {
@@ -818,7 +876,7 @@ impl<'a> Parser<'a> {
                     }
 
                     let field_name = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span,
                     };
                     self.advance();
@@ -832,7 +890,13 @@ impl<'a> Parser<'a> {
                         field_value = Some(self.parse_expr()?);
                     }
 
-                    fields.push((field_name, field_type, field_value, is_mut, is_field_private));
+                    fields.push(pace_ast::FieldDef {
+                        name: field_name,
+                        ty: field_type,
+                        default_value: field_value,
+                        is_mut,
+                        is_private: is_field_private,
+                    });
                 } else {
                     return Err(Diagnostic::error("Expected field name after let/var")
                         .with_span(self.current_span()));
@@ -859,11 +923,19 @@ impl<'a> Parser<'a> {
             const_fields,
             methods,
             is_private,
-            span: if is_private { start_span.merge(end_tok.span) } else { start_tok.span.merge(end_tok.span) },
+            span: if is_private {
+                start_span.merge(end_tok.span)
+            } else {
+                start_tok.span.merge(end_tok.span)
+            },
         })
     }
 
-    pub(crate) fn parse_enum_decl(&mut self, is_private: bool, start_span: pace_span::Span) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_enum_decl(
+        &mut self,
+        is_private: bool,
+        start_span: pace_span::Span,
+    ) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Enum)?;
 
         let name_tok = match &self.current {
@@ -872,7 +944,7 @@ impl<'a> Parser<'a> {
                 span,
             }) => {
                 let ident = Ident {
-                    name: name.to_string(),
+                    name: pace_span::intern(name),
                     span: *span,
                 };
                 self.advance();
@@ -896,7 +968,7 @@ impl<'a> Parser<'a> {
                     span,
                 }) => {
                     let ident = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     };
                     self.advance();
@@ -921,7 +993,7 @@ impl<'a> Parser<'a> {
                             kind: TokenKind::Ident(n),
                             span,
                         }) => Ident {
-                            name: n.to_string(),
+                            name: pace_span::intern(n),
                             span: *span,
                         },
                         _ => {
@@ -960,11 +1032,19 @@ impl<'a> Parser<'a> {
             generic_params,
             variants,
             is_private,
-            span: if is_private { start_span.merge(end_tok.span) } else { start_tok.span.merge(end_tok.span) },
+            span: if is_private {
+                start_span.merge(end_tok.span)
+            } else {
+                start_tok.span.merge(end_tok.span)
+            },
         })
     }
 
-    pub(crate) fn parse_fn_decl(&mut self, is_private: bool, start_span: pace_span::Span) -> Result<Decl, Diagnostic> {
+    pub(crate) fn parse_fn_decl(
+        &mut self,
+        is_private: bool,
+        start_span: pace_span::Span,
+    ) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Fn)?;
 
         let name_tok = match &self.current {
@@ -973,7 +1053,7 @@ impl<'a> Parser<'a> {
                 span,
             }) => {
                 let ident = Ident {
-                    name: name.to_string(),
+                    name: pace_span::intern(name),
                     span: *span,
                 };
                 self.advance();
@@ -997,7 +1077,7 @@ impl<'a> Parser<'a> {
                     span,
                 }) => {
                     let ident = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     };
                     self.advance();
@@ -1041,7 +1121,11 @@ impl<'a> Parser<'a> {
             is_static: false,
             is_override: false,
             is_private,
-            span: if is_private { start_span.merge(end_span) } else { start_tok.span.merge(end_span) },
+            span: if is_private {
+                start_span.merge(end_span)
+            } else {
+                start_tok.span.merge(end_span)
+            },
         })
     }
 }

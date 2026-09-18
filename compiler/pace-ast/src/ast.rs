@@ -1,16 +1,48 @@
-use pace_span::{FileId, Span};
+use pace_span::{FileId, Span, Symbol};
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldDef {
+    pub name: Ident,
+    pub ty: Type,
+    pub default_value: Option<Expr>,
+    pub is_mut: bool,
+    pub is_private: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StaticFieldDef {
+    pub name: Ident,
+    pub ty: Type,
+    pub value: Expr,
+    pub is_private: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConstFieldDef {
+    pub name: Ident,
+    pub ty: Type,
+    pub value: Expr,
+    pub is_private: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CallArg {
+    pub label: Option<Ident>,
+    pub expr: Expr,
+}
+
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
-    pub modules: HashMap<String, Module>,
-    pub module_order: Vec<String>,
+    pub modules: HashMap<Symbol, Module>,
+    pub module_order: Vec<Symbol>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
-    pub name: String,
+    pub name: Symbol,
     pub file_id: FileId,
     pub declarations: Vec<Decl>,
     pub comments: Vec<(Span, String)>,
@@ -18,7 +50,7 @@ pub struct Module {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ident {
-    pub name: String,
+    pub name: Symbol,
     pub span: Span,
 }
 
@@ -71,9 +103,9 @@ pub enum Decl {
         name: Ident,
         generic_params: Option<Vec<GenericParam>>,
         with: Vec<Ident>,
-        fields: Vec<(Ident, Type, Option<Expr>, bool, bool)>, // name, type, default, is_optional, is_private
-        static_fields: Vec<(Ident, Type, Expr, bool)>, // name, type, default, is_private
-        const_fields: Vec<(Ident, Type, Expr, bool)>,
+        fields: Vec<FieldDef>, // name, type, default, is_optional, is_private
+        static_fields: Vec<StaticFieldDef>, // name, type, default, is_private
+        const_fields: Vec<ConstFieldDef>,
         methods: Vec<Decl>, // Expects Decl::Function
         is_private: bool,
         span: Span,
@@ -83,9 +115,9 @@ pub enum Decl {
         generic_params: Option<Vec<GenericParam>>,
         extends: Option<Ident>,
         with: Vec<Ident>,
-        fields: Vec<(Ident, Type, Option<Expr>, bool, bool)>,
-        static_fields: Vec<(Ident, Type, Expr, bool)>,
-        const_fields: Vec<(Ident, Type, Expr, bool)>,
+        fields: Vec<FieldDef>,
+        static_fields: Vec<StaticFieldDef>,
+        const_fields: Vec<ConstFieldDef>,
         methods: Vec<Decl>, // Expects Decl::Function
         is_private: bool,
         span: Span,
@@ -182,7 +214,7 @@ pub enum Expr {
     },
     Call {
         callee: Box<Expr>,
-        args: Vec<(Option<Ident>, Expr)>,
+        args: Vec<CallArg>,
         span: Span,
     },
     If {

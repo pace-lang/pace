@@ -122,7 +122,7 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> R
             .map_err(|_| format!("Invalid SDK version requirement: {}", env.sdk))?;
         let compiler_version = semver::Version::parse(env!("CARGO_PKG_VERSION"))
             .unwrap_or_else(|_| semver::Version::new(0, 1, 0));
-        
+
         if !req.matches(&compiler_version) {
             return Err(format!(
                 "The current project requires Pace SDK version {}, but you are using {}",
@@ -131,10 +131,10 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> R
         }
         let mut resolver = pace_pkg::resolve::DependencyResolver::new();
         let lockfile_path = root.join("pace.lock");
-        if lockfile_path.exists() {
-            if let Ok(lock) = pace_pkg::resolve::DependencyResolver::read_lockfile(&lockfile_path) {
-                resolver.load_lock(lock);
-            }
+        if lockfile_path.exists()
+            && let Ok(lock) = pace_pkg::resolve::DependencyResolver::read_lockfile(&lockfile_path)
+        {
+            resolver.load_lock(lock);
         }
         let lock = resolver.resolve(&toml).await?;
         resolver.write_lockfile(&lockfile_path, &lock)?;
@@ -162,7 +162,10 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> R
                     // Automatically download if missing from cache
                     if let Some(checksum) = &pkg_info.checksum {
                         println!("Downloading {} v{}...", pkg_name, pkg_info.version);
-                        if let Err(e) = cache.download_and_extract(pkg_name, &pkg_info.version, checksum).await {
+                        if let Err(e) = cache
+                            .download_and_extract(pkg_name, &pkg_info.version, checksum)
+                            .await
+                        {
                             eprintln!("Warning: failed to download {}: {}", pkg_name, e);
                         }
                     }
@@ -172,7 +175,14 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> R
         }
 
         let build_dir = root.join("build");
-        pace_driver::compile_file(&target_file, &build_dir, &project_name, run, check, &dependencies)
+        pace_driver::compile_file(
+            &target_file,
+            &build_dir,
+            &project_name,
+            run,
+            check,
+            &dependencies,
+        )
     }
 }
 
@@ -183,7 +193,7 @@ fn format_dir_recursively(dir: &Path, write: bool) -> Result<(), String> {
             let path = entry.path();
             if path.is_dir() {
                 format_dir_recursively(&path, write)?;
-            } else if path.extension().map_or(false, |ext| ext == "pace") {
+            } else if path.extension().is_some_and(|ext| ext == "pace") {
                 match pace_driver::format_file(&path, write) {
                     Err(e) => eprintln!("Error formatting {}: {}", path.display(), e),
                     Ok(changed) => {
@@ -207,8 +217,8 @@ fn execute_fmt(file: Option<String>, write: bool) -> Result<(), String> {
                     println!("Formatted {}", path.display());
                 }
                 Ok(())
-            },
-            Err(e) => Err(e)
+            }
+            Err(e) => Err(e),
         }
     } else {
         let (root, _) = get_project_info()?;
@@ -277,7 +287,8 @@ async fn main() {
             }
         }
         Commands::Add { name, version, dev } => {
-            if let Err(e) = pace_pkg::commands::add_dependency(&name, version.as_deref(), dev).await {
+            if let Err(e) = pace_pkg::commands::add_dependency(&name, version.as_deref(), dev).await
+            {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }

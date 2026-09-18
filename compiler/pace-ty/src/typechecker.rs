@@ -1,3 +1,27 @@
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedField {
+    pub name: String,
+    pub ty: crate::ty::Ty,
+    pub is_mut: bool,
+    pub is_private: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VTableEntry {
+    pub name: String,
+    pub ty: crate::ty::Ty,
+    pub mangled_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedMethod {
+    pub name: String,
+    pub ty: crate::ty::Ty,
+    pub mangled_name: String,
+    pub is_private: bool,
+    pub span: pace_span::Span,
+}
+
 use pace_hir::{Decl, Expr, HirId, Program, Stmt};
 use std::collections::HashMap;
 
@@ -20,10 +44,10 @@ pub struct TypeChecker {
     pub methods_env: HashMap<String, Ty>,
     pub methods_privacy: HashMap<String, bool>,
     pub global_functions: HashMap<String, Ty>,
-    pub struct_defs: HashMap<HirId, Vec<(String, Ty, bool, bool)>>,
-    pub class_defs: HashMap<HirId, Vec<(String, Ty, bool, bool)>>,
+    pub struct_defs: HashMap<HirId, Vec<ResolvedField>>,
+    pub class_defs: HashMap<HirId, Vec<ResolvedField>>,
     pub class_parents: HashMap<HirId, HirId>,
-    pub class_vtables: HashMap<HirId, Vec<(String, Ty, String)>>,
+    pub class_vtables: HashMap<HirId, Vec<VTableEntry>>,
     pub enum_defs: HashMap<HirId, Vec<pace_hir::EnumVariant>>,
     pub trait_defs: HashMap<String, Decl>,
     pub static_fields_env: HashMap<String, Ty>,
@@ -48,6 +72,12 @@ pub struct TypeChecker {
     pub inlay_hints: Vec<(pace_span::Span, String)>,
     pub function_calls: Vec<(pace_span::Span, Ty)>,
     pub reporter: Reporter,
+}
+
+impl Default for TypeChecker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TypeChecker {
@@ -121,7 +151,7 @@ impl TypeChecker {
             pace_ast::Type::Generic(base, args, _) => {
                 if let pace_ast::Type::Named(id) = &**base {
                     let mut final_args = Vec::new();
-                    if let Some(template) = self.generic_templates.get(&id.name) {
+                    if let Some(template) = self.generic_templates.get(&id.name.to_string()) {
                         let generic_params = match template {
                             pace_hir::Decl::Struct { generic_params, .. } => {
                                 generic_params.clone().unwrap_or_default()
@@ -241,24 +271,26 @@ impl TypeChecker {
             let module = program.modules.get(module_name).unwrap();
             let mut scope = ModuleScope::default();
             for decl in &module.declarations {
-                if let Decl::Import { path, alias, .. } = decl {
-                    if let Some(target_module) = path.first() {
-                        if let Some(a) = alias {
-                            scope.aliases.insert(a.clone(), target_module.clone());
-                        } else {
-                            scope.wildcard_imports.push(target_module.clone());
-                        }
+                if let Decl::Import { path, alias, .. } = decl
+                    && let Some(target_module) = path.first()
+                {
+                    if let Some(a) = alias {
+                        scope
+                            .aliases
+                            .insert(a.to_string(), target_module.to_string());
+                    } else {
+                        scope.wildcard_imports.push(target_module.to_string());
                     }
                 }
             }
-            self.module_scopes.insert(module_name.clone(), scope);
+            self.module_scopes.insert(module_name.to_string(), scope);
         }
 
         let mut declarations: Vec<(String, Decl)> = Vec::new();
         for module_name in &program.module_order {
             let module = program.modules.get(module_name).unwrap();
             for decl in &module.declarations {
-                declarations.push((module_name.clone(), decl.clone()));
+                declarations.push((module_name.to_string(), decl.clone()));
             }
         }
 
@@ -289,7 +321,7 @@ impl TypeChecker {
 
         // 1. Gather all top-level types (Structs/Classes/Functions)
         for (module_name, decl) in &declarations {
-            self.current_module = Some(module_name.clone());
+            self.current_module = Some(module_name.to_string());
             match decl {
                 Decl::Struct {
                     id,
@@ -307,7 +339,7 @@ impl TypeChecker {
                         self.generic_templates_by_id
                             .insert(*id, mangled_name.clone());
                         if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                            scope.visible_symbols.insert(name.clone(), mangled_name);
+                            scope.visible_symbols.insert(name.to_string(), mangled_name);
                         }
                         continue;
                     }
@@ -315,14 +347,24 @@ impl TypeChecker {
                     if let Some(scope) = self.module_scopes.get_mut(module_name) {
                         scope
                             .visible_symbols
-                            .insert(name.clone(), mangled_name.clone());
+                            .insert(name.to_string(), mangled_name.clone());
                     }
-                    for (sf_name, sf_ty, _, _) in static_fields {
+                    for pace_hir::HirStaticFieldDef {
+                        name: sf_name,
+                        ty: sf_ty,
+                        ..
+                    } in static_fields
+                    {
                         let resolved_ty = self.resolve_type(sf_ty).unwrap_or(Ty::Int);
                         self.static_fields_env
                             .insert(format!("{}_{}", mangled_name, sf_name), resolved_ty);
                     }
-                    for (cf_name, cf_ty, _, _) in const_fields {
+                    for pace_hir::HirConstFieldDef {
+                        name: cf_name,
+                        ty: cf_ty,
+                        ..
+                    } in const_fields
+                    {
                         let resolved_ty = self.resolve_type(cf_ty).unwrap_or(Ty::Int);
                         self.const_env
                             .insert(format!("{}_{}", mangled_name, cf_name), resolved_ty);
@@ -376,7 +418,7 @@ impl TypeChecker {
                         self.generic_templates_by_id
                             .insert(*id, mangled_name.clone());
                         if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                            scope.visible_symbols.insert(name.clone(), mangled_name);
+                            scope.visible_symbols.insert(name.to_string(), mangled_name);
                         }
                         continue;
                     }
@@ -384,14 +426,24 @@ impl TypeChecker {
                     if let Some(scope) = self.module_scopes.get_mut(module_name) {
                         scope
                             .visible_symbols
-                            .insert(name.clone(), mangled_name.clone());
+                            .insert(name.to_string(), mangled_name.clone());
                     }
-                    for (sf_name, sf_ty, _, _) in static_fields {
+                    for pace_hir::HirStaticFieldDef {
+                        name: sf_name,
+                        ty: sf_ty,
+                        ..
+                    } in static_fields
+                    {
                         let resolved_ty = self.resolve_type(sf_ty).unwrap_or(Ty::Int);
                         self.static_fields_env
                             .insert(format!("{}_{}", mangled_name, sf_name), resolved_ty);
                     }
-                    for (cf_name, cf_ty, _, _) in const_fields {
+                    for pace_hir::HirConstFieldDef {
+                        name: cf_name,
+                        ty: cf_ty,
+                        ..
+                    } in const_fields
+                    {
                         let resolved_ty = self.resolve_type(cf_ty).unwrap_or(Ty::Int);
                         self.const_env
                             .insert(format!("{}_{}", mangled_name, cf_name), resolved_ty);
@@ -430,7 +482,7 @@ impl TypeChecker {
                     }
                 }
                 Decl::Trait { name, .. } => {
-                    self.trait_defs.insert(name.clone(), decl.clone());
+                    self.trait_defs.insert(name.to_string(), decl.clone());
                 }
                 Decl::Enum {
                     id,
@@ -446,13 +498,13 @@ impl TypeChecker {
                         self.generic_templates_by_id
                             .insert(*id, mangled_name.clone());
                         if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                            scope.visible_symbols.insert(name.clone(), mangled_name);
+                            scope.visible_symbols.insert(name.to_string(), mangled_name);
                         }
                         continue;
                     }
                     self.named_types.insert(mangled_name.clone(), (*id, 2));
                     if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                        scope.visible_symbols.insert(name.clone(), mangled_name);
+                        scope.visible_symbols.insert(name.to_string(), mangled_name);
                     }
                     for v in variants {
                         if let Some(fields) = &v.fields {
@@ -473,7 +525,7 @@ impl TypeChecker {
 
         // Pass 2: Register struct/class fields
         for (module_name, decl) in &declarations {
-            self.current_module = Some(module_name.clone());
+            self.current_module = Some(module_name.to_string());
             match decl {
                 Decl::Struct {
                     id,
@@ -485,8 +537,20 @@ impl TypeChecker {
                         continue;
                     }
                     let mut resolved_fields = Vec::new();
-                    for (fname, fty, _, is_mut, is_private) in fields {
-                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?, *is_mut, *is_private));
+                    for pace_hir::HirFieldDef {
+                        name: fname,
+                        ty: fty,
+                        is_mut,
+                        is_private,
+                        ..
+                    } in fields
+                    {
+                        resolved_fields.push(ResolvedField {
+                            name: fname.to_string(),
+                            ty: self.resolve_type(fty)?,
+                            is_mut: *is_mut,
+                            is_private: *is_private,
+                        });
                     }
                     self.struct_defs.insert(*id, resolved_fields);
                 }
@@ -500,8 +564,20 @@ impl TypeChecker {
                         continue;
                     }
                     let mut resolved_fields = Vec::new();
-                    for (fname, fty, _, is_mut, is_private) in fields {
-                        resolved_fields.push((fname.clone(), self.resolve_type(fty)?, *is_mut, *is_private));
+                    for pace_hir::HirFieldDef {
+                        name: fname,
+                        ty: fty,
+                        is_mut,
+                        is_private,
+                        ..
+                    } in fields
+                    {
+                        resolved_fields.push(ResolvedField {
+                            name: fname.to_string(),
+                            ty: self.resolve_type(fty)?,
+                            is_mut: *is_mut,
+                            is_private: *is_private,
+                        });
                     }
                     self.class_defs.insert(*id, resolved_fields);
                 }
@@ -522,40 +598,36 @@ impl TypeChecker {
 
         // Pass 2.5: Hierarchy Resolution & Field Inheritance
         for (module_name, decl) in &declarations {
-            self.current_module = Some(module_name.clone());
+            self.current_module = Some(module_name.to_string());
             if let Decl::Class {
                 id, extends, span, ..
             } = decl
+                && let Some(parent_name) = extends
             {
-                if let Some(parent_name) = extends {
-                    let mangled_parent_name =
-                        if let Some(scope) = self.module_scopes.get(module_name) {
-                            scope
-                                .visible_symbols
-                                .get(parent_name)
-                                .cloned()
-                                .unwrap_or_else(|| parent_name.clone())
-                        } else {
-                            parent_name.clone()
-                        };
-                    if let Some(&(parent_id, 1)) = self.named_types.get(&mangled_parent_name) {
-                        if parent_id == *id {
-                            self.reporter.report(
-                                pace_errors::Diagnostic::error("Class cannot inherit from itself")
-                                    .with_span(*span),
-                            );
-                            return Err("Class cannot inherit from itself".to_string());
-                        }
-                        self.class_parents.insert(*id, parent_id);
-                    } else {
+                let mangled_parent_name = if let Some(scope) = self.module_scopes.get(module_name) {
+                    scope
+                        .visible_symbols
+                        .get(&parent_name.to_string())
+                        .cloned()
+                        .unwrap_or_else(|| parent_name.to_string())
+                } else {
+                    parent_name.to_string()
+                };
+                if let Some(&(parent_id, 1)) = self.named_types.get(&mangled_parent_name) {
+                    if parent_id == *id {
                         self.reporter.report(
-                            pace_errors::Diagnostic::error(
-                                "Class extends a non-class or unknown type",
-                            )
-                            .with_span(*span),
+                            pace_errors::Diagnostic::error("Class cannot inherit from itself")
+                                .with_span(*span),
                         );
-                        return Err("Class extends a non-class or unknown type".to_string());
+                        return Err("Class cannot inherit from itself".to_string());
                     }
+                    self.class_parents.insert(*id, parent_id);
+                } else {
+                    self.reporter.report(
+                        pace_errors::Diagnostic::error("Class extends a non-class or unknown type")
+                            .with_span(*span),
+                    );
+                    return Err("Class extends a non-class or unknown type".to_string());
                 }
             }
         }
@@ -589,7 +661,7 @@ impl TypeChecker {
 
         // Pass 3: Register functions
         for (module_name, decl) in &declarations {
-            self.current_module = Some(module_name.clone());
+            self.current_module = Some(module_name.to_string());
             if let Decl::Function {
                 id: func_id,
                 name,
@@ -612,7 +684,7 @@ impl TypeChecker {
                     Ty::Void
                 };
                 let mangled_name = if name == "main" {
-                    name.clone()
+                    name.to_string()
                 } else {
                     format!("{}_{}", module_name, name)
                 };
@@ -620,10 +692,11 @@ impl TypeChecker {
                     mangled_name.clone(),
                     Ty::Function(param_tys, Box::new(ret_ty)),
                 );
-                self.resolved_global_names.insert(*func_id, mangled_name.clone());
+                self.resolved_global_names
+                    .insert(*func_id, mangled_name.clone());
 
                 if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                    scope.visible_symbols.insert(name.clone(), mangled_name);
+                    scope.visible_symbols.insert(name.to_string(), mangled_name);
                 }
             }
         }
@@ -631,7 +704,7 @@ impl TypeChecker {
         // Resolve wildcard imports
         let mut wildcard_symbols_to_add: HashMap<String, Vec<(String, String)>> = HashMap::new();
         for module_name in &program.module_order {
-            let scope = self.module_scopes.get(module_name).unwrap();
+            let scope = self.module_scopes.get(&module_name.to_string()).unwrap();
             let mut symbols_to_add = Vec::new();
             for target_module in &scope.wildcard_imports {
                 if let Some(target_scope) = self.module_scopes.get(target_module) {
@@ -642,23 +715,22 @@ impl TypeChecker {
                     }
                 }
             }
-            wildcard_symbols_to_add.insert(module_name.clone(), symbols_to_add);
+            wildcard_symbols_to_add.insert(module_name.to_string(), symbols_to_add);
         }
         for module_name in &program.module_order {
-            if let Some(symbols) = wildcard_symbols_to_add.remove(module_name) {
-                if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                    for (name, mangled) in symbols {
-                        scope.visible_symbols.insert(name, mangled);
-                    }
+            if let Some(symbols) = wildcard_symbols_to_add.remove(&module_name.to_string())
+                && let Some(scope) = self.module_scopes.get_mut(&module_name.to_string())
+            {
+                for (name, mangled) in symbols {
+                    scope.visible_symbols.insert(name, mangled);
                 }
             }
         }
 
         // Pass 3.5: Construct V-Tables and Validate Overrides
-        let mut class_methods: HashMap<HirId, Vec<(String, Ty, String, bool, pace_span::Span)>> =
-            HashMap::new();
+        let mut class_methods: HashMap<HirId, Vec<ResolvedMethod>> = HashMap::new();
         for (module_name, decl) in &declarations {
-            self.current_module = Some(module_name.clone());
+            self.current_module = Some(module_name.to_string());
             if let Decl::Class {
                 id,
                 name: decl_name,
@@ -676,19 +748,19 @@ impl TypeChecker {
                     } = m
                     {
                         let mangled_class_name = format!("{}_{}", module_name, decl_name);
-                        let short_method_name = name.split('_').last().unwrap();
+                        let short_method_name = name.split('_').next_back().unwrap();
                         let method_mangled_name =
                             format!("{}_{}", mangled_class_name, short_method_name);
 
                         if let Some(ty) = self.methods_env.get(&method_mangled_name) {
                             let base_name = short_method_name.to_string();
-                            cm.push((
-                                base_name,
-                                ty.clone(),
-                                method_mangled_name,
-                                *is_override,
-                                *span,
-                            ));
+                            cm.push(ResolvedMethod {
+                                name: base_name,
+                                ty: ty.clone(),
+                                mangled_name: method_mangled_name,
+                                is_private: *is_override,
+                                span: *span,
+                            });
                         }
                     }
                 }
@@ -697,7 +769,7 @@ impl TypeChecker {
         }
 
         for &id in &class_ids {
-            let mut vtable: Vec<(String, Ty, String)> = Vec::new();
+            let mut vtable: Vec<VTableEntry> = Vec::new();
             let mut hierarchy = Vec::new();
             let mut curr = Some(id);
             while let Some(c_id) = curr {
@@ -707,49 +779,62 @@ impl TypeChecker {
 
             for &c_id in hierarchy.iter().rev() {
                 if let Some(methods) = class_methods.get(&c_id) {
-                    for (base_name, ty, full_name, is_override, span) in methods {
+                    for ResolvedMethod {
+                        name: base_name,
+                        ty,
+                        mangled_name: full_name,
+                        is_private: is_override,
+                        span,
+                        ..
+                    } in methods
+                    {
                         if *is_override {
-                            if let Some(pos) = vtable.iter().position(|(n, _, _)| n == base_name) {
+                            if let Some(pos) = vtable.iter().position(|v| &v.name == base_name) {
                                 // Validate signature (ignoring the first `self` parameter's exact type, but checking length and other params)
-                                let base_ty = &vtable[pos].1;
+                                let base_ty = &vtable[pos].ty;
                                 let mut sig_match = false;
                                 if let (
                                     Ty::Function(base_params, base_ret),
                                     Ty::Function(new_params, new_ret),
                                 ) = (base_ty, ty)
+                                    && *base_ret == *new_ret
+                                    && base_params.len() == new_params.len()
                                 {
-                                    if base_ret == new_ret && base_params.len() == new_params.len()
-                                    {
-                                        let mut params_match = true;
-                                        for i in 1..base_params.len() {
-                                            if base_params[i] != new_params[i] {
-                                                params_match = false;
-                                                break;
-                                            }
+                                    let mut params_match = true;
+                                    for i in 1..base_params.len() {
+                                        if base_params[i] != new_params[i] {
+                                            params_match = false;
+                                            break;
                                         }
-                                        if params_match {
-                                            sig_match = true;
-                                        }
+                                    }
+                                    if params_match {
+                                        sig_match = true;
                                     }
                                 }
 
                                 if !sig_match {
                                     self.reporter.report(pace_errors::Diagnostic::error(format!("Method '{}' overrides parent method but has a different signature", base_name)).with_span(*span));
-                                    return Err(format!("Signature mismatch in override"));
+                                    return Err("Signature mismatch in override".to_string());
                                 }
-                                vtable[pos] = (base_name.clone(), ty.clone(), full_name.clone());
+                                vtable[pos] = VTableEntry {
+                                    name: base_name.to_string(),
+                                    ty: ty.clone(),
+                                    mangled_name: full_name.clone(),
+                                };
                             } else {
                                 self.reporter.report(pace_errors::Diagnostic::error(format!("Method '{}' marked as override but does not override any parent method", base_name)).with_span(*span));
-                                return Err(format!("Invalid override"));
+                                return Err("Invalid override".to_string());
                             }
                         } else {
-                            if vtable.iter().any(|(n, _, _)| n == base_name) {
-                                if base_name != "init" {
-                                    self.reporter.report(pace_errors::Diagnostic::error(format!("Method '{}' shadows a parent method. Use 'override' keyword", base_name)).with_span(*span));
-                                    return Err(format!("Missing override keyword"));
-                                }
+                            if vtable.iter().any(|v| &v.name == base_name) && base_name != "init" {
+                                self.reporter.report(pace_errors::Diagnostic::error(format!("Method '{}' shadows a parent method. Use 'override' keyword", base_name)).with_span(*span));
+                                return Err("Missing override keyword".to_string());
                             }
-                            vtable.push((base_name.clone(), ty.clone(), full_name.clone()));
+                            vtable.push(VTableEntry {
+                                name: base_name.to_string(),
+                                ty: ty.clone(),
+                                mangled_name: full_name.clone(),
+                            });
                         }
                     }
                 }
@@ -758,7 +843,7 @@ impl TypeChecker {
         }
 
         for (module_name, decl) in &declarations {
-            self.current_module = Some(module_name.clone());
+            self.current_module = Some(module_name.to_string());
             self.check_decl(decl)?;
         }
 
@@ -768,7 +853,7 @@ impl TypeChecker {
                 .named_types
                 .keys()
                 .any(|k| name.starts_with(&format!("{}_", k)));
-            if !self.used_bindings.contains(&id)
+            if !self.used_bindings.contains(id)
                 && !self.used_bindings_by_name.contains(name)
                 && !name.starts_with('_')
                 && name != "main"
@@ -838,10 +923,9 @@ impl TypeChecker {
                                 type_matches = true;
                             } else if let (Ty::Optional(_), Ty::Optional(inner_val)) =
                                 (&expected, &ty)
+                                && **inner_val == Ty::Void
                             {
-                                if **inner_val == Ty::Void {
-                                    type_matches = true;
-                                }
+                                type_matches = true;
                             }
                         }
 
@@ -860,7 +944,7 @@ impl TypeChecker {
                     self.env.insert(*id, ty.clone());
                     self.local_types.insert(*id, ty.clone());
                     self.mutability_env.insert(*id, false); // Let is immutable
-                    self.declared_bindings.push((*id, name.clone(), *span));
+                    self.declared_bindings.push((*id, name.to_string(), *span));
                 }
                 pace_hir::Stmt::Var {
                     id,
@@ -894,10 +978,9 @@ impl TypeChecker {
                                 type_matches = true;
                             } else if let (Ty::Optional(_), Ty::Optional(inner_val)) =
                                 (&expected, &ty)
+                                && **inner_val == Ty::Void
                             {
-                                if **inner_val == Ty::Void {
-                                    type_matches = true;
-                                }
+                                type_matches = true;
                             }
                         }
 
@@ -916,7 +999,7 @@ impl TypeChecker {
                     self.env.insert(*id, ty.clone());
                     self.local_types.insert(*id, ty.clone());
                     self.mutability_env.insert(*id, true); // Var is mutable
-                    self.declared_bindings.push((*id, name.clone(), *span));
+                    self.declared_bindings.push((*id, name.to_string(), *span));
                 }
                 pace_hir::Stmt::ExprStmt(expr, _) => {
                     self.check_expr(expr)?;
@@ -928,12 +1011,17 @@ impl TypeChecker {
                         Ty::Void
                     };
 
-                    if let Some(expected) = expected_ret_ty {
-                        if ret_ty != *expected {
-                            self.reporter.report(Diagnostic::error(format!("Type mismatch: function expects to return {:?}, but returned {:?}", expected, ret_ty))
-                                .with_span(*span)
-                                .with_code(ErrorCode::TypeMismatch));
-                        }
+                    if let Some(expected) = expected_ret_ty
+                        && ret_ty != *expected
+                    {
+                        self.reporter.report(
+                            Diagnostic::error(format!(
+                                "Type mismatch: function expects to return {:?}, but returned {:?}",
+                                expected, ret_ty
+                            ))
+                            .with_span(*span)
+                            .with_code(ErrorCode::TypeMismatch),
+                        );
                     }
                 }
             }
@@ -973,25 +1061,25 @@ impl TypeChecker {
                     expected
                 };
 
-                if let Some(expected) = expected_ty {
-                    if ty != expected {
-                        if expected != Ty::Optional(Box::new(ty.clone())) {
-                            self.reporter.report(
-                                pace_errors::Diagnostic::error(format!(
-                                    "Type mismatch: expected {:?}, got {:?}",
-                                    expected, ty
-                                ))
-                                .with_span(explicit_ty.as_ref().unwrap().span()),
-                            );
-                            return Err("Type mismatch".to_string());
-                        }
-                        ty = expected;
+                if let Some(expected) = expected_ty
+                    && ty != expected
+                {
+                    if expected != Ty::Optional(Box::new(ty.clone())) {
+                        self.reporter.report(
+                            pace_errors::Diagnostic::error(format!(
+                                "Type mismatch: expected {:?}, got {:?}",
+                                expected, ty
+                            ))
+                            .with_span(explicit_ty.as_ref().unwrap().span()),
+                        );
+                        return Err("Type mismatch".to_string());
                     }
+                    ty = expected;
                 }
                 self.env.insert(*id, ty.clone());
                 self.local_types.insert(*id, ty.clone());
                 self.mutability_env.insert(*id, false); // Let is immutable
-                self.declared_bindings.push((*id, name.clone(), *span));
+                self.declared_bindings.push((*id, name.to_string(), *span));
                 Ok(())
             }
             Decl::Var {
@@ -1033,7 +1121,7 @@ impl TypeChecker {
                 self.env.insert(*id, ty.clone());
                 self.local_types.insert(*id, ty.clone());
                 self.mutability_env.insert(*id, true); // Var is mutable
-                self.declared_bindings.push((*id, name.clone(), *span));
+                self.declared_bindings.push((*id, name.to_string(), *span));
                 Ok(())
             }
             Decl::Const {
@@ -1063,7 +1151,7 @@ impl TypeChecker {
                 }
                 self.env.insert(*id, ty);
                 self.mutability_env.insert(*id, false);
-                self.declared_bindings.push((*id, name.clone(), *span));
+                self.declared_bindings.push((*id, name.to_string(), *span));
                 Ok(())
             }
             Decl::Struct {
@@ -1078,7 +1166,12 @@ impl TypeChecker {
                     return Ok(());
                 }
                 self.env.insert(*id, Ty::Struct(*id));
-                for (_, sf_ty, sf_expr, _) in static_fields {
+                for pace_hir::HirStaticFieldDef {
+                    ty: sf_ty,
+                    value: sf_expr,
+                    ..
+                } in static_fields
+                {
                     let expected_ty = self.resolve_type(sf_ty)?;
                     let expr_ty = self.check_expr(sf_expr)?;
                     if expected_ty != expr_ty {
@@ -1093,7 +1186,12 @@ impl TypeChecker {
                         return Err("Type mismatch".to_string());
                     }
                 }
-                for (_, cf_ty, cf_expr, _) in const_fields {
+                for pace_hir::HirConstFieldDef {
+                    ty: cf_ty,
+                    value: cf_expr,
+                    ..
+                } in const_fields
+                {
                     let expected_ty = self.resolve_type(cf_ty)?;
                     let expr_ty = self.check_expr(cf_expr)?;
                     if expected_ty != expr_ty {
@@ -1125,7 +1223,12 @@ impl TypeChecker {
                     return Ok(());
                 }
                 self.env.insert(*id, Ty::Class(*id));
-                for (_, sf_ty, sf_expr, _) in static_fields {
+                for pace_hir::HirStaticFieldDef {
+                    ty: sf_ty,
+                    value: sf_expr,
+                    ..
+                } in static_fields
+                {
                     let expected_ty = self.resolve_type(sf_ty)?;
                     let expr_ty = self.check_expr(sf_expr)?;
                     if expected_ty != expr_ty {
@@ -1140,7 +1243,12 @@ impl TypeChecker {
                         return Err("Type mismatch".to_string());
                     }
                 }
-                for (_, cf_ty, cf_expr, _) in const_fields {
+                for pace_hir::HirConstFieldDef {
+                    ty: cf_ty,
+                    value: cf_expr,
+                    ..
+                } in const_fields
+                {
                     let expected_ty = self.resolve_type(cf_ty)?;
                     let expr_ty = self.check_expr(cf_expr)?;
                     if expected_ty != expr_ty {
@@ -1182,12 +1290,12 @@ impl TypeChecker {
                 body,
                 span,
                 is_static,
-                is_override: _,
                 ..
             } => {
                 if generic_params.is_some() {
-                    self.generic_templates.insert(name.clone(), decl.clone());
-                    self.generic_templates_by_id.insert(*id, name.clone());
+                    self.generic_templates
+                        .insert(name.to_string(), decl.clone());
+                    self.generic_templates_by_id.insert(*id, name.to_string());
                     return Ok(());
                 }
                 if name.contains('_') && name != "main" && !name.ends_with("_init") {
@@ -1195,8 +1303,8 @@ impl TypeChecker {
                     let is_compiler_generated = self.named_types.keys().any(|k| {
                         name.starts_with(k)
                             || k.split('_')
-                                .last()
-                                .map_or(false, |short_k| name.starts_with(&format!("{}_", short_k)))
+                                .next_back()
+                                .is_some_and(|short_k| name.starts_with(&format!("{}_", short_k)))
                     });
                     if !is_compiler_generated {
                         let offset = if *is_static { 10 } else { 3 };
@@ -1222,7 +1330,8 @@ impl TypeChecker {
                     span.start + offset as u32,
                     span.start + (offset + name.len()) as u32,
                 );
-                self.declared_bindings.push((*id, name.clone(), name_span));
+                self.declared_bindings
+                    .push((*id, name.to_string(), name_span));
                 self.initialized_bindings.insert(*id);
 
                 // Definite assignment check for initializers
@@ -1236,14 +1345,12 @@ impl TypeChecker {
 
                     // Simple analysis: collect all `self.field = value` assignments in the top-level block
                     for stmt in &body.statements {
-                        if let Stmt::ExprStmt(Expr::Assign { target, .. }, _) = stmt {
-                            if let Expr::MemberAccess { object, member, .. } = &**target {
-                                if let Expr::Ident(obj_id, _, _, _) = &**object {
-                                    if Some(*obj_id) == self_id {
-                                        assigned_fields.insert(member.clone());
-                                    }
-                                }
-                            }
+                        if let Stmt::ExprStmt(Expr::Assign { target, .. }, _) = stmt
+                            && let Expr::MemberAccess { object, member, .. } = &**target
+                            && let Expr::Ident(obj_id, _, _, _) = &**object
+                            && Some(*obj_id) == self_id
+                        {
+                            assigned_fields.insert(member.to_string());
                         }
                     }
 
@@ -1251,21 +1358,19 @@ impl TypeChecker {
                         if kind == 1 {
                             let mut calls_super = false;
                             for stmt in &body.statements {
-                                if let Stmt::ExprStmt(Expr::Call { callee, .. }, _) = stmt {
-                                    if let Expr::MemberAccess { object, .. } = &**callee {
-                                        if matches!(&**object, Expr::Super(_)) {
-                                            calls_super = true;
-                                        }
-                                    }
+                                if let Stmt::ExprStmt(Expr::Call { callee, .. }, _) = stmt
+                                    && let Expr::MemberAccess { object, .. } = &**callee
+                                    && matches!(&**object, Expr::Super(_))
+                                {
+                                    calls_super = true;
                                 }
                             }
-                            if calls_super {
-                                if let Some(parent_id) = self.class_parents.get(&hir_id) {
-                                    if let Some(parent_fields) = self.class_defs.get(parent_id) {
-                                        for (fname, _, _, _) in parent_fields {
-                                            assigned_fields.insert(fname.clone());
-                                        }
-                                    }
+                            if calls_super
+                                && let Some(parent_id) = self.class_parents.get(&hir_id)
+                                && let Some(parent_fields) = self.class_defs.get(parent_id)
+                            {
+                                for ResolvedField { name: fname, .. } in parent_fields {
+                                    assigned_fields.insert(fname.clone());
                                 }
                             }
                         }
@@ -1279,7 +1384,7 @@ impl TypeChecker {
                         };
 
                         if let Some(fields) = fields {
-                            for (fname, _, _, _) in fields {
+                            for ResolvedField { name: fname, .. } in fields {
                                 if !assigned_fields.contains(fname) {
                                     self.reporter.report(Diagnostic::error(format!("Field '{}' must be initialized", fname))
                                         .with_span(*span)
@@ -1293,13 +1398,13 @@ impl TypeChecker {
 
                 let outer_env = self.env.clone();
                 let prev_fn = self.current_fn_name.take();
-                self.current_fn_name = Some(name.clone());
+                self.current_fn_name = Some(name.to_string());
                 for (param_id, param_name, pty) in params {
                     let ty = self.resolve_type(pty)?;
                     self.env.insert(*param_id, ty.clone());
                     self.local_types.insert(*param_id, ty);
                     self.declared_bindings
-                        .push((*param_id, param_name.clone(), *span));
+                        .push((*param_id, param_name.to_string(), *span));
                     self.initialized_bindings.insert(*param_id);
                 }
                 let ret_ty = if let Some(rty) = &return_type {
@@ -1335,20 +1440,20 @@ impl TypeChecker {
         for stmt in &block.statements {
             match stmt {
                 pace_hir::Stmt::Return(..) => return true,
-                pace_hir::Stmt::ExprStmt(expr, _) => {
-                    if let pace_hir::Expr::If {
+                pace_hir::Stmt::ExprStmt(
+                    pace_hir::Expr::If {
                         then_block,
                         else_block,
                         ..
-                    } = expr
-                    {
-                        let then_returns = self.check_exhaustive_return(then_block);
-                        let else_returns = else_block
-                            .as_ref()
-                            .map_or(false, |b| self.check_exhaustive_return(b));
-                        if then_returns && else_returns {
-                            return true;
-                        }
+                    },
+                    _,
+                ) => {
+                    let then_returns = self.check_exhaustive_return(then_block);
+                    let else_returns = else_block
+                        .as_ref()
+                        .is_some_and(|b| self.check_exhaustive_return(b));
+                    if then_returns && else_returns {
+                        return true;
                     }
                 }
                 _ => {}
@@ -1376,23 +1481,19 @@ impl TypeChecker {
                         .declared_bindings
                         .iter()
                         .find(|(b_id, _, _)| b_id == id)
+                        && name == "self"
+                        && let Ty::Class(class_id) = ty
                     {
-                        if name == "self" {
-                            if let Ty::Class(class_id) = ty {
-                                if let Some(&parent_id) = self.class_parents.get(class_id) {
-                                    return Ok(Ty::Class(parent_id));
-                                } else {
-                                    self.reporter.report(
-                                        pace_errors::Diagnostic::error(
-                                            "Cannot use 'super' in a class with no parent",
-                                        )
-                                        .with_span(*span),
-                                    );
-                                    return Err(
-                                        "Cannot use 'super' in a class with no parent".to_string()
-                                    );
-                                }
-                            }
+                        if let Some(&parent_id) = self.class_parents.get(class_id) {
+                            return Ok(Ty::Class(parent_id));
+                        } else {
+                            self.reporter.report(
+                                pace_errors::Diagnostic::error(
+                                    "Cannot use 'super' in a class with no parent",
+                                )
+                                .with_span(*span),
+                            );
+                            return Err("Cannot use 'super' in a class with no parent".to_string());
                         }
                     }
                 }
@@ -1403,51 +1504,50 @@ impl TypeChecker {
                 Err("Cannot use 'super' outside of a class method".to_string())
             }
             Expr::Null(_span) => {
-                if let Some(expected) = &self.current_expected_ty {
-                    if let Ty::Optional(_) = expected {
-                        return Ok(expected.clone());
-                    }
+                if let Some(expected) = &self.current_expected_ty
+                    && let Ty::Optional(_) = expected
+                {
+                    return Ok(expected.clone());
                 }
                 // Default to Option<Void> if context is unknown
                 Ok(Ty::Optional(Box::new(Ty::Void)))
             }
             Expr::Ident(id, name, generic_args, span) => {
                 self.used_bindings.insert(*id);
-                if !self.initialized_bindings.contains(id) {
-                    if let Some((_, name, _)) = self
+                if !self.initialized_bindings.contains(id)
+                    && let Some((_, name, _)) = self
                         .declared_bindings
                         .iter()
                         .find(|(d_id, _, _)| d_id == id)
-                    {
-                        self.reporter.report(
-                            Diagnostic::error(format!(
-                                "Non-nullable variable '{}' must be assigned before it can be used",
-                                name
-                            ))
-                            .with_span(*span)
-                            .with_code(ErrorCode::UninitializedVariable),
-                        );
-                    }
+                {
+                    self.reporter.report(
+                        Diagnostic::error(format!(
+                            "Non-nullable variable '{}' must be assigned before it can be used",
+                            name
+                        ))
+                        .with_span(*span)
+                        .with_code(ErrorCode::UninitializedVariable),
+                    );
                 }
                 let mangled_name = if let Some(curr) = &self.current_module {
                     if let Some(scope) = self.module_scopes.get(curr) {
                         scope
                             .visible_symbols
-                            .get(name)
+                            .get(&name.to_string())
                             .cloned()
-                            .unwrap_or_else(|| name.clone())
+                            .unwrap_or_else(|| name.to_string())
                     } else {
-                        name.clone()
+                        name.to_string()
                     }
                 } else {
-                    name.clone()
+                    name.to_string()
                 };
 
                 if let Some(ty) = self.env.get(id).cloned() {
                     self.symbol_references.entry(*id).or_default().push(*span);
                     Ok(ty)
                 } else if let Some(ty) = self.global_functions.get(&mangled_name).cloned() {
-                    self.used_bindings_by_name.insert(name.clone());
+                    self.used_bindings_by_name.insert(name.to_string());
                     self.resolved_global_names.insert(*id, mangled_name.clone());
                     self.local_types.insert(*id, ty.clone());
                     Ok(ty)
@@ -1555,7 +1655,12 @@ impl TypeChecker {
                     if let Ty::Struct(hir_id) | Ty::Class(hir_id) = *inner {
                         if let Ty::Struct(_) = *inner {
                             if let Some(fields) = self.struct_defs.get(&hir_id) {
-                                for (fname, fty, _, _) in fields {
+                                for ResolvedField {
+                                    name: fname,
+                                    ty: fty,
+                                    ..
+                                } in fields
+                                {
                                     if fname == member {
                                         return Ok(Ty::Optional(Box::new(fty.clone())));
                                     }
@@ -1563,7 +1668,12 @@ impl TypeChecker {
                             }
                         } else {
                             if let Some(fields) = self.class_defs.get(&hir_id) {
-                                for (fname, fty, _, _) in fields {
+                                for ResolvedField {
+                                    name: fname,
+                                    ty: fty,
+                                    ..
+                                } in fields
+                                {
                                     if fname == member {
                                         return Ok(Ty::Optional(Box::new(fty.clone())));
                                     }
@@ -1586,40 +1696,33 @@ impl TypeChecker {
                 span: _,
             } => {
                 // Intercept module aliases (e.g. `d.hello` where `d` is an alias for `demo_lib`)
-                if let Expr::Ident(id, name, _, _) = &**object {
-                    if let Some(curr) = &self.current_module {
-                        if let Some(scope) = self.module_scopes.get(curr) {
-                            if let Some(target_module) = scope.aliases.get(name) {
-                                // It IS a module alias access!
-                                if let Some(target_scope) = self.module_scopes.get(target_module) {
-                                    if let Some(mangled_name) =
-                                        target_scope.visible_symbols.get(member)
-                                    {
-                                        // The object is a module reference. Record the target module so MirBuilder can use it.
-                                        self.resolved_global_names
-                                            .insert(*id, target_module.clone());
-                                        self.used_bindings_by_name.insert(member.clone());
+                if let Expr::Ident(id, name, _, _) = &**object
+                    && let Some(curr) = &self.current_module
+                    && let Some(scope) = self.module_scopes.get(curr)
+                    && let Some(target_module) = scope.aliases.get(&name.to_string())
+                {
+                    // It IS a module alias access!
+                    if let Some(target_scope) = self.module_scopes.get(target_module)
+                        && let Some(mangled_name) =
+                            target_scope.visible_symbols.get(&member.to_string())
+                    {
+                        // The object is a module reference. Record the target module so MirBuilder can use it.
+                        self.resolved_global_names
+                            .insert(*id, target_module.to_string());
+                        self.used_bindings_by_name.insert(member.to_string());
 
-                                        // Return the type of the resolved global function or type
-                                        if let Some(ty) =
-                                            self.global_functions.get(mangled_name).cloned()
-                                        {
-                                            return Ok(ty);
-                                        } else if let Some(&(hir_id, kind)) =
-                                            self.named_types.get(mangled_name)
-                                        {
-                                            let ty = if kind == 0 {
-                                                Ty::Struct(hir_id)
-                                            } else if kind == 1 {
-                                                Ty::Class(hir_id)
-                                            } else {
-                                                Ty::Enum(hir_id)
-                                            };
-                                            return Ok(ty);
-                                        }
-                                    }
-                                }
-                            }
+                        // Return the type of the resolved global function or type
+                        if let Some(ty) = self.global_functions.get(mangled_name).cloned() {
+                            return Ok(ty);
+                        } else if let Some(&(hir_id, kind)) = self.named_types.get(mangled_name) {
+                            let ty = if kind == 0 {
+                                Ty::Struct(hir_id)
+                            } else if kind == 1 {
+                                Ty::Class(hir_id)
+                            } else {
+                                Ty::Enum(hir_id)
+                            };
+                            return Ok(ty);
                         }
                     }
                 }
@@ -1639,17 +1742,26 @@ impl TypeChecker {
                             .struct_defs
                             .get(&hir_id)
                             .ok_or("Struct definition not found")?;
-                        for (fname, fty, _, is_private) in fields {
+                        for ResolvedField {
+                            name: fname,
+                            ty: fty,
+                            is_private,
+                            ..
+                        } in fields
+                        {
                             if fname == member {
                                 if *is_private {
                                     let mut can_access = false;
-                                    if let Some(current_fn) = &self.current_fn_name {
-                                        if current_fn.starts_with(&format!("{}_", struct_name)) {
-                                            can_access = true;
-                                        }
+                                    if let Some(current_fn) = &self.current_fn_name
+                                        && current_fn.starts_with(&format!("{}_", struct_name))
+                                    {
+                                        can_access = true;
                                     }
                                     if !can_access {
-                                        return Err(format!("Field '{}' of '{}' is private", member, struct_name));
+                                        return Err(format!(
+                                            "Field '{}' of '{}' is private",
+                                            member, struct_name
+                                        ));
                                     }
                                 }
                                 self.used_bindings_by_name.insert(fname.clone());
@@ -1669,7 +1781,7 @@ impl TypeChecker {
                         let method_name = format!("{}_{}", struct_name, member);
                         if let Some(mty) = self.methods_env.get(&method_name) {
                             self.used_bindings_by_name.insert(method_name.clone());
-                            let short_struct = struct_name.split('_').last().unwrap();
+                            let short_struct = struct_name.split('_').next_back().unwrap();
                             self.used_bindings_by_name
                                 .insert(format!("{}_{}", short_struct, member));
                             return Ok(mty.clone());
@@ -1690,17 +1802,26 @@ impl TypeChecker {
                             .class_defs
                             .get(&hir_id)
                             .ok_or("Class definition not found")?;
-                        for (fname, fty, _, is_private) in fields {
+                        for ResolvedField {
+                            name: fname,
+                            ty: fty,
+                            is_private,
+                            ..
+                        } in fields
+                        {
                             if fname == member {
                                 if *is_private {
                                     let mut can_access = false;
-                                    if let Some(current_fn) = &self.current_fn_name {
-                                        if current_fn.starts_with(&format!("{}_", class_name)) {
-                                            can_access = true;
-                                        }
+                                    if let Some(current_fn) = &self.current_fn_name
+                                        && current_fn.starts_with(&format!("{}_", class_name))
+                                    {
+                                        can_access = true;
                                     }
                                     if !can_access {
-                                        return Err(format!("Field '{}' of '{}' is private", member, class_name));
+                                        return Err(format!(
+                                            "Field '{}' of '{}' is private",
+                                            member, class_name
+                                        ));
                                     }
                                 }
                                 self.used_bindings_by_name.insert(fname.clone());
@@ -1720,7 +1841,7 @@ impl TypeChecker {
                         let method_name = format!("{}_{}", class_name, member);
                         if let Some(mty) = self.methods_env.get(&method_name) {
                             self.used_bindings_by_name.insert(method_name.clone());
-                            let short_class = class_name.split('_').last().unwrap();
+                            let short_class = class_name.split('_').next_back().unwrap();
                             self.used_bindings_by_name
                                 .insert(format!("{}_{}", short_class, member));
                             return Ok(mty.clone());
@@ -1762,8 +1883,12 @@ impl TypeChecker {
                         if let Ok(func_ty) = self.instantiate_generic(name, explicit_args) {
                             generic_instantiation = Some(func_ty);
                         }
-                    } else if self.generic_templates.contains_key(name) {
-                        let template = self.generic_templates.get(name).unwrap().clone();
+                    } else if self.generic_templates.contains_key(&name.to_string()) {
+                        let template = self
+                            .generic_templates
+                            .get(&name.to_string())
+                            .unwrap()
+                            .clone();
                         if let pace_hir::Decl::Function {
                             generic_params,
                             params,
@@ -1772,37 +1897,39 @@ impl TypeChecker {
                         {
                             let generic_params = generic_params.unwrap_or_default();
                             let mut inferred_args = std::collections::HashMap::new();
-                            for (i, (_, arg_expr)) in args.iter().enumerate() {
+                            for (i, pace_hir::HirCallArg { expr: arg_expr, .. }) in
+                                args.iter().enumerate()
+                            {
                                 if i < params.len() {
                                     let arg_ty = self.check_expr(arg_expr)?;
                                     let (_, _, param_ty) = &params[i];
-                                    if let pace_ast::Type::Named(ident) = param_ty {
-                                        if generic_params.iter().any(|(p, _)| p == &ident.name) {
-                                            inferred_args.insert(ident.name.clone(), arg_ty);
-                                        }
+                                    if let pace_ast::Type::Named(ident) = param_ty
+                                        && generic_params.iter().any(|(p, _)| p == &ident.name)
+                                    {
+                                        inferred_args.insert(ident.name.to_string(), arg_ty);
                                     }
                                 }
                             }
 
                             let mut ast_args = Vec::new();
                             for (param_name, _) in &generic_params {
-                                if let Some(ty) = inferred_args.get(param_name) {
+                                if let Some(ty) = inferred_args.get(&param_name.to_string()) {
                                     let ty_str = format!("{:?}", ty)
                                         .replace(" ", "")
                                         .replace("(", "_")
                                         .replace(")", "_")
                                         .replace(":", "_");
                                     ast_args.push(pace_ast::Type::Named(pace_ast::Ident {
-                                        name: ty_str,
+                                        name: pace_span::intern(&ty_str),
                                         span: *span,
                                     }));
                                 }
                             }
 
-                            if ast_args.len() == generic_params.len() {
-                                if let Ok(func_ty) = self.instantiate_generic(name, &ast_args) {
-                                    generic_instantiation = Some(func_ty);
-                                }
+                            if ast_args.len() == generic_params.len()
+                                && let Ok(func_ty) = self.instantiate_generic(name, &ast_args)
+                            {
+                                generic_instantiation = Some(func_ty);
                             }
                         }
                     }
@@ -1845,7 +1972,8 @@ impl TypeChecker {
                                 args.len()
                             ));
                         }
-                        for (i, (_, fexpr)) in args.iter().enumerate() {
+                        for (i, pace_hir::HirCallArg { expr: fexpr, .. }) in args.iter().enumerate()
+                        {
                             let fty = self.check_expr(fexpr)?;
                             if fty != param_tys[i + 1] {
                                 self.reporter.report(
@@ -1870,12 +1998,14 @@ impl TypeChecker {
                     }
 
                     let def_fields = self.struct_defs.get(&id).unwrap().clone();
-                    let mut def_map: std::collections::HashMap<_, _> =
-                        def_fields.into_iter().map(|(n, t, _, _)| (n, t)).collect();
-                    for (label, fexpr) in args {
+                    let mut def_map: std::collections::HashMap<_, _> = def_fields
+                        .into_iter()
+                        .map(|f| (f.name.clone(), f.ty.clone()))
+                        .collect();
+                    for pace_hir::HirCallArg { label, expr: fexpr } in args {
                         let fty = self.check_expr(fexpr)?;
                         if let Some(fname) = label {
-                            if let Some(expected_ty) = def_map.remove(fname) {
+                            if let Some(expected_ty) = def_map.remove(fname.as_str()) {
                                 if fty != expected_ty {
                                     self.reporter.report(
                                         Diagnostic::error(format!(
@@ -1959,7 +2089,8 @@ impl TypeChecker {
                                 args.len()
                             ));
                         }
-                        for (i, (_, fexpr)) in args.iter().enumerate() {
+                        for (i, pace_hir::HirCallArg { expr: fexpr, .. }) in args.iter().enumerate()
+                        {
                             let fty = self.check_expr(fexpr)?;
                             if fty != param_tys[i + 1] {
                                 self.reporter.report(
@@ -1984,12 +2115,14 @@ impl TypeChecker {
                     }
 
                     let def_fields = self.class_defs.get(&id).unwrap().clone();
-                    let mut def_map: std::collections::HashMap<_, _> =
-                        def_fields.into_iter().map(|(n, t, _, _)| (n, t)).collect();
-                    for (label, fexpr) in args {
+                    let mut def_map: std::collections::HashMap<_, _> = def_fields
+                        .into_iter()
+                        .map(|f| (f.name.clone(), f.ty.clone()))
+                        .collect();
+                    for pace_hir::HirCallArg { label, expr: fexpr } in args {
                         let fty = self.check_expr(fexpr)?;
                         if let Some(fname) = label {
-                            if let Some(expected_ty) = def_map.remove(fname) {
+                            if let Some(expected_ty) = def_map.remove(fname.as_str()) {
                                 if fty != expected_ty {
                                     self.reporter.report(
                                         Diagnostic::error(format!(
@@ -2042,91 +2175,89 @@ impl TypeChecker {
                     return Ok(Ty::Class(id));
                 }
 
-                if let Ty::Function(_, ret_ty) = &callee_ty {
-                    if let Ty::Enum(enum_id) = **ret_ty {
-                        // Enum variant instantiation!
-                        let variants = self.enum_defs.get(&enum_id).unwrap();
-                        let mut variant_name = "";
-                        if let Expr::MemberAccess { member, .. } = &**callee {
-                            variant_name = member;
+                if let Ty::Function(_, ret_ty) = &callee_ty
+                    && let Ty::Enum(enum_id) = **ret_ty
+                {
+                    // Enum variant instantiation!
+                    let variants = self.enum_defs.get(&enum_id).unwrap();
+                    let mut variant_name = "";
+                    if let Expr::MemberAccess { member, .. } = &**callee {
+                        variant_name = member;
+                    }
+                    let mut def_fields = Vec::new();
+                    for v in variants {
+                        if v.name == variant_name
+                            && let Some(f) = &v.fields
+                        {
+                            def_fields = f.clone();
                         }
-                        let mut def_fields = Vec::new();
-                        for v in variants {
-                            if v.name == variant_name {
-                                if let Some(f) = &v.fields {
-                                    def_fields = f.clone();
-                                }
-                            }
-                        }
-                        let mut def_map: std::collections::HashMap<_, _> = def_fields
-                            .into_iter()
-                            .map(|(n, t)| (n, self.resolve_type(&t).unwrap_or(Ty::Int)))
-                            .collect();
-                        for (label, fexpr) in args {
-                            let fty = self.check_expr(fexpr)?;
-                            if let Some(fname) = label {
-                                if let Some(expected_ty) = def_map.remove(fname) {
-                                    if fty != expected_ty {
-                                        self.reporter.report(
-                                            Diagnostic::error(format!(
-                                                "Field '{}' expects type {:?}, got {:?}",
-                                                fname, expected_ty, fty
-                                            ))
-                                            .with_span(*span)
-                                            .with_code(ErrorCode::TypeMismatch),
-                                        );
-                                        return Err(format!(
-                                            "Field '{}' expects type {:?}, got {:?}",
-                                            fname, expected_ty, fty
-                                        ));
-                                    }
-                                } else {
+                    }
+                    let mut def_map: std::collections::HashMap<_, _> = def_fields
+                        .into_iter()
+                        .map(|(n, t)| (n, self.resolve_type(&t).unwrap_or(Ty::Int)))
+                        .collect();
+                    for pace_hir::HirCallArg { label, expr: fexpr } in args {
+                        let fty = self.check_expr(fexpr)?;
+                        if let Some(fname) = label {
+                            if let Some(expected_ty) = def_map.remove(fname) {
+                                if fty != expected_ty {
                                     self.reporter.report(
                                         Diagnostic::error(format!(
-                                            "Unknown field '{}' in variant instantiation",
-                                            fname
+                                            "Field '{}' expects type {:?}, got {:?}",
+                                            fname, expected_ty, fty
                                         ))
                                         .with_span(*span)
-                                        .with_code(ErrorCode::UnknownField),
+                                        .with_code(ErrorCode::TypeMismatch),
                                     );
                                     return Err(format!(
-                                        "Unknown field '{}' in variant instantiation",
-                                        fname
+                                        "Field '{}' expects type {:?}, got {:?}",
+                                        fname, expected_ty, fty
                                     ));
                                 }
                             } else {
                                 self.reporter.report(
-                                    Diagnostic::error(
-                                        "Variant instantiation requires named arguments",
-                                    )
+                                    Diagnostic::error(format!(
+                                        "Unknown field '{}' in variant instantiation",
+                                        fname
+                                    ))
+                                    .with_span(*span)
+                                    .with_code(ErrorCode::UnknownField),
+                                );
+                                return Err(format!(
+                                    "Unknown field '{}' in variant instantiation",
+                                    fname
+                                ));
+                            }
+                        } else {
+                            self.reporter.report(
+                                Diagnostic::error("Variant instantiation requires named arguments")
                                     .with_span(*span)
                                     .with_code(ErrorCode::InvalidArguments),
-                                );
-                                return Err(
-                                    "Variant instantiation requires named arguments".to_string()
-                                );
-                            }
-                        }
-                        def_map.retain(|_, ty| !matches!(ty, Ty::Optional(_)));
-                        if !def_map.is_empty() {
-                            self.reporter.report(
-                                Diagnostic::error(format!(
-                                    "Missing fields in variant instantiation: {:?}",
-                                    def_map.keys()
-                                ))
-                                .with_span(*span)
-                                .with_code(ErrorCode::MissingFields),
                             );
-                            return Err(format!(
+                            return Err(
+                                "Variant instantiation requires named arguments".to_string()
+                            );
+                        }
+                    }
+                    def_map.retain(|_, ty| !matches!(ty, Ty::Optional(_)));
+                    if !def_map.is_empty() {
+                        self.reporter.report(
+                            Diagnostic::error(format!(
                                 "Missing fields in variant instantiation: {:?}",
                                 def_map.keys()
-                            ));
-                        }
-                        return Ok(Ty::Enum(enum_id));
+                            ))
+                            .with_span(*span)
+                            .with_code(ErrorCode::MissingFields),
+                        );
+                        return Err(format!(
+                            "Missing fields in variant instantiation: {:?}",
+                            def_map.keys()
+                        ));
                     }
+                    return Ok(Ty::Enum(enum_id));
                 }
 
-                for (_, arg) in args {
+                for pace_hir::HirCallArg { expr: arg, .. } in args {
                     self.check_expr(arg)?;
                 }
                 self.function_calls.push((*span, callee_ty.clone()));
@@ -2180,7 +2311,7 @@ impl TypeChecker {
                         self.env
                             .get(id)
                             .cloned()
-                            .ok_or(format!("Cannot infer type for unbound variable"))?
+                            .ok_or("Cannot infer type for unbound variable".to_string())?
                     }
                     _ => self.check_expr(target)?,
                 };
@@ -2189,24 +2320,24 @@ impl TypeChecker {
                 if let Expr::Ident(id, _, _, _) = &**target {
                     let was_initialized = self.initialized_bindings.contains(id);
                     self.initialized_bindings.insert(*id); // Mark as initialized upon assignment
-                    if let Some(&is_mut) = self.mutability_env.get(id) {
-                        if !is_mut && was_initialized {
-                            self.reporter.report(Diagnostic::error("Cannot reassign immutable variable")
+                    if let Some(&is_mut) = self.mutability_env.get(id)
+                        && !is_mut
+                        && was_initialized
+                    {
+                        self.reporter.report(Diagnostic::error("Cannot reassign immutable variable")
                                 .with_span(*span)
                                 .with_code(ErrorCode::ImmutableAssignment)
                                 .with_hint("Declare this variable with 'var' instead of 'let' to make it mutable"));
-                        }
                     }
                 } else if let Expr::MemberAccess { object, member, .. } = &**target {
-                    if let Expr::Ident(id, _, _, _) = &**object {
-                        if let Some(&is_mut) = self.mutability_env.get(id) {
-                            if !is_mut {
-                                self.reporter.report(Diagnostic::error("Cannot mutate field of immutable variable")
+                    if let Expr::Ident(id, _, _, _) = &**object
+                        && let Some(&is_mut) = self.mutability_env.get(id)
+                        && !is_mut
+                    {
+                        self.reporter.report(Diagnostic::error("Cannot mutate field of immutable variable")
                                     .with_span(*span)
                                     .with_code(ErrorCode::ImmutableAssignment)
                                     .with_hint("Declare this variable with 'var' instead of 'let' to make it mutable"));
-                            }
-                        }
                     }
 
                     let obj_ty = self.check_expr(object)?;
@@ -2218,7 +2349,12 @@ impl TypeChecker {
                             self.struct_defs.get(&id)
                         };
                         if let Some(fields) = fields {
-                            for (fname, _, is_mut, _) in fields {
+                            for ResolvedField {
+                                name: fname,
+                                is_mut,
+                                ..
+                            } in fields
+                            {
                                 if fname == member {
                                     field_is_mut = *is_mut;
                                     break;
@@ -2229,14 +2365,12 @@ impl TypeChecker {
 
                     if !field_is_mut {
                         let mut allowed = false;
-                        if let Expr::Ident(_, name, _, _) = &**object {
-                            if name == "self" {
-                                if let Some(fn_name) = &self.current_fn_name {
-                                    if fn_name.ends_with("_init") || fn_name == "init" {
-                                        allowed = true;
-                                    }
-                                }
-                            }
+                        if let Expr::Ident(_, name, _, _) = &**object
+                            && name == "self"
+                            && let Some(fn_name) = &self.current_fn_name
+                            && (fn_name.ends_with("_init") || fn_name == "init")
+                        {
+                            allowed = true;
                         }
 
                         if !allowed {
@@ -2255,12 +2389,11 @@ impl TypeChecker {
 
                 let val_ty = val_ty_res?;
                 let mut type_matches = target_ty == val_ty;
-                if !type_matches {
-                    if let (Ty::Optional(_), Ty::Optional(inner_val)) = (&target_ty, &val_ty) {
-                        if **inner_val == Ty::Void {
-                            type_matches = true;
-                        }
-                    }
+                if !type_matches
+                    && let (Ty::Optional(_), Ty::Optional(inner_val)) = (&target_ty, &val_ty)
+                    && **inner_val == Ty::Void
+                {
+                    type_matches = true;
                 }
 
                 if !type_matches {
@@ -2285,26 +2418,18 @@ impl TypeChecker {
 
                 for arm in arms {
                     let mut arm_env = HashMap::new();
-                    if let pace_hir::Pattern::Variant { name, fields, .. } = &arm.pattern {
-                        if let Ty::Enum(enum_id) = subject_ty {
-                            if let Some(variants) = self.enum_defs.get(&enum_id).cloned() {
-                                if let Some(v) = variants.iter().find(|v| v.name == *name) {
-                                    if let Some(vfields) = &v.fields {
-                                        if let Some(pfields) = fields {
-                                            if vfields.len() == pfields.len() {
-                                                for (i, (pf_id, _, _)) in pfields.iter().enumerate()
-                                                {
-                                                    let fty = self
-                                                        .resolve_type(&vfields[i].1)
-                                                        .unwrap_or(Ty::Int);
-                                                    arm_env.insert(*pf_id, fty.clone());
-                                                    self.local_types.insert(*pf_id, fty);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                    if let pace_hir::Pattern::Variant { name, fields, .. } = &arm.pattern
+                        && let Ty::Enum(enum_id) = subject_ty
+                        && let Some(variants) = self.enum_defs.get(&enum_id).cloned()
+                        && let Some(v) = variants.iter().find(|v| v.name == *name)
+                        && let Some(vfields) = &v.fields
+                        && let Some(pfields) = fields
+                        && vfields.len() == pfields.len()
+                    {
+                        for (i, (pf_id, _, _)) in pfields.iter().enumerate() {
+                            let fty = self.resolve_type(&vfields[i].1).unwrap_or(Ty::Int);
+                            arm_env.insert(*pf_id, fty.clone());
+                            self.local_types.insert(*pf_id, fty);
                         }
                     }
 
@@ -2316,18 +2441,19 @@ impl TypeChecker {
                     let arm_ty = self.check_expr(&arm.body)?;
                     self.env = outer_env;
 
-                    if ret_ty.is_none() {
+                    if let Some(expected) = &ret_ty {
+                        if *expected != arm_ty {
+                            self.reporter.report(
+                                Diagnostic::error(format!(
+                                    "Match arms have incompatible types: {:?} and {:?}",
+                                    expected, arm_ty
+                                ))
+                                .with_span(arm.span)
+                                .with_code(ErrorCode::TypeMismatch),
+                            );
+                        }
+                    } else {
                         ret_ty = Some(arm_ty);
-                    } else if ret_ty != Some(arm_ty.clone()) {
-                        self.reporter.report(
-                            Diagnostic::error(format!(
-                                "Match arms have incompatible types: {:?} and {:?}",
-                                ret_ty.as_ref().unwrap(),
-                                arm_ty
-                            ))
-                            .with_span(arm.span)
-                            .with_code(ErrorCode::TypeMismatch),
-                        );
                     }
                 }
 
@@ -2419,18 +2545,18 @@ impl TypeChecker {
         let mut new_decl = template.clone();
 
         mapping.insert(
-            template_name.to_string(),
+            pace_span::intern(template_name),
             pace_ast::Type::Named(pace_ast::Ident {
-                name: mono_name.clone(),
+                name: pace_span::intern(&mono_name),
                 span: pace_span::Span::DUMMY,
             }),
         );
 
-        let short_template_name = template_name.split('_').last().unwrap().to_string();
+        let short_template_name = template_name.split('_').next_back().unwrap().to_string();
         mapping.insert(
-            short_template_name,
+            pace_span::intern(&short_template_name),
             pace_ast::Type::Named(pace_ast::Ident {
-                name: mono_name.clone(),
+                name: pace_span::intern(&mono_name),
                 span: pace_span::Span::DUMMY,
             }),
         );
@@ -2457,15 +2583,15 @@ impl TypeChecker {
                 ..
             } => {
                 *id = self.generate_id();
-                *name = mono_name.clone();
+                *name = pace_span::intern(&mono_name);
                 *generic_params = None;
-                for (_, ty, _, _, _) in fields.iter_mut() {
+                for pace_hir::HirFieldDef { ty, .. } in fields.iter_mut() {
                     *ty = substitute_type(ty, &mapping);
                 }
-                for (_, ty, _, _) in static_fields.iter_mut() {
+                for pace_hir::HirStaticFieldDef { ty, .. } in static_fields.iter_mut() {
                     *ty = substitute_type(ty, &mapping);
                 }
-                for (_, ty, _, _) in const_fields.iter_mut() {
+                for pace_hir::HirConstFieldDef { ty, .. } in const_fields.iter_mut() {
                     *ty = substitute_type(ty, &mapping);
                 }
                 for method in methods.iter_mut() {
@@ -2476,12 +2602,12 @@ impl TypeChecker {
                         ..
                     } = method
                     {
-                        let short_template_name = template_name.split('_').last().unwrap();
+                        let short_template_name = template_name.split('_').next_back().unwrap();
                         let base_method_name = m_name
                             .strip_prefix(&format!("{}_", short_template_name))
                             .unwrap_or(m_name)
                             .to_string();
-                        *m_name = format!("{}_{}", mono_name, base_method_name);
+                        *m_name = pace_span::intern(&format!("{}_{}", mono_name, base_method_name));
                         for (_, _, param_ty) in params.iter_mut() {
                             *param_ty = substitute_type(param_ty, &mapping);
                         }
@@ -2499,7 +2625,7 @@ impl TypeChecker {
                 ..
             } => {
                 *id = self.generate_id();
-                *name = mono_name.clone();
+                *name = pace_span::intern(&mono_name);
                 *generic_params = None;
                 for v in variants.iter_mut() {
                     v.id = self.generate_id();
@@ -2519,7 +2645,7 @@ impl TypeChecker {
                 ..
             } => {
                 *id = self.generate_id();
-                *name = mono_name.clone();
+                *name = pace_span::intern(&mono_name);
                 *generic_params = None;
                 for (_, _, ty) in params.iter_mut() {
                     *ty = substitute_type(ty, &mapping);
@@ -2559,11 +2685,23 @@ impl TypeChecker {
             pace_hir::Decl::Struct {
                 id, name, fields, ..
             } => {
-                self.named_types.insert(name.clone(), (*id, 0));
+                self.named_types.insert(name.to_string(), (*id, 0));
                 let mut resolved_fields = Vec::new();
-                for (f_name, f_ty, _, is_pub, is_private) in fields {
+                for pace_hir::HirFieldDef {
+                    name: f_name,
+                    ty: f_ty,
+                    is_mut: is_pub,
+                    is_private,
+                    ..
+                } in fields
+                {
                     let ty = self.resolve_type(f_ty).unwrap_or(Ty::Int);
-                    resolved_fields.push((f_name.clone(), ty, *is_pub, *is_private));
+                    resolved_fields.push(ResolvedField {
+                        name: f_name.to_string(),
+                        ty: ty.clone(),
+                        is_mut: *is_pub,
+                        is_private: *is_private,
+                    });
                 }
                 self.struct_defs.insert(*id, resolved_fields);
             }
@@ -2574,11 +2712,23 @@ impl TypeChecker {
                 methods,
                 ..
             } => {
-                self.named_types.insert(name.clone(), (*id, 1));
+                self.named_types.insert(name.to_string(), (*id, 1));
                 let mut resolved_fields = Vec::new();
-                for (f_name, f_ty, _, is_pub, is_private) in fields {
+                for pace_hir::HirFieldDef {
+                    name: f_name,
+                    ty: f_ty,
+                    is_mut: is_pub,
+                    is_private,
+                    ..
+                } in fields
+                {
                     let ty = self.resolve_type(f_ty).unwrap_or(Ty::Int);
-                    resolved_fields.push((f_name.clone(), ty, *is_pub, *is_private));
+                    resolved_fields.push(ResolvedField {
+                        name: f_name.to_string(),
+                        ty: ty.clone(),
+                        is_mut: *is_pub,
+                        is_private: *is_private,
+                    });
                 }
                 self.class_defs.insert(*id, resolved_fields);
 
@@ -2601,21 +2751,27 @@ impl TypeChecker {
                         } else {
                             Ty::Void
                         };
-                        self.methods_env
-                            .insert(m_name.clone(), Ty::Function(param_tys, Box::new(ret_ty)));
+                        self.methods_env.insert(
+                            m_name.to_string(),
+                            Ty::Function(param_tys, Box::new(ret_ty)),
+                        );
                     }
                 }
 
                 let mut vtable = Vec::new();
                 for method in methods {
-                    if let pace_hir::Decl::Function { name: m_name, .. } = method {
-                        if let Some(ty) = self.methods_env.get(m_name) {
-                            let base_name = m_name
-                                .strip_prefix(&format!("{}_", name))
-                                .unwrap_or(m_name)
-                                .to_string();
-                            vtable.push((base_name, ty.clone(), m_name.clone()));
-                        }
+                    if let pace_hir::Decl::Function { name: m_name, .. } = method
+                        && let Some(ty) = self.methods_env.get(&m_name.to_string())
+                    {
+                        let base_name = m_name
+                            .strip_prefix(&format!("{}_", name))
+                            .unwrap_or(m_name)
+                            .to_string();
+                        vtable.push(VTableEntry {
+                            name: base_name.clone(),
+                            ty: ty.clone(),
+                            mangled_name: m_name.to_string(),
+                        });
                     }
                 }
                 self.class_vtables.insert(*id, vtable);
@@ -2623,7 +2779,7 @@ impl TypeChecker {
             pace_hir::Decl::Enum {
                 id, name, variants, ..
             } => {
-                self.named_types.insert(name.clone(), (*id, 2));
+                self.named_types.insert(name.to_string(), (*id, 2));
                 self.enum_defs.insert(*id, variants.clone());
             }
             _ => {}
@@ -2650,7 +2806,7 @@ impl TypeChecker {
                 }
                 Ok(Ty::Enum(id))
             }
-            pace_hir::Decl::Function { id: _, .. } => Ok(Ty::Function(
+            pace_hir::Decl::Function { .. } => Ok(Ty::Function(
                 vec![], // A bit hacky, but Expr::Call doesn't actually use this Ty::Function for the callee type if it's already instantiated
                 Box::new(Ty::Void),
             )),
@@ -2667,9 +2823,13 @@ impl TypeChecker {
             Ty::Void => "void".to_string(),
             Ty::Optional(inner) => format!("?{}", self.display_ty(inner)),
             Ty::Function(args, ret) => {
-                let args_str = args.iter().map(|a| self.display_ty(a)).collect::<Vec<_>>().join(", ");
+                let args_str = args
+                    .iter()
+                    .map(|a| self.display_ty(a))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 format!("fn({}) -> {}", args_str, self.display_ty(ret))
-            },
+            }
             Ty::Struct(id) | Ty::Class(id) | Ty::Enum(id) => {
                 // Try to find the name in named_types (reverse lookup)
                 for (name, (nid, _)) in &self.named_types {
@@ -2677,7 +2837,7 @@ impl TypeChecker {
                         if let Some(clean) = self.display_names.get(name) {
                             return clean.clone();
                         }
-                        return name.clone();
+                        return name.to_string();
                     }
                 }
                 format!("{:?}", ty)
@@ -2688,7 +2848,7 @@ impl TypeChecker {
 
 pub fn substitute_type(
     ty: &pace_ast::Type,
-    mapping: &std::collections::HashMap<String, pace_ast::Type>,
+    mapping: &std::collections::HashMap<pace_span::Symbol, pace_ast::Type>,
 ) -> pace_ast::Type {
     match ty {
         pace_ast::Type::Named(id) => {

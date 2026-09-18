@@ -19,7 +19,7 @@ impl LoweringContext {
                 span,
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name.clone(), id);
+                self.scope.insert(name.name, id);
                 let lowered_value = match value {
                     Some(expr) => Some(self.lower_expr(expr)?),
                     None => None,
@@ -41,7 +41,7 @@ impl LoweringContext {
                 span,
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name.clone(), id);
+                self.scope.insert(name.name, id);
                 let lowered_value = match value {
                     Some(expr) => Some(self.lower_expr(expr)?),
                     None => None,
@@ -68,38 +68,72 @@ impl LoweringContext {
                 ..
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name.clone(), id);
+                self.scope.insert(name.name, id);
                 let mut lowered_fields = Vec::new();
-                for (field_name, field_ty, field_val, is_mut, is_field_private) in fields.clone() {
+                for pace_ast::FieldDef {
+                    name: field_name,
+                    ty: field_ty,
+                    default_value: field_val,
+                    is_mut,
+                    is_private: is_field_private,
+                } in fields.clone()
+                {
                     let lowered_val = match field_val {
                         Some(v) => Some(self.lower_expr(v)?),
                         None => None,
                     };
-                    lowered_fields.push((
-                        field_name.name.clone(),
-                        field_ty.clone(),
-                        lowered_val,
+                    lowered_fields.push(crate::hir::HirFieldDef {
+                        name: field_name.name,
+                        ty: field_ty.clone(),
+                        default_value: lowered_val,
                         is_mut,
-                        is_field_private,
-                    ));
+                        is_private: is_field_private,
+                    });
                 }
 
                 let mut lowered_static = Vec::new();
-                for (sf_name, sf_ty, sf_val, is_field_private) in static_fields {
-                    lowered_static.push((sf_name.name, sf_ty, self.lower_expr(sf_val)?, is_field_private));
+                for pace_ast::StaticFieldDef {
+                    name: sf_name,
+                    ty: sf_ty,
+                    value: sf_val,
+                    is_private: is_field_private,
+                } in static_fields
+                {
+                    lowered_static.push(crate::hir::HirStaticFieldDef {
+                        name: sf_name.name,
+                        ty: sf_ty,
+                        value: self.lower_expr(sf_val)?,
+                        is_private: is_field_private,
+                    });
                 }
                 let mut lowered_const = Vec::new();
-                for (cf_name, cf_ty, cf_val, is_field_private) in const_fields {
-                    lowered_const.push((cf_name.name, cf_ty, self.lower_expr(cf_val)?, is_field_private));
+                for pace_ast::ConstFieldDef {
+                    name: cf_name,
+                    ty: cf_ty,
+                    value: cf_val,
+                    is_private: is_field_private,
+                } in const_fields
+                {
+                    lowered_const.push(crate::hir::HirConstFieldDef {
+                        name: cf_name.name,
+                        ty: cf_ty,
+                        value: self.lower_expr(cf_val)?,
+                        is_private: is_field_private,
+                    });
                 }
 
                 let mut initializers = Vec::new();
-                for (field_name, _, field_val, _, _) in &fields {
+                for pace_ast::FieldDef {
+                    name: field_name,
+                    default_value: field_val,
+                    ..
+                } in &fields
+                {
                     if let Some(val) = field_val {
                         let lhs = ast::Expr::MemberAccess {
                             object: Box::new(ast::Expr::Ident(
                                 ast::Ident {
-                                    name: "self".to_string(),
+                                    name: pace_span::intern("self"),
                                     span: field_name.span,
                                 },
                                 None,
@@ -126,19 +160,18 @@ impl LoweringContext {
                         if let ast::Decl::Function {
                             name: m_name, body, ..
                         } = method
+                            && m_name.name == "init"
                         {
-                            if m_name.name == "init" {
-                                has_init = true;
-                                for (i, init) in initializers.iter().enumerate() {
-                                    body.statements.insert(i, init.clone());
-                                }
+                            has_init = true;
+                            for (i, init) in initializers.iter().enumerate() {
+                                body.statements.insert(i, init.clone());
                             }
                         }
                     }
                     if !has_init {
                         let synthetic_init = ast::Decl::Function {
                             name: ast::Ident {
-                                name: "init".to_string(),
+                                name: pace_span::intern("init"),
                                 span,
                             },
                             generic_params: None,
@@ -175,7 +208,7 @@ impl LoweringContext {
                         if !is_static {
                             new_params.push((
                                 ast::Ident {
-                                    name: "self".to_string(),
+                                    name: pace_span::intern("self"),
                                     span: m_name.span,
                                 },
                                 ast::Type::Named(name.clone()),
@@ -184,7 +217,7 @@ impl LoweringContext {
                         new_params.extend(params);
                         let m_decl = ast::Decl::Function {
                             name: ast::Ident {
-                                name: format!("{}_{}", name.name, m_name.name),
+                                name: pace_span::intern(&format!("{}_{}", name.name, m_name.name)),
                                 span: m_name.span,
                             },
                             generic_params: m_generic_params,
@@ -235,32 +268,72 @@ impl LoweringContext {
                 ..
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name.clone(), id);
+                self.scope.insert(name.name, id);
                 let mut lowered_fields = Vec::new();
-                for (field_name, field_ty, field_val, is_mut, is_field_private) in fields.clone() {
+                for pace_ast::FieldDef {
+                    name: field_name,
+                    ty: field_ty,
+                    default_value: field_val,
+                    is_mut,
+                    is_private: is_field_private,
+                } in fields.clone()
+                {
                     let lowered_val = match field_val {
                         Some(v) => Some(self.lower_expr(v)?),
                         None => None,
                     };
-                    lowered_fields.push((field_name.name, field_ty, lowered_val, is_mut, is_field_private));
+                    lowered_fields.push(crate::hir::HirFieldDef {
+                        name: field_name.name,
+                        ty: field_ty,
+                        default_value: lowered_val,
+                        is_mut,
+                        is_private: is_field_private,
+                    });
                 }
 
                 let mut lowered_static = Vec::new();
-                for (sf_name, sf_ty, sf_val, is_field_private) in static_fields {
-                    lowered_static.push((sf_name.name, sf_ty, self.lower_expr(sf_val)?, is_field_private));
+                for pace_ast::StaticFieldDef {
+                    name: sf_name,
+                    ty: sf_ty,
+                    value: sf_val,
+                    is_private: is_field_private,
+                } in static_fields
+                {
+                    lowered_static.push(crate::hir::HirStaticFieldDef {
+                        name: sf_name.name,
+                        ty: sf_ty,
+                        value: self.lower_expr(sf_val)?,
+                        is_private: is_field_private,
+                    });
                 }
                 let mut lowered_const = Vec::new();
-                for (cf_name, cf_ty, cf_val, is_field_private) in const_fields {
-                    lowered_const.push((cf_name.name, cf_ty, self.lower_expr(cf_val)?, is_field_private));
+                for pace_ast::ConstFieldDef {
+                    name: cf_name,
+                    ty: cf_ty,
+                    value: cf_val,
+                    is_private: is_field_private,
+                } in const_fields
+                {
+                    lowered_const.push(crate::hir::HirConstFieldDef {
+                        name: cf_name.name,
+                        ty: cf_ty,
+                        value: self.lower_expr(cf_val)?,
+                        is_private: is_field_private,
+                    });
                 }
 
                 let mut initializers = Vec::new();
-                for (field_name, _, field_val, _, _) in &fields {
+                for pace_ast::FieldDef {
+                    name: field_name,
+                    default_value: field_val,
+                    ..
+                } in &fields
+                {
                     if let Some(val) = field_val {
                         let lhs = ast::Expr::MemberAccess {
                             object: Box::new(ast::Expr::Ident(
                                 ast::Ident {
-                                    name: "self".to_string(),
+                                    name: pace_span::intern("self"),
                                     span: field_name.span,
                                 },
                                 None,
@@ -287,35 +360,28 @@ impl LoweringContext {
                         if let ast::Decl::Function {
                             name: m_name, body, ..
                         } = method
+                            && m_name.name == "init"
                         {
-                            if m_name.name == "init" {
-                                has_init = true;
-                                let mut inject_idx = 0;
-                                if let Some(first_stmt) = body.statements.first() {
-                                    if let ast::Stmt::ExprStmt(ast::Expr::Call { callee, .. }, _) =
-                                        first_stmt
-                                    {
-                                        if let ast::Expr::MemberAccess { object, member, .. } =
-                                            &**callee
-                                        {
-                                            if let ast::Expr::Super(_) = &**object {
-                                                if member.name == "init" {
-                                                    inject_idx = 1;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                for (i, init) in initializers.iter().enumerate() {
-                                    body.statements.insert(inject_idx + i, init.clone());
-                                }
+                            has_init = true;
+                            let mut inject_idx = 0;
+                            if let Some(first_stmt) = body.statements.first()
+                                && let ast::Stmt::ExprStmt(ast::Expr::Call { callee, .. }, _) =
+                                    first_stmt
+                                && let ast::Expr::MemberAccess { object, member, .. } = &**callee
+                                && let ast::Expr::Super(_) = &**object
+                                && member.name == "init"
+                            {
+                                inject_idx = 1;
+                            }
+                            for (i, init) in initializers.iter().enumerate() {
+                                body.statements.insert(inject_idx + i, init.clone());
                             }
                         }
                     }
                     if !has_init {
                         let synthetic_init = ast::Decl::Function {
                             name: ast::Ident {
-                                name: "init".to_string(),
+                                name: pace_span::intern("init"),
                                 span,
                             },
                             generic_params: None,
@@ -352,7 +418,7 @@ impl LoweringContext {
                         if !is_static {
                             new_params.push((
                                 ast::Ident {
-                                    name: "self".to_string(),
+                                    name: pace_span::intern("self"),
                                     span: m_name.span,
                                 },
                                 ast::Type::Named(name.clone()),
@@ -361,7 +427,7 @@ impl LoweringContext {
                         new_params.extend(params);
                         let m_decl = ast::Decl::Function {
                             name: ast::Ident {
-                                name: format!("{}_{}", name.name, m_name.name),
+                                name: pace_span::intern(&format!("{}_{}", name.name, m_name.name)),
                                 span: m_name.span,
                             },
                             generic_params: m_generic_params,
@@ -409,7 +475,7 @@ impl LoweringContext {
                 ..
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name.clone(), id);
+                self.scope.insert(name.name, id);
 
                 let mut lowered_methods = Vec::new();
                 for method in methods {
@@ -429,7 +495,7 @@ impl LoweringContext {
                         if !is_static {
                             new_params.push((
                                 ast::Ident {
-                                    name: "self".to_string(),
+                                    name: pace_span::intern("self"),
                                     span: m_name.span,
                                 },
                                 ast::Type::Named(name.clone()),
@@ -438,7 +504,7 @@ impl LoweringContext {
                         new_params.extend(params);
                         let m_decl = ast::Decl::Function {
                             name: ast::Ident {
-                                name: format!("{}_{}", name.name, m_name.name),
+                                name: pace_span::intern(&format!("{}_{}", name.name, m_name.name)),
                                 span: m_name.span,
                             },
                             generic_params: m_generic_params,
@@ -482,11 +548,11 @@ impl LoweringContext {
                 span,
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name.clone(), id);
+                self.scope.insert(name.name, id);
                 let mut lowered_variants = Vec::new();
                 for v in variants {
                     let var_id = self.generate_id();
-                    self.scope.insert(v.name.name.clone(), var_id);
+                    self.scope.insert(v.name.name, var_id);
 
                     let mut lowered_fields = None;
                     if let Some(fields) = v.fields {
@@ -539,7 +605,7 @@ impl LoweringContext {
                 let mut lowered_params = Vec::new();
                 for (param_name, param_ty) in params {
                     let param_id = self.generate_id();
-                    self.scope.insert(param_name.name.clone(), param_id);
+                    self.scope.insert(param_name.name, param_id);
                     lowered_params.push((param_id, param_name.name, param_ty));
                 }
 

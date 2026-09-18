@@ -18,7 +18,7 @@ impl<'a> Parser<'a> {
                         span,
                     }) => {
                         let ident = Ident {
-                            name: name.to_string(),
+                            name: pace_span::intern(name),
                             span: *span,
                         };
                         self.advance();
@@ -54,14 +54,17 @@ impl<'a> Parser<'a> {
 
                         let mut parsed_expr = self.parse_expr()?;
 
-                        if let Expr::Ident(ref ident, _) = parsed_expr {
-                            if self.check(&TokenKind::Colon) {
-                                self.advance(); // consume `:`
-                                label = Some(ident.clone());
-                                parsed_expr = self.parse_expr()?;
-                            }
+                        if let Expr::Ident(ref ident, _) = parsed_expr
+                            && self.check(&TokenKind::Colon)
+                        {
+                            self.advance(); // consume `:`
+                            label = Some(ident.clone());
+                            parsed_expr = self.parse_expr()?;
                         }
-                        args.push((label, parsed_expr));
+                        args.push(pace_ast::CallArg {
+                            label,
+                            expr: parsed_expr,
+                        });
                         if self.check(&TokenKind::Comma) {
                             self.advance();
                         } else {
@@ -212,7 +215,7 @@ impl<'a> Parser<'a> {
                 while let Some((idx, c)) = chars.next() {
                     if c == '$' {
                         if !current_str.is_empty() {
-                            let end_idx = tok.span.start as u32 + 1 + idx as u32;
+                            let end_idx = tok.span.start + 1 + idx as u32;
                             let start_idx = end_idx - current_str.len() as u32;
                             exprs.push(Expr::StringLiteral(
                                 format!("\"{}\"", current_str),
@@ -225,7 +228,7 @@ impl<'a> Parser<'a> {
                             chars.next(); // consume '{'
                             let mut expr_str = String::new();
                             let mut brace_count = 1;
-                            while let Some((_, inner_c)) = chars.next() {
+                            for (_, inner_c) in chars.by_ref() {
                                 if inner_c == '{' {
                                     brace_count += 1;
                                 } else if inner_c == '}' {
@@ -245,10 +248,10 @@ impl<'a> Parser<'a> {
                             );
                             let mut sub_parser = crate::Parser::new(sub_lexer);
                             let (decls, _, _) = sub_parser.parse_program();
-                            if !decls.is_empty() {
-                                if let pace_ast::Decl::Expr(e, _) = &decls[0] {
-                                    exprs.push(e.clone());
-                                }
+                            if !decls.is_empty()
+                                && let pace_ast::Decl::Expr(e, _) = &decls[0]
+                            {
+                                exprs.push(e.clone());
                             }
                         } else {
                             // Parse $var
@@ -262,12 +265,16 @@ impl<'a> Parser<'a> {
                                 }
                             }
                             if !var_str.is_empty() {
-                                let start_pos = tok.span.start as u32 + 1 + idx as u32 + 1;
+                                let start_pos = tok.span.start + 1 + idx as u32 + 1;
                                 let end_pos = start_pos + var_str.len() as u32;
                                 exprs.push(Expr::Ident(
                                     Ident {
-                                        name: var_str,
-                                        span: pace_span::Span::new(tok.span.file_id, start_pos, end_pos),
+                                        name: pace_span::intern(&var_str),
+                                        span: pace_span::Span::new(
+                                            tok.span.file_id,
+                                            start_pos,
+                                            end_pos,
+                                        ),
                                     },
                                     None,
                                 ));
@@ -281,19 +288,19 @@ impl<'a> Parser<'a> {
                 }
 
                 if !current_str.is_empty() {
-                            let end_idx = tok.span.end as u32 - 1;
-                            let start_idx = end_idx - current_str.len() as u32;
-                            exprs.push(Expr::StringLiteral(
-                                format!("\"{}\"", current_str),
-                                pace_span::Span::new(tok.span.file_id, start_idx, end_idx),
-                            ));
+                    let end_idx = tok.span.end - 1;
+                    let start_idx = end_idx - current_str.len() as u32;
+                    exprs.push(Expr::StringLiteral(
+                        format!("\"{}\"", current_str),
+                        pace_span::Span::new(tok.span.file_id, start_idx, end_idx),
+                    ));
                 }
 
                 Ok(Expr::InterpolatedString(exprs, tok.span))
             }
             TokenKind::Ident(name) => {
                 let ident = Ident {
-                    name: name.to_string(),
+                    name: pace_span::intern(name),
                     span: tok.span,
                 };
                 let generic_args = self.try_parse_generic_args_expr();
@@ -326,7 +333,7 @@ impl<'a> Parser<'a> {
                     Pattern::CatchAll(s)
                 } else {
                     let ident = Ident {
-                        name: name.to_string(),
+                        name: pace_span::intern(name),
                         span: *span,
                     };
                     self.advance();
@@ -341,7 +348,7 @@ impl<'a> Parser<'a> {
                             }) = &self.current
                             {
                                 fields.push(Ident {
-                                    name: n.to_string(),
+                                    name: pace_span::intern(n),
                                     span: *fspan,
                                 });
                                 self.advance();

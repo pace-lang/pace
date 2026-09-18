@@ -38,7 +38,10 @@ impl SourceMap {
     }
 
     pub fn get_file_id(&self, path: &str) -> Option<FileId> {
-        self.files.iter().position(|(p, _)| p == path).map(|i| FileId(i as u32))
+        self.files
+            .iter()
+            .position(|(p, _)| p == path)
+            .map(|i| FileId(i as u32))
     }
 }
 
@@ -84,7 +87,7 @@ impl From<Span> for SourceSpan {
     fn from(span: Span) -> Self {
         SourceSpan::new(
             (span.start as usize).into(),
-            ((span.end - span.start) as usize).into(),
+            (span.end - span.start) as usize,
         )
     }
 }

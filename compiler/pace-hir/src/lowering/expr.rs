@@ -14,7 +14,7 @@ impl LoweringContext {
                     lowered_exprs.push(self.lower_expr(expr)?);
                 }
                 Ok(Expr::InterpolatedString(lowered_exprs, span))
-            },
+            }
             ast::Expr::Ident(ident, generic_args) => {
                 if ident.name == "true" {
                     return Ok(Expr::BoolLiteral(true, ident.span));
@@ -26,17 +26,11 @@ impl LoweringContext {
                     id
                 } else {
                     let id = self.generate_id();
-                    self.scope.insert(ident.name.clone(), id);
+                    self.scope.insert(ident.name, id);
                     id
                 };
-                let lowered_args =
-                    generic_args.map(|args| args.into_iter().map(|arg| arg.clone()).collect());
-                Ok(Expr::Ident(
-                    id,
-                    ident.name.clone(),
-                    lowered_args,
-                    ident.span,
-                ))
+                let lowered_args = generic_args.map(|args| args.into_iter().collect());
+                Ok(Expr::Ident(id, ident.name, lowered_args, ident.span))
             }
             ast::Expr::Super(span) => Ok(Expr::Super(span)),
             ast::Expr::Binary {
@@ -70,20 +64,23 @@ impl LoweringContext {
                 span,
             }),
             ast::Expr::Call { callee, args, span } => {
-                if let ast::Expr::Ident(ident, _) = &*callee {
-                    if ident.name == "print" || ident.name == "println" {
-                        let mut lowered_args = Vec::new();
-                        for (_, arg) in args {
-                            lowered_args.push(self.lower_expr(arg)?);
-                        }
-                        return Ok(Expr::BuiltinCall(ident.name.clone(), lowered_args, span));
+                if let ast::Expr::Ident(ident, _) = &*callee
+                    && (ident.name == "print" || ident.name == "println")
+                {
+                    let mut lowered_args = Vec::new();
+                    for pace_ast::CallArg { expr: arg, .. } in args {
+                        lowered_args.push(self.lower_expr(arg)?);
                     }
+                    return Ok(Expr::BuiltinCall(ident.name, lowered_args, span));
                 }
 
                 let mut lowered_args = Vec::new();
-                for (label, arg) in args {
+                for pace_ast::CallArg { label, expr: arg } in args {
                     let lowered_label = label.map(|id| id.name);
-                    lowered_args.push((lowered_label, self.lower_expr(arg)?));
+                    lowered_args.push(crate::hir::HirCallArg {
+                        label: lowered_label,
+                        expr: self.lower_expr(arg)?,
+                    });
                 }
                 Ok(Expr::Call {
                     callee: Box::new(self.lower_expr(*callee)?),
@@ -145,7 +142,7 @@ impl LoweringContext {
                     let pattern = match arm.pattern {
                         ast::Pattern::Ident(ident) => {
                             let id = self.generate_id();
-                            self.scope.insert(ident.name.clone(), id);
+                            self.scope.insert(ident.name, id);
                             crate::hir::Pattern::Ident(id, ident.name, ident.span)
                         }
                         ast::Pattern::Variant {
@@ -158,7 +155,7 @@ impl LoweringContext {
                                 let mut lf = Vec::new();
                                 for fname in f {
                                     let id = self.generate_id();
-                                    self.scope.insert(fname.name.clone(), id);
+                                    self.scope.insert(fname.name, id);
                                     lf.push((id, fname.name, fname.span));
                                 }
                                 lowered_fields = Some(lf);

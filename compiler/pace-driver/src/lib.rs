@@ -67,11 +67,12 @@ impl DependencyGraph {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parse_file_and_imports(
     file_path: &Path,
     module_name_opt: Option<String>,
     visited: &mut HashSet<PathBuf>,
-    modules: &mut std::collections::HashMap<String, pace_ast::Module>,
+    modules: &mut std::collections::HashMap<pace_span::Symbol, pace_ast::Module>,
     deps: &mut DependencyGraph,
     dependencies: &std::collections::HashMap<String, PathBuf>,
     source_map: &mut pace_span::SourceMap,
@@ -114,25 +115,25 @@ fn parse_file_and_imports(
                 if i == path.len() - 1 {
                     import_path.push(format!("{}.pace", ident.name));
                 } else {
-                    import_path.push(&ident.name);
+                    import_path.push(ident.name);
                 }
             }
 
-            if !import_path.exists() {
-                if let Some(pkg_path) = dependencies.get(first_ident) {
-                    let mut resolved_path = pkg_path.join("src");
-                    for (i, ident) in path.iter().skip(1).enumerate() {
-                        if i == path.len() - 2 {
-                            resolved_path.push(format!("{}.pace", ident.name));
-                        } else {
-                            resolved_path.push(&ident.name);
-                        }
+            if !import_path.exists()
+                && let Some(pkg_path) = dependencies.get(&first_ident.to_string())
+            {
+                let mut resolved_path = pkg_path.join("src");
+                for (i, ident) in path.iter().skip(1).enumerate() {
+                    if i == path.len() - 2 {
+                        resolved_path.push(format!("{}.pace", ident.name));
+                    } else {
+                        resolved_path.push(ident.name);
                     }
-                    if path.len() == 1 {
-                        resolved_path.push("lib.pace");
-                    }
-                    import_path = resolved_path;
                 }
+                if path.len() == 1 {
+                    resolved_path.push("lib.pace");
+                }
+                import_path = resolved_path;
             }
 
             if !import_path.exists() {
@@ -167,9 +168,9 @@ fn parse_file_and_imports(
     }
 
     modules.insert(
-        module_name.clone(),
+        pace_span::intern(&module_name),
         pace_ast::Module {
-            name: module_name,
+            name: pace_span::intern(&module_name),
             file_id,
             declarations: module_decls,
             comments,
@@ -183,13 +184,20 @@ pub fn analyze_workspace(
     file_path: &Path,
     overrides: &std::collections::HashMap<PathBuf, String>,
     dependencies: &std::collections::HashMap<String, PathBuf>,
-) -> Result<(pace_ast::Program, pace_span::SourceMap, Vec<pace_errors::Diagnostic>), String> {
+) -> Result<
+    (
+        pace_ast::Program,
+        pace_span::SourceMap,
+        Vec<pace_errors::Diagnostic>,
+    ),
+    String,
+> {
     if !file_path.exists() && !overrides.contains_key(file_path) {
         return Err(format!("File not found: {}", file_path.display()));
     }
 
     let mut visited = HashSet::new();
-    let mut modules = std::collections::HashMap::new();
+    let mut modules = std::collections::HashMap::<pace_span::Symbol, pace_ast::Module>::new();
     let mut source_map = pace_span::SourceMap::new();
     let mut deps = DependencyGraph::default();
     let mut all_diags = Vec::new();
@@ -206,8 +214,13 @@ pub fn analyze_workspace(
         &mut all_diags,
     )?;
 
-    let module_names: Vec<String> = modules.keys().cloned().collect();
-    let module_order = deps.topological_sort(&module_names)?;
+    let module_names: Vec<pace_span::Symbol> = modules.keys().cloned().collect();
+    let module_names_str: Vec<String> = module_names.iter().map(|n| n.to_string()).collect();
+    let module_order_str = deps.topological_sort(&module_names_str)?;
+    let module_order: Vec<pace_span::Symbol> = module_order_str
+        .into_iter()
+        .map(|s| pace_span::intern(&s))
+        .collect();
 
     let ast = pace_ast::Program {
         modules,
@@ -333,13 +346,13 @@ pub fn format_file(file_path: &Path, write: bool) -> Result<bool, String> {
 
     let source = fs::read_to_string(file_path)
         .map_err(|e| format!("Failed to read {}: {}", file_path.display(), e))?;
-    
+
     let mut source_map = pace_span::SourceMap::new();
     let file_id = source_map.add_file(file_path.display().to_string(), source.clone());
-    
+
     let lexer = Lexer::new(&source, file_id);
     let mut parser = Parser::new(lexer);
-    
+
     let (ast, diags, comments) = parser.parse_program();
     if !diags.is_empty() {
         let mut reporter = pace_errors::Reporter::new();
@@ -351,19 +364,20 @@ pub fn format_file(file_path: &Path, write: bool) -> Result<bool, String> {
     }
 
     let module = pace_ast::Module {
-        name: file_path.file_stem().unwrap().to_string_lossy().to_string(),
+        name: pace_span::intern(&file_path.file_stem().unwrap().to_string_lossy()),
         file_id,
         declarations: ast,
         comments,
     };
 
     let formatted = pace_fmt::format_module(&module);
-    
+
     let changed = source != formatted;
 
     if write {
         if changed {
-            fs::write(file_path, formatted).map_err(|e| format!("Failed to write {}: {}", file_path.display(), e))?;
+            fs::write(file_path, formatted)
+                .map_err(|e| format!("Failed to write {}: {}", file_path.display(), e))?;
         }
     } else {
         println!("{}", formatted);

@@ -20,7 +20,11 @@ pub fn position_to_offset(text: &str, position: tower_lsp::lsp_types::Position) 
     offset
 }
 
-pub fn find_ident_at_offset(program: &Program, file_id: pace_span::FileId, offset: usize) -> Option<HirId> {
+pub fn find_ident_at_offset(
+    program: &Program,
+    file_id: pace_span::FileId,
+    offset: usize,
+) -> Option<HirId> {
     for module in program.modules.values() {
         if module.file_id != file_id {
             continue;
@@ -36,17 +40,24 @@ pub fn find_ident_at_offset(program: &Program, file_id: pace_span::FileId, offse
 
 fn find_ident_in_decl(decl: &Decl, offset: usize) -> Option<HirId> {
     match decl {
-        Decl::Let { id, value, span, .. } | Decl::Var { id, value, span, .. } => {
-            if let Some(v) = value {
-                if let Some(vid) = find_ident_in_expr(v, offset) {
-                    return Some(vid);
-                }
+        Decl::Let {
+            id, value, span, ..
+        }
+        | Decl::Var {
+            id, value, span, ..
+        } => {
+            if let Some(v) = value
+                && let Some(vid) = find_ident_in_expr(v, offset)
+            {
+                return Some(vid);
             }
             if offset >= span.start as usize && offset <= span.end as usize {
                 return Some(*id);
             }
         }
-        Decl::Const { id, value, span, .. } => {
+        Decl::Const {
+            id, value, span, ..
+        } => {
             if let Some(vid) = find_ident_in_expr(value, offset) {
                 return Some(vid);
             }
@@ -83,11 +94,16 @@ fn find_ident_in_block(block: &Block, offset: usize) -> Option<HirId> {
 
 fn find_ident_in_stmt(stmt: &Stmt, offset: usize) -> Option<HirId> {
     match stmt {
-        Stmt::Let { id, value, span, .. } | Stmt::Var { id, value, span, .. } => {
-            if let Some(v) = value {
-                if let Some(vid) = find_ident_in_expr(v, offset) {
-                    return Some(vid);
-                }
+        Stmt::Let {
+            id, value, span, ..
+        }
+        | Stmt::Var {
+            id, value, span, ..
+        } => {
+            if let Some(v) = value
+                && let Some(vid) = find_ident_in_expr(v, offset)
+            {
+                return Some(vid);
             }
             if offset >= span.start as usize && offset <= span.end as usize {
                 return Some(*id);
@@ -131,7 +147,7 @@ fn find_ident_in_expr(expr: &Expr, offset: usize) -> Option<HirId> {
             if let Some(id) = find_ident_in_expr(callee, offset) {
                 return Some(id);
             }
-            for (_, arg) in args {
+            for pace_hir::HirCallArg { expr: arg, .. } in args {
                 if let Some(id) = find_ident_in_expr(arg, offset) {
                     return Some(id);
                 }
@@ -142,17 +158,22 @@ fn find_ident_in_expr(expr: &Expr, offset: usize) -> Option<HirId> {
                 return Some(id);
             }
         }
-        Expr::If { cond, then_block, else_block, .. } => {
+        Expr::If {
+            cond,
+            then_block,
+            else_block,
+            ..
+        } => {
             if let Some(id) = find_ident_in_expr(cond, offset) {
                 return Some(id);
             }
             if let Some(id) = find_ident_in_block(then_block, offset) {
                 return Some(id);
             }
-            if let Some(b) = else_block {
-                if let Some(id) = find_ident_in_block(b, offset) {
-                    return Some(id);
-                }
+            if let Some(b) = else_block
+                && let Some(id) = find_ident_in_block(b, offset)
+            {
+                return Some(id);
             }
         }
         Expr::While { cond, body, .. } => {

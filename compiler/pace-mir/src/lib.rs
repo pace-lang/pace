@@ -17,7 +17,12 @@ mod tests {
         // Simulating the HIR for: `(x + 1) + 2`
         let expr = Expr::Binary {
             left: Box::new(Expr::Binary {
-                left: Box::new(Expr::Ident(HirId(1), "x".to_string(), None, Span::DUMMY)),
+                left: Box::new(Expr::Ident(
+                    HirId(1),
+                    pace_span::intern("x"),
+                    None,
+                    Span::DUMMY,
+                )),
                 op: BinaryOp::Add,
                 right: Box::new(Expr::IntLiteral("1".to_string(), Span::DUMMY)),
                 span: Span::DUMMY,

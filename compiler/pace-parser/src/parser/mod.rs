@@ -16,7 +16,12 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
-        let mut parser = Self { lexer, current: None, diagnostics: Vec::new(), comments: Vec::new() };
+        let mut parser = Self {
+            lexer,
+            current: None,
+            diagnostics: Vec::new(),
+            comments: Vec::new(),
+        };
         parser.advance();
         parser
     }
@@ -28,11 +33,11 @@ impl<'a> Parser<'a> {
     pub(crate) fn advance(&mut self) {
         loop {
             let next = self.lexer.next().and_then(|r| r.ok());
-            if let Some(tok) = &next {
-                if let TokenKind::Comment(text) = tok.kind {
-                    self.comments.push((tok.span, text.to_string()));
-                    continue;
-                }
+            if let Some(tok) = &next
+                && let TokenKind::Comment(text) = tok.kind
+            {
+                self.comments.push((tok.span, text.to_string()));
+                continue;
             }
             self.current = next;
             break;
@@ -40,7 +45,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn check(&self, kind: &TokenKind) -> bool {
-        self.current.as_ref().map_or(false, |t| &t.kind == kind)
+        self.current.as_ref().is_some_and(|t| &t.kind == kind)
     }
 
     pub(crate) fn expect(&mut self, kind: TokenKind<'a>) -> Result<Token<'a>, Diagnostic> {
@@ -64,7 +69,11 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        (declarations, self.diagnostics.clone(), self.comments.clone())
+        (
+            declarations,
+            self.diagnostics.clone(),
+            self.comments.clone(),
+        )
     }
 
     fn synchronize(&mut self) {
@@ -92,7 +101,7 @@ impl<'a> Parser<'a> {
             Some(Token {
                 kind: TokenKind::Ident(name),
                 span,
-            }) => (name.to_string(), *span),
+            }) => (pace_span::intern(name), *span),
             _ => return Err(Diagnostic::error("Expected type name").with_span(self.current_span())),
         };
 

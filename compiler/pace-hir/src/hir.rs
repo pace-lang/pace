@@ -1,5 +1,36 @@
 use pace_ast::{BinaryOp, Type};
-use pace_span::Span;
+use pace_span::{Span, Symbol};
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HirFieldDef {
+    pub name: Symbol,
+    pub ty: Type,
+    pub default_value: Option<Expr>,
+    pub is_mut: bool,
+    pub is_private: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HirStaticFieldDef {
+    pub name: Symbol,
+    pub ty: Type,
+    pub value: Expr,
+    pub is_private: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HirConstFieldDef {
+    pub name: Symbol,
+    pub ty: Type,
+    pub value: Expr,
+    pub is_private: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HirCallArg {
+    pub label: Option<Symbol>,
+    pub expr: Expr,
+}
 
 /// A unique ID for variables and definitions across the entire program.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -15,14 +46,14 @@ pub struct Block {
 pub enum Stmt {
     Let {
         id: HirId,
-        name: String,
+        name: Symbol,
         ty: Option<Type>,
         value: Option<Expr>,
         span: Span,
     },
     Var {
         id: HirId,
-        name: String,
+        name: Symbol,
         ty: Option<Type>,
         value: Option<Expr>,
         span: Span,
@@ -36,13 +67,13 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
-    pub modules: HashMap<String, Module>,
-    pub module_order: Vec<String>,
+    pub modules: HashMap<Symbol, Module>,
+    pub module_order: Vec<Symbol>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
-    pub name: String,
+    pub name: Symbol,
     pub file_id: FileId,
     pub declarations: Vec<Decl>,
 }
@@ -54,7 +85,7 @@ impl Program {
         for module in self.modules.values() {
             for decl in &module.declarations {
                 if let Decl::Trait { name, methods, .. } = decl {
-                    trait_methods.insert(name.clone(), methods.clone());
+                    trait_methods.insert(*name, methods.clone());
                 }
             }
         }
@@ -87,12 +118,12 @@ impl Program {
                                 {
                                     // Extract actual method name (remove trait prefix)
                                     let actual_name =
-                                        t_m_name.split('_').last().unwrap_or(t_m_name);
+                                        t_m_name.split('_').next_back().unwrap_or(t_m_name);
 
                                     // Check if class already has this method
                                     let has_method = methods.iter().any(|m| {
                                         if let Decl::Function { name: m_name, .. } = m {
-                                            m_name.split('_').last().unwrap_or(m_name)
+                                            m_name.split('_').next_back().unwrap_or(m_name)
                                                 == actual_name
                                         } else {
                                             false
@@ -104,7 +135,7 @@ impl Program {
                                             reporter.report(pace_errors::Diagnostic::error(format!("Class/Struct '{}' must implement required method '{}' from Trait '{}'", name, actual_name, trait_name))
                                             .with_span(*span));
                                         } else {
-                                            let struct_name = name.clone();
+                                            let struct_name = *name;
                                             // Clone and inject default method
                                             let mut new_method = t_method.clone();
                                             if let Decl::Function {
@@ -113,7 +144,10 @@ impl Program {
                                                 ..
                                             } = new_method
                                             {
-                                                *name = format!("{}_{}", struct_name, actual_name);
+                                                *name = pace_span::intern(&format!(
+                                                    "{}_{}",
+                                                    struct_name, actual_name
+                                                ));
                                                 if !params.is_empty() && params[0].1 == "self" {
                                                     params[0].2 =
                                                         pace_ast::Type::Named(pace_ast::Ident {
@@ -146,13 +180,13 @@ impl Program {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
     Import {
-        path: Vec<String>,
-        alias: Option<String>,
+        path: Vec<Symbol>,
+        alias: Option<Symbol>,
         span: Span,
     },
     Let {
         id: HirId,
-        name: String,
+        name: Symbol,
         ty: Option<Type>,
         value: Option<Expr>,
         is_private: bool,
@@ -160,7 +194,7 @@ pub enum Decl {
     },
     Var {
         id: HirId,
-        name: String,
+        name: Symbol,
         ty: Option<Type>,
         value: Option<Expr>,
         is_private: bool,
@@ -168,7 +202,7 @@ pub enum Decl {
     },
     Const {
         id: HirId,
-        name: String,
+        name: Symbol,
         ty: Option<Type>,
         value: Expr,
         is_private: bool,
@@ -176,50 +210,50 @@ pub enum Decl {
     },
     Struct {
         id: HirId,
-        name: String,
-        generic_params: Option<Vec<(String, Option<Type>)>>,
-        with: Vec<String>,
-        fields: Vec<(String, Type, Option<Expr>, bool, bool)>,
-        static_fields: Vec<(String, Type, Expr, bool)>,
-        const_fields: Vec<(String, Type, Expr, bool)>,
+        name: Symbol,
+        generic_params: Option<Vec<(Symbol, Option<Type>)>>,
+        with: Vec<Symbol>,
+        fields: Vec<HirFieldDef>,
+        static_fields: Vec<HirStaticFieldDef>,
+        const_fields: Vec<HirConstFieldDef>,
         methods: Vec<Decl>, // Lowered to global functions anyway, but kept for namespacing if needed
         is_private: bool,
         span: Span,
     },
     Class {
         id: HirId,
-        name: String,
-        generic_params: Option<Vec<(String, Option<Type>)>>,
-        extends: Option<String>,
-        with: Vec<String>,
-        fields: Vec<(String, Type, Option<Expr>, bool, bool)>,
-        static_fields: Vec<(String, Type, Expr, bool)>,
-        const_fields: Vec<(String, Type, Expr, bool)>,
+        name: Symbol,
+        generic_params: Option<Vec<(Symbol, Option<Type>)>>,
+        extends: Option<Symbol>,
+        with: Vec<Symbol>,
+        fields: Vec<HirFieldDef>,
+        static_fields: Vec<HirStaticFieldDef>,
+        const_fields: Vec<HirConstFieldDef>,
         methods: Vec<Decl>,
         is_private: bool,
         span: Span,
     },
     Trait {
         id: HirId,
-        name: String,
-        generic_params: Option<Vec<(String, Option<Type>)>>,
+        name: Symbol,
+        generic_params: Option<Vec<(Symbol, Option<Type>)>>,
         methods: Vec<Decl>,
         is_private: bool,
         span: Span,
     },
     Enum {
         id: HirId,
-        name: String,
-        generic_params: Option<Vec<(String, Option<Type>)>>,
+        name: Symbol,
+        generic_params: Option<Vec<(Symbol, Option<Type>)>>,
         variants: Vec<EnumVariant>,
         is_private: bool,
         span: Span,
     },
     Function {
         id: HirId,
-        name: String,
-        generic_params: Option<Vec<(String, Option<Type>)>>,
-        params: Vec<(HirId, String, Type)>,
+        name: Symbol,
+        generic_params: Option<Vec<(Symbol, Option<Type>)>>,
+        params: Vec<(HirId, Symbol, Type)>,
         return_type: Option<Type>,
         body: Block,
         is_static: bool,
@@ -232,9 +266,9 @@ pub enum Decl {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumVariant {
-    pub name: String,
+    pub name: Symbol,
     pub id: HirId,
-    pub fields: Option<Vec<(String, Type)>>,
+    pub fields: Option<Vec<(Symbol, Type)>>,
     pub span: Span,
 }
 
@@ -246,7 +280,7 @@ pub enum Expr {
     StringLiteral(String, Span),
     InterpolatedString(Vec<Expr>, Span),
     Null(Span),
-    Ident(HirId, String, Option<Vec<Type>>, Span),
+    Ident(HirId, Symbol, Option<Vec<Type>>, Span),
     Super(Span),
     Binary {
         left: Box<Expr>,
@@ -256,20 +290,20 @@ pub enum Expr {
     },
     MemberAccess {
         object: Box<Expr>,
-        member: String,
+        member: Symbol,
         span: Span,
     },
     OptionalMemberAccess {
         object: Box<Expr>,
-        member: String,
+        member: Symbol,
         span: Span,
     },
     Call {
         callee: Box<Expr>,
-        args: Vec<(Option<String>, Expr)>,
+        args: Vec<HirCallArg>,
         span: Span,
     },
-    BuiltinCall(String, Vec<Expr>, Span),
+    BuiltinCall(Symbol, Vec<Expr>, Span),
     If {
         cond: Box<Expr>,
         then_block: Block,
@@ -302,10 +336,10 @@ pub struct MatchArm {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
-    Ident(HirId, String, Span),
+    Ident(HirId, Symbol, Span),
     Variant {
-        name: String,
-        fields: Option<Vec<(HirId, String, Span)>>,
+        name: Symbol,
+        fields: Option<Vec<(HirId, Symbol, Span)>>,
         span: Span,
     },
     CatchAll(Span),

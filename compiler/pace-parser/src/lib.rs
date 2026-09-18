@@ -88,7 +88,7 @@ mod tests {
             } => {
                 assert_eq!(name.name, "User");
                 assert_eq!(fields.len(), 1);
-                assert_eq!(fields[0].0.name, "name");
+                assert_eq!(fields[0].name.name, "name");
                 assert_eq!(methods.len(), 0);
             }
             _ => panic!("Expected Class declaration"),

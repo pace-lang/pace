@@ -9,7 +9,6 @@ use pace_lexer::Lexer;
 use pace_parser::parser::Parser;
 use pace_span::SourceMap;
 
-
 mod find_node;
 
 #[derive(Debug)]
@@ -64,13 +63,13 @@ impl LanguageServer for Backend {
         params: DocumentSymbolParams,
     ) -> Result<Option<DocumentSymbolResponse>> {
         let uri = params.text_document.uri;
-        if let Some((ast, source_map, _diags, text)) = self.analyze_uri(&uri.as_str()).await {
+        if let Some((ast, source_map, _diags, text)) = self.analyze_uri(uri.as_str()).await {
             let file_path = uri.to_file_path().unwrap().to_string_lossy().to_string();
             let mut symbols = Vec::new();
             if let Some(fid) = source_map.get_file_id(&file_path) {
                 for module in ast.modules.values() {
                     for decl in &module.declarations {
-                        if let Some(sym) = decl_to_document_symbol(&decl, &text, fid) {
+                        if let Some(sym) = decl_to_document_symbol(decl, &text, fid) {
                             symbols.push(sym);
                         }
                     }
@@ -86,19 +85,24 @@ impl LanguageServer for Backend {
         }
     }
 
-
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri.to_string();
         let text = params.text_document.text.clone();
-        
-        self.document_map.lock().await.insert(uri.clone(), text.clone());
+
+        self.document_map
+            .lock()
+            .await
+            .insert(uri.clone(), text.clone());
         self.publish_diagnostics(uri, text).await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.to_string();
         if let Some(change) = params.content_changes.into_iter().next() {
-            self.document_map.lock().await.insert(uri.clone(), change.text.clone());
+            self.document_map
+                .lock()
+                .await
+                .insert(uri.clone(), change.text.clone());
             self.publish_diagnostics(uri, change.text).await;
         }
     }
@@ -108,10 +112,7 @@ impl LanguageServer for Backend {
         self.document_map.lock().await.remove(&uri);
     }
 
-    async fn formatting(
-        &self,
-        params: DocumentFormattingParams,
-    ) -> Result<Option<Vec<TextEdit>>> {
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let uri = params.text_document.uri.to_string();
         let text = {
             let map = self.document_map.lock().await;
@@ -128,7 +129,7 @@ impl LanguageServer for Backend {
 
             if diags.is_empty() {
                 let module = pace_ast::Module {
-                    name: "module".to_string(),
+                    name: pace_span::intern("module"),
                     file_id,
                     declarations: ast,
                     comments,
@@ -138,8 +139,14 @@ impl LanguageServer for Backend {
                 // For simplicity, we replace the entire document
                 let line_count = source.lines().count() as u32;
                 let range = Range {
-                    start: Position { line: 0, character: 0 },
-                    end: Position { line: line_count, character: 0 },
+                    start: Position {
+                        line: 0,
+                        character: 0,
+                    },
+                    end: Position {
+                        line: line_count,
+                        character: 0,
+                    },
                 };
 
                 return Ok(Some(vec![TextEdit {
@@ -148,40 +155,47 @@ impl LanguageServer for Backend {
                 }]));
             }
         }
-        
+
         Ok(None)
     }
     async fn goto_definition(
         &self,
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
-        let uri = params.text_document_position_params.text_document.uri.to_string();
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .to_string();
         let position = params.text_document_position_params.position;
 
-        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
-            if diags.is_empty() {
-                let mut lowerer = pace_hir::LoweringContext::new();
-                if let Ok(hir) = lowerer.lower_program(ast) {
-                    let mut tc = pace_ty::TypeChecker::new();
-                    let _ = tc.check_program(&hir);
+        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await
+            && diags.is_empty()
+        {
+            let mut lowerer = pace_hir::LoweringContext::new();
+            if let Ok(hir) = lowerer.lower_program(ast) {
+                let mut tc = pace_ty::TypeChecker::new();
+                let _ = tc.check_program(&hir);
 
-                    let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
-                    if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref()) {
-                        let offset = find_node::position_to_offset(&text, position);
-                        if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset) {
-                            let mut target_span = None;
-                            
-                            // 1. Check local bindings
-                            for (decl_id, _, span) in &tc.declared_bindings {
-                                if *decl_id == id {
-                                    target_span = Some(*span);
-                                    break;
-                                }
+                let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
+                if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref())
+                {
+                    let offset = find_node::position_to_offset(&text, position);
+                    if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset) {
+                        let mut target_span = None;
+
+                        // 1. Check local bindings
+                        for (decl_id, _, span) in &tc.declared_bindings {
+                            if *decl_id == id {
+                                target_span = Some(*span);
+                                break;
                             }
+                        }
 
-                            // 2. Check global definitions
-                            if target_span.is_none() {
-                                if let Some(mangled_name) = tc.resolved_global_names.get(&id) {
+                        // 2. Check global definitions
+                        if target_span.is_none()
+                            && let Some(mangled_name) = tc.resolved_global_names.get(&id)
+                        {
                             // Find the declaration in HIR
                             for module in hir.modules.values() {
                                 for decl in &module.declarations {
@@ -199,50 +213,55 @@ impl LanguageServer for Backend {
                                     }
                                 }
                             }
-                                }
-                            }
-                            if let Some(span) = target_span {
-                                let span_text = source_map.get_source(span.file_id).unwrap_or_default();
-                                let start = offset_to_position(span_text, span.start as usize);
-                                let end = offset_to_position(span_text, span.end as usize);
-                                
-                                let file_path = source_map.get_path(span.file_id).unwrap_or_default();
-                                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
-                                    uri: Url::from_file_path(file_path).unwrap(),
-                                    range: Range { start, end },
-                                })));
-                            }
+                        }
+                        if let Some(span) = target_span {
+                            let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                            let start = offset_to_position(span_text, span.start as usize);
+                            let end = offset_to_position(span_text, span.end as usize);
+
+                            let file_path = source_map.get_path(span.file_id).unwrap_or_default();
+                            return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                                uri: Url::from_file_path(file_path).unwrap(),
+                                range: Range { start, end },
+                            })));
                         }
                     }
                 }
             }
         }
-        
+
         Ok(None)
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-        let uri = params.text_document_position_params.text_document.uri.to_string();
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .to_string();
         let position = params.text_document_position_params.position;
 
-        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
-            if diags.is_empty() {
-                let mut lowerer = pace_hir::LoweringContext::new();
-                if let Ok(hir) = lowerer.lower_program(ast) {
-                    let mut tc = pace_ty::TypeChecker::new();
-                    let _ = tc.check_program(&hir);
+        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await
+            && diags.is_empty()
+        {
+            let mut lowerer = pace_hir::LoweringContext::new();
+            if let Ok(hir) = lowerer.lower_program(ast) {
+                let mut tc = pace_ty::TypeChecker::new();
+                let _ = tc.check_program(&hir);
 
-                    let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
-                    if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref()) {
-                        let offset = find_node::position_to_offset(&text, position);
-                        if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset) {
-                            if let Some(ty) = tc.local_types.get(&id).or_else(|| tc.env.get(&id)) {
-                                return Ok(Some(Hover {
-                                    contents: HoverContents::Scalar(MarkedString::String(tc.display_ty(ty))),
-                                    range: None,
-                                }));
-                            }
-                        }
+                let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
+                if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref())
+                {
+                    let offset = find_node::position_to_offset(&text, position);
+                    if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset)
+                        && let Some(ty) = tc.local_types.get(&id).or_else(|| tc.env.get(&id))
+                    {
+                        return Ok(Some(Hover {
+                            contents: HoverContents::Scalar(MarkedString::String(
+                                tc.display_ty(ty),
+                            )),
+                            range: None,
+                        }));
                     }
                 }
             }
@@ -263,66 +282,95 @@ impl LanguageServer for Backend {
                 let _ = tc.check_program(&hir);
 
                 let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
-                if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref()) {
+                if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref())
+                {
                     let offset = find_node::position_to_offset(&text, position);
                     let is_dot_completion = offset > 0 && text.chars().nth(offset - 1) == Some('.');
-                    
+
                     if is_dot_completion {
                         let mut prev_offset = offset - 1;
-                        while prev_offset > 0 && text.chars().nth(prev_offset - 1).unwrap_or(' ').is_whitespace() {
+                        while prev_offset > 0
+                            && text
+                                .chars()
+                                .nth(prev_offset - 1)
+                                .unwrap_or(' ')
+                                .is_whitespace()
+                        {
                             prev_offset -= 1;
                         }
-                        if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, prev_offset - 1) {
-                            if let Some(ty) = tc.local_types.get(&id) {
-                                let mut add_fields = |fields: &Vec<(String, pace_ty::Ty, bool, bool)>| {
-                                    for (fname, _, _, is_private) in fields {
-                                        items.push(CompletionItem {
-                                            label: fname.clone(),
-                                            kind: Some(CompletionItemKind::FIELD),
-                                            detail: Some(if *is_private { "private field".to_string() } else { "field".to_string() }),
-                                            ..Default::default()
-                                        });
-                                    }
-                                };
-                                match ty {
-                                    pace_ty::Ty::Struct(sid) => {
-                                        if let Some(fields) = tc.struct_defs.get(sid) {
-                                            add_fields(fields);
-                                        }
-                                        if let Some(struct_name) = tc.named_types.iter().find_map(|(k, &(vid, _))| if vid == *sid { Some(k) } else { None }) {
-                                            for (mname, _) in &tc.methods_env {
-                                                if mname.starts_with(&format!("{}_", struct_name)) {
-                                                    let method_short_name = mname.trim_start_matches(&format!("{}_", struct_name));
-                                                    items.push(CompletionItem {
-                                                        label: method_short_name.to_string(),
-                                                        kind: Some(CompletionItemKind::METHOD),
-                                                        detail: Some("method".to_string()),
-                                                        ..Default::default()
-                                                    });
-                                                }
-                                            }
-                                        }
-                                    }
-                                    pace_ty::Ty::Class(cid) => {
-                                        if let Some(fields) = tc.class_defs.get(cid) {
-                                            add_fields(fields);
-                                        }
-                                        if let Some(class_name) = tc.named_types.iter().find_map(|(k, &(vid, _))| if vid == *cid { Some(k) } else { None }) {
-                                            for (mname, _) in &tc.methods_env {
-                                                if mname.starts_with(&format!("{}_", class_name)) {
-                                                    let method_short_name = mname.trim_start_matches(&format!("{}_", class_name));
-                                                    items.push(CompletionItem {
-                                                        label: method_short_name.to_string(),
-                                                        kind: Some(CompletionItemKind::METHOD),
-                                                        detail: Some("method".to_string()),
-                                                        ..Default::default()
-                                                    });
-                                                }
-                                            }
-                                        }
-                                    }
-                                    _ => {}
+                        if let Some(id) =
+                            find_node::find_ident_at_offset(&hir, file_id, prev_offset - 1)
+                            && let Some(ty) = tc.local_types.get(&id)
+                        {
+                            let mut add_fields = |fields: &Vec<pace_ty::ResolvedField>| {
+                                for pace_ty::ResolvedField {
+                                    name: fname,
+                                    is_private,
+                                    ..
+                                } in fields
+                                {
+                                    items.push(CompletionItem {
+                                        label: fname.clone(),
+                                        kind: Some(CompletionItemKind::FIELD),
+                                        detail: Some(if *is_private {
+                                            "private field".to_string()
+                                        } else {
+                                            "field".to_string()
+                                        }),
+                                        ..Default::default()
+                                    });
                                 }
+                            };
+                            match ty {
+                                pace_ty::Ty::Struct(sid) => {
+                                    if let Some(fields) = tc.struct_defs.get(sid) {
+                                        add_fields(fields);
+                                    }
+                                    if let Some(struct_name) =
+                                        tc.named_types.iter().find_map(|(k, &(vid, _))| {
+                                            if vid == *sid { Some(k) } else { None }
+                                        })
+                                    {
+                                        for mname in tc.methods_env.keys() {
+                                            if mname.starts_with(&format!("{}_", struct_name)) {
+                                                let method_short_name = mname.trim_start_matches(
+                                                    &format!("{}_", struct_name),
+                                                );
+                                                items.push(CompletionItem {
+                                                    label: method_short_name.to_string(),
+                                                    kind: Some(CompletionItemKind::METHOD),
+                                                    detail: Some("method".to_string()),
+                                                    ..Default::default()
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                                pace_ty::Ty::Class(cid) => {
+                                    if let Some(fields) = tc.class_defs.get(cid) {
+                                        add_fields(fields);
+                                    }
+                                    if let Some(class_name) =
+                                        tc.named_types.iter().find_map(|(k, &(vid, _))| {
+                                            if vid == *cid { Some(k) } else { None }
+                                        })
+                                    {
+                                        for mname in tc.methods_env.keys() {
+                                            if mname.starts_with(&format!("{}_", class_name)) {
+                                                let method_short_name = mname.trim_start_matches(
+                                                    &format!("{}_", class_name),
+                                                );
+                                                items.push(CompletionItem {
+                                                    label: method_short_name.to_string(),
+                                                    kind: Some(CompletionItemKind::METHOD),
+                                                    detail: Some("method".to_string()),
+                                                    ..Default::default()
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => {}
                             }
                         }
                     } else {
@@ -338,7 +386,7 @@ impl LanguageServer for Backend {
                 }
             }
         }
-    
+
         Ok(Some(CompletionResponse::Array(items)))
     }
 
@@ -347,29 +395,36 @@ impl LanguageServer for Backend {
         let position = params.text_document_position.position;
         let new_name = params.new_name;
 
-        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
-            if diags.is_empty() {
-                let mut lowerer = pace_hir::LoweringContext::new();
-                if let Ok(hir) = lowerer.lower_program(ast) {
-                    let mut tc = pace_ty::TypeChecker::new();
-                    let _ = tc.check_program(&hir);
+        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await
+            && diags.is_empty()
+        {
+            let mut lowerer = pace_hir::LoweringContext::new();
+            if let Ok(hir) = lowerer.lower_program(ast) {
+                let mut tc = pace_ty::TypeChecker::new();
+                let _ = tc.check_program(&hir);
 
-                    let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
-                    if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref()) {
-                        let offset = find_node::position_to_offset(&text, position);
-                        if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset) {
+                let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
+                if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref())
+                {
+                    let offset = find_node::position_to_offset(&text, position);
+                    if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset) {
                         let mut changes = HashMap::new();
                         let mut edits = Vec::new();
-                        
+
                         // Add the declaration itself
-                        if let Some((_, _, span)) = tc.declared_bindings.iter().find(|(d_id, _, _)| *d_id == id) {
+                        if let Some((_, _, span)) =
+                            tc.declared_bindings.iter().find(|(d_id, _, _)| *d_id == id)
+                        {
                             let span_text = source_map.get_source(span.file_id).unwrap_or_default();
                             let pos = offset_to_position(span_text, span.start as usize);
-                            
+
                             edits.push(TextEdit {
                                 range: Range {
                                     start: pos,
-                                    end: Position { line: pos.line, character: pos.character + new_name.len() as u32 }, // approx
+                                    end: Position {
+                                        line: pos.line,
+                                        character: pos.character + new_name.len() as u32,
+                                    }, // approx
                                 },
                                 new_text: new_name.clone(),
                             });
@@ -378,34 +433,38 @@ impl LanguageServer for Backend {
                         // Add references
                         if let Some(refs) = tc.symbol_references.get(&id) {
                             for span in refs {
-                                let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                                let span_text =
+                                    source_map.get_source(span.file_id).unwrap_or_default();
                                 let pos = offset_to_position(span_text, span.start as usize);
-                                
-                                let file_path = source_map.get_path(span.file_id).unwrap_or_default();
+
+                                let file_path =
+                                    source_map.get_path(span.file_id).unwrap_or_default();
                                 let file_uri = Url::from_file_path(file_path).unwrap();
-                                
+
                                 let edit = TextEdit {
                                     range: Range {
                                         start: pos,
-                                        end: Position { line: pos.line, character: pos.character + new_name.len() as u32 }, // approx
+                                        end: Position {
+                                            line: pos.line,
+                                            character: pos.character + new_name.len() as u32,
+                                        }, // approx
                                     },
                                     new_text: new_name.clone(),
                                 };
                                 changes.entry(file_uri).or_insert_with(Vec::new).push(edit);
                             }
                         }
-                        
+
                         // Also push the edits for current file if any
                         if let Ok(url) = Url::parse(&uri) {
                             changes.entry(url).or_insert_with(Vec::new).extend(edits);
                         }
-                        
-                            return Ok(Some(WorkspaceEdit {
-                                changes: Some(changes),
-                                document_changes: None,
-                                change_annotations: None,
-                            }));
-                        }
+
+                        return Ok(Some(WorkspaceEdit {
+                            changes: Some(changes),
+                            document_changes: None,
+                            change_annotations: None,
+                        }));
                     }
                 }
             }
@@ -413,30 +472,44 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
-    async fn document_highlight(&self, params: DocumentHighlightParams) -> Result<Option<Vec<DocumentHighlight>>> {
-        let uri = params.text_document_position_params.text_document.uri.to_string();
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams,
+    ) -> Result<Option<Vec<DocumentHighlight>>> {
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .to_string();
         let position = params.text_document_position_params.position;
 
-        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
-            if diags.is_empty() {
-                let mut lowerer = pace_hir::LoweringContext::new();
-                if let Ok(hir) = lowerer.lower_program(ast) {
-                    let mut tc = pace_ty::TypeChecker::new();
-                    let _ = tc.check_program(&hir);
+        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await
+            && diags.is_empty()
+        {
+            let mut lowerer = pace_hir::LoweringContext::new();
+            if let Ok(hir) = lowerer.lower_program(ast) {
+                let mut tc = pace_ty::TypeChecker::new();
+                let _ = tc.check_program(&hir);
 
-                    let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
-                    if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref()) {
-                        let offset = find_node::position_to_offset(&text, position);
-                        if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset) {
+                let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
+                if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref())
+                {
+                    let offset = find_node::position_to_offset(&text, position);
+                    if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset) {
                         let mut highlights = Vec::new();
 
-                        if let Some((_, _, span)) = tc.declared_bindings.iter().find(|(d_id, _, _)| *d_id == id) {
+                        if let Some((_, _, span)) =
+                            tc.declared_bindings.iter().find(|(d_id, _, _)| *d_id == id)
+                        {
                             let span_text = source_map.get_source(span.file_id).unwrap_or_default();
                             let pos = offset_to_position(span_text, span.start as usize);
                             highlights.push(DocumentHighlight {
                                 range: Range {
                                     start: pos,
-                                    end: Position { line: pos.line, character: pos.character + 5 }, // approx
+                                    end: Position {
+                                        line: pos.line,
+                                        character: pos.character + 5,
+                                    }, // approx
                                 },
                                 kind: Some(DocumentHighlightKind::WRITE),
                             });
@@ -444,20 +517,23 @@ impl LanguageServer for Backend {
 
                         if let Some(refs) = tc.symbol_references.get(&id) {
                             for span in refs {
-                                let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                                let span_text =
+                                    source_map.get_source(span.file_id).unwrap_or_default();
                                 let pos = offset_to_position(span_text, span.start as usize);
                                 highlights.push(DocumentHighlight {
                                     range: Range {
                                         start: pos,
-                                        end: Position { line: pos.line, character: pos.character + 5 }, // approx
+                                        end: Position {
+                                            line: pos.line,
+                                            character: pos.character + 5,
+                                        }, // approx
                                     },
                                     kind: Some(DocumentHighlightKind::READ),
                                 });
                             }
                         }
 
-                            return Ok(Some(highlights));
-                        }
+                        return Ok(Some(highlights));
                     }
                 }
             }
@@ -468,106 +544,110 @@ impl LanguageServer for Backend {
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
         let uri = params.text_document.uri.to_string();
 
-        if let Some((ast, source_map, diags, _text)) = self.analyze_uri(&uri).await {
-            if diags.is_empty() {
-                let mut lowerer = pace_hir::LoweringContext::new();
-                if let Ok(hir) = lowerer.lower_program(ast) {
-                    let mut tc = pace_ty::TypeChecker::new();
-                    let _ = tc.check_program(&hir);
+        if let Some((ast, source_map, diags, _text)) = self.analyze_uri(&uri).await
+            && diags.is_empty()
+        {
+            let mut lowerer = pace_hir::LoweringContext::new();
+            if let Ok(hir) = lowerer.lower_program(ast) {
+                let mut tc = pace_ty::TypeChecker::new();
+                let _ = tc.check_program(&hir);
 
-                    let mut hints = Vec::new();
-                    for (span, hint_str) in tc.inlay_hints {
-                        // Inlay hints apply to the current file
-                        if let Some(file_path) = source_map.get_path(span.file_id) {
-                            if let Ok(file_uri) = Url::from_file_path(file_path) {
-                                if file_uri.to_string() == uri {
-                                    let span_text = source_map.get_source(span.file_id).unwrap_or_default();
-                                    // The span covers the whole `let x = ...` stmt.
-                                    // Let's just place the hint at the end of the `let x` part. 
-                                    // Actually, placing it at the `span.start + 4 + name.len()` is tricky without the name.
-                                    // Let's just place it at `span.start` for simplicity and let the user see it there,
-                                    // or we could search for "=" and place it before it.
-                                    let stmt_text = &span_text[span.start as usize..span.end as usize];
-                                    let offset = if let Some(eq_idx) = stmt_text.find('=') {
-                                        span.start as usize + eq_idx
-                                    } else {
-                                        span.start as usize
-                                    };
-                                    
-                                    let pos = offset_to_position(span_text, offset);
-                                    hints.push(InlayHint {
-                                        position: pos,
-                                        label: InlayHintLabel::String(hint_str.clone()),
-                                        kind: Some(InlayHintKind::TYPE),
-                                        text_edits: None,
-                                        tooltip: None,
-                                        padding_left: Some(true),
-                                        padding_right: Some(true),
-                                        data: None,
-                                    });
-                                }
-                            }
-                        }
+                let mut hints = Vec::new();
+                for (span, hint_str) in tc.inlay_hints {
+                    // Inlay hints apply to the current file
+                    if let Some(file_path) = source_map.get_path(span.file_id)
+                        && let Ok(file_uri) = Url::from_file_path(file_path)
+                        && file_uri.to_string() == uri
+                    {
+                        let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                        // The span covers the whole `let x = ...` stmt.
+                        // Let's just place the hint at the end of the `let x` part.
+                        // Actually, placing it at the `span.start + 4 + name.len()` is tricky without the name.
+                        // Let's just place it at `span.start` for simplicity and let the user see it there,
+                        // or we could search for "=" and place it before it.
+                        let stmt_text = &span_text[span.start as usize..span.end as usize];
+                        let offset = if let Some(eq_idx) = stmt_text.find('=') {
+                            span.start as usize + eq_idx
+                        } else {
+                            span.start as usize
+                        };
+
+                        let pos = offset_to_position(span_text, offset);
+                        hints.push(InlayHint {
+                            position: pos,
+                            label: InlayHintLabel::String(hint_str.clone()),
+                            kind: Some(InlayHintKind::TYPE),
+                            text_edits: None,
+                            tooltip: None,
+                            padding_left: Some(true),
+                            padding_right: Some(true),
+                            data: None,
+                        });
                     }
-                    return Ok(Some(hints));
                 }
+                return Ok(Some(hints));
             }
         }
         Ok(None)
     }
 
     async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
-        let uri = params.text_document_position_params.text_document.uri.to_string();
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .to_string();
         let position = params.text_document_position_params.position;
 
-        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await {
-            if diags.is_empty() {
-                let mut lowerer = pace_hir::LoweringContext::new();
-                if let Ok(hir) = lowerer.lower_program(ast) {
-                    let mut tc = pace_ty::TypeChecker::new();
-                    let _ = tc.check_program(&hir);
+        if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await
+            && diags.is_empty()
+        {
+            let mut lowerer = pace_hir::LoweringContext::new();
+            if let Ok(hir) = lowerer.lower_program(ast) {
+                let mut tc = pace_ty::TypeChecker::new();
+                let _ = tc.check_program(&hir);
 
-                    let offset = find_node::position_to_offset(&text, position);
-                    
-                    // Find the innermost function call whose span contains the offset
-                    let mut best_call = None;
-                    let mut best_len = usize::MAX;
-                    for (span, ty) in &tc.function_calls {
-                        let span_len = span.end.saturating_sub(span.start) as usize;
-                        if offset >= span.start as usize && offset <= span.end as usize {
-                            if span_len < best_len {
-                                best_len = span_len;
-                                best_call = Some((*span, ty.clone()));
-                            }
-                        }
+                let offset = find_node::position_to_offset(&text, position);
+
+                // Find the innermost function call whose span contains the offset
+                let mut best_call = None;
+                let mut best_len = usize::MAX;
+                for (span, ty) in &tc.function_calls {
+                    let span_len = span.end.saturating_sub(span.start) as usize;
+                    if offset >= span.start as usize
+                        && offset <= span.end as usize
+                        && span_len < best_len
+                    {
+                        best_len = span_len;
+                        best_call = Some((*span, ty.clone()));
                     }
+                }
 
-                    if let Some((span, pace_ty::Ty::Function(args, ret))) = best_call {
-                        let mut param_infos = Vec::new();
-                        for arg_ty in args {
-                            param_infos.push(ParameterInformation {
-                                label: ParameterLabel::Simple(tc.display_ty(&arg_ty)),
-                                documentation: None,
-                            });
-                        }
-                        
-                        let span_text = source_map.get_source(span.file_id).unwrap_or_default();
-                        let call_text = &span_text[span.start as usize..offset];
-                        let active_param = call_text.chars().filter(|&c| c == ',').count() as u32;
-
-                        let sig_info = SignatureInformation {
-                            label: format!("fn(…) -> {}", tc.display_ty(&ret)),
+                if let Some((span, pace_ty::Ty::Function(args, ret))) = best_call {
+                    let mut param_infos = Vec::new();
+                    for arg_ty in args {
+                        param_infos.push(ParameterInformation {
+                            label: ParameterLabel::Simple(tc.display_ty(&arg_ty)),
                             documentation: None,
-                            parameters: Some(param_infos),
-                            active_parameter: Some(active_param),
-                        };
-
-                        return Ok(Some(SignatureHelp {
-                            signatures: vec![sig_info],
-                            active_signature: Some(0),
-                            active_parameter: Some(active_param),
-                        }));
+                        });
                     }
+
+                    let span_text = source_map.get_source(span.file_id).unwrap_or_default();
+                    let call_text = &span_text[span.start as usize..offset];
+                    let active_param = call_text.chars().filter(|&c| c == ',').count() as u32;
+
+                    let sig_info = SignatureInformation {
+                        label: format!("fn(…) -> {}", tc.display_ty(&ret)),
+                        documentation: None,
+                        parameters: Some(param_infos),
+                        active_parameter: Some(active_param),
+                    };
+
+                    return Ok(Some(SignatureHelp {
+                        signatures: vec![sig_info],
+                        active_signature: Some(0),
+                        active_parameter: Some(active_param),
+                    }));
                 }
             }
         }
@@ -576,77 +656,84 @@ impl LanguageServer for Backend {
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let mut actions = Vec::new();
-        
+
         for diag in params.context.diagnostics {
-            if diag.message.contains("must be assigned before it can be used") {
+            if diag
+                .message
+                .contains("must be assigned before it can be used")
+            {
                 // Not much we can do automatically here
             }
             if diag.message.contains("Type mismatch") {
                 // Type mismatch
             }
-            
-            // Unused variables often have "unused variable: `x`" (if rustc-like) 
+
+            // Unused variables often have "unused variable: `x`" (if rustc-like)
             // but in pace we don't have unused var warnings yet from typechecker.
-            
+
             // As a simple placeholder Code Action for Phase 4:
             // Let's suggest adding an import if we see "Cannot find value 'xyz'"
-            if diag.message.starts_with("Cannot find value '") {
-                if let Some(start) = diag.message.find('\'') {
-                    if let Some(end) = diag.message[start + 1..].find('\'') {
-                        let var_name = &diag.message[start + 1..start + 1 + end];
-                        
-                        let mut changes = HashMap::new();
-                        let uri = params.text_document.uri.clone();
-                        let edit = TextEdit {
-                            range: Range {
-                                start: Position { line: 0, character: 0 },
-                                end: Position { line: 0, character: 0 },
-                            },
-                            new_text: format!("import {}\n", var_name),
-                        };
-                        changes.insert(uri, vec![edit]);
-                        
-                        actions.push(CodeActionOrCommand::CodeAction(CodeAction {
-                            title: format!("Import '{}'", var_name),
-                            kind: Some(CodeActionKind::QUICKFIX),
-                            diagnostics: Some(vec![diag.clone()]),
-                            edit: Some(WorkspaceEdit {
-                                changes: Some(changes),
-                                document_changes: None,
-                                change_annotations: None,
-                            }),
-                            ..Default::default()
-                        }));
-                    }
-                }
+            if diag.message.starts_with("Cannot find value '")
+                && let Some(start) = diag.message.find('\'')
+                && let Some(end) = diag.message[start + 1..].find('\'')
+            {
+                let var_name = &diag.message[start + 1..start + 1 + end];
+
+                let mut changes = HashMap::new();
+                let uri = params.text_document.uri.clone();
+                let edit = TextEdit {
+                    range: Range {
+                        start: Position {
+                            line: 0,
+                            character: 0,
+                        },
+                        end: Position {
+                            line: 0,
+                            character: 0,
+                        },
+                    },
+                    new_text: format!("import {}\n", var_name),
+                };
+                changes.insert(uri, vec![edit]);
+
+                actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                    title: format!("Import '{}'", var_name),
+                    kind: Some(CodeActionKind::QUICKFIX),
+                    diagnostics: Some(vec![diag.clone()]),
+                    edit: Some(WorkspaceEdit {
+                        changes: Some(changes),
+                        document_changes: None,
+                        change_annotations: None,
+                    }),
+                    ..Default::default()
+                }));
             }
 
-            if diag.message.starts_with("unused variable or function: `") {
-                if let Some(start) = diag.message.find('`') {
-                    if let Some(end) = diag.message[start + 1..].find('`') {
-                        let var_name = &diag.message[start + 1..start + 1 + end];
-                        
-                        let mut changes = HashMap::new();
-                        let uri = params.text_document.uri.clone();
-                        let edit = TextEdit {
-                            range: diag.range,
-                            new_text: format!("_{}", var_name),
-                        };
-                        changes.insert(uri, vec![edit]);
-                        
-                        actions.push(CodeActionOrCommand::CodeAction(CodeAction {
-                            title: format!("Rename to '_{}'", var_name),
-                            kind: Some(CodeActionKind::QUICKFIX),
-                            diagnostics: Some(vec![diag.clone()]),
-                            edit: Some(WorkspaceEdit {
-                                changes: Some(changes),
-                                document_changes: None,
-                                change_annotations: None,
-                            }),
-                            ..Default::default()
-                        }));
-                    }
-                }
+            if diag.message.starts_with("unused variable or function: `")
+                && let Some(start) = diag.message.find('`')
+                && let Some(end) = diag.message[start + 1..].find('`')
+            {
+                let var_name = &diag.message[start + 1..start + 1 + end];
+
+                let mut changes = HashMap::new();
+                let uri = params.text_document.uri.clone();
+                let edit = TextEdit {
+                    range: diag.range,
+                    new_text: format!("_{}", var_name),
+                };
+                changes.insert(uri, vec![edit]);
+
+                actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+                    title: format!("Rename to '_{}'", var_name),
+                    kind: Some(CodeActionKind::QUICKFIX),
+                    diagnostics: Some(vec![diag.clone()]),
+                    edit: Some(WorkspaceEdit {
+                        changes: Some(changes),
+                        document_changes: None,
+                        change_annotations: None,
+                    }),
+                    ..Default::default()
+                }));
             }
         }
 
@@ -661,25 +748,25 @@ impl LanguageServer for Backend {
 impl Backend {
     async fn publish_diagnostics(&self, uri: String, text: String) {
         let mut lsp_diags = Vec::new();
-        
+
         if let Some((ast, source_map, diags, _)) = self.analyze_uri(&uri).await {
             // Find file_id for current uri so we only report its diagnostics
             let mut current_file_id = None;
-            if let Ok(url) = Url::parse(&uri) {
-                if let Ok(file_path) = url.to_file_path() {
-                    current_file_id = source_map.get_file_id(&file_path.display().to_string());
-                }
+            if let Ok(url) = Url::parse(&uri)
+                && let Ok(file_path) = url.to_file_path()
+            {
+                current_file_id = source_map.get_file_id(&file_path.display().to_string());
             }
 
             for diag in diags {
                 // If it belongs to another file, skip it
                 if let Some(span) = diag.span {
-                    if let Some(cf_id) = current_file_id {
-                        if span.file_id != cf_id {
-                            continue;
-                        }
+                    if let Some(cf_id) = current_file_id
+                        && span.file_id != cf_id
+                    {
+                        continue;
                     }
-                    
+
                     let start = offset_to_position(&text, span.start as usize);
                     let end = offset_to_position(&text, span.end as usize);
                     let range = Range { start, end };
@@ -697,16 +784,22 @@ impl Backend {
                 if let Ok(hir) = lowerer.lower_program(ast) {
                     let mut tc = pace_ty::TypeChecker::new();
                     if let Err(msg) = tc.check_program(&hir) {
-                    let range = Range {
-                        start: Position { line: 0, character: 0 },
-                        end: Position { line: 0, character: 1 },
-                    };
-                    lsp_diags.push(Diagnostic {
-                        range,
-                        severity: Some(DiagnosticSeverity::ERROR),
-                        message: msg,
-                        ..Default::default()
-                    });
+                        let range = Range {
+                            start: Position {
+                                line: 0,
+                                character: 0,
+                            },
+                            end: Position {
+                                line: 0,
+                                character: 1,
+                            },
+                        };
+                        lsp_diags.push(Diagnostic {
+                            range,
+                            severity: Some(DiagnosticSeverity::ERROR),
+                            message: msg,
+                            ..Default::default()
+                        });
                     }
                 }
             }
@@ -744,11 +837,11 @@ impl Backend {
                 let cache = pace_pkg::cache::CacheManager::new();
                 for (pkg_name, pkg_info) in &lock.packages {
                     let mut pkg_path = cache.get_package_path(pkg_name, &pkg_info.version);
-                    if let Some(source) = &pkg_info.source {
-                        if source.starts_with("local+") {
-                            let local_path = source.strip_prefix("local+").unwrap();
-                            pkg_path = root.join(local_path);
-                        }
+                    if let Some(source) = &pkg_info.source
+                        && source.starts_with("local+")
+                    {
+                        let local_path = source.strip_prefix("local+").unwrap();
+                        pkg_path = root.join(local_path);
                     }
                     dependencies.insert(pkg_name.clone(), pkg_path);
                 }
@@ -794,18 +887,22 @@ pub async fn start_server() {
     Server::new(stdin, stdout, socket).serve(service).await;
 }
 
-
-fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span::FileId) -> Option<DocumentSymbol> {
+fn decl_to_document_symbol(
+    decl: &pace_ast::Decl,
+    text: &str,
+    file_id: pace_span::FileId,
+) -> Option<DocumentSymbol> {
     use pace_ast::Decl;
-    
+
     // Helper closure to check file id and prevent panics
     let is_valid = |span: &pace_span::Span| span.file_id == file_id;
-    
+
     match decl {
-        Decl::Function { name, span, .. } if is_valid(span) => {
+        Decl::Function { name, span, .. } if is_valid(span) =>
+        {
             #[allow(deprecated)]
             Some(DocumentSymbol {
-                name: name.name.clone(),
+                name: name.name.to_string(),
                 detail: None,
                 kind: SymbolKind::FUNCTION,
                 tags: None,
@@ -821,13 +918,21 @@ fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span
                 children: None,
             })
         }
-        Decl::Struct { name, span, fields, methods, .. } if is_valid(span) => {
+        Decl::Struct {
+            name,
+            span,
+            fields,
+            methods,
+            ..
+        } if is_valid(span) => {
             let mut children = Vec::new();
-            for (fname, _, _, _, _) in fields {
-                if !is_valid(&fname.span) { continue; }
+            for pace_ast::FieldDef { name: fname, .. } in fields {
+                if !is_valid(&fname.span) {
+                    continue;
+                }
                 #[allow(deprecated)]
                 children.push(DocumentSymbol {
-                    name: fname.name.clone(),
+                    name: fname.name.to_string(),
                     detail: None,
                     kind: SymbolKind::FIELD,
                     tags: None,
@@ -851,7 +956,7 @@ fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span
             }
             #[allow(deprecated)]
             Some(DocumentSymbol {
-                name: name.name.clone(),
+                name: name.name.to_string(),
                 detail: None,
                 kind: SymbolKind::STRUCT,
                 tags: None,
@@ -867,13 +972,21 @@ fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span
                 children: Some(children),
             })
         }
-        Decl::Class { name, span, fields, methods, .. } if is_valid(span) => {
+        Decl::Class {
+            name,
+            span,
+            fields,
+            methods,
+            ..
+        } if is_valid(span) => {
             let mut children = Vec::new();
-            for (fname, _, _, _, _) in fields {
-                if !is_valid(&fname.span) { continue; }
+            for pace_ast::FieldDef { name: fname, .. } in fields {
+                if !is_valid(&fname.span) {
+                    continue;
+                }
                 #[allow(deprecated)]
                 children.push(DocumentSymbol {
-                    name: fname.name.clone(),
+                    name: fname.name.to_string(),
                     detail: None,
                     kind: SymbolKind::FIELD,
                     tags: None,
@@ -897,7 +1010,7 @@ fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span
             }
             #[allow(deprecated)]
             Some(DocumentSymbol {
-                name: name.name.clone(),
+                name: name.name.to_string(),
                 detail: None,
                 kind: SymbolKind::CLASS,
                 tags: None,
@@ -913,13 +1026,20 @@ fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span
                 children: Some(children),
             })
         }
-        Decl::Enum { name, span, variants, .. } if is_valid(span) => {
+        Decl::Enum {
+            name,
+            span,
+            variants,
+            ..
+        } if is_valid(span) => {
             let mut children = Vec::new();
             for v in variants {
-                if !is_valid(&v.name.span) { continue; }
+                if !is_valid(&v.name.span) {
+                    continue;
+                }
                 #[allow(deprecated)]
                 children.push(DocumentSymbol {
-                    name: v.name.name.clone(),
+                    name: v.name.name.to_string(),
                     detail: None,
                     kind: SymbolKind::ENUM_MEMBER,
                     tags: None,
@@ -937,7 +1057,7 @@ fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span
             }
             #[allow(deprecated)]
             Some(DocumentSymbol {
-                name: name.name.clone(),
+                name: name.name.to_string(),
                 detail: None,
                 kind: SymbolKind::ENUM,
                 tags: None,
@@ -953,7 +1073,12 @@ fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span
                 children: Some(children),
             })
         }
-        Decl::Trait { name, span, methods, .. } if is_valid(span) => {
+        Decl::Trait {
+            name,
+            span,
+            methods,
+            ..
+        } if is_valid(span) => {
             let mut children = Vec::new();
             for m in methods {
                 if let Some(mut m_sym) = decl_to_document_symbol(m, text, file_id) {
@@ -963,7 +1088,7 @@ fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span
             }
             #[allow(deprecated)]
             Some(DocumentSymbol {
-                name: name.name.clone(),
+                name: name.name.to_string(),
                 detail: None,
                 kind: SymbolKind::INTERFACE,
                 tags: None,
@@ -979,10 +1104,11 @@ fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span
                 children: Some(children),
             })
         }
-        Decl::Let { name, span, .. } | Decl::Var { name, span, .. } if is_valid(span) => {
+        Decl::Let { name, span, .. } | Decl::Var { name, span, .. } if is_valid(span) =>
+        {
             #[allow(deprecated)]
             Some(DocumentSymbol {
-                name: name.name.clone(),
+                name: name.name.to_string(),
                 detail: None,
                 kind: SymbolKind::VARIABLE,
                 tags: None,
@@ -998,10 +1124,11 @@ fn decl_to_document_symbol(decl: &pace_ast::Decl, text: &str, file_id: pace_span
                 children: None,
             })
         }
-        Decl::Const { name, span, .. } if is_valid(span) => {
+        Decl::Const { name, span, .. } if is_valid(span) =>
+        {
             #[allow(deprecated)]
             Some(DocumentSymbol {
-                name: name.name.clone(),
+                name: name.name.to_string(),
                 detail: None,
                 kind: SymbolKind::CONSTANT,
                 tags: None,

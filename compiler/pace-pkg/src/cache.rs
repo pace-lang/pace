@@ -8,6 +8,12 @@ pub struct CacheManager {
     cache_dir: PathBuf,
 }
 
+impl Default for CacheManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CacheManager {
     pub fn new() -> Self {
         let cache_dir = dirs::home_dir()
@@ -36,7 +42,7 @@ impl CacheManager {
         // Use configurable registry or default
         let registry_url = std::env::var("PACE_REGISTRY_URL")
             .unwrap_or_else(|_| "http://localhost:3000/api/packages".to_string());
-        
+
         let url = format!("{}/{}/download/{}", registry_url, name, version);
         let client = Client::new();
         let resp = client

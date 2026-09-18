@@ -3,6 +3,7 @@ pub mod typechecker;
 
 pub use ty::Ty;
 pub use typechecker::TypeChecker;
+pub use typechecker::{ResolvedField, ResolvedMethod, VTableEntry};
 
 #[cfg(test)]
 mod tests {
@@ -20,15 +21,18 @@ mod tests {
         assert!(diags.is_empty(), "Parse errors");
 
         let mut modules = std::collections::HashMap::new();
-        modules.insert("main".to_string(), pace_ast::Module {
-            name: "main".to_string(),
-            file_id: pace_span::FileId::DUMMY,
-            declarations: ast,
-            comments: vec![],
-        });
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
         let program = pace_ast::Program {
             modules,
-            module_order: vec!["main".to_string()],
+            module_order: vec![pace_span::intern("main")],
             span: pace_span::Span::DUMMY,
         };
 
@@ -48,15 +52,18 @@ mod tests {
         assert!(diags.is_empty(), "Parse errors");
 
         let mut modules = std::collections::HashMap::new();
-        modules.insert("main".to_string(), pace_ast::Module {
-            name: "main".to_string(),
-            file_id: pace_span::FileId::DUMMY,
-            declarations: ast,
-            comments: vec![],
-        });
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
         let program = pace_ast::Program {
             modules,
-            module_order: vec!["main".to_string()],
+            module_order: vec![pace_span::intern("main")],
             span: pace_span::Span::DUMMY,
         };
 

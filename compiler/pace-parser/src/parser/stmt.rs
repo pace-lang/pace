@@ -32,7 +32,7 @@ impl<'a> Parser<'a> {
             })?;
             let name = match name_tok.kind {
                 TokenKind::Ident(n) => Ident {
-                    name: n.to_string(),
+                    name: pace_span::intern(n),
                     span: name_tok.span,
                 },
                 _ => {
@@ -79,7 +79,7 @@ impl<'a> Parser<'a> {
             })?;
             let name = match name_tok.kind {
                 TokenKind::Ident(n) => Ident {
-                    name: n.to_string(),
+                    name: pace_span::intern(n),
                     span: name_tok.span,
                 },
                 _ => {
