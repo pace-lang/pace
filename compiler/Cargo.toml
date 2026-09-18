@@ -14,5 +14,12 @@ members = [
     "pace-lsp",
     "pace-driver",
     "pace-fmt",
-    "pace-cli"
+    "pace-cli",
+    "runtime"
 ]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"

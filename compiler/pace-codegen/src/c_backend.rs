@@ -127,7 +127,7 @@ impl CGenerator {
                 ..
             } in fields
             {
-                if matches!(fty, Ty::Class(_)) {
+                if matches!(fty, Ty::Class(_)) || matches!(fty, Ty::String) {
                     self.output
                         .push_str(&format!("    pace_release(self->{});\n", fname));
                 }
@@ -221,7 +221,7 @@ impl CGenerator {
         match ty {
             Ty::Int | Ty::Bool => "long long".to_string(),
             Ty::Float => "double".to_string(),
-            Ty::String => "char*".to_string(),
+            Ty::String => "struct PaceString*".to_string(),
             Ty::Struct(id) => format!("struct pace_{}", id.0),
             Ty::Class(id) => format!("struct pace_{}*", id.0),
             Ty::Enum(id) => format!("struct pace_{}", id.0),
@@ -400,7 +400,7 @@ impl CGenerator {
                 write!(&mut self.output, "{}", if *val { "1" } else { "0" }).unwrap()
             }
             Rvalue::Constant(Constant::String(val)) => {
-                write!(&mut self.output, "\"{}\"", val.trim_matches('"')).unwrap()
+                write!(&mut self.output, "pace_string_new(\"{}\")", val.trim_matches('"')).unwrap()
             }
             Rvalue::BinaryOp(op, lhs, rhs) => {
                 if matches!(op, BinaryOp::NullCoalesce) {
@@ -476,7 +476,7 @@ impl CGenerator {
                             type_args.push(format!("_{}", arg.0));
                         } else if matches!(ty, Ty::String) {
                             format_str.push_str("%s");
-                            type_args.push(format!("_{}", arg.0));
+                            type_args.push(format!("(_{} ? _{}->data : \"null\")", arg.0, arg.0));
                         } else if matches!(ty, Ty::Bool) {
                             format_str.push_str("%s");
                             type_args.push(format!("_{} ? \"true\" : \"false\"", arg.0));

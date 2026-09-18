@@ -296,25 +296,34 @@ pub fn compile_file(
         .map_err(|e| format!("Failed to create output directory: {}", e))?;
     let bin_file = output_dir.join(output_name);
 
-    // Find runtime path
-    let runtime_path = if Path::new("runtime/pace_runtime.c").exists() {
-        "runtime/pace_runtime.c".to_string()
-    } else if Path::new("../runtime/pace_runtime.c").exists() {
-        "../runtime/pace_runtime.c".to_string()
-    } else if Path::new("../../runtime/pace_runtime.c").exists() {
-        "../../runtime/pace_runtime.c".to_string()
+    // Find runtime paths
+    let runtime_dir = if Path::new("runtime").exists() {
+        PathBuf::from("runtime")
+    } else if Path::new("../compiler/runtime").exists() {
+        PathBuf::from("../compiler/runtime")
+    } else if Path::new("../../compiler/runtime").exists() {
+        PathBuf::from("../../compiler/runtime")
     } else {
-        "runtime/pace_runtime.c".to_string()
+        PathBuf::from("compiler/runtime")
+    };
+
+    let lib_dir = if Path::new("target/debug/libpace_rt.a").exists() {
+        PathBuf::from("target/debug")
+    } else if Path::new("../compiler/target/debug/libpace_rt.a").exists() {
+        PathBuf::from("../compiler/target/debug")
+    } else if Path::new("../../compiler/target/debug/libpace_rt.a").exists() {
+        PathBuf::from("../../compiler/target/debug")
+    } else {
+        PathBuf::from("target/debug")
     };
 
     let status = Command::new("gcc")
         .arg("-O2")
-        .arg(format!(
-            "-I{}",
-            Path::new(&runtime_path).parent().unwrap().display()
-        ))
+        .arg(format!("-I{}", runtime_dir.display()))
         .arg(c_file)
-        .arg(&runtime_path)
+        .arg("-L")
+        .arg(lib_dir)
+        .arg("-lpace_rt")
         .arg("-o")
         .arg(&bin_file)
         .status()

@@ -1,0 +1,20 @@
+[package]
+name = "pace-rt"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "pace_rt"
+crate-type = ["staticlib"]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+[dependencies]
+mimalloc = "0.1.43"
+
+[build-dependencies]
+cc = "1.0"
