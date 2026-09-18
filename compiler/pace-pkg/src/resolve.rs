@@ -8,7 +8,7 @@ use std::path::Path;
 
 use crate::PaceToml;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PaceLock {
     pub packages: HashMap<String, LockedPackage>,
 }

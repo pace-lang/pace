@@ -18,26 +18,18 @@ pub async fn add_dependency(name: &str, version: Option<&str>, dev: bool) -> Res
         v.to_string()
     } else {
         println!("Fetching latest version of {}...", name);
-        let registry_url = env::var("PACE_REGISTRY_URL")
-            .unwrap_or_else(|_| "http://localhost:3000/api/packages".to_string());
-
-        let client = reqwest::Client::new();
-        let url = format!("{}/{}", registry_url, name);
-        let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
-
-        if res.status().is_success() {
-            #[derive(serde::Deserialize)]
-            struct PkgInfo {
-                latest_version: Option<String>,
+        let resolver = DependencyResolver::new();
+        match resolver.get_package_info(name).await {
+            Ok(info) => {
+                if let Some(lv) = info.latest_version {
+                    format!("^{}", lv)
+                } else if let Some(v_info) = info.version_info.last() {
+                    format!("^{}", v_info.version)
+                } else {
+                    "*".to_string()
+                }
             }
-            let info: PkgInfo = res.json().await.map_err(|e| e.to_string())?;
-            if let Some(lv) = info.latest_version {
-                format!("^{}", lv)
-            } else {
-                "*".to_string()
-            }
-        } else {
-            return Err(format!("Package '{}' not found in registry", name));
+            Err(e) => return Err(e),
         }
     };
 
@@ -206,6 +198,10 @@ pub async fn update_dependencies(latest: bool) -> Result<(), String> {
     } else {
         None
     };
+
+    if let Some(ref lock) = old_lock {
+        resolver.load_lock(lock.clone());
+    }
 
     let lock = resolver.resolve(&toml).await?;
     resolver.write_lockfile(&lockfile_path, &lock)?;

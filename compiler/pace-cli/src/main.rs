@@ -166,7 +166,7 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> R
                             .download_and_extract(pkg_name, &pkg_info.version, checksum)
                             .await
                         {
-                            eprintln!("Warning: failed to download {}: {}", pkg_name, e);
+                            eprintln!("Warning: Failed to download {}. You may be offline, and this package is not in your local cache. Error: {}", pkg_name, e);
                         }
                     }
                 }

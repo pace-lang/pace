@@ -67,9 +67,17 @@ impl CacheManager {
         let tar = GzDecoder::new(&bytes[..]);
         let mut archive = Archive::new(tar);
 
+        let tmp_dir = self.cache_dir.join(format!("{}-{}.tmp", name, version));
+        if tmp_dir.exists() {
+            fs::remove_dir_all(&tmp_dir).map_err(|e| format!("Failed to clear temp directory: {}", e))?;
+        }
+
         archive
-            .unpack(&pkg_dir)
+            .unpack(&tmp_dir)
             .map_err(|e| format!("Failed to extract {}: {}", name, e))?;
+
+        fs::rename(&tmp_dir, &pkg_dir)
+            .map_err(|e| format!("Failed to rename extracted directory: {}", e))?;
 
         Ok(pkg_dir)
     }
