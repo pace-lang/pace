@@ -237,6 +237,7 @@ pub fn compile_file(
     output_name: &str,
     run: bool,
     check_only: bool,
+    release: bool,
     dependencies: &std::collections::HashMap<String, PathBuf>,
 ) -> Result<(), String> {
     let empty_overrides = std::collections::HashMap::new();
@@ -317,8 +318,12 @@ pub fn compile_file(
         PathBuf::from("target/debug")
     };
 
-    let status = Command::new("gcc")
-        .arg("-O2")
+    let mut gcc_cmd = Command::new("gcc");
+    if release {
+        gcc_cmd.arg("-O2");
+    }
+
+    let status = gcc_cmd
         .arg(format!("-I{}", runtime_dir.display()))
         .arg(c_file)
         .arg("-L")

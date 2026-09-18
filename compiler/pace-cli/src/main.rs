@@ -4,6 +4,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[derive(ClapParser)]
 #[command(
     name = "pace",
@@ -106,12 +109,12 @@ fn get_project_info() -> Result<(PathBuf, String), String> {
     Ok((root, toml.package.name))
 }
 
-async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> Result<(), String> {
+async fn execute_build_or_run(file: Option<String>, run: bool, check: bool, release: bool) -> Result<(), String> {
     if let Some(f) = file {
         let p = PathBuf::from(&f);
         let name = p.file_stem().unwrap().to_str().unwrap().to_string();
         let empty_deps = std::collections::HashMap::new();
-        pace_driver::compile_file(&p, Path::new("."), &name, run, check, &empty_deps)
+        pace_driver::compile_file(&p, Path::new("."), &name, run, check, release, &empty_deps)
     } else {
         let (root, project_name) = get_project_info()?;
 
@@ -181,6 +184,7 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool) -> R
             &project_name,
             run,
             check,
+            release,
             &dependencies,
         )
     }
@@ -246,19 +250,19 @@ async fn main() {
             }
         }
         Commands::Build { file } => {
-            if let Err(e) = execute_build_or_run(file, false, false).await {
+            if let Err(e) = execute_build_or_run(file, false, false, true).await {
                 eprintln!("{}", e);
                 std::process::exit(1);
             }
         }
         Commands::Check { file } => {
-            if let Err(e) = execute_build_or_run(file, false, true).await {
+            if let Err(e) = execute_build_or_run(file, false, true, false).await {
                 eprintln!("{}", e);
                 std::process::exit(1);
             }
         }
         Commands::Run { file } => {
-            if let Err(e) = execute_build_or_run(file, true, false).await {
+            if let Err(e) = execute_build_or_run(file, true, false, false).await {
                 eprintln!("{}", e);
                 std::process::exit(1);
             }

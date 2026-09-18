@@ -14,3 +14,4 @@ pace-driver = { path = "../pace-driver" }
 pace-lsp = { path = "../pace-lsp" }
 tokio = { version = "1.0", features = ["full"] }
 semver = "1.0.28"
+mimalloc = "0.1.43"

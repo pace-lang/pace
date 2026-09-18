@@ -23,7 +23,7 @@ impl Default for CGenerator {
 impl CGenerator {
     pub fn new() -> Self {
         Self {
-            output: String::new(),
+            output: String::with_capacity(1024 * 1024),
             enum_defs: std::collections::HashMap::new(),
         }
     }
