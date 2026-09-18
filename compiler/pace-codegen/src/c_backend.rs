@@ -1,5 +1,7 @@
 use pace_ast::BinaryOp;
-use pace_mir::{BasicBlock, Constant, Lvalue, MirFunction, MirProgram, Rvalue, Statement, Terminator};
+use pace_mir::{
+    BasicBlock, Constant, Lvalue, MirFunction, MirProgram, Rvalue, Statement, Terminator,
+};
 use pace_ty::Ty;
 use std::fmt::Write;
 

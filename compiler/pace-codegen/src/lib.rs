@@ -5,7 +5,9 @@ pub use c_backend::CGenerator;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pace_mir::{BasicBlock, Constant, Local, Lvalue, MirBody, MirProgram, Rvalue, Statement, Terminator};
+    use pace_mir::{
+        BasicBlock, Constant, Local, Lvalue, MirBody, MirProgram, Rvalue, Statement, Terminator,
+    };
     use pace_ty::Ty;
 
     #[test]

@@ -7,6 +7,7 @@ pub struct Local(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BasicBlockId(pub u32);
 
+/// A sequential block of statements ending with a control-flow terminator.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BasicBlock {
     pub statements: Vec<Statement>,
@@ -27,7 +28,6 @@ pub enum Statement {
     Release(Lvalue),
     GlobalWrite(String, Local),
 }
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
@@ -72,6 +72,7 @@ pub struct MirBody {
     pub locals: Vec<pace_ty::Ty>,
 }
 
+/// A basic block-based function representation within MIR.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MirFunction {
     pub name: String,
@@ -80,6 +81,7 @@ pub struct MirFunction {
     pub body: MirBody,
 }
 
+/// Represents the entire Middle Intermediate Representation (MIR) of the program, optimized for control-flow analysis and lowering.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MirProgram {
     pub functions: Vec<MirFunction>,

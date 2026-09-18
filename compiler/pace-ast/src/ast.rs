@@ -33,6 +33,7 @@ pub struct CallArg {
 
 use std::collections::HashMap;
 
+/// Represents a complete parsed Pace program consisting of multiple modules.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub modules: HashMap<Symbol, Module>,

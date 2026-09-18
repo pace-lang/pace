@@ -18,7 +18,7 @@ mod tests {
     fn format_source(source: &str) -> String {
         let mut sm = SourceMap::new();
         let file_id = sm.add_file("test.pace".to_string(), source.to_string());
-        
+
         let lexer = Lexer::new(source, file_id);
         let mut parser = Parser::new(lexer);
         let (declarations, diags, comments) = parser.parse_program();
