@@ -161,7 +161,7 @@ impl<'a> MirBuilder<'a> {
                             let temp = self.new_local(Ty::Int);
                             self.push_stmt(Statement::Assign(
                                 Lvalue::Local(temp),
-                                Rvalue::IntConstant("0".to_string()),
+                                Rvalue::Constant(Constant::Int("0".to_string())),
                             ));
                             temp
                         }
@@ -226,7 +226,7 @@ impl<'a> MirBuilder<'a> {
                 let local = self.new_local(Ty::Optional(Box::new(Ty::Void)));
                 self.push_stmt(Statement::Assign(
                     Lvalue::Local(local),
-                    Rvalue::IntConstant("0".to_string()), // Represent null as 0 in MIR for MVP
+                    Rvalue::Constant(Constant::Int("0".to_string())), // Represent null as 0 in MIR for MVP
                 ));
                 local
             }
@@ -258,7 +258,7 @@ impl<'a> MirBuilder<'a> {
                 let local = self.new_local(Ty::Int);
                 self.push_stmt(Statement::Assign(
                     Lvalue::Local(local),
-                    Rvalue::IntConstant(val.clone()),
+                    Rvalue::Constant(Constant::Int(val.clone())),
                 ));
                 local
             }
@@ -266,7 +266,7 @@ impl<'a> MirBuilder<'a> {
                 let local = self.new_local(Ty::Float);
                 self.push_stmt(Statement::Assign(
                     Lvalue::Local(local),
-                    Rvalue::FloatConstant(val.clone()),
+                    Rvalue::Constant(Constant::Float(val.clone())),
                 ));
                 local
             }
@@ -274,7 +274,7 @@ impl<'a> MirBuilder<'a> {
                 let local = self.new_local(Ty::Bool);
                 self.push_stmt(Statement::Assign(
                     Lvalue::Local(local),
-                    Rvalue::BoolConstant(*val),
+                    Rvalue::Constant(Constant::Bool(*val)),
                 ));
                 local
             }
@@ -282,7 +282,7 @@ impl<'a> MirBuilder<'a> {
                 let temp = self.new_local(Ty::String);
                 self.push_stmt(Statement::Assign(
                     Lvalue::Local(temp),
-                    Rvalue::StringConstant(val.clone()),
+                    Rvalue::Constant(Constant::String(val.clone())),
                 ));
                 temp
             }
@@ -974,7 +974,7 @@ impl<'a> MirBuilder<'a> {
                     let tag_const_local = self.new_local(Ty::Int);
                     self.push_stmt(Statement::Assign(
                         Lvalue::Local(tag_const_local),
-                        Rvalue::IntConstant(arm_tag.to_string()),
+                        Rvalue::Constant(Constant::Int(arm_tag.to_string())),
                     ));
                     self.push_stmt(Statement::Assign(
                         Lvalue::Local(cond_local),
@@ -1448,7 +1448,7 @@ impl<'a> MirBuilder<'a> {
             let temp = self.new_local(Ty::Int);
             self.blocks[current_bb].statements.push(Statement::Assign(
                 Lvalue::Local(temp),
-                Rvalue::IntConstant("0".to_string()),
+                Rvalue::Constant(Constant::Int("0".to_string())),
             ));
             self.blocks[current_bb].terminator = Some(Terminator::Return(temp));
         }

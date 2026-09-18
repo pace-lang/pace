@@ -28,14 +28,20 @@ pub enum Statement {
     GlobalWrite(String, Local),
 }
 
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Constant {
+    Int(String),
+    Float(String),
+    Bool(bool),
+    String(String),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Rvalue {
     Use(Local),
     BinaryOp(BinaryOp, Local, Local),
-    IntConstant(String),
-    FloatConstant(String),
-    BoolConstant(bool),
-    StringConstant(String),
+    Constant(Constant),
     Call(Local, Vec<Local>),
     BuiltinCall(String, Vec<Local>),
     GlobalCall(String, Vec<Local>),

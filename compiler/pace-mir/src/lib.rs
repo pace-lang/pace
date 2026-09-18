@@ -79,7 +79,7 @@ mod tests {
         }
 
         match &stmts[1] {
-            Statement::Assign(_, Rvalue::IntConstant(v)) => assert_eq!(v, "1"),
+            Statement::Assign(_, Rvalue::Constant(Constant::Int(v))) => assert_eq!(v, "1"),
             _ => panic!("Expected IntConstant 1"),
         }
 
@@ -89,7 +89,7 @@ mod tests {
         }
 
         match &stmts[3] {
-            Statement::Assign(_, Rvalue::IntConstant(v)) => assert_eq!(v, "2"),
+            Statement::Assign(_, Rvalue::Constant(Constant::Int(v))) => assert_eq!(v, "2"),
             _ => panic!("Expected IntConstant 2"),
         }
 
@@ -99,7 +99,7 @@ mod tests {
         }
 
         match &stmts[5] {
-            Statement::Assign(_, Rvalue::IntConstant(v)) => assert_eq!(v, "0"),
+            Statement::Assign(_, Rvalue::Constant(Constant::Int(v))) => assert_eq!(v, "0"),
             _ => panic!("Expected IntConstant 0 for return"),
         }
 

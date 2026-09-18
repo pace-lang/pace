@@ -97,3 +97,42 @@ impl From<(FileId, std::ops::Range<usize>)> for Span {
         Span::new(file_id, range.start as u32, range.end as u32)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_source_map() {
+        let mut sm = SourceMap::new();
+        let file1 = sm.add_file("file1.pace".to_string(), "let x = 5;".to_string());
+        let file2 = sm.add_file("file2.pace".to_string(), "let y = 10;".to_string());
+
+        assert_eq!(file1, FileId(0));
+        assert_eq!(file2, FileId(1));
+
+        assert_eq!(sm.get_source(file1), Some("let x = 5;"));
+        assert_eq!(sm.get_path(file2), Some("file2.pace"));
+        assert_eq!(sm.get_file_id("file1.pace"), Some(file1));
+        assert_eq!(sm.get_file_id("missing.pace"), None);
+    }
+
+    #[test]
+    fn test_span_merge() {
+        let span1 = Span::new(FileId(1), 5, 10);
+        let span2 = Span::new(FileId(1), 15, 20);
+        let merged = span1.merge(span2);
+
+        assert_eq!(merged.file_id, FileId(1));
+        assert_eq!(merged.start, 5);
+        assert_eq!(merged.end, 20);
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot merge spans from different files")]
+    fn test_span_merge_panic() {
+        let span1 = Span::new(FileId(1), 5, 10);
+        let span2 = Span::new(FileId(2), 15, 20);
+        span1.merge(span2);
+    }
+}

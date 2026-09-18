@@ -5,7 +5,7 @@ pub use c_backend::CGenerator;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pace_mir::{BasicBlock, Local, Lvalue, MirBody, MirProgram, Rvalue, Statement, Terminator};
+    use pace_mir::{BasicBlock, Constant, Local, Lvalue, MirBody, MirProgram, Rvalue, Statement, Terminator};
     use pace_ty::Ty;
 
     #[test]
@@ -17,11 +17,11 @@ mod tests {
                 statements: vec![
                     Statement::Assign(
                         Lvalue::Local(Local(0)),
-                        Rvalue::IntConstant("42".to_string()),
+                        Rvalue::Constant(Constant::Int("42".to_string())),
                     ),
                     Statement::Assign(
                         Lvalue::Local(Local(1)),
-                        Rvalue::StringConstant("hello".to_string()),
+                        Rvalue::Constant(Constant::String("hello".to_string())),
                     ),
                     Statement::Retain(Lvalue::Local(Local(1))),
                 ],

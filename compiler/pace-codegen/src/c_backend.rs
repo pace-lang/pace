@@ -1,5 +1,5 @@
 use pace_ast::BinaryOp;
-use pace_mir::{BasicBlock, Lvalue, MirFunction, MirProgram, Rvalue, Statement, Terminator};
+use pace_mir::{BasicBlock, Constant, Lvalue, MirFunction, MirProgram, Rvalue, Statement, Terminator};
 use pace_ty::Ty;
 use std::fmt::Write;
 
@@ -392,12 +392,12 @@ impl CGenerator {
     fn generate_rvalue(&mut self, rvalue: &Rvalue, locals: &[Ty]) {
         match rvalue {
             Rvalue::Use(local) => write!(&mut self.output, "_{}", local.0).unwrap(),
-            Rvalue::IntConstant(val) => write!(&mut self.output, "{}", val).unwrap(),
-            Rvalue::FloatConstant(val) => write!(&mut self.output, "{}", val).unwrap(),
-            Rvalue::BoolConstant(val) => {
+            Rvalue::Constant(Constant::Int(val)) => write!(&mut self.output, "{}", val).unwrap(),
+            Rvalue::Constant(Constant::Float(val)) => write!(&mut self.output, "{}", val).unwrap(),
+            Rvalue::Constant(Constant::Bool(val)) => {
                 write!(&mut self.output, "{}", if *val { "1" } else { "0" }).unwrap()
             }
-            Rvalue::StringConstant(val) => {
+            Rvalue::Constant(Constant::String(val)) => {
                 write!(&mut self.output, "\"{}\"", val.trim_matches('"')).unwrap()
             }
             Rvalue::BinaryOp(op, lhs, rhs) => {

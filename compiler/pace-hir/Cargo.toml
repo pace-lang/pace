@@ -7,3 +7,7 @@ edition = "2024"
 pace-ast = { path = "../pace-ast" }
 pace-span = { path = "../pace-span" }
 pace-errors = { path = "../pace-errors" }
+
+[dev-dependencies]
+pace-lexer = { path = "../pace-lexer" }
+pace-parser = { path = "../pace-parser" }
