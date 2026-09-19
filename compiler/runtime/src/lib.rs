@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 extern crate alloc;
 
@@ -17,14 +18,16 @@ unsafe extern "C" {
     fn memcpy(dest: *mut c_void, src: *const c_void, n: usize) -> *mut c_void;
 }
 
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe {
-        printf(b"Rust panic!\n\0".as_ptr() as *const c_char);
+        printf(c"Rust panic!\n".as_ptr());
         abort();
     }
 }
 
+#[cfg(not(test))]
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_eh_personality() {}
 
@@ -38,7 +41,7 @@ pub struct ArcHeader {
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_panic(msg: *const c_char) -> ! {
     unsafe {
-        printf(b"Fatal error: %s\n\0".as_ptr() as *const c_char, msg);
+        printf(c"Fatal error: %s\n".as_ptr(), msg);
         abort();
     }
 }
@@ -49,7 +52,7 @@ pub extern "C" fn pace_alloc(size: usize, deinit: Option<unsafe extern "C" fn(*m
     let total_size = header_size + size;
     
     let layout = Layout::from_size_align(total_size, core::mem::align_of::<ArcHeader>()).unwrap_or_else(|_| {
-        pace_panic(b"Invalid allocation layout\0".as_ptr() as *const c_char);
+        pace_panic(c"Invalid allocation layout".as_ptr());
     });
 
     unsafe {
@@ -65,7 +68,7 @@ pub extern "C" fn pace_alloc(size: usize, deinit: Option<unsafe extern "C" fn(*m
             deinit,
         });
 
-        (ptr as *mut u8).add(header_size) as *mut c_void
+        ptr.add(header_size) as *mut c_void
     }
 }
 
@@ -108,26 +111,26 @@ pub extern "C" fn pace_release(obj: *mut c_void) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_print_int(val: c_longlong) {
-    unsafe { printf(b"%lld\n\0".as_ptr() as *const c_char, val); }
+    unsafe { printf(c"%lld\n".as_ptr(), val); }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_print_float(val: c_double) {
-    unsafe { printf(b"%f\n\0".as_ptr() as *const c_char, val); }
+    unsafe { printf(c"%f\n".as_ptr(), val); }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_print_bool(val: c_int) {
     if val != 0 {
-        unsafe { printf(b"true\n\0".as_ptr() as *const c_char); }
+        unsafe { printf(c"true\n".as_ptr()); }
     } else {
-        unsafe { printf(b"false\n\0".as_ptr() as *const c_char); }
+        unsafe { printf(c"false\n".as_ptr()); }
     }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_println() {
-    unsafe { printf(b"\n\0".as_ptr() as *const c_char); }
+    unsafe { printf(c"\n".as_ptr()); }
 }
 
 #[repr(C)]
@@ -165,10 +168,10 @@ pub extern "C" fn pace_string_new(c_str: *const c_char) -> *mut PaceString {
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_print_string(val: *mut PaceString) {
     if val.is_null() {
-        unsafe { printf(b"null\n\0".as_ptr() as *const c_char); }
+        unsafe { printf(c"null\n".as_ptr()); }
         return;
     }
     unsafe {
-        printf(b"%s\n\0".as_ptr() as *const c_char, (*val).data);
+        printf(c"%s\n".as_ptr(), (*val).data);
     }
 }

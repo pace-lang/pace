@@ -96,7 +96,7 @@ impl ConstantFolder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mir::{MirBody, Terminator};
+    use crate::mir::Terminator;
 
     #[test]
     fn test_constant_folding_add() {

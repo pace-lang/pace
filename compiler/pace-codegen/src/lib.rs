@@ -45,9 +45,9 @@ mod tests {
         let code = generator.generate(&program);
 
         assert!(code.contains("long long _0 = 0;"));
-        assert!(code.contains("char* _1 = NULL;"));
+        assert!(code.contains("struct PaceString* _1 = NULL;"));
         assert!(code.contains("_0 = 42;"));
-        assert!(code.contains("_1 = \"hello\";"));
+        assert!(code.contains("_1 = pace_string_new(\"hello\");"));
         assert!(code.contains("pace_retain(_1);"));
     }
 }
