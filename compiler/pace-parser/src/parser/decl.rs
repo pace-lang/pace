@@ -263,6 +263,19 @@ impl<'a> Parser<'a> {
                     };
                     self.advance();
 
+                    let mut trait_bounds = Vec::new();
+                    if self.check(&TokenKind::Colon) {
+                        self.advance();
+                        loop {
+                            trait_bounds.push(self.parse_type()?);
+                            if self.check(&TokenKind::Plus) {
+                                self.advance();
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+
                     let mut default = None;
                     if self.check(&TokenKind::Eq) {
                         self.advance();
@@ -271,6 +284,7 @@ impl<'a> Parser<'a> {
 
                     params.push(GenericParam {
                         name: param_name,
+                        trait_bounds,
                         default,
                     });
 

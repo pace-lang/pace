@@ -58,6 +58,7 @@ pub struct Ident {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenericParam {
     pub name: Ident,
+    pub trait_bounds: Vec<Type>,
     pub default: Option<Type>,
 }
 

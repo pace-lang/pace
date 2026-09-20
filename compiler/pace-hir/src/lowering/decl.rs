@@ -237,7 +237,7 @@ impl LoweringContext {
                 let hir_generic_params = generic_params.map(|params| {
                     params
                         .into_iter()
-                        .map(|p| (p.name.name, p.default))
+                        .map(|p| (p.name.name, p.trait_bounds, p.default))
                         .collect()
                 });
                 let hir_with = with.into_iter().map(|w| w.name).collect();
@@ -447,7 +447,7 @@ impl LoweringContext {
                 let hir_generic_params = generic_params.map(|params| {
                     params
                         .into_iter()
-                        .map(|p| (p.name.name, p.default))
+                        .map(|p| (p.name.name, p.trait_bounds, p.default))
                         .collect()
                 });
                 let hir_with = with.into_iter().map(|w| w.name).collect();
@@ -524,7 +524,7 @@ impl LoweringContext {
                 let hir_generic_params = generic_params.map(|params| {
                     params
                         .into_iter()
-                        .map(|p| (p.name.name, p.default))
+                        .map(|p| (p.name.name, p.trait_bounds, p.default))
                         .collect()
                 });
                 Ok(Some(Decl::Trait {
@@ -572,7 +572,7 @@ impl LoweringContext {
                 let hir_generic_params = generic_params.map(|params| {
                     params
                         .into_iter()
-                        .map(|p| (p.name.name, p.default))
+                        .map(|p| (p.name.name, p.trait_bounds, p.default))
                         .collect()
                 });
                 Ok(Some(Decl::Enum {
@@ -615,7 +615,7 @@ impl LoweringContext {
                 let hir_generic_params = generic_params.map(|params| {
                     params
                         .into_iter()
-                        .map(|p| (p.name.name, p.default))
+                        .map(|p| (p.name.name, p.trait_bounds, p.default))
                         .collect()
                 });
                 Ok(Some(Decl::Function {

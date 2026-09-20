@@ -1,5 +1,6 @@
 pub mod ty;
 pub mod typechecker;
+pub mod reassign;
 
 pub use ty::Ty;
 pub use typechecker::TypeChecker;

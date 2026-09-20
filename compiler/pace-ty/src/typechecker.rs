@@ -57,6 +57,7 @@ pub struct TypeChecker {
     pub display_names: HashMap<String, String>,
     pub generic_templates: HashMap<String, Decl>,
     pub generic_templates_by_id: HashMap<HirId, String>,
+    pub implemented_traits: HashMap<HirId, Vec<String>>,
     pub current_expected_ty: Option<Ty>,
     pub current_fn_name: Option<String>,
     pub current_module: Option<String>,
@@ -101,6 +102,7 @@ impl TypeChecker {
             display_names: HashMap::new(),
             generic_templates: HashMap::new(),
             generic_templates_by_id: HashMap::new(),
+            implemented_traits: HashMap::new(),
             current_expected_ty: None,
             current_fn_name: None,
             current_module: None,
@@ -167,7 +169,7 @@ impl TypeChecker {
                             }
                             _ => vec![],
                         };
-                        for (i, (_, default_ty)) in generic_params.iter().enumerate() {
+                        for (i, (_, _, default_ty)) in generic_params.iter().enumerate() {
                             if i < args.len() {
                                 final_args.push(args[i].clone());
                             } else if let Some(def_ty) = default_ty {
@@ -531,6 +533,7 @@ impl TypeChecker {
                     id,
                     generic_params,
                     fields,
+                    with,
                     ..
                 } => {
                     if generic_params.is_some() {
@@ -553,11 +556,13 @@ impl TypeChecker {
                         });
                     }
                     self.struct_defs.insert(*id, resolved_fields);
+                    self.implemented_traits.insert(*id, with.iter().map(|w| w.to_string()).collect());
                 }
                 Decl::Class {
                     id,
                     generic_params,
                     fields,
+                    with,
                     ..
                 } => {
                     if generic_params.is_some() {
@@ -580,6 +585,7 @@ impl TypeChecker {
                         });
                     }
                     self.class_defs.insert(*id, resolved_fields);
+                    self.implemented_traits.insert(*id, with.iter().map(|w| w.to_string()).collect());
                 }
                 Decl::Enum {
                     id,
@@ -1904,7 +1910,7 @@ impl TypeChecker {
                                     let arg_ty = self.check_expr(arg_expr)?;
                                     let (_, _, param_ty) = &params[i];
                                     if let pace_ast::Type::Named(ident) = param_ty
-                                        && generic_params.iter().any(|(p, _)| p == &ident.name)
+                                        && generic_params.iter().any(|(p, _, _)| p == &ident.name)
                                     {
                                         inferred_args.insert(ident.name.to_string(), arg_ty);
                                     }
@@ -1912,7 +1918,7 @@ impl TypeChecker {
                             }
 
                             let mut ast_args = Vec::new();
-                            for (param_name, _) in &generic_params {
+                            for (param_name, _, _) in &generic_params {
                                 if let Some(ty) = inferred_args.get(&param_name.to_string()) {
                                     let ty_str = format!("{:?}", ty)
                                         .replace(" ", "")
@@ -2489,7 +2495,7 @@ impl TypeChecker {
         };
 
         let mut final_args = Vec::new();
-        for (i, (param_name, default_ty)) in generic_params.iter().enumerate() {
+        for (i, (param_name, trait_bounds, default_ty)) in generic_params.iter().enumerate() {
             if i < args.len() {
                 final_args.push(args[i].clone());
             } else if let Some(def_ty) = default_ty {
@@ -2512,9 +2518,34 @@ impl TypeChecker {
 
         let mut mapping = std::collections::HashMap::new();
         let mut mono_name = template_name.to_string();
-        for ((param_name, _), arg) in generic_params.into_iter().zip(final_args.iter()) {
+        for ((param_name, trait_bounds, _), arg) in generic_params.into_iter().zip(final_args.iter()) {
             mapping.insert(param_name, arg.clone());
             let arg_ty = self.resolve_type(arg)?;
+            
+            // Check trait bounds
+            if !trait_bounds.is_empty() {
+                let hir_id = match &arg_ty {
+                    Ty::Struct(id) => Some(*id),
+                    Ty::Class(id) => Some(*id),
+                    _ => None,
+                };
+                
+                let impl_traits = hir_id.and_then(|id| self.implemented_traits.get(&id).cloned());
+                if let Some(impl_traits) = impl_traits {
+                    for bound in &trait_bounds {
+                        let bound_ty = self.resolve_type(bound)?;
+                        let bound_name = self.display_ty(&bound_ty);
+                        if !impl_traits.contains(&bound_name) {
+                            return Err(format!("Type {} does not implement required trait {}", self.display_ty(&arg_ty), bound_name));
+                        }
+                    }
+                } else if hir_id.is_some() {
+                    return Err(format!("Type {} does not implement any traits, required for generic parameter", self.display_ty(&arg_ty)));
+                } else {
+                    return Err(format!("Type {} cannot satisfy trait bounds", self.display_ty(&arg_ty)));
+                }
+            }
+
             mono_name.push_str(
                 &format!("_{:?}", arg_ty)
                     .replace(" ", "")
@@ -2784,7 +2815,7 @@ impl TypeChecker {
             }
             _ => {}
         }
-
+        crate::reassign::reassign_decl_ids(self, &mut new_decl);
         self.instantiated_generics.push(new_decl.clone());
         self.check_decl(&new_decl)?;
 
