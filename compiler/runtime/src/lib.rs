@@ -3,8 +3,8 @@
 
 extern crate alloc;
 
-use alloc::alloc::{alloc, dealloc, handle_alloc_error, Layout};
-use core::ffi::{c_char, c_void, c_longlong, c_double, c_int};
+use alloc::alloc::{Layout, alloc, dealloc, handle_alloc_error};
+use core::ffi::{c_char, c_double, c_int, c_longlong, c_void};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use mimalloc::MiMalloc;
 
@@ -47,13 +47,17 @@ pub extern "C" fn pace_panic(msg: *const c_char) -> ! {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pace_alloc(size: usize, deinit: Option<unsafe extern "C" fn(*mut c_void)>) -> *mut c_void {
+pub extern "C" fn pace_alloc(
+    size: usize,
+    deinit: Option<unsafe extern "C" fn(*mut c_void)>,
+) -> *mut c_void {
     let header_size = core::mem::size_of::<ArcHeader>();
     let total_size = header_size + size;
-    
-    let layout = Layout::from_size_align(total_size, core::mem::align_of::<ArcHeader>()).unwrap_or_else(|_| {
-        pace_panic(c"Invalid allocation layout".as_ptr());
-    });
+
+    let layout = Layout::from_size_align(total_size, core::mem::align_of::<ArcHeader>())
+        .unwrap_or_else(|_| {
+            pace_panic(c"Invalid allocation layout".as_ptr());
+        });
 
     unsafe {
         let ptr = alloc(layout);
@@ -62,11 +66,14 @@ pub extern "C" fn pace_alloc(size: usize, deinit: Option<unsafe extern "C" fn(*m
         }
 
         let header = ptr as *mut ArcHeader;
-        core::ptr::write(header, ArcHeader {
-            ref_count: AtomicUsize::new(1),
-            size,
-            deinit,
-        });
+        core::ptr::write(
+            header,
+            ArcHeader {
+                ref_count: AtomicUsize::new(1),
+                size,
+                deinit,
+            },
+        );
 
         ptr.add(header_size) as *mut c_void
     }
@@ -92,7 +99,7 @@ pub extern "C" fn pace_release(obj: *mut c_void) {
 
     unsafe {
         let header_ptr = (obj as *mut u8).sub(core::mem::size_of::<ArcHeader>()) as *mut ArcHeader;
-        
+
         if (*header_ptr).ref_count.fetch_sub(1, Ordering::Release) != 1 {
             return;
         }
@@ -104,33 +111,44 @@ pub extern "C" fn pace_release(obj: *mut c_void) {
         }
 
         let total_size = core::mem::size_of::<ArcHeader>() + (*header_ptr).size;
-        let layout = Layout::from_size_align(total_size, core::mem::align_of::<ArcHeader>()).unwrap();
+        let layout =
+            Layout::from_size_align(total_size, core::mem::align_of::<ArcHeader>()).unwrap();
         dealloc(header_ptr as *mut u8, layout);
     }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_print_int(val: c_longlong) {
-    unsafe { printf(c"%lld\n".as_ptr(), val); }
+    unsafe {
+        printf(c"%lld\n".as_ptr(), val);
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_print_float(val: c_double) {
-    unsafe { printf(c"%f\n".as_ptr(), val); }
+    unsafe {
+        printf(c"%f\n".as_ptr(), val);
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_print_bool(val: c_int) {
     if val != 0 {
-        unsafe { printf(c"true\n".as_ptr()); }
+        unsafe {
+            printf(c"true\n".as_ptr());
+        }
     } else {
-        unsafe { printf(c"false\n".as_ptr()); }
+        unsafe {
+            printf(c"false\n".as_ptr());
+        }
     }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_println() {
-    unsafe { printf(c"\n".as_ptr()); }
+    unsafe {
+        printf(c"\n".as_ptr());
+    }
 }
 
 #[repr(C)]
@@ -151,16 +169,17 @@ extern "C" fn string_deinit(obj: *mut c_void) {
 pub extern "C" fn pace_string_new(c_str: *const c_char) -> *mut PaceString {
     unsafe {
         let len = strlen(c_str);
-        let obj_ptr = pace_alloc(core::mem::size_of::<PaceString>(), Some(string_deinit)) as *mut PaceString;
-        
+        let obj_ptr =
+            pace_alloc(core::mem::size_of::<PaceString>(), Some(string_deinit)) as *mut PaceString;
+
         let layout = Layout::from_size_align(len + 1, 1).unwrap();
         let data_ptr = alloc(layout) as *mut c_char;
-        
+
         memcpy(data_ptr as *mut c_void, c_str as *const c_void, len + 1);
-        
+
         (*obj_ptr).data = data_ptr;
         (*obj_ptr).length = len;
-        
+
         obj_ptr
     }
 }
@@ -168,7 +187,9 @@ pub extern "C" fn pace_string_new(c_str: *const c_char) -> *mut PaceString {
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_print_string(val: *mut PaceString) {
     if val.is_null() {
-        unsafe { printf(c"null\n".as_ptr()); }
+        unsafe {
+            printf(c"null\n".as_ptr());
+        }
         return;
     }
     unsafe {

@@ -69,7 +69,8 @@ impl CacheManager {
 
         let tmp_dir = self.cache_dir.join(format!("{}-{}.tmp", name, version));
         if tmp_dir.exists() {
-            fs::remove_dir_all(&tmp_dir).map_err(|e| format!("Failed to clear temp directory: {}", e))?;
+            fs::remove_dir_all(&tmp_dir)
+                .map_err(|e| format!("Failed to clear temp directory: {}", e))?;
         }
 
         archive

@@ -143,7 +143,10 @@ pub fn clean(cache: bool) -> Result<(), String> {
 
     let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
     if let Some(manifest_path) = find_manifest(&current_dir) {
-        let build_dir = manifest_path.parent().ok_or("Invalid manifest path")?.join("build");
+        let build_dir = manifest_path
+            .parent()
+            .ok_or("Invalid manifest path")?
+            .join("build");
         if build_dir.exists() {
             fs::remove_dir_all(&build_dir)
                 .map_err(|e| format!("Failed to clean build directory: {}", e))?;

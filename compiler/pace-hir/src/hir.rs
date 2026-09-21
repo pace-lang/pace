@@ -211,7 +211,7 @@ pub enum Decl {
     Struct {
         id: HirId,
         name: Symbol,
-        generic_params: Option<Vec<(Symbol, Vec<Type>, Option<Type>)>>,
+        generic_params: Option<GenericParams>,
         with: Vec<Symbol>,
         fields: Vec<HirFieldDef>,
         static_fields: Vec<HirStaticFieldDef>,
@@ -223,7 +223,7 @@ pub enum Decl {
     Class {
         id: HirId,
         name: Symbol,
-        generic_params: Option<Vec<(Symbol, Vec<Type>, Option<Type>)>>,
+        generic_params: Option<GenericParams>,
         extends: Option<Symbol>,
         with: Vec<Symbol>,
         fields: Vec<HirFieldDef>,
@@ -236,7 +236,7 @@ pub enum Decl {
     Trait {
         id: HirId,
         name: Symbol,
-        generic_params: Option<Vec<(Symbol, Vec<Type>, Option<Type>)>>,
+        generic_params: Option<GenericParams>,
         methods: Vec<Decl>,
         is_private: bool,
         span: Span,
@@ -244,7 +244,7 @@ pub enum Decl {
     Enum {
         id: HirId,
         name: Symbol,
-        generic_params: Option<Vec<(Symbol, Vec<Type>, Option<Type>)>>,
+        generic_params: Option<GenericParams>,
         variants: Vec<EnumVariant>,
         is_private: bool,
         span: Span,
@@ -252,7 +252,7 @@ pub enum Decl {
     Function {
         id: HirId,
         name: Symbol,
-        generic_params: Option<Vec<(Symbol, Vec<Type>, Option<Type>)>>,
+        generic_params: Option<GenericParams>,
         params: Vec<(HirId, Symbol, Type)>,
         return_type: Option<Type>,
         body: Block,
@@ -263,6 +263,8 @@ pub enum Decl {
     },
     Expr(Expr, Span),
 }
+
+pub type GenericParams = Vec<(Symbol, Vec<Type>, Option<Type>)>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumVariant {

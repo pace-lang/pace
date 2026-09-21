@@ -104,17 +104,38 @@ fn get_project_info() -> Result<(PathBuf, String), String> {
         .ok_or("No pace.toml found in this directory or any parent directory")?;
 
     let toml = pace_pkg::parse_manifest(&manifest_path)?;
-    let root = manifest_path.parent().unwrap().to_path_buf();
+    let root = manifest_path
+        .parent()
+        .ok_or("Invalid manifest path")?
+        .to_path_buf();
 
     Ok((root, toml.package.name))
 }
 
-async fn execute_build_or_run(file: Option<String>, run: bool, check: bool, release: bool) -> Result<(), String> {
+async fn execute_build_or_run(
+    file: Option<String>,
+    run: bool,
+    check: bool,
+    release: bool,
+) -> Result<(), String> {
     if let Some(f) = file {
         let p = PathBuf::from(&f);
-        let name = p.file_stem().unwrap().to_str().unwrap().to_string();
+        let name = p
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or("Invalid file name")?
+            .to_string();
         let empty_deps = std::collections::HashMap::new();
-        pace_driver::compile_file(&p, Path::new("."), &name, run, check, release, &empty_deps, false)
+        pace_driver::compile_file(pace_driver::CompileOptions {
+            file_path: &p,
+            output_dir: Path::new("."),
+            output_name: &name,
+            run,
+            check_only: check,
+            release,
+            dependencies: &empty_deps,
+            is_lib: false,
+        })
     } else {
         let (root, project_name) = get_project_info()?;
 
@@ -160,7 +181,9 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool, rele
             let mut pkg_path = cache.get_package_path(pkg_name, &pkg_info.version);
             if let Some(source) = &pkg_info.source {
                 if source.starts_with("local+") {
-                    let local_path = source.strip_prefix("local+").unwrap();
+                    let local_path = source
+                        .strip_prefix("local+")
+                        .ok_or("Invalid local+ prefix")?;
                     pkg_path = root.join(local_path);
                 } else if !pkg_path.exists() {
                     // Automatically download if missing from cache
@@ -170,7 +193,10 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool, rele
                             .download_and_extract(pkg_name, &pkg_info.version, checksum)
                             .await
                         {
-                            eprintln!("Warning: Failed to download {}. You may be offline, and this package is not in your local cache. Error: {}", pkg_name, e);
+                            eprintln!(
+                                "Warning: Failed to download {}. You may be offline, and this package is not in your local cache. Error: {}",
+                                pkg_name, e
+                            );
                         }
                     }
                 }
@@ -179,16 +205,16 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool, rele
         }
 
         let build_dir = root.join("build");
-        pace_driver::compile_file(
-            &target_file,
-            &build_dir,
-            &project_name,
+        pace_driver::compile_file(pace_driver::CompileOptions {
+            file_path: &target_file,
+            output_dir: &build_dir,
+            output_name: &project_name,
             run,
-            check,
+            check_only: check,
             release,
-            &dependencies,
+            dependencies: &dependencies,
             is_lib,
-        )
+        })
     }
 }
 

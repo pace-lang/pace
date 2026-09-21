@@ -558,7 +558,8 @@ impl TypeChecker {
                         });
                     }
                     self.struct_defs.insert(*id, resolved_fields);
-                    self.implemented_traits.insert(*id, with.iter().map(|w| w.to_string()).collect());
+                    self.implemented_traits
+                        .insert(*id, with.iter().map(|w| w.to_string()).collect());
                 }
                 Decl::Class {
                     id,
@@ -587,7 +588,8 @@ impl TypeChecker {
                         });
                     }
                     self.class_defs.insert(*id, resolved_fields);
-                    self.implemented_traits.insert(*id, with.iter().map(|w| w.to_string()).collect());
+                    self.implemented_traits
+                        .insert(*id, with.iter().map(|w| w.to_string()).collect());
                 }
                 Decl::Enum {
                     id,
@@ -2520,10 +2522,12 @@ impl TypeChecker {
 
         let mut mapping = std::collections::HashMap::new();
         let mut mono_name = template_name.to_string();
-        for ((param_name, trait_bounds, _), arg) in generic_params.into_iter().zip(final_args.iter()) {
+        for ((param_name, trait_bounds, _), arg) in
+            generic_params.into_iter().zip(final_args.iter())
+        {
             mapping.insert(param_name, arg.clone());
             let arg_ty = self.resolve_type(arg)?;
-            
+
             // Check trait bounds
             if !trait_bounds.is_empty() {
                 let hir_id = match &arg_ty {
@@ -2531,20 +2535,30 @@ impl TypeChecker {
                     Ty::Class(id) => Some(*id),
                     _ => None,
                 };
-                
+
                 let impl_traits = hir_id.and_then(|id| self.implemented_traits.get(&id).cloned());
                 if let Some(impl_traits) = impl_traits {
                     for bound in &trait_bounds {
                         let bound_ty = self.resolve_type(bound)?;
                         let bound_name = self.display_ty(&bound_ty);
                         if !impl_traits.contains(&bound_name) {
-                            return Err(format!("Type {} does not implement required trait {}", self.display_ty(&arg_ty), bound_name));
+                            return Err(format!(
+                                "Type {} does not implement required trait {}",
+                                self.display_ty(&arg_ty),
+                                bound_name
+                            ));
                         }
                     }
                 } else if hir_id.is_some() {
-                    return Err(format!("Type {} does not implement any traits, required for generic parameter", self.display_ty(&arg_ty)));
+                    return Err(format!(
+                        "Type {} does not implement any traits, required for generic parameter",
+                        self.display_ty(&arg_ty)
+                    ));
                 } else {
-                    return Err(format!("Type {} cannot satisfy trait bounds", self.display_ty(&arg_ty)));
+                    return Err(format!(
+                        "Type {} cannot satisfy trait bounds",
+                        self.display_ty(&arg_ty)
+                    ));
                 }
             }
 

@@ -1,6 +1,6 @@
-pub mod opt;
 pub mod builder;
 pub mod mir;
+pub mod opt;
 
 pub use builder::MirBuilder;
 pub use mir::*;

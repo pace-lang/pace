@@ -14,7 +14,6 @@ use pace_ty::TypeChecker;
 
 use std::collections::HashSet;
 
-
 #[derive(Debug, Default)]
 struct DependencyGraph {
     edges: std::collections::HashMap<String, Vec<String>>,
@@ -103,8 +102,13 @@ fn parse_file_and_imports(
     all_diags.extend(diags);
 
     let mut module_decls = Vec::new();
-    let module_name = module_name_opt
-        .unwrap_or_else(|| file_path.file_stem().unwrap().to_string_lossy().to_string());
+    let module_name = module_name_opt.unwrap_or_else(|| {
+        file_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown")
+            .to_string()
+    });
 
     for decl in ast {
         module_decls.push(decl.clone());
@@ -113,7 +117,10 @@ fn parse_file_and_imports(
             let first_ident = &path[0].name;
 
             // Try to resolve logically
-            let mut import_path = file_path.parent().unwrap().to_path_buf();
+            let mut import_path = file_path
+                .parent()
+                .ok_or_else(|| format!("Invalid file path: {:?}", file_path))?
+                .to_path_buf();
             for (i, ident) in path.iter().enumerate() {
                 if i == path.len() - 1 {
                     import_path.push(format!("{}.pace", ident.name));
@@ -234,18 +241,21 @@ pub fn analyze_workspace(
     Ok((ast, source_map, all_diags))
 }
 
-pub fn compile_file(
-    file_path: &Path,
-    output_dir: &Path,
-    output_name: &str,
-    run: bool,
-    check_only: bool,
-    release: bool,
-    dependencies: &std::collections::HashMap<String, PathBuf>,
-    is_lib: bool,
-) -> Result<(), String> {
+pub struct CompileOptions<'a> {
+    pub file_path: &'a Path,
+    pub output_dir: &'a Path,
+    pub output_name: &'a str,
+    pub run: bool,
+    pub check_only: bool,
+    pub release: bool,
+    pub dependencies: &'a std::collections::HashMap<String, PathBuf>,
+    pub is_lib: bool,
+}
+
+pub fn compile_file(opts: CompileOptions) -> Result<(), String> {
     let empty_overrides = std::collections::HashMap::new();
-    let (ast, source_map, diags) = analyze_workspace(file_path, &empty_overrides, dependencies)?;
+    let (ast, source_map, diags) =
+        analyze_workspace(opts.file_path, &empty_overrides, opts.dependencies)?;
 
     if !diags.is_empty() {
         let mut reporter = pace_errors::Reporter::new();
@@ -262,7 +272,7 @@ pub fn compile_file(
 
     // 3. Typecheck
     let mut tc = TypeChecker::new();
-    tc.is_lib = is_lib;
+    tc.is_lib = opts.is_lib;
     hir.resolve_traits(&mut tc.reporter);
     if let Err(e) = tc.check_program(&hir) {
         if !tc.reporter.has_errors() {
@@ -279,19 +289,19 @@ pub fn compile_file(
         return Err("Compilation failed due to type errors.".to_string());
     }
 
-    if check_only {
+    if opts.check_only {
         println!("Check finished successfully.");
         return Ok(());
     }
 
-    if is_lib {
+    if opts.is_lib {
         println!("Library built successfully.");
         return Ok(());
     }
 
     // 4. Build MIR
     let mut mir = MirBuilder::build_program(&hir, &mut tc);
-    
+
     // 4.5 Optimize MIR
     pace_mir::opt::ConstantFolder::new().optimize_program(&mut mir);
 
@@ -299,13 +309,12 @@ pub fn compile_file(
     let mut codegen = CGenerator::new();
     let c_code = codegen.generate(&mir);
 
-    let c_file = "/tmp/pace_out.c";
-    fs::write(c_file, c_code).map_err(|e| format!("Failed to write C file: {}", e))?;
+    fs::create_dir_all(opts.output_dir)
+        .map_err(|e| format!("Failed to create output dir: {}", e))?;
+    let c_file = opts.output_dir.join(format!("{}.c", opts.output_name));
+    fs::write(&c_file, c_code).map_err(|e| format!("Failed to write C file: {}", e))?;
 
-    // 6. Compile with GCC
-    fs::create_dir_all(output_dir)
-        .map_err(|e| format!("Failed to create output directory: {}", e))?;
-    let bin_file = output_dir.join(output_name);
+    let bin_file = opts.output_dir.join(opts.output_name);
 
     // Find runtime paths
     let tmp_dir = std::env::temp_dir().join(format!("pace-rt-{}", std::process::id()));
@@ -313,14 +322,15 @@ pub fn compile_file(
     let tmp_lib = tmp_dir.join("libpace_rt.a");
     let tmp_header = tmp_dir.join("pace_runtime.h");
     fs::write(&tmp_lib, RUNTIME_LIB).map_err(|e| format!("Failed to write libpace_rt.a: {}", e))?;
-    fs::write(&tmp_header, RUNTIME_HEADER).map_err(|e| format!("Failed to write pace_runtime.h: {}", e))?;
+    fs::write(&tmp_header, RUNTIME_HEADER)
+        .map_err(|e| format!("Failed to write pace_runtime.h: {}", e))?;
 
     let runtime_dir = tmp_dir.clone();
     let lib_dir = tmp_dir.clone();
 
     let mut gcc_cmd = Command::new("gcc");
-    if release {
-        gcc_cmd.arg("-O2");
+    if opts.release {
+        gcc_cmd.arg("-O3");
     }
 
     let status = gcc_cmd
@@ -338,13 +348,13 @@ pub fn compile_file(
         return Err("GCC compilation failed".to_string());
     }
 
-    if !run {
-        let file_name = file_path.file_name().unwrap_or_default().to_string_lossy();
+    if !opts.run {
+        let file_name = opts.file_path.file_name().unwrap_or_default().to_string_lossy();
         let bin_name = bin_file.file_name().unwrap_or_default().to_string_lossy();
         println!("build {} into ./build/{}", file_name, bin_name);
     }
 
-    if run {
+    if opts.run {
         let run_status = Command::new(&bin_file)
             .status()
             .map_err(|e| format!("Failed to run executable: {}", e))?;
@@ -381,7 +391,12 @@ pub fn format_file(file_path: &Path, write: bool) -> Result<bool, String> {
     }
 
     let module = pace_ast::Module {
-        name: pace_span::intern(&file_path.file_stem().unwrap().to_string_lossy()),
+        name: pace_span::intern(
+            file_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown"),
+        ),
         file_id,
         declarations: ast,
         comments,

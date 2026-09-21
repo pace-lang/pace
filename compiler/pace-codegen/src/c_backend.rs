@@ -399,9 +399,12 @@ impl CGenerator {
             Rvalue::Constant(Constant::Bool(val)) => {
                 write!(&mut self.output, "{}", if *val { "1" } else { "0" }).unwrap()
             }
-            Rvalue::Constant(Constant::String(val)) => {
-                write!(&mut self.output, "pace_string_new(\"{}\")", val.trim_matches('"')).unwrap()
-            }
+            Rvalue::Constant(Constant::String(val)) => write!(
+                &mut self.output,
+                "pace_string_new(\"{}\")",
+                val.trim_matches('"')
+            )
+            .unwrap(),
             Rvalue::BinaryOp(op, lhs, rhs) => {
                 if matches!(op, BinaryOp::NullCoalesce) {
                     write!(
