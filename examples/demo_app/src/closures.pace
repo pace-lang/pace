@@ -1,0 +1,12 @@
+fn testClosures() {
+    println("--- Closures & Lambdas ---")
+
+    let add = (x: int, y: int) => x + y
+    let result = add(10, 20)
+    println(result)
+    
+    let multiply = (a: int, b: int) => a * b
+    
+    let prod = multiply(5, 5)
+    println(prod)
+}

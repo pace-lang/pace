@@ -211,6 +211,14 @@ impl TypeChecker {
                 let inner = self.get_type(inner_ty)?;
                 Ok(Ty::Optional(Box::new(inner)))
             }
+            pace_ast::Type::Closure(params, ret, _) => {
+                let mut param_tys = Vec::new();
+                for p in params {
+                    param_tys.push(self.get_type(p)?);
+                }
+                let ret_ty = self.get_type(ret)?;
+                Ok(Ty::Closure(param_tys, Box::new(ret_ty)))
+            }
         }
     }
 
@@ -265,6 +273,14 @@ impl TypeChecker {
             pace_ast::Type::Optional(inner_ty, _) => {
                 let inner = self.resolve_type(inner_ty)?;
                 Ok(Ty::Optional(Box::new(inner)))
+            }
+            pace_ast::Type::Closure(params, ret, _) => {
+                let mut param_tys = Vec::new();
+                for p in params {
+                    param_tys.push(self.resolve_type(p)?);
+                }
+                let ret_ty = self.resolve_type(ret)?;
+                Ok(Ty::Closure(param_tys, Box::new(ret_ty)))
             }
         }
     }
@@ -2271,7 +2287,7 @@ impl TypeChecker {
                     self.check_expr(arg)?;
                 }
                 self.function_calls.push((*span, callee_ty.clone()));
-                if let Ty::Function(_, ret_ty) = callee_ty {
+                if let Ty::Function(_, ret_ty) | Ty::Closure(_, ret_ty) = callee_ty {
                     return Ok(*ret_ty);
                 }
                 Ok(Ty::Int) // Fallback for MVP
@@ -2468,6 +2484,38 @@ impl TypeChecker {
                 }
 
                 Ok(ret_ty.unwrap_or(Ty::Void))
+            }
+            Expr::Closure {
+                params,
+                return_type,
+                body,
+                span: _,
+            } => {
+                let mut param_tys = Vec::new();
+                let outer_env = self.env.clone();
+                for param in params {
+                    let ty = if let Some(t) = &param.ty {
+                        self.resolve_type(t).unwrap_or(Ty::Int)
+                    } else {
+                        Ty::Int // Inference would go here, fallback to Int
+                    };
+                    param_tys.push(ty.clone());
+                    self.env.insert(param.id, ty.clone());
+                    self.local_types.insert(param.id, ty);
+                }
+                
+                // TODO: closure environment capture analysis
+                
+                let ret_ty = self.check_expr(body)?;
+                
+                let expected_ret = if let Some(t) = return_type {
+                    self.resolve_type(t).unwrap_or(Ty::Void)
+                } else {
+                    ret_ty.clone()
+                };
+                
+                self.env = outer_env;
+                Ok(Ty::Closure(param_tys, Box::new(expected_ret)))
             }
         }
     }
@@ -2874,6 +2922,14 @@ impl TypeChecker {
                     .join(", ");
                 format!("fn({}) -> {}", args_str, self.display_ty(ret))
             }
+            Ty::Closure(args, ret) => {
+                let args_str = args
+                    .iter()
+                    .map(|a| self.display_ty(a))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("({}) => {}", args_str, self.display_ty(ret))
+            }
             Ty::Struct(id) | Ty::Class(id) | Ty::Enum(id) => {
                 // Try to find the name in named_types (reverse lookup)
                 for (name, (nid, _)) in &self.named_types {
@@ -2909,6 +2965,10 @@ pub fn substitute_type(
         }
         pace_ast::Type::Optional(inner, span) => {
             pace_ast::Type::Optional(Box::new(substitute_type(inner, mapping)), *span)
+        }
+        pace_ast::Type::Closure(params, ret, span) => {
+            let sub_params = params.iter().map(|p| substitute_type(p, mapping)).collect();
+            pace_ast::Type::Closure(sub_params, Box::new(substitute_type(ret, mapping)), *span)
         }
     }
 }

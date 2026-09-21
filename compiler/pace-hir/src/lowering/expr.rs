@@ -185,6 +185,28 @@ impl LoweringContext {
                     span,
                 })
             }
+            ast::Expr::Closure { params, return_type, body, span } => {
+                let mut lowered_params = Vec::new();
+                let inner_scope = self.scope.clone();
+                for param in params {
+                    let id = self.generate_id();
+                    self.scope.insert(param.name.name, id);
+                    lowered_params.push(crate::hir::HirClosureParam {
+                        id,
+                        name: param.name.name,
+                        ty: param.ty,
+                        span: param.name.span,
+                    });
+                }
+                let lowered_body = self.lower_expr(*body)?;
+                self.scope = inner_scope;
+                Ok(Expr::Closure {
+                    params: lowered_params,
+                    return_type,
+                    body: Box::new(lowered_body),
+                    span,
+                })
+            }
         }
     }
 }

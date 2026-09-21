@@ -55,6 +55,8 @@ pub struct MirBuilder<'a> {
     pub class_parents: &'a HashMap<HirId, HirId>,
     pub global_functions_env: &'a HashMap<String, Ty>,
     pub resolved_global_names: &'a HashMap<pace_hir::HirId, String>,
+    pub closure_functions: Vec<MirFunction>,
+    pub closure_counter: usize,
 }
 
 impl<'a> MirBuilder<'a> {
@@ -98,6 +100,8 @@ impl<'a> MirBuilder<'a> {
             class_parents,
             global_functions_env,
             resolved_global_names,
+            closure_functions: Vec::new(),
+            closure_counter: 0,
         }
     }
 
@@ -188,6 +192,58 @@ impl<'a> MirBuilder<'a> {
                     .expect("Super used outside of a method");
                 let temp = self.new_local(self.locals[local.0 as usize].clone());
                 self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(local)));
+                temp
+            }
+            Expr::Closure { params, return_type: _, body, span: _ } => {
+                self.closure_counter += 1;
+                let closure_name = format!("__closure_{}", self.closure_counter);
+                
+                let mut fn_builder = MirBuilder::new(
+                    self.global_fns.clone(),
+                    self.struct_defs,
+                    self.class_defs,
+                    self.class_vtables,
+                    self.enum_defs,
+                    self.global_env,
+                    self.local_types,
+                    self.named_types,
+                    self.static_fields_env,
+                    self.methods_env,
+                    self.class_parents,
+                    self.global_functions_env,
+                    self.resolved_global_names,
+                );
+                
+                let mut mir_params = Vec::new();
+                let mut param_tys = Vec::new();
+                for param in params {
+                    let ty = self.local_types.get(&param.id).cloned().unwrap_or(Ty::Int);
+                    param_tys.push(ty.clone());
+                    let local = fn_builder.new_local(ty);
+                    fn_builder.hir_to_local.insert(param.id, local);
+                    mir_params.push(local);
+                }
+                
+                let body_local = fn_builder.build_expr(body);
+                let ret_ty = fn_builder.locals[body_local.0 as usize].clone();
+                let ret_local = fn_builder.new_local(ret_ty.clone());
+                fn_builder.push_stmt(Statement::Assign(Lvalue::Local(ret_local), Rvalue::Use(body_local)));
+                if fn_builder.blocks[fn_builder.current_block.0 as usize].terminator.is_none() {
+                    fn_builder.blocks[fn_builder.current_block.0 as usize].terminator = Some(Terminator::Return(ret_local));
+                }
+                
+                let fn_body = fn_builder.finish(&mir_params);
+                
+                self.closure_functions.push(MirFunction {
+                    name: closure_name.clone(),
+                    params: mir_params,
+                    return_type: ret_ty.clone(),
+                    body: fn_body,
+                });
+                
+                let closure_ty = Ty::Closure(param_tys, Box::new(ret_ty));
+                let temp = self.new_local(closure_ty);
+                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::GlobalRead(closure_name)));
                 temp
             }
             Expr::Ident(id, name, _, _) => {
@@ -1334,6 +1390,7 @@ impl<'a> MirBuilder<'a> {
                                 Ty::Void
                             };
                             fn_builder.build_block(body);
+                            let extracted_closures = std::mem::take(&mut fn_builder.closure_functions);
                             let fn_body = fn_builder.finish(&mir_params);
 
                             functions.push(MirFunction {
@@ -1342,6 +1399,7 @@ impl<'a> MirBuilder<'a> {
                                 return_type: ret_ty,
                                 body: fn_body,
                             });
+                            functions.extend(extracted_closures);
                         }
                     }
                 }
@@ -1393,6 +1451,7 @@ impl<'a> MirBuilder<'a> {
                         Ty::Void
                     };
                     fn_builder.build_block(body);
+                    let extracted_closures = std::mem::take(&mut fn_builder.closure_functions);
                     let fn_body = fn_builder.finish(&mir_params);
                     functions.push(MirFunction {
                         name: tc
@@ -1404,12 +1463,16 @@ impl<'a> MirBuilder<'a> {
                         return_type: ret_ty,
                         body: fn_body,
                     });
+                    functions.extend(extracted_closures);
                 }
                 pace_hir::Decl::Enum { .. } => {}
                 pace_hir::Decl::Trait { .. } => {}
                 pace_hir::Decl::Import { .. } => {}
             }
         }
+        
+        let extracted_closures = std::mem::take(&mut main_builder.closure_functions);
+        functions.extend(extracted_closures);
 
         let mut resolved_enum_defs = std::collections::HashMap::new();
         for (id, variants) in &tc.enum_defs {

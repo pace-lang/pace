@@ -225,7 +225,7 @@ impl CGenerator {
             Ty::Struct(id) => format!("struct pace_{}", id.0),
             Ty::Class(id) => format!("struct pace_{}*", id.0),
             Ty::Enum(id) => format!("struct pace_{}", id.0),
-            Ty::Function(_, _) => "void*".to_string(),
+            Ty::Function(_, _) | Ty::Closure(_, _) => "void*".to_string(),
             Ty::Optional(inner) => {
                 let inner_c = self.emit_c_type(inner);
                 if inner_c == "void" {
@@ -241,7 +241,7 @@ impl CGenerator {
     fn emit_c_default_val(&self, ty: &Ty) -> String {
         match ty {
             Ty::Int | Ty::Bool | Ty::Float => "0".to_string(),
-            Ty::String | Ty::Class(_) | Ty::Function(_, _) => "NULL".to_string(),
+            Ty::String | Ty::Class(_) | Ty::Function(_, _) | Ty::Closure(_, _) => "NULL".to_string(),
             Ty::Struct(_) | Ty::Enum(_) => "{0}".to_string(),
             Ty::Optional(inner) => {
                 let default_val = self.emit_c_default_val(inner);
@@ -453,7 +453,19 @@ impl CGenerator {
                 }
             }
             Rvalue::Call(callee, args) => {
-                write!(&mut self.output, "_{}(", callee.0).unwrap();
+                let callee_ty = &locals[callee.0 as usize];
+                if let Ty::Function(params, ret) | Ty::Closure(params, ret) = callee_ty {
+                    let mut fn_ptr = format!("(({} (*)(", self.emit_c_type(ret));
+                    if params.is_empty() {
+                        fn_ptr.push_str("void");
+                    } else {
+                        fn_ptr.push_str(&params.iter().map(|p| self.emit_c_type(p)).collect::<Vec<_>>().join(", "));
+                    }
+                    fn_ptr.push_str("))");
+                    write!(&mut self.output, "{}_{})(", fn_ptr, callee.0).unwrap();
+                } else {
+                    write!(&mut self.output, "_{}(", callee.0).unwrap();
+                }
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");

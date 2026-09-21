@@ -570,6 +570,17 @@ impl Formatter {
                 self.format_type(inner);
                 self.write("?");
             }
+            Type::Closure(params, ret, _) => {
+                self.write("(");
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        self.write(", ");
+                    }
+                    self.format_type(p);
+                }
+                self.write(") => ");
+                self.format_type(ret);
+            }
         }
     }
 
@@ -760,6 +771,25 @@ impl Formatter {
                 self.dedent();
                 self.write_indent();
                 self.write("}");
+            }
+            Expr::Closure { params, return_type, body, .. } => {
+                self.write("(");
+                for (i, param) in params.iter().enumerate() {
+                    if i > 0 {
+                        self.write(", ");
+                    }
+                    self.write(&param.name.name);
+                    if let Some(ty) = &param.ty {
+                        self.write(": ");
+                        self.format_type(ty);
+                    }
+                }
+                self.write(") => ");
+                if let Some(ty) = return_type {
+                    self.format_type(ty);
+                    self.write(" ");
+                }
+                self.format_expr(body);
             }
         }
     }

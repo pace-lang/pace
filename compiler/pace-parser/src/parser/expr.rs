@@ -160,7 +160,103 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn try_parse_closure_expr(&mut self) -> Result<Option<Expr>, Diagnostic> {
+        let saved_lexer = self.lexer.clone();
+        let saved_current = self.current.clone();
+
+        // Must start with '('
+        if !self.check(&TokenKind::LParen) {
+            return Ok(None);
+        }
+        let start_span = self.current_span();
+        self.advance(); // consume '('
+
+        let mut params = Vec::new();
+        let mut valid_params = true;
+
+        if !self.check(&TokenKind::RParen) {
+            loop {
+                if let Some(Token { kind: TokenKind::Ident(name), span }) = &self.current {
+                    let ident = Ident {
+                        name: pace_span::intern(name),
+                        span: *span,
+                    };
+                    self.advance();
+                    
+                    let ty = if self.check(&TokenKind::Colon) {
+                        self.advance();
+                        if let Ok(t) = self.parse_type() {
+                            Some(t)
+                        } else {
+                            valid_params = false;
+                            break;
+                        }
+                    } else {
+                        None
+                    };
+
+                    params.push(pace_ast::ClosureParam { name: ident, ty });
+
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                } else {
+                    valid_params = false;
+                    break;
+                }
+            }
+        }
+
+        if !valid_params || !self.check(&TokenKind::RParen) {
+            self.lexer = saved_lexer;
+            self.current = saved_current;
+            return Ok(None);
+        }
+        self.advance(); // consume ')'
+
+        let return_type = if self.check(&TokenKind::Arrow) {
+            self.advance();
+            if let Ok(t) = self.parse_type() {
+                Some(t)
+            } else {
+                self.lexer = saved_lexer;
+                self.current = saved_current;
+                return Ok(None);
+            }
+        } else {
+            None
+        };
+
+        if !self.check(&TokenKind::FatArrow) {
+            self.lexer = saved_lexer;
+            self.current = saved_current;
+            return Ok(None);
+        }
+        self.advance(); // consume '=>'
+
+        let body = if self.check(&TokenKind::LBrace) {
+            let _block = self.parse_block()?;
+            self.parse_expr()?
+        } else {
+            self.parse_expr()?
+        };
+
+        let span = start_span.merge(body.span());
+        Ok(Some(Expr::Closure {
+            params,
+            return_type,
+            body: Box::new(body),
+            span,
+        }))
+    }
+
     pub(crate) fn parse_primary(&mut self) -> Result<Expr, Diagnostic> {
+        if let Some(closure) = self.try_parse_closure_expr()? {
+            return Ok(closure);
+        }
+
         if self.check(&TokenKind::If) {
             let start_tok = self.expect(TokenKind::If)?;
             let cond = self.parse_expr()?;
@@ -307,6 +403,11 @@ impl<'a> Parser<'a> {
                 Ok(Expr::Ident(ident, generic_args))
             }
             TokenKind::Null => Ok(Expr::Null(tok.span)),
+            TokenKind::LParen => {
+                let expr = self.parse_expr()?;
+                let _rparen = self.expect(TokenKind::RParen)?;
+                Ok(expr) // For now, we drop the span of the parens to keep AST simple, or we could add Expr::Paren. But returning the inner expr is fine.
+            }
             TokenKind::Super => Ok(Expr::Super(tok.span)),
             _ => Err(
                 Diagnostic::error(format!("Unexpected token in expression: {:?}", tok.kind))

@@ -327,6 +327,20 @@ pub enum Expr {
         arms: Vec<MatchArm>,
         span: Span,
     },
+    Closure {
+        params: Vec<HirClosureParam>,
+        return_type: Option<Type>,
+        body: Box<Expr>,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HirClosureParam {
+    pub id: HirId,
+    pub name: Symbol,
+    pub ty: Option<Type>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -367,6 +381,7 @@ impl Expr {
             Expr::While { span, .. } => *span,
             Expr::Assign { span, .. } => *span,
             Expr::Match { span, .. } => *span,
+            Expr::Closure { span, .. } => *span,
         }
     }
 }

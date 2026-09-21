@@ -153,6 +153,7 @@ pub enum Type {
     Named(Ident),
     Generic(Box<Type>, Vec<Type>, Span),
     Optional(Box<Type>, Span),
+    Closure(Vec<Type>, Box<Type>, Span),
 }
 
 impl Type {
@@ -161,6 +162,7 @@ impl Type {
             Type::Named(ident) => ident.span,
             Type::Generic(_, _, span) => *span,
             Type::Optional(_, span) => *span,
+            Type::Closure(_, _, span) => *span,
         }
     }
 }
@@ -240,6 +242,18 @@ pub enum Expr {
         arms: Vec<MatchArm>,
         span: Span,
     },
+    Closure {
+        params: Vec<ClosureParam>,
+        return_type: Option<Type>,
+        body: Box<Expr>,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClosureParam {
+    pub name: Ident,
+    pub ty: Option<Type>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -295,6 +309,7 @@ impl Expr {
             Expr::While { span, .. } => *span,
             Expr::Assign { span, .. } => *span,
             Expr::Match { span, .. } => *span,
+            Expr::Closure { span, .. } => *span,
         }
     }
 }

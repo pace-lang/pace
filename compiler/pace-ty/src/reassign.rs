@@ -199,6 +199,14 @@ pub fn reassign_expr_ids(
         | Expr::StringLiteral(..)
         | Expr::Null(_)
         | Expr::Super(_) => {}
+        Expr::Closure { params, body, .. } => {
+            for param in params {
+                let new_id = tc.generate_id();
+                id_map.insert(param.id, new_id);
+                param.id = new_id;
+            }
+            reassign_expr_ids(tc, body, id_map);
+        }
     }
 }
 
