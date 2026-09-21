@@ -237,17 +237,20 @@ impl<'a> Parser<'a> {
         self.advance(); // consume '=>'
 
         let body = if self.check(&TokenKind::LBrace) {
-            let _block = self.parse_block()?;
-            self.parse_expr()?
+            pace_ast::ClosureBody::Block(self.parse_block()?)
         } else {
-            self.parse_expr()?
+            pace_ast::ClosureBody::Expr(Box::new(self.parse_expr()?))
         };
 
-        let span = start_span.merge(body.span());
+        let body_span = match &body {
+            pace_ast::ClosureBody::Expr(e) => e.span(),
+            pace_ast::ClosureBody::Block(b) => b.span,
+        };
+        let span = start_span.merge(body_span);
         Ok(Some(Expr::Closure {
             params,
             return_type,
-            body: Box::new(body),
+            body,
             span,
         }))
     }

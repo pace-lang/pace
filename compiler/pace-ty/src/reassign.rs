@@ -205,7 +205,10 @@ pub fn reassign_expr_ids(
                 id_map.insert(param.id, new_id);
                 param.id = new_id;
             }
-            reassign_expr_ids(tc, body, id_map);
+            match body {
+                pace_hir::ClosureBody::Expr(e) => reassign_expr_ids(tc, e, id_map),
+                pace_hir::ClosureBody::Block(b) => reassign_block_ids(tc, b, id_map),
+            }
         }
     }
 }

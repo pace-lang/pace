@@ -6,9 +6,13 @@ fn testClosures() {
     let multiply = (a: int, b: int) => a * b
     let prod = multiply(5, 5)
     println(prod)
-    // Capture test
+    // Capture test with block body and type inference
     let baseOffset = 100
-    let captureTest = (x: int) => x + baseOffset
+    let captureTest = (x: int) => {
+        let temp = x + baseOffset
+        return temp
+    }
+    
     let res = captureTest(50)
     println(res)
 }

@@ -789,7 +789,20 @@ impl Formatter {
                     self.format_type(ty);
                     self.write(" ");
                 }
-                self.format_expr(body);
+                match body {
+                    pace_ast::ClosureBody::Expr(e) => self.format_expr(e),
+                    pace_ast::ClosureBody::Block(b) => {
+                        self.write("{\n");
+                        self.indent();
+                        for stmt in &b.statements {
+                            self.format_stmt(stmt);
+                            self.write("\n");
+                        }
+                        self.dedent();
+                        self.write_indent();
+                        self.write("}");
+                    }
+                }
             }
         }
     }

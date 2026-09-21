@@ -201,7 +201,11 @@ impl LoweringContext {
                         span: param.name.span,
                     });
                 }
-                let lowered_body = self.lower_expr(*body)?;
+                
+                let lowered_body = match body {
+                    pace_ast::ClosureBody::Expr(e) => crate::hir::ClosureBody::Expr(Box::new(self.lower_expr(*e)?)),
+                    pace_ast::ClosureBody::Block(b) => crate::hir::ClosureBody::Block(self.lower_block(b)?),
+                };
                 
                 let ctx = self.closure_stack.pop().unwrap();
                 let captured_vars: Vec<HirId> = ctx.captures.into_iter().collect();
@@ -210,7 +214,7 @@ impl LoweringContext {
                 Ok(Expr::Closure {
                     params: lowered_params,
                     return_type,
-                    body: Box::new(lowered_body),
+                    body: lowered_body,
                     captured_vars,
                     span,
                 })

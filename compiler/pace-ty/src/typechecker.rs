@@ -59,6 +59,7 @@ pub struct TypeChecker {
     pub generic_templates_by_id: HashMap<HirId, String>,
     pub implemented_traits: HashMap<HirId, Vec<String>>,
     pub current_expected_ty: Option<Ty>,
+    pub current_return_ty: Option<Ty>,
     pub current_fn_name: Option<String>,
     pub current_module: Option<String>,
     pub module_scopes: HashMap<String, ModuleScope>,
@@ -106,6 +107,7 @@ impl TypeChecker {
             implemented_traits: HashMap::new(),
             current_expected_ty: None,
             current_fn_name: None,
+            current_return_ty: None,
             current_module: None,
             module_scopes: HashMap::new(),
             resolved_global_names: HashMap::new(),
@@ -1037,17 +1039,19 @@ impl TypeChecker {
                         Ty::Void
                     };
 
-                    if let Some(expected) = expected_ret_ty
-                        && ret_ty != *expected
-                    {
-                        self.reporter.report(
-                            Diagnostic::error(format!(
-                                "Type mismatch: function expects to return {:?}, but returned {:?}",
-                                expected, ret_ty
-                            ))
-                            .with_span(*span)
-                            .with_code(ErrorCode::TypeMismatch),
-                        );
+                    if let Some(expected) = expected_ret_ty {
+                        if ret_ty != *expected {
+                            self.reporter.report(
+                                Diagnostic::error(format!(
+                                    "Type mismatch: function expects to return {:?}, but returned {:?}",
+                                    expected, ret_ty
+                                ))
+                                .with_span(*span)
+                                .with_code(ErrorCode::TypeMismatch),
+                            );
+                        }
+                    } else if self.current_return_ty.is_none() {
+                        self.current_return_ty = Some(ret_ty);
                     }
                 }
             }
@@ -2490,32 +2494,89 @@ impl TypeChecker {
                 return_type,
                 body,
                 captured_vars: _,
-                span: _,
+                span,
             } => {
+                let expected_closure_ty = self.current_expected_ty.clone();
+                let mut inferred_param_tys = None;
+                if let Some(Ty::Closure(p_tys, _)) = &expected_closure_ty {
+                    if p_tys.len() == params.len() {
+                        inferred_param_tys = Some(p_tys.clone());
+                    }
+                }
+
                 let mut param_tys = Vec::new();
                 let outer_env = self.env.clone();
-                for param in params {
+                for (i, param) in params.iter().enumerate() {
                     let ty = if let Some(t) = &param.ty {
                         self.resolve_type(t).unwrap_or(Ty::Int)
+                    } else if let Some(inferred) = &inferred_param_tys {
+                        inferred[i].clone()
                     } else {
-                        Ty::Int // Inference would go here, fallback to Int
+                        self.reporter.report(
+                            pace_errors::Diagnostic::error(format!(
+                                "Type of parameter `{}` cannot be inferred, please provide a type annotation",
+                                param.name
+                            ))
+                            .with_span(param.span),
+                        );
+                        Ty::Int
                     };
                     param_tys.push(ty.clone());
                     self.env.insert(param.id, ty.clone());
                     self.local_types.insert(param.id, ty);
                 }
-                
+
                 // TODO: closure environment capture analysis
-                
-                let ret_ty = self.check_expr(body)?;
-                
+
+                let ret_ty = match body {
+                    pace_hir::ClosureBody::Expr(e) => {
+                        let prev_expected = self.current_expected_ty.take();
+                        if let Some(Ty::Closure(_, r_ty)) = &expected_closure_ty {
+                            self.current_expected_ty = Some((**r_ty).clone());
+                        }
+                        let t = self.check_expr(e)?;
+                        self.current_expected_ty = prev_expected;
+                        t
+                    }
+                    pace_hir::ClosureBody::Block(b) => {
+                        let prev_ret = self.current_return_ty.take();
+                        let mut block_ret = Ty::Void;
+                        if let Some(Ty::Closure(_, r_ty)) = &expected_closure_ty {
+                            self.current_return_ty = Some((**r_ty).clone());
+                        } else if let Some(t) = return_type {
+                            if let Ok(r) = self.resolve_type(t) {
+                                self.current_return_ty = Some(r);
+                            }
+                        }
+                        self.check_block(b, None)?;
+                        
+                        if let Some(inferred_ret) = self.current_return_ty.take() {
+                            block_ret = inferred_ret;
+                        }
+                        self.current_return_ty = prev_ret;
+                        
+                        block_ret
+                    }
+                };
+
                 let expected_ret = if let Some(t) = return_type {
                     self.resolve_type(t).unwrap_or(Ty::Void)
                 } else {
                     ret_ty.clone()
                 };
-                
+
+                if ret_ty != expected_ret && expected_ret != Ty::Void {
+                    self.reporter.report(
+                        pace_errors::Diagnostic::error(format!(
+                            "Closure body returns {:?}, but is expected to return {:?}",
+                            ret_ty, expected_ret
+                        ))
+                        .with_span(*span),
+                    );
+                }
+
                 self.env = outer_env;
+
                 Ok(Ty::Closure(param_tys, Box::new(expected_ret)))
             }
         }

@@ -245,9 +245,15 @@ pub enum Expr {
     Closure {
         params: Vec<ClosureParam>,
         return_type: Option<Type>,
-        body: Box<Expr>,
+        body: ClosureBody,
         span: Span,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClosureBody {
+    Expr(Box<Expr>),
+    Block(Block),
 }
 
 #[derive(Debug, Clone, PartialEq)]

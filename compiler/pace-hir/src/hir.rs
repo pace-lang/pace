@@ -330,10 +330,16 @@ pub enum Expr {
     Closure {
         params: Vec<HirClosureParam>,
         return_type: Option<Type>,
-        body: Box<Expr>,
+        body: ClosureBody,
         captured_vars: Vec<HirId>,
         span: Span,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClosureBody {
+    Expr(Box<Expr>),
+    Block(Block),
 }
 
 #[derive(Debug, Clone, PartialEq)]

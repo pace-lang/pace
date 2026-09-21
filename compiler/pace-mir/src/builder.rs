@@ -236,13 +236,29 @@ impl<'a> MirBuilder<'a> {
                     }
                 }
                 
-                let body_local = fn_builder.build_expr(body);
-                let ret_ty = fn_builder.locals[body_local.0 as usize].clone();
-                let ret_local = fn_builder.new_local(ret_ty.clone());
-                fn_builder.push_stmt(Statement::Assign(Lvalue::Local(ret_local), Rvalue::Use(body_local)));
-                if fn_builder.blocks[fn_builder.current_block.0 as usize].terminator.is_none() {
-                    fn_builder.blocks[fn_builder.current_block.0 as usize].terminator = Some(Terminator::Return(ret_local));
-                }
+                let ret_ty = match body {
+                    pace_hir::ClosureBody::Expr(e) => {
+                        let body_local = fn_builder.build_expr(e);
+                        let ret_ty = fn_builder.locals[body_local.0 as usize].clone();
+                        let ret_local = fn_builder.new_local(ret_ty.clone());
+                        fn_builder.push_stmt(Statement::Assign(Lvalue::Local(ret_local), Rvalue::Use(body_local)));
+                        if fn_builder.blocks[fn_builder.current_block.0 as usize].terminator.is_none() {
+                            fn_builder.blocks[fn_builder.current_block.0 as usize].terminator = Some(Terminator::Return(ret_local));
+                        }
+                        ret_ty
+                    }
+                    pace_hir::ClosureBody::Block(b) => {
+                        fn_builder.build_block(b);
+                        let mut r_ty = Ty::Void;
+                        for block in &fn_builder.blocks {
+                            if let Some(Terminator::Return(local)) = &block.terminator {
+                                r_ty = fn_builder.locals[local.0 as usize].clone();
+                                break;
+                            }
+                        }
+                        r_ty
+                    }
+                };
                 
                 let fn_body = fn_builder.finish(&mir_params);
 
