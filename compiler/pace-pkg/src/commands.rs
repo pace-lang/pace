@@ -64,7 +64,7 @@ pub async fn add_dependency(name: &str, version: Option<&str>, dev: bool) -> Res
 
     // If resolution succeeds, write pace.toml and pace.lock
     fs::write(&manifest_path, doc_str).map_err(|e| format!("Failed to write pace.toml: {}", e))?;
-    let root = manifest_path.parent().unwrap();
+    let root = manifest_path.parent().ok_or("Invalid manifest path")?;
     resolver.write_lockfile(&root.join("pace.lock"), &lock)?;
 
     let cache = CacheManager::new();
@@ -122,7 +122,7 @@ pub async fn remove_dependency(name: &str) -> Result<(), String> {
     };
 
     fs::write(&manifest_path, doc_str).map_err(|e| format!("Failed to write pace.toml: {}", e))?;
-    let root = manifest_path.parent().unwrap();
+    let root = manifest_path.parent().ok_or("Invalid manifest path")?;
     resolver.write_lockfile(&root.join("pace.lock"), &lock)?;
 
     println!("Removed {}", name);
@@ -143,7 +143,7 @@ pub fn clean(cache: bool) -> Result<(), String> {
 
     let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
     if let Some(manifest_path) = find_manifest(&current_dir) {
-        let build_dir = manifest_path.parent().unwrap().join("build");
+        let build_dir = manifest_path.parent().ok_or("Invalid manifest path")?.join("build");
         if build_dir.exists() {
             fs::remove_dir_all(&build_dir)
                 .map_err(|e| format!("Failed to clean build directory: {}", e))?;
@@ -190,7 +190,7 @@ pub async fn update_dependencies(latest: bool) -> Result<(), String> {
         }
     }
 
-    let root = manifest_path.parent().unwrap();
+    let root = manifest_path.parent().ok_or("Invalid manifest path")?;
     let lockfile_path = root.join("pace.lock");
 
     let old_lock = if lockfile_path.exists() {
@@ -291,7 +291,7 @@ pub async fn list_outdated() -> Result<(), String> {
     let manifest_path = find_manifest(&current_dir)
         .ok_or("No pace.toml found in this directory or any parent directory")?;
 
-    let root = manifest_path.parent().unwrap();
+    let root = manifest_path.parent().ok_or("Invalid manifest path")?;
     let lockfile_path = root.join("pace.lock");
     if !lockfile_path.exists() {
         println!("No pace.lock found. Run `pace build` or `pace update` first.");
@@ -403,7 +403,7 @@ pub async fn publish() -> Result<(), String> {
     let manifest_path = find_manifest(&current_dir)
         .ok_or("No pace.toml found in this directory or any parent directory")?;
 
-    let root = manifest_path.parent().unwrap();
+    let root = manifest_path.parent().ok_or("Invalid manifest path")?;
     let toml = parse_manifest(&manifest_path)?;
 
     // Validate metadata

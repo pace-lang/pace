@@ -73,6 +73,7 @@ pub struct TypeChecker {
     pub inlay_hints: Vec<(pace_span::Span, String)>,
     pub function_calls: Vec<(pace_span::Span, Ty)>,
     pub reporter: Reporter,
+    pub is_lib: bool,
 }
 
 impl Default for TypeChecker {
@@ -120,6 +121,7 @@ impl TypeChecker {
             loop_depth: 0,
             next_id: 1000000,
             reporter: Reporter::new(),
+            is_lib: false,
         }
     }
 
@@ -314,7 +316,7 @@ impl TypeChecker {
 
         // MVP: Assume it's an executable if it's not a library.
         // For now we will warn if main is missing instead of error, so we don't break old tests without main yet.
-        if !has_main {
+        if !has_main && !self.is_lib {
             self.reporter.report(
                 Diagnostic::warning("No 'main' function found")
                     .with_hint("Executables must have an entry point 'fn main()'"),
@@ -2495,7 +2497,7 @@ impl TypeChecker {
         };
 
         let mut final_args = Vec::new();
-        for (i, (param_name, trait_bounds, default_ty)) in generic_params.iter().enumerate() {
+        for (i, (param_name, _trait_bounds, default_ty)) in generic_params.iter().enumerate() {
             if i < args.len() {
                 final_args.push(args[i].clone());
             } else if let Some(def_ty) = default_ty {
@@ -2594,7 +2596,7 @@ impl TypeChecker {
 
         match &mut new_decl {
             pace_hir::Decl::Struct {
-                id,
+                id: _,
                 name,
                 fields,
                 static_fields,
@@ -2604,7 +2606,7 @@ impl TypeChecker {
                 ..
             }
             | pace_hir::Decl::Class {
-                id,
+                id: _,
                 name,
                 fields,
                 static_fields,
@@ -2613,7 +2615,6 @@ impl TypeChecker {
                 methods,
                 ..
             } => {
-                *id = self.generate_id();
                 *name = pace_span::intern(&mono_name);
                 *generic_params = None;
                 for pace_hir::HirFieldDef { ty, .. } in fields.iter_mut() {
@@ -2649,17 +2650,15 @@ impl TypeChecker {
                 }
             }
             pace_hir::Decl::Enum {
-                id,
+                id: _,
                 name,
                 variants,
                 generic_params,
                 ..
             } => {
-                *id = self.generate_id();
                 *name = pace_span::intern(&mono_name);
                 *generic_params = None;
                 for v in variants.iter_mut() {
-                    v.id = self.generate_id();
                     if let Some(fields) = &mut v.fields {
                         for (_, ty) in fields.iter_mut() {
                             *ty = substitute_type(ty, &mapping);
@@ -2668,14 +2667,13 @@ impl TypeChecker {
                 }
             }
             pace_hir::Decl::Function {
-                id,
+                id: _,
                 name,
                 params,
                 return_type,
                 generic_params,
                 ..
             } => {
-                *id = self.generate_id();
                 *name = pace_span::intern(&mono_name);
                 *generic_params = None;
                 for (_, _, ty) in params.iter_mut() {
@@ -2690,6 +2688,8 @@ impl TypeChecker {
             }
             _ => {}
         }
+
+        crate::reassign::reassign_decl_ids(self, &mut new_decl);
 
         if let pace_hir::Decl::Function {
             id,
@@ -2815,7 +2815,6 @@ impl TypeChecker {
             }
             _ => {}
         }
-        crate::reassign::reassign_decl_ids(self, &mut new_decl);
         self.instantiated_generics.push(new_decl.clone());
         self.check_decl(&new_decl)?;
 

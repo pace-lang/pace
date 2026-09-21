@@ -1,6 +1,9 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+const RUNTIME_LIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libpace_rt.a"));
+const RUNTIME_HEADER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pace_runtime.h"));
 
 use pace_codegen::CGenerator;
 use pace_hir::LoweringContext;
@@ -10,7 +13,7 @@ use pace_parser::Parser;
 use pace_ty::TypeChecker;
 
 use std::collections::HashSet;
-use std::path::PathBuf;
+
 
 #[derive(Debug, Default)]
 struct DependencyGraph {
@@ -239,6 +242,7 @@ pub fn compile_file(
     check_only: bool,
     release: bool,
     dependencies: &std::collections::HashMap<String, PathBuf>,
+    is_lib: bool,
 ) -> Result<(), String> {
     let empty_overrides = std::collections::HashMap::new();
     let (ast, source_map, diags) = analyze_workspace(file_path, &empty_overrides, dependencies)?;
@@ -258,6 +262,7 @@ pub fn compile_file(
 
     // 3. Typecheck
     let mut tc = TypeChecker::new();
+    tc.is_lib = is_lib;
     hir.resolve_traits(&mut tc.reporter);
     if let Err(e) = tc.check_program(&hir) {
         if !tc.reporter.has_errors() {
@@ -276,6 +281,11 @@ pub fn compile_file(
 
     if check_only {
         println!("Check finished successfully.");
+        return Ok(());
+    }
+
+    if is_lib {
+        println!("Library built successfully.");
         return Ok(());
     }
 
@@ -298,25 +308,15 @@ pub fn compile_file(
     let bin_file = output_dir.join(output_name);
 
     // Find runtime paths
-    let runtime_dir = if Path::new("runtime").exists() {
-        PathBuf::from("runtime")
-    } else if Path::new("../compiler/runtime").exists() {
-        PathBuf::from("../compiler/runtime")
-    } else if Path::new("../../compiler/runtime").exists() {
-        PathBuf::from("../../compiler/runtime")
-    } else {
-        PathBuf::from("compiler/runtime")
-    };
+    let tmp_dir = std::env::temp_dir().join(format!("pace-rt-{}", std::process::id()));
+    fs::create_dir_all(&tmp_dir).map_err(|e| format!("Failed to create tmp dir: {}", e))?;
+    let tmp_lib = tmp_dir.join("libpace_rt.a");
+    let tmp_header = tmp_dir.join("pace_runtime.h");
+    fs::write(&tmp_lib, RUNTIME_LIB).map_err(|e| format!("Failed to write libpace_rt.a: {}", e))?;
+    fs::write(&tmp_header, RUNTIME_HEADER).map_err(|e| format!("Failed to write pace_runtime.h: {}", e))?;
 
-    let lib_dir = if Path::new("target/debug/libpace_rt.a").exists() {
-        PathBuf::from("target/debug")
-    } else if Path::new("../compiler/target/debug/libpace_rt.a").exists() {
-        PathBuf::from("../compiler/target/debug")
-    } else if Path::new("../../compiler/target/debug/libpace_rt.a").exists() {
-        PathBuf::from("../../compiler/target/debug")
-    } else {
-        PathBuf::from("target/debug")
-    };
+    let runtime_dir = tmp_dir.clone();
+    let lib_dir = tmp_dir.clone();
 
     let mut gcc_cmd = Command::new("gcc");
     if release {

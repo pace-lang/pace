@@ -114,7 +114,7 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool, rele
         let p = PathBuf::from(&f);
         let name = p.file_stem().unwrap().to_str().unwrap().to_string();
         let empty_deps = std::collections::HashMap::new();
-        pace_driver::compile_file(&p, Path::new("."), &name, run, check, release, &empty_deps)
+        pace_driver::compile_file(&p, Path::new("."), &name, run, check, release, &empty_deps, false)
     } else {
         let (root, project_name) = get_project_info()?;
 
@@ -144,6 +144,7 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool, rele
 
         let main_file = root.join("src/main.pace");
         let lib_file = root.join("src/lib.pace");
+        let is_lib = !main_file.exists() && lib_file.exists();
 
         let target_file = if main_file.exists() {
             main_file
@@ -186,6 +187,7 @@ async fn execute_build_or_run(file: Option<String>, run: bool, check: bool, rele
             check,
             release,
             &dependencies,
+            is_lib,
         )
     }
 }
