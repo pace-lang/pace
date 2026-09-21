@@ -13,6 +13,7 @@ compiler/runtime_target/
 installer/
 benchmarks/
 examples/
+tests/
 *.md
 
 # OS / Editor Files
@@ -20,3 +21,4 @@ examples/
 .vscode
 *.swp
 *.swo
+*.png

@@ -131,8 +131,8 @@ log_info "Downloading Pace $LATEST_RELEASE for $OS_NAME-$ARCH_NAME..."
 TMP_DIR=$(mktemp -d)
 (
     cd "$TMP_DIR"
-    if ! curl -L --progress-bar -o "$FILENAME" "$DOWNLOAD_URL"; then
-        log_error "Failed to download $DOWNLOAD_URL"
+    if ! curl -f -L --progress-bar -o "$FILENAME" "$DOWNLOAD_URL"; then
+        log_error "Failed to download $DOWNLOAD_URL. The release might not exist or the URL is incorrect."
         exit 1
     fi
 )
