@@ -34,6 +34,21 @@ impl CGenerator {
         self.output.push_str("#include <string.h>\n");
         self.output.push_str("#include \"pace_runtime.h\"\n\n");
 
+        self.output.push_str("typedef struct PaceClosure {\n");
+        self.output.push_str("    void* func;\n");
+        self.output.push_str("    void* env;\n");
+        self.output.push_str("} PaceClosure;\n\n");
+
+        for func in &program.functions {
+            if let Some(env_layout) = &func.env_layout {
+                self.output.push_str(&format!("struct __Env_{} {{\n", func.name));
+                for (local, ty) in env_layout {
+                    self.output.push_str(&format!("    {} _{};\n", self.emit_c_type(ty), local.0));
+                }
+                self.output.push_str("};\n\n");
+            }
+        }
+
         self.enum_defs = program.enum_defs.clone();
 
         for (id, fields) in &program.struct_defs {
@@ -153,16 +168,21 @@ impl CGenerator {
                 self.emit_c_type(&func.return_type),
                 func_name
             ));
-            if func.params.is_empty() {
-                self.output.push_str("void");
-            } else {
-                for (i, p) in func.params.iter().enumerate() {
-                    if i > 0 {
-                        self.output.push_str(", ");
-                    }
-                    let c_ty = self.emit_c_type(&func.body.locals[p.0 as usize]);
-                    self.output.push_str(&format!("{} _{}", c_ty, i));
+            if func.env_layout.is_some() {
+                self.output.push_str("void* __env");
+                if !func.params.is_empty() {
+                    self.output.push_str(", ");
                 }
+            } else if func.params.is_empty() {
+                self.output.push_str("void");
+            }
+            
+            for (i, p) in func.params.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                let c_ty = self.emit_c_type(&func.body.locals[p.0 as usize]);
+                self.output.push_str(&format!("{} _{}", c_ty, i));
             }
             self.output.push_str(");\n");
         }
@@ -225,7 +245,8 @@ impl CGenerator {
             Ty::Struct(id) => format!("struct pace_{}", id.0),
             Ty::Class(id) => format!("struct pace_{}*", id.0),
             Ty::Enum(id) => format!("struct pace_{}", id.0),
-            Ty::Function(_, _) | Ty::Closure(_, _) => "void*".to_string(),
+            Ty::Closure(_, _) => "PaceClosure*".to_string(),
+            Ty::Function(_, _) => "void*".to_string(),
             Ty::Optional(inner) => {
                 let inner_c = self.emit_c_type(inner);
                 if inner_c == "void" {
@@ -263,13 +284,22 @@ impl CGenerator {
             &func.name
         };
         self.output.push_str(&format!("{} {}(", ret_ty_str, c_name));
-        for (i, param) in func.params.iter().enumerate() {
-            if i > 0 {
+        let mut has_params = false;
+        if func.env_layout.is_some() {
+            self.output.push_str("void* __env");
+            has_params = true;
+        }
+        for param in func.params.iter() {
+            if has_params {
                 self.output.push_str(", ");
             }
             let ty = &func.body.locals[param.0 as usize];
             let ty_str = self.emit_c_type(ty);
             write!(&mut self.output, "{} _{}", ty_str, param.0).unwrap();
+            has_params = true;
+        }
+        if !has_params {
+            self.output.push_str("void");
         }
         self.output.push_str(") {\n");
 
@@ -290,6 +320,14 @@ impl CGenerator {
         }
         self.output.push_str(&locals.join("\n"));
         self.output.push_str("\n\n");
+
+        if let Some(env_layout) = &func.env_layout {
+            self.output.push_str(&format!("    struct __Env_{}* __env_ptr = (struct __Env_{}*)__env;\n", func.name, func.name));
+            for (local, _) in env_layout {
+                self.output.push_str(&format!("    _{} = __env_ptr->_{};\n", local.0, local.0));
+            }
+            self.output.push_str("\n");
+        }
 
         for (i, block) in func.body.blocks.iter().enumerate() {
             writeln!(&mut self.output, "{}_bb_{}:", func.name, i).unwrap();
@@ -454,7 +492,18 @@ impl CGenerator {
             }
             Rvalue::Call(callee, args) => {
                 let callee_ty = &locals[callee.0 as usize];
-                if let Ty::Function(params, ret) | Ty::Closure(params, ret) = callee_ty {
+                if let Ty::Closure(params, ret) = callee_ty {
+                    let mut fn_ptr = format!("(({} (*)(void*", self.emit_c_type(ret));
+                    for p in params {
+                        fn_ptr.push_str(", ");
+                        fn_ptr.push_str(&self.emit_c_type(p));
+                    }
+                    fn_ptr.push_str("))");
+                    write!(&mut self.output, "{}_{}->func)(_{}->env", fn_ptr, callee.0, callee.0).unwrap();
+                    if !args.is_empty() {
+                        self.output.push_str(", ");
+                    }
+                } else if let Ty::Function(params, ret) = callee_ty {
                     let mut fn_ptr = format!("(({} (*)(", self.emit_c_type(ret));
                     if params.is_empty() {
                         fn_ptr.push_str("void");
@@ -466,6 +515,7 @@ impl CGenerator {
                 } else {
                     write!(&mut self.output, "_{}(", callee.0).unwrap();
                 }
+                
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         self.output.push_str(", ");
@@ -659,6 +709,22 @@ impl CGenerator {
                         id.0, tag
                     )
                     .unwrap();
+                }
+            }
+            Rvalue::MakeClosure(func_name, captured_locals) => {
+                let env_struct_name = format!("__Env_{}", func_name);
+                self.output.push_str("(PaceClosure*)memcpy(pace_alloc(sizeof(PaceClosure), NULL), &(PaceClosure){");
+                if captured_locals.is_empty() {
+                    write!(&mut self.output, " .func = (void*){}, .env = NULL }}, sizeof(PaceClosure))", func_name).unwrap();
+                } else {
+                    write!(&mut self.output, " .func = (void*){}, .env = memcpy(pace_alloc(sizeof(struct {}), NULL), &(struct {}){{ ", func_name, env_struct_name, env_struct_name).unwrap();
+                    for (i, arg) in captured_locals.iter().enumerate() {
+                        if i > 0 {
+                            self.output.push_str(", ");
+                        }
+                        write!(&mut self.output, "_{}", arg.0).unwrap();
+                    }
+                    write!(&mut self.output, " }}, sizeof(struct {})) }}, sizeof(PaceClosure))", env_struct_name).unwrap();
                 }
             }
         }

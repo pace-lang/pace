@@ -2489,6 +2489,7 @@ impl TypeChecker {
                 params,
                 return_type,
                 body,
+                captured_vars: _,
                 span: _,
             } => {
                 let mut param_tys = Vec::new();

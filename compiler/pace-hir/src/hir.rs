@@ -331,6 +331,7 @@ pub enum Expr {
         params: Vec<HirClosureParam>,
         return_type: Option<Type>,
         body: Box<Expr>,
+        captured_vars: Vec<HirId>,
         span: Span,
     },
 }

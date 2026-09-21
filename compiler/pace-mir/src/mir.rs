@@ -53,6 +53,7 @@ pub enum Rvalue {
     Instantiate(pace_ty::Ty, Vec<Local>),
     InstantiateEnum(pace_hir::HirId, String, Vec<Local>),
     EnumTag(Local),
+    MakeClosure(String, Vec<Local>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -78,6 +79,7 @@ pub struct MirFunction {
     pub name: String,
     pub params: Vec<Local>,
     pub return_type: Ty,
+    pub env_layout: Option<Vec<(Local, pace_ty::Ty)>>,
     pub body: MirBody,
 }
 

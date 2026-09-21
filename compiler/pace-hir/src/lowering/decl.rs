@@ -19,7 +19,7 @@ impl LoweringContext {
                 span,
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name, id);
+                self.bind_global(name.name, id);
                 let lowered_value = match value {
                     Some(expr) => Some(self.lower_expr(expr)?),
                     None => None,
@@ -41,7 +41,7 @@ impl LoweringContext {
                 span,
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name, id);
+                self.bind_global(name.name, id);
                 let lowered_value = match value {
                     Some(expr) => Some(self.lower_expr(expr)?),
                     None => None,
@@ -68,7 +68,7 @@ impl LoweringContext {
                 ..
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name, id);
+                self.bind_global(name.name, id);
                 let mut lowered_fields = Vec::new();
                 for pace_ast::FieldDef {
                     name: field_name,
@@ -268,7 +268,7 @@ impl LoweringContext {
                 ..
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name, id);
+                self.bind_global(name.name, id);
                 let mut lowered_fields = Vec::new();
                 for pace_ast::FieldDef {
                     name: field_name,
@@ -475,7 +475,7 @@ impl LoweringContext {
                 ..
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name, id);
+                self.bind_global(name.name, id);
 
                 let mut lowered_methods = Vec::new();
                 for method in methods {
@@ -548,11 +548,11 @@ impl LoweringContext {
                 span,
             } => {
                 let id = self.generate_id();
-                self.scope.insert(name.name, id);
+                self.bind_global(name.name, id);
                 let mut lowered_variants = Vec::new();
                 for v in variants {
                     let var_id = self.generate_id();
-                    self.scope.insert(v.name.name, var_id);
+                    self.bind_global(v.name.name, var_id);
 
                     let mut lowered_fields = None;
                     if let Some(fields) = v.fields {
@@ -605,7 +605,7 @@ impl LoweringContext {
                 let mut lowered_params = Vec::new();
                 for (param_name, param_ty) in params {
                     let param_id = self.generate_id();
-                    self.scope.insert(param_name.name, param_id);
+                    self.bind_local(param_name.name, param_id);
                     lowered_params.push((param_id, param_name.name, param_ty));
                 }
 

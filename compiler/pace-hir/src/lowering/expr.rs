@@ -22,11 +22,11 @@ impl LoweringContext {
                 if ident.name == "false" {
                     return Ok(Expr::BoolLiteral(false, ident.span));
                 }
-                let id = if let Some(id) = self.scope.get(&ident.name).copied() {
+                let id = if let Some(id) = self.resolve_local(ident.name) {
                     id
                 } else {
                     let id = self.generate_id();
-                    self.scope.insert(ident.name, id);
+                    self.bind_local(ident.name, id);
                     id
                 };
                 let lowered_args = generic_args.map(|args| args.into_iter().collect());
@@ -142,7 +142,7 @@ impl LoweringContext {
                     let pattern = match arm.pattern {
                         ast::Pattern::Ident(ident) => {
                             let id = self.generate_id();
-                            self.scope.insert(ident.name, id);
+                            self.bind_local(ident.name, id);
                             crate::hir::Pattern::Ident(id, ident.name, ident.span)
                         }
                         ast::Pattern::Variant {
@@ -155,7 +155,7 @@ impl LoweringContext {
                                 let mut lf = Vec::new();
                                 for fname in f {
                                     let id = self.generate_id();
-                                    self.scope.insert(fname.name, id);
+                                    self.bind_local(fname.name, id);
                                     lf.push((id, fname.name, fname.span));
                                 }
                                 lowered_fields = Some(lf);
@@ -188,9 +188,12 @@ impl LoweringContext {
             ast::Expr::Closure { params, return_type, body, span } => {
                 let mut lowered_params = Vec::new();
                 let inner_scope = self.scope.clone();
+                
+                self.closure_stack.push(crate::lowering::ClosureContext::default());
+
                 for param in params {
                     let id = self.generate_id();
-                    self.scope.insert(param.name.name, id);
+                    self.bind_local(param.name.name, id);
                     lowered_params.push(crate::hir::HirClosureParam {
                         id,
                         name: param.name.name,
@@ -199,11 +202,16 @@ impl LoweringContext {
                     });
                 }
                 let lowered_body = self.lower_expr(*body)?;
+                
+                let ctx = self.closure_stack.pop().unwrap();
+                let captured_vars: Vec<HirId> = ctx.captures.into_iter().collect();
+
                 self.scope = inner_scope;
                 Ok(Expr::Closure {
                     params: lowered_params,
                     return_type,
                     body: Box::new(lowered_body),
+                    captured_vars,
                     span,
                 })
             }

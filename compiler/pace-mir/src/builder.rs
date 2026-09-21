@@ -194,7 +194,7 @@ impl<'a> MirBuilder<'a> {
                 self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(local)));
                 temp
             }
-            Expr::Closure { params, return_type: _, body, span: _ } => {
+            Expr::Closure { params, return_type: _, body, captured_vars, span: _ } => {
                 self.closure_counter += 1;
                 let closure_name = format!("__closure_{}", self.closure_counter);
                 
@@ -224,6 +224,18 @@ impl<'a> MirBuilder<'a> {
                     mir_params.push(local);
                 }
                 
+                let mut captured_mir_locals = Vec::new();
+                let mut env_layout = Vec::new();
+                for cap_id in captured_vars {
+                    if let Some(local) = self.hir_to_local.get(cap_id) {
+                        captured_mir_locals.push(*local);
+                        let ty = self.locals[local.0 as usize].clone();
+                        let fn_local = fn_builder.new_local(ty.clone());
+                        fn_builder.hir_to_local.insert(*cap_id, fn_local);
+                        env_layout.push((fn_local, ty));
+                    }
+                }
+                
                 let body_local = fn_builder.build_expr(body);
                 let ret_ty = fn_builder.locals[body_local.0 as usize].clone();
                 let ret_local = fn_builder.new_local(ret_ty.clone());
@@ -233,17 +245,22 @@ impl<'a> MirBuilder<'a> {
                 }
                 
                 let fn_body = fn_builder.finish(&mir_params);
-                
+
                 self.closure_functions.push(MirFunction {
                     name: closure_name.clone(),
                     params: mir_params,
                     return_type: ret_ty.clone(),
+                    env_layout: Some(env_layout),
                     body: fn_body,
                 });
                 
                 let closure_ty = Ty::Closure(param_tys, Box::new(ret_ty));
                 let temp = self.new_local(closure_ty);
-                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::GlobalRead(closure_name)));
+                
+                self.push_stmt(Statement::Assign(
+                    Lvalue::Local(temp),
+                    Rvalue::MakeClosure(closure_name, captured_mir_locals),
+                ));
                 temp
             }
             Expr::Ident(id, name, _, _) => {
@@ -1397,6 +1414,7 @@ impl<'a> MirBuilder<'a> {
                                 name: get_mangled_name(tc, name),
                                 params: mir_params,
                                 return_type: ret_ty,
+                                env_layout: None,
                                 body: fn_body,
                             });
                             functions.extend(extracted_closures);
@@ -1461,6 +1479,7 @@ impl<'a> MirBuilder<'a> {
                             .unwrap_or_else(|| get_mangled_name(tc, name)),
                         params: mir_params,
                         return_type: ret_ty,
+                        env_layout: None,
                         body: fn_body,
                     });
                     functions.extend(extracted_closures);

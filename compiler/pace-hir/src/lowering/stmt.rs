@@ -20,7 +20,7 @@ impl LoweringContext {
                         Some(expr) => Some(self.lower_expr(expr)?),
                         None => None,
                     };
-                    self.scope.insert(name.name, id);
+                    self.bind_local(name.name, id);
                     statements.push(Stmt::Let {
                         id,
                         name: name.name,
@@ -40,7 +40,7 @@ impl LoweringContext {
                         Some(expr) => Some(self.lower_expr(expr)?),
                         None => None,
                     };
-                    self.scope.insert(name.name, id);
+                    self.bind_local(name.name, id);
                     statements.push(Stmt::Var {
                         id,
                         name: name.name,
