@@ -1,0 +1,22 @@
+# Git
+.git
+.gitignore
+.github
+
+# Build Artifacts
+target/
+compiler/target/
+compiler/runtime_target/
+
+# Documentation & Others
+.agents/
+installer/
+benchmarks/
+examples/
+*.md
+
+# OS / Editor Files
+.DS_Store
+.vscode
+*.swp
+*.swo

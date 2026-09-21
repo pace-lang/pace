@@ -13,6 +13,11 @@ RUN cargo build --release
 # Stage 2: Minimal runtime image
 FROM debian:bookworm-slim
 
+# Link the image to the repository
+LABEL org.opencontainers.image.source=https://github.com/pace-lang/pace
+LABEL org.opencontainers.image.description="Pace Programming Language Compiler"
+LABEL org.opencontainers.image.licenses="MIT"
+
 # Install gcc and libc dev headers needed for linking Pace programs
 RUN apt-get update && \
     apt-get install -y gcc libc6-dev && \

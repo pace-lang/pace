@@ -58,17 +58,19 @@ jobs:
 
       - name: Build
         if: ${{ !matrix.use_cross }}
+        working-directory: compiler
         run: cargo build --release --target ${{ matrix.target }}
         
       - name: Build (Cross)
         if: matrix.use_cross
+        working-directory: compiler
         run: cross build --release --target ${{ matrix.target }}
 
       - name: Package (Unix)
         if: matrix.os_name != 'windows'
         run: |
           mkdir -p package
-          cp target/${{ matrix.target }}/release/pace package/pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}
+          cp compiler/target/${{ matrix.target }}/release/pace package/pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}
           cd package
           shasum -a 256 pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }} > pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.sha256
 
@@ -77,7 +79,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p package
-          cp target/${{ matrix.target }}/release/pace.exe package/pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.exe
+          cp compiler/target/${{ matrix.target }}/release/pace.exe package/pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.exe
           cd package
           sha256sum pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.exe > pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.exe.sha256
 
