@@ -72,7 +72,7 @@ if ($Interactive) {
     }
 }
 
-$FileName = "pace-${LatestRelease}-windows-${ArchName}.zip"
+$FileName = "pace-${LatestRelease}-windows-${ArchName}.exe"
 $DownloadUrl = "https://github.com/$Repo/releases/download/$LatestRelease/$FileName"
 
 Write-Host "-> Downloading Pace $LatestRelease for windows-$ArchName..." -ForegroundColor Gray
@@ -82,26 +82,17 @@ $TempDir = Join-Path $env:TEMP "pace-installer-$(New-Guid)"
 New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
 
 try {
-    $ZipPath = Join-Path $TempDir $FileName
+    $ExePath = Join-Path $TempDir $FileName
     
-    Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -UseBasicParsing
+    Invoke-WebRequest -Uri $DownloadUrl -OutFile $ExePath -UseBasicParsing
     
-    Write-Host "-> Extracting toolchain..." -ForegroundColor Gray
-    if (Test-Path $InstallDir) {
-        Remove-Item -Recurse -Force $InstallDir
+    Write-Host "-> Installing toolchain..." -ForegroundColor Gray
+    if (-not (Test-Path $BinDir)) {
+        New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
     }
-    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     
-    # Expand archive
-    Expand-Archive -Path $ZipPath -DestinationPath $TempDir\extracted -Force
-    
-    # The zip contains a 'pace' folder, move its contents to InstallDir
-    $ExtractedPaceFolder = Join-Path $TempDir\extracted "pace"
-    if (Test-Path $ExtractedPaceFolder) {
-        Move-Item -Path "$ExtractedPaceFolder\*" -Destination $InstallDir -Force
-    } else {
-        Move-Item -Path "$TempDir\extracted\*" -Destination $InstallDir -Force
-    }
+    Move-Item -Path $ExePath -Destination "$BinDir\pace.exe" -Force
+
 } catch {
     Write-Error "❌ Error during installation: $_"
     exit 1

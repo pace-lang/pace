@@ -122,7 +122,7 @@ if [ "$INTERACTIVE" -eq 1 ]; then
     fi
 fi
 
-FILENAME="pace-${LATEST_RELEASE}-${OS_NAME}-${ARCH_NAME}.tar.gz"
+FILENAME="pace-${LATEST_RELEASE}-${OS_NAME}-${ARCH_NAME}"
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_RELEASE/$FILENAME"
 
 log_info "Downloading Pace $LATEST_RELEASE for $OS_NAME-$ARCH_NAME..."
@@ -137,11 +137,11 @@ TMP_DIR=$(mktemp -d)
     fi
 )
 
-log_info "Extracting toolchain..."
-mkdir -p "$INSTALL_DIR"
+log_info "Installing toolchain..."
+mkdir -p "$BIN_DIR"
 
-# Extract stripping the top-level 'pace' directory from the tarball
-tar -xzf "$TMP_DIR/$FILENAME" -C "$INSTALL_DIR" --strip-components=1
+# Move the downloaded binary to the bin directory
+mv "$TMP_DIR/$FILENAME" "$BIN_DIR/pace"
 
 # Add to PATH
 SHELL_NAME=$(basename "$SHELL")

@@ -67,25 +67,19 @@ jobs:
       - name: Package (Unix)
         if: matrix.os_name != 'windows'
         run: |
-          mkdir -p package/pace/bin package/pace/lib/pace/stdlib
-          cp target/${{ matrix.target }}/release/pace package/pace/bin/${{ matrix.artifact_name }}
-          cp -r stdlib/* package/pace/lib/pace/stdlib/
+          mkdir -p package
+          cp target/${{ matrix.target }}/release/pace package/pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}
           cd package
-          tar -czf ../pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.tar.gz pace
-          cd ..
-          shasum -a 256 pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.tar.gz > pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.tar.gz.sha256
+          shasum -a 256 pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }} > pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.sha256
 
       - name: Package (Windows)
         if: matrix.os_name == 'windows'
         shell: bash
         run: |
-          mkdir -p package/pace/bin package/pace/lib/pace/stdlib
-          cp target/${{ matrix.target }}/release/pace.exe package/pace/bin/${{ matrix.artifact_name }}
-          cp -r stdlib/* package/pace/lib/pace/stdlib/
+          mkdir -p package
+          cp target/${{ matrix.target }}/release/pace.exe package/pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.exe
           cd package
-          7z a ../pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip pace
-          cd ..
-          sha256sum pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip > pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip.sha256
+          sha256sum pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.exe > pace-${{ github.ref_name }}-${{ matrix.os_name }}-${{ matrix.arch_name }}.exe.sha256
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
@@ -112,7 +106,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            pace-*.tar.gz
-            pace-*.zip
+            pace-*
+            pace-*.exe
             pace-*.sha256
           generate_release_notes: true
