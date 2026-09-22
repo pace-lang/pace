@@ -51,7 +51,7 @@ impl DependencyResolver {
         Self {
             client: Client::new(),
             registry_url: env::var("PACE_REGISTRY_URL")
-                .unwrap_or_else(|_| "http://localhost:3000/api/packages".to_string()),
+                .unwrap_or_else(|_| "https://pace-registry.aniketkhote99.workers.dev/api/packages".to_string()),
             resolved: HashMap::new(),
         }
     }

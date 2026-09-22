@@ -12,7 +12,6 @@ fn testClosures() {
         let temp = x + baseOffset
         return temp
     }
-    
     let res = captureTest(50)
     println(res)
 }

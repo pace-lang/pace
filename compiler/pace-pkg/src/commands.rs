@@ -477,7 +477,7 @@ pub async fn publish() -> Result<(), String> {
     let description = toml.package.description.unwrap_or_default();
 
     let registry_url = env::var("PACE_REGISTRY_URL")
-        .unwrap_or_else(|_| "http://localhost:3000/api/packages".to_string());
+        .unwrap_or_else(|_| "https://pace-registry.aniketkhote99.workers.dev/api/packages".to_string());
 
     let url = format!("{}/{}/publish", registry_url, toml.package.name);
 

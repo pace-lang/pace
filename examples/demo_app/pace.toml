@@ -7,7 +7,7 @@ sdk = ">=0.1.0"
 
 [dependencies]
 demo_lib = { path = "../demo_lib" }
-hello_world = "^0.1.2"
 math_utils = "^2.0.0"
+hello_world = "^0.1.0"
 
 [dev-dependencies]
