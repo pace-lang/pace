@@ -28,6 +28,17 @@ void pace_print_bool(int val);
 void pace_print_string(struct PaceString* val);
 void pace_println();
 
+// Concurrency API
+// Event Loop (Single-threaded)
+void pace_event_loop_init(void);
+void pace_event_loop_run(void);
+void pace_spawn_task(void (*func)(void*), void* arg);
+
+// Thread Pool (for Actors)
+void pace_thread_pool_init(size_t num_threads);
+void pace_spawn_actor_task(void (*func)(void*), void* arg);
+void pace_thread_pool_shutdown(void);
+
 #ifdef __cplusplus
 }
 #endif
