@@ -32,7 +32,9 @@ void pace_println();
 // Event Loop (Single-threaded)
 void pace_event_loop_init(void);
 void pace_event_loop_run(void);
-void pace_spawn_task(void (*func)(void*), void* arg);
+void* pace_spawn_fiber(void (*func)(void*), void* arg);
+void* pace_await_fiber(void* fiber_ptr);
+void pace_fiber_set_result(void* result);
 
 // Thread Pool (for Actors)
 void pace_thread_pool_init(size_t num_threads);

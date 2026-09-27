@@ -79,6 +79,7 @@ pub struct MirFunction {
     pub name: String,
     pub params: Vec<Local>,
     pub return_type: Ty,
+    pub is_async: bool,
     pub env_layout: Option<Vec<(Local, pace_ty::Ty)>>,
     pub body: MirBody,
 }

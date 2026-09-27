@@ -266,6 +266,7 @@ impl<'a> MirBuilder<'a> {
                     name: closure_name.clone(),
                     params: mir_params,
                     return_type: ret_ty.clone(),
+                    is_async: false,
                     env_layout: Some(env_layout),
                     body: fn_body,
                 });
@@ -1240,8 +1241,19 @@ impl<'a> MirBuilder<'a> {
                 rval
             }
             Expr::Await(inner, _) => {
-                // Phase 2 will implement state machine lowering
-                self.build_expr(inner)
+                let inner_local = self.build_expr(inner);
+                let inner_ty = self.locals[inner_local.0 as usize].clone();
+                let ret_ty = if let Ty::Future(inner_t) = inner_ty {
+                    *inner_t
+                } else {
+                    inner_ty
+                };
+                let temp = self.new_local(ret_ty);
+                self.push_stmt(Statement::Assign(
+                    Lvalue::Local(temp),
+                    Rvalue::BuiltinCall("pace_await_fiber".to_string(), vec![inner_local]),
+                ));
+                temp
             }
         }
     }
@@ -1392,6 +1404,7 @@ impl<'a> MirBuilder<'a> {
                             params,
                             return_type,
                             body,
+                            is_async,
                             ..
                         } = method
                         {
@@ -1434,6 +1447,7 @@ impl<'a> MirBuilder<'a> {
                                 name: get_mangled_name(tc, name),
                                 params: mir_params,
                                 return_type: ret_ty,
+                                is_async: *is_async,
                                 env_layout: None,
                                 body: fn_body,
                             });
@@ -1452,6 +1466,7 @@ impl<'a> MirBuilder<'a> {
                     return_type,
                     body,
                     generic_params,
+                    is_async,
                     ..
                 } => {
                     if generic_params.is_some() {
@@ -1499,6 +1514,7 @@ impl<'a> MirBuilder<'a> {
                             .unwrap_or_else(|| get_mangled_name(tc, name)),
                         params: mir_params,
                         return_type: ret_ty,
+                        is_async: *is_async,
                         env_layout: None,
                         body: fn_body,
                     });

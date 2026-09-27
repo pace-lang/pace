@@ -227,12 +227,14 @@ impl CGenerator {
         self.output.push_str("}\n\n");
 
         self.output.push_str("int main() {\n");
+        self.output.push_str("    pace_event_loop_init();\n");
         self.output.push_str("    pace_init();\n");
-        // Always call the user's main function if it exists.
-        // We know it exists if the program has a function named "main".
-        let has_main = program.functions.iter().any(|f| f.name == "main");
-        if has_main {
+        let main_func = program.functions.iter().find(|f| f.name == "main");
+        if let Some(m) = main_func {
             self.output.push_str("    pace_main();\n");
+            if m.is_async {
+                self.output.push_str("    pace_event_loop_run();\n");
+            }
         }
         self.output.push_str("    return 0;\n");
         self.output.push_str("}\n");
@@ -257,14 +259,7 @@ impl CGenerator {
                     inner_c
                 }
             }
-            Ty::Future(inner) => {
-                let inner_c = self.emit_c_type(inner);
-                if inner_c == "void" {
-                    "void*".to_string()
-                } else {
-                    inner_c
-                }
-            }
+            Ty::Future(_) => "void*".to_string(),
             Ty::Void => "void".to_string(),
         }
     }
@@ -301,25 +296,51 @@ impl CGenerator {
         } else {
             &func.name
         };
-        self.output.push_str(&format!("{} {}(", ret_ty_str, c_name));
-        let mut has_params = false;
-        if func.env_layout.is_some() {
-            self.output.push_str("void* __env");
-            has_params = true;
-        }
-        for param in func.params.iter() {
-            if has_params {
-                self.output.push_str(", ");
+
+        if func.is_async {
+            self.output.push_str(&format!("struct __AsyncEnv_{} {{\n", c_name));
+            for param in func.params.iter() {
+                let ty = &func.body.locals[param.0 as usize];
+                let ty_str = self.emit_c_type(ty);
+                self.output.push_str(&format!("    {} _{};\n", ty_str, param.0));
             }
-            let ty = &func.body.locals[param.0 as usize];
-            let ty_str = self.emit_c_type(ty);
-            write!(&mut self.output, "{} _{}", ty_str, param.0).unwrap();
-            has_params = true;
+            if func.env_layout.is_some() {
+                self.output.push_str("    void* __env;\n");
+            }
+            self.output.push_str("};\n\n");
+            
+            self.output.push_str(&format!("void __async_body_{}(void* __env_ptr) {{\n", c_name));
+            self.output.push_str(&format!("    struct __AsyncEnv_{}* __async_env = (struct __AsyncEnv_{}*)__env_ptr;\n", c_name, c_name));
+            
+            for param in func.params.iter() {
+                let ty = &func.body.locals[param.0 as usize];
+                let ty_str = self.emit_c_type(ty);
+                self.output.push_str(&format!("    {} _{} = __async_env->_{};\n", ty_str, param.0, param.0));
+            }
+            if func.env_layout.is_some() {
+                self.output.push_str("    void* __env = __async_env->__env;\n");
+            }
+        } else {
+            self.output.push_str(&format!("{} {}(", ret_ty_str, c_name));
+            let mut has_params = false;
+            if func.env_layout.is_some() {
+                self.output.push_str("void* __env");
+                has_params = true;
+            }
+            for param in func.params.iter() {
+                if has_params {
+                    self.output.push_str(", ");
+                }
+                let ty = &func.body.locals[param.0 as usize];
+                let ty_str = self.emit_c_type(ty);
+                self.output.push_str(&format!("{} _{}", ty_str, param.0));
+                has_params = true;
+            }
+            if !has_params {
+                self.output.push_str("void");
+            }
+            self.output.push_str(") {\n");
         }
-        if !has_params {
-            self.output.push_str("void");
-        }
-        self.output.push_str(") {\n");
 
         let mut locals = Vec::new();
         for i in 0..func.body.locals.len() {
@@ -348,41 +369,79 @@ impl CGenerator {
         }
 
         for (i, block) in func.body.blocks.iter().enumerate() {
-            writeln!(&mut self.output, "{}_bb_{}:", func.name, i).unwrap();
+            self.output.push_str(&format!("{}_bb_{}:\n", func.name, i));
             self.generate_block(block, &func.body.locals);
             match &block.terminator {
                 Some(Terminator::Return(local)) => {
-                    if self.emit_c_type(&func.return_type) == "void" {
-                        writeln!(&mut self.output, "    return;").unwrap();
+                    if func.is_async {
+                        if self.emit_c_type(&func.return_type) != "void" {
+                            self.output.push_str(&format!("    pace_fiber_set_result((void*)(long long)_{});\n", local.0));
+                        }
+                        self.output.push_str("    return;\n");
                     } else {
-                        writeln!(&mut self.output, "    return _{};", local.0).unwrap();
+                        if self.emit_c_type(&func.return_type) == "void" {
+                            self.output.push_str("    return;\n");
+                        } else {
+                            self.output.push_str(&format!("    return _{};\n", local.0));
+                        }
                     }
                 }
                 Some(Terminator::Goto(bb)) => {
-                    writeln!(&mut self.output, "    goto {}_bb_{};", func.name, bb.0).unwrap();
+                    self.output.push_str(&format!("    goto {}_bb_{};\n", func.name, bb.0));
                 }
                 Some(Terminator::Branch {
                     cond,
                     then_block,
                     else_block,
                 }) => {
-                    writeln!(
-                        &mut self.output,
-                        "    if (_{}) goto {}_bb_{}; else goto {}_bb_{};",
+                    self.output.push_str(&format!(
+                        "    if (_{}) goto {}_bb_{}; else goto {}_bb_{};\n",
                         cond.0, func.name, then_block.0, func.name, else_block.0
-                    )
-                    .unwrap();
+                    ));
                 }
                 None => {
-                    if ret_ty_str != "void" {
+                    if func.is_async {
+                        self.output.push_str("    return;\n");
+                    } else if ret_ty_str != "void" {
                         self.output.push_str("    return 0;\n");
                     }
                 }
             }
         }
-        self.output.push_str("}\n");
-    }
+        self.output.push_str("}\n\n");
 
+        if func.is_async {
+            self.output.push_str(&format!("void* {}(", c_name));
+            let mut has_params = false;
+            if func.env_layout.is_some() {
+                self.output.push_str("void* __env");
+                has_params = true;
+            }
+            for param in func.params.iter() {
+                if has_params {
+                    self.output.push_str(", ");
+                }
+                let ty = &func.body.locals[param.0 as usize];
+                let ty_str = self.emit_c_type(ty);
+                self.output.push_str(&format!("{} _{}", ty_str, param.0));
+                has_params = true;
+            }
+            if !has_params {
+                self.output.push_str("void");
+            }
+            self.output.push_str(") {\n");
+            
+            self.output.push_str(&format!("    struct __AsyncEnv_{}* __async_env = (struct __AsyncEnv_{}*)malloc(sizeof(struct __AsyncEnv_{}));\n", c_name, c_name, c_name));
+            for param in func.params.iter() {
+                self.output.push_str(&format!("    __async_env->_{} = _{};\n", param.0, param.0));
+            }
+            if func.env_layout.is_some() {
+                self.output.push_str("    __async_env->__env = __env;\n");
+            }
+            self.output.push_str(&format!("    return pace_spawn_fiber(__async_body_{}, __async_env);\n", c_name));
+            self.output.push_str("}\n");
+        }
+    }
     fn generate_block(&mut self, block: &BasicBlock, locals: &[Ty]) {
         for stmt in &block.statements {
             match stmt {
@@ -390,19 +449,27 @@ impl CGenerator {
                     self.output.push_str("    ");
 
                     let mut is_void = false;
+                    if let Lvalue::Local(local) = lval {
+                        if self.emit_c_type(&locals[local.0 as usize]) == "void" {
+                            is_void = true;
+                        }
+                    }
                     if let Rvalue::BuiltinCall(name, _) = rval {
                         if name == "print" || name == "println" {
                             is_void = true;
                         }
-                    } else if let Lvalue::Local(local) = lval
-                        && self.emit_c_type(&locals[local.0 as usize]) == "void"
-                    {
-                        is_void = true;
                     }
 
                     if !is_void {
                         self.generate_lvalue(lval, locals);
                         self.output.push_str(" = ");
+                        if let Rvalue::BuiltinCall(name, _) = rval {
+                            if name == "pace_await_fiber" {
+                                if let Lvalue::Local(local) = lval {
+                                    self.output.push_str(&format!("({})", self.emit_c_type(&locals[local.0 as usize])));
+                                }
+                            }
+                        }
                     }
 
                     self.generate_rvalue(rval, locals);
@@ -543,7 +610,10 @@ impl CGenerator {
                 self.output.push(')');
             }
             Rvalue::BuiltinCall(name, args) => {
-                if name == "interpolate_string" {
+                if name == "pace_await_fiber" {
+                    write!(&mut self.output, "pace_await_fiber((void*)_{})", args[0].0).unwrap();
+                    return;
+                } else if name == "interpolate_string" {
                     let mut format_str = String::new();
                     let mut type_args = Vec::new();
                     for arg in args {

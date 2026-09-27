@@ -158,7 +158,7 @@ impl LoweringContext {
                     let mut has_init = false;
                     for method in &mut methods {
                         if let ast::Decl::Function {
-                            name: m_name, body, is_async, ..
+                            name: m_name, body, is_async: _, ..
                         } = method
                             && m_name.name == "init"
                         {
