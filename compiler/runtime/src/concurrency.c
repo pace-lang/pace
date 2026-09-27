@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <ucontext.h>
+#include <time.h>
+#include <unistd.h>
 
 #define FIBER_STACK_SIZE (1024 * 1024)
 
@@ -14,10 +16,23 @@ typedef struct PaceFiber {
     struct PaceFiber* next;
 } PaceFiber;
 
+typedef struct SleepEntry {
+    PaceFiber* fiber;
+    long long wakeup_time_ms;
+    struct SleepEntry* next;
+} SleepEntry;
+
 static PaceFiber* current_fiber = NULL;
 static PaceFiber* ready_queue_head = NULL;
 static PaceFiber* ready_queue_tail = NULL;
+static SleepEntry* sleep_queue = NULL;
 static ucontext_t main_loop_ctx;
+
+static long long current_time_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
 
 // Queue management
 static void enqueue_fiber(PaceFiber* fiber) {
@@ -30,7 +45,7 @@ static void enqueue_fiber(PaceFiber* fiber) {
     }
 }
 
-static PaceFiber* dequeue_fiber() {
+static PaceFiber* dequeue_fiber(void) {
     if (!ready_queue_head) return NULL;
     PaceFiber* f = ready_queue_head;
     ready_queue_head = f->next;
@@ -41,6 +56,7 @@ static PaceFiber* dequeue_fiber() {
 void pace_event_loop_init(void) {
     ready_queue_head = NULL;
     ready_queue_tail = NULL;
+    sleep_queue = NULL;
     current_fiber = NULL;
 }
 
@@ -71,6 +87,29 @@ void* pace_spawn_fiber(void (*func)(void*), void* arg) {
     return fiber;
 }
 
+static void pace_check_sleep_queue(void) {
+    long long now = current_time_ms();
+    SleepEntry* prev = NULL;
+    SleepEntry* curr = sleep_queue;
+    while (curr) {
+        if (now >= curr->wakeup_time_ms) {
+            enqueue_fiber(curr->fiber);
+            SleepEntry* to_free = curr;
+            if (prev) {
+                prev->next = curr->next;
+                curr = curr->next;
+            } else {
+                sleep_queue = curr->next;
+                curr = curr->next;
+            }
+            free(to_free);
+        } else {
+            prev = curr;
+            curr = curr->next;
+        }
+    }
+}
+
 void* pace_await_fiber(void* fiber_ptr) {
     PaceFiber* target = (PaceFiber*)fiber_ptr;
     
@@ -80,24 +119,28 @@ void* pace_await_fiber(void* fiber_ptr) {
             // Save current fiber state and switch back to main loop
             swapcontext(&current_fiber->ctx, &main_loop_ctx);
         } else {
-            // If called from main thread (not inside a fiber), we must run the event loop until it's done
+            // If called from main thread
             while (!target->is_done) {
+                pace_check_sleep_queue();
                 PaceFiber* next_f = dequeue_fiber();
                 if (next_f) {
                     current_fiber = next_f;
                     swapcontext(&main_loop_ctx, &next_f->ctx);
                     current_fiber = NULL;
-                    if (!next_f->is_done) {
+                    if (!next_f->is_done && next_f->waiting_on != (void*)1) {
                         enqueue_fiber(next_f);
+                    }
+                } else if (sleep_queue) {
+                    long long now = current_time_ms();
+                    long long sleep_time = sleep_queue->wakeup_time_ms - now;
+                    if (sleep_time > 0) {
+                        usleep(sleep_time * 1000);
                     }
                 }
             }
         }
     }
     
-    // Once done, retrieve result and clean up target fiber?
-    // In a real GC'd language we wouldn't free immediately unless we track refs.
-    // For now we assume one awaiter and free it.
     void* result = target->result;
     free(target->stack);
     free(target);
@@ -105,30 +148,102 @@ void* pace_await_fiber(void* fiber_ptr) {
 }
 
 void pace_event_loop_run(void) {
-    while (ready_queue_head) {
-        PaceFiber* f = dequeue_fiber();
+    while (ready_queue_head || sleep_queue) {
+        pace_check_sleep_queue();
         
-        // If it's waiting on something that is not done, put it back
-        if (f->waiting_on && !f->waiting_on->is_done) {
-            enqueue_fiber(f);
-            continue;
-        } else {
-            f->waiting_on = NULL;
-        }
+        PaceFiber* f = dequeue_fiber();
+        if (f) {
+            if (f->waiting_on && f->waiting_on != (void*)1 && !f->waiting_on->is_done) {
+                // If it is waiting on another fiber that is still running, 
+                // wait, actually we shouldn't enqueue it here if it's explicitly waiting.
+                // But for now we just put it back.
+                enqueue_fiber(f);
+                continue;
+            } else {
+                f->waiting_on = NULL;
+            }
 
-        current_fiber = f;
-        swapcontext(&main_loop_ctx, &f->ctx);
-        current_fiber = NULL;
+            current_fiber = f;
+            swapcontext(&main_loop_ctx, &f->ctx);
+            current_fiber = NULL;
 
-        if (!f->is_done) {
-            enqueue_fiber(f);
+            // Notice we only re-enqueue if it's NOT explicitly sleeping or waiting.
+            // If it's waiting on a future or sleeping, it shouldn't be in the ready queue.
+            // The sleep function removes it from ready queue by not re-enqueuing.
+            // But wait, our current implementation re-enqueues unconditionally? No, only if not done.
+            // We should only re-enqueue if it's not waiting on something else and not in sleep queue.
+            // Actually, if it yielded due to await or sleep, its `waiting_on` is set, or it put itself in sleep queue.
+            // Wait, if it put itself in sleep queue, we shouldn't put it in ready queue.
+            // So we add a flag `is_sleeping`? Or just check if `waiting_on` is NULL.
+            // For now, let's just let it be. If we don't re-enqueue it, who does?
+            // `pace_await_fiber` sets `waiting_on`.
+            // `pace_sleep` puts it in `sleep_queue` and we should set `waiting_on = (void*)1` to prevent re-enqueueing?
+            // Yes, let's just use `waiting_on = (void*)1` as a hack for sleep.
+            if (!f->is_done && f->waiting_on != (void*)1) {
+                enqueue_fiber(f);
+            }
+        } else if (sleep_queue) {
+            long long now = current_time_ms();
+            long long sleep_time = sleep_queue->wakeup_time_ms - now;
+            if (sleep_time > 0) {
+                usleep(sleep_time * 1000);
+            }
         }
     }
 }
 
-// API for fiber to set result before finishing
 void pace_fiber_set_result(void* result) {
     if (current_fiber) {
         current_fiber->result = result;
     }
+}
+
+static void fiber_sleep_trampoline(void* arg) {
+    long long ms = (long long)arg;
+    
+    SleepEntry* entry = (SleepEntry*)malloc(sizeof(SleepEntry));
+    entry->fiber = current_fiber;
+    entry->wakeup_time_ms = current_time_ms() + ms;
+    
+    // insert sorted by wakeup time
+    if (!sleep_queue || sleep_queue->wakeup_time_ms >= entry->wakeup_time_ms) {
+        entry->next = sleep_queue;
+        sleep_queue = entry;
+    } else {
+        SleepEntry* curr = sleep_queue;
+        while (curr->next && curr->next->wakeup_time_ms < entry->wakeup_time_ms) {
+            curr = curr->next;
+        }
+        entry->next = curr->next;
+        curr->next = entry;
+    }
+    
+    // Prevent event loop from immediately re-enqueueing this fiber
+    current_fiber->waiting_on = (void*)1; 
+    
+    swapcontext(&current_fiber->ctx, &main_loop_ctx);
+    
+    // Woken up
+    current_fiber->waiting_on = NULL;
+    current_fiber->is_done = 1;
+    setcontext(&main_loop_ctx);
+}
+
+void* pace_sleep(long long ms) {
+    PaceFiber* fiber = (PaceFiber*)malloc(sizeof(PaceFiber));
+    fiber->stack = malloc(FIBER_STACK_SIZE);
+    fiber->is_done = 0;
+    fiber->result = NULL;
+    fiber->waiting_on = NULL;
+    fiber->next = NULL;
+
+    getcontext(&fiber->ctx);
+    fiber->ctx.uc_stack.ss_sp = fiber->stack;
+    fiber->ctx.uc_stack.ss_size = FIBER_STACK_SIZE;
+    fiber->ctx.uc_link = &main_loop_ctx;
+    
+    makecontext(&fiber->ctx, (void (*)())fiber_sleep_trampoline, 1, (void*)ms);
+
+    enqueue_fiber(fiber);
+    return fiber;
 }

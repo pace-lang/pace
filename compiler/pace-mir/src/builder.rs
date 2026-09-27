@@ -903,7 +903,12 @@ impl<'a> MirBuilder<'a> {
                 for arg in args {
                     arg_locals.push(self.build_expr(arg));
                 }
-                let temp = self.new_local(Ty::Int);
+                let ret_ty = if name == "sleep" {
+                    Ty::Future(Box::new(Ty::Void))
+                } else {
+                    Ty::Int
+                };
+                let temp = self.new_local(ret_ty);
                 self.push_stmt(Statement::Assign(
                     Lvalue::Local(temp),
                     Rvalue::BuiltinCall(name.to_string(), arg_locals),

@@ -613,6 +613,9 @@ impl CGenerator {
                 if name == "pace_await_fiber" {
                     write!(&mut self.output, "pace_await_fiber((void*)_{})", args[0].0).unwrap();
                     return;
+                } else if name == "sleep" {
+                    write!(&mut self.output, "pace_sleep(_{})", args[0].0).unwrap();
+                    return;
                 } else if name == "interpolate_string" {
                     let mut format_str = String::new();
                     let mut type_args = Vec::new();

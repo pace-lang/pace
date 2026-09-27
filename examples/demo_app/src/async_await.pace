@@ -5,14 +5,15 @@ async fn fetchData(id: int) -> Future<String> {
     // Simulating a network request delay (Phase 2 will actually suspend execution)
     println("Fetching data for id ${id}...")
     
-    // In Phase 2, this would yield execution
-    // await sleep(1000)
+    // Wait 1 second (1000 ms) using our single-threaded event loop!
+    await sleep(1000)
     
     return "Data payload for id ${id}"
 }
 
 async fn processData(data: String) -> Future<int> {
     println("Processing data: ${data}")
+    await sleep(500)
     return 42
 }
 

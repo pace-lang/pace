@@ -2333,6 +2333,14 @@ impl TypeChecker {
                         return Err(format!("{} takes exactly 1 argument", name));
                     }
                     Ok(Ty::Int)
+                } else if name == "sleep" {
+                    if arg_types.len() != 1 {
+                        return Err(format!("{} takes exactly 1 argument", name));
+                    }
+                    if !matches!(arg_types[0], Ty::Int) {
+                        return Err(format!("{} takes an int", name));
+                    }
+                    Ok(Ty::Future(Box::new(Ty::Void)))
                 } else {
                     Err(format!("Unknown builtin: {}", name))
                 }
