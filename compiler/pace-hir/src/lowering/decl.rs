@@ -158,7 +158,7 @@ impl LoweringContext {
                     let mut has_init = false;
                     for method in &mut methods {
                         if let ast::Decl::Function {
-                            name: m_name, body, ..
+                            name: m_name, body, is_async, ..
                         } = method
                             && m_name.name == "init"
                         {
@@ -184,6 +184,7 @@ impl LoweringContext {
                             is_static: false,
                             is_override: false,
                             is_private: false,
+                            is_async: false,
                             span,
                         };
                         methods.push(synthetic_init);
@@ -202,6 +203,7 @@ impl LoweringContext {
                         is_static,
                         is_override,
                         is_private: is_method_private,
+                        is_async,
                     } = method
                     {
                         let mut new_params = Vec::new();
@@ -228,6 +230,7 @@ impl LoweringContext {
                             is_static,
                             is_override,
                             is_private: is_method_private,
+                            is_async,
                         };
                         if let Some(lowered) = self.lower_decl(m_decl)? {
                             lowered_methods.push(lowered);
@@ -394,6 +397,7 @@ impl LoweringContext {
                             is_static: false,
                             is_override: false,
                             is_private: false,
+                            is_async: false,
                             span,
                         };
                         methods.push(synthetic_init);
@@ -412,6 +416,7 @@ impl LoweringContext {
                         is_static,
                         is_override,
                         is_private: is_method_private,
+                        is_async,
                     } = method
                     {
                         let mut new_params = Vec::new();
@@ -438,6 +443,7 @@ impl LoweringContext {
                             is_static,
                             is_override,
                             is_private: is_method_private,
+                            is_async,
                         };
                         if let Some(lowered) = self.lower_decl(m_decl)? {
                             lowered_methods.push(lowered);
@@ -489,6 +495,7 @@ impl LoweringContext {
                         is_static,
                         is_override,
                         is_private: is_method_private,
+                        is_async,
                     } = method
                     {
                         let mut new_params = Vec::new();
@@ -515,6 +522,7 @@ impl LoweringContext {
                             is_static,
                             is_override,
                             is_private: is_method_private,
+                            is_async,
                         };
                         if let Some(lowered) = self.lower_decl(m_decl)? {
                             lowered_methods.push(lowered);
@@ -594,6 +602,7 @@ impl LoweringContext {
                 is_static,
                 is_override,
                 is_private,
+                is_async,
             } => {
                 let id = self.generate_id();
                 // We do NOT insert global functions into `self.scope` because they are resolved
@@ -628,6 +637,7 @@ impl LoweringContext {
                     is_static,
                     is_override,
                     is_private,
+                    is_async,
                     span,
                 }))
             }

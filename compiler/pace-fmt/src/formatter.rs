@@ -804,6 +804,10 @@ impl Formatter {
                     }
                 }
             }
+            Expr::Await(inner, _) => {
+                self.write("await ");
+                self.format_expr(inner);
+            }
         }
     }
 

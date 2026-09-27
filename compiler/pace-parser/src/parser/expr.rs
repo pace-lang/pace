@@ -6,6 +6,13 @@ use super::Parser;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_postfix_expr(&mut self) -> Result<Expr, Diagnostic> {
+        if self.check(&TokenKind::Await) {
+            let start_tok = self.expect(TokenKind::Await)?;
+            let inner = self.parse_postfix_expr()?;
+            let span = start_tok.span.merge(inner.span());
+            return Ok(Expr::Await(Box::new(inner), span));
+        }
+
         let mut left = self.parse_primary()?;
 
         loop {

@@ -213,9 +213,11 @@ impl CGenerator {
         self.output.push_str("void pace_init() {\n");
         for (i, ty) in program.main_body.locals.iter().enumerate() {
             let c_ty = self.emit_c_type(ty);
-            let def_val = self.emit_c_default_val(ty);
-            self.output
-                .push_str(&format!("    {} _{} = {};\n", c_ty, i, def_val));
+            if c_ty != "void" {
+                let def_val = self.emit_c_default_val(ty);
+                self.output
+                    .push_str(&format!("    {} _{} = {};\n", c_ty, i, def_val));
+            }
         }
         self.output.push('\n');
         for (i, block) in program.main_body.blocks.iter().enumerate() {
@@ -255,6 +257,14 @@ impl CGenerator {
                     inner_c
                 }
             }
+            Ty::Future(inner) => {
+                let inner_c = self.emit_c_type(inner);
+                if inner_c == "void" {
+                    "void*".to_string()
+                } else {
+                    inner_c
+                }
+            }
             Ty::Void => "void".to_string(),
         }
     }
@@ -265,6 +275,14 @@ impl CGenerator {
             Ty::String | Ty::Class(_) | Ty::Function(_, _) | Ty::Closure(_, _) => "NULL".to_string(),
             Ty::Struct(_) | Ty::Enum(_) => "{0}".to_string(),
             Ty::Optional(inner) => {
+                let default_val = self.emit_c_default_val(inner);
+                if default_val.is_empty() {
+                    "NULL".to_string()
+                } else {
+                    default_val
+                }
+            }
+            Ty::Future(inner) => {
                 let default_val = self.emit_c_default_val(inner);
                 if default_val.is_empty() {
                     "NULL".to_string()

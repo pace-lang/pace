@@ -231,8 +231,11 @@ impl<'a> Parser<'a> {
                     start_tok.span.merge(end_span)
                 },
             })
+        } else if self.check(&TokenKind::Async) {
+            self.advance();
+            self.parse_fn_decl(is_private, true, start_span)
         } else if self.check(&TokenKind::Fn) {
-            self.parse_fn_decl(is_private, start_span)
+            self.parse_fn_decl(is_private, false, start_span)
         } else if self.check(&TokenKind::Struct) {
             self.parse_struct_decl(is_private, start_span)
         } else if self.check(&TokenKind::Class) {
@@ -428,8 +431,14 @@ impl<'a> Parser<'a> {
             } else if self.check(&TokenKind::Static) {
                 self.advance();
 
+                let mut is_async = false;
+                if self.check(&TokenKind::Async) {
+                    self.advance();
+                    is_async = true;
+                }
+
                 if self.check(&TokenKind::Fn) {
-                    let mut func = self.parse_fn_decl(is_field_private, self.current_span())?;
+                    let mut func = self.parse_fn_decl(is_field_private, is_async, self.current_span())?;
                     if let Decl::Function {
                         ref mut is_static, ..
                     } = func
@@ -470,8 +479,11 @@ impl<'a> Parser<'a> {
                     )
                     .with_span(self.current_span()));
                 }
+            } else if self.check(&TokenKind::Async) {
+                self.advance();
+                methods.push(self.parse_fn_decl(is_field_private, true, self.current_span())?);
             } else if self.check(&TokenKind::Fn) {
-                methods.push(self.parse_fn_decl(is_field_private, self.current_span())?);
+                methods.push(self.parse_fn_decl(is_field_private, false, self.current_span())?);
             } else if self.check(&TokenKind::Let)
                 || self.check(&TokenKind::Var)
                 || matches!(
@@ -539,6 +551,7 @@ impl<'a> Parser<'a> {
                             is_static: false,
                             is_override: false,
                             is_private: is_field_private,
+                            is_async: false,
                             span: init_span_start.merge(body.span),
                         });
                         continue;
@@ -636,8 +649,11 @@ impl<'a> Parser<'a> {
                 is_field_private = true;
             }
 
-            if self.check(&TokenKind::Fn) {
-                methods.push(self.parse_fn_decl(is_field_private, self.current_span())?);
+            if self.check(&TokenKind::Async) {
+                self.advance();
+                methods.push(self.parse_fn_decl(is_field_private, true, self.current_span())?);
+            } else if self.check(&TokenKind::Fn) {
+                methods.push(self.parse_fn_decl(is_field_private, false, self.current_span())?);
             } else {
                 return Err(
                     Diagnostic::error("Expected method in trait").with_span(self.current_span())
@@ -756,8 +772,14 @@ impl<'a> Parser<'a> {
             } else if self.check(&TokenKind::Static) {
                 self.advance();
 
+                let mut is_async = false;
+                if self.check(&TokenKind::Async) {
+                    self.advance();
+                    is_async = true;
+                }
+
                 if self.check(&TokenKind::Fn) {
-                    let mut func = self.parse_fn_decl(is_field_private, self.current_span())?;
+                    let mut func = self.parse_fn_decl(is_field_private, is_async, self.current_span())?;
                     if let Decl::Function {
                         ref mut is_static, ..
                     } = func
@@ -798,13 +820,20 @@ impl<'a> Parser<'a> {
                     )
                     .with_span(self.current_span()));
                 }
-            } else if self.check(&TokenKind::Fn) || self.check(&TokenKind::Override) {
+            } else if self.check(&TokenKind::Async) || self.check(&TokenKind::Fn) || self.check(&TokenKind::Override) {
                 let is_override = self.check(&TokenKind::Override);
                 if is_override {
                     self.advance();
                 }
+                
+                let mut is_async = false;
+                if self.check(&TokenKind::Async) {
+                    self.advance();
+                    is_async = true;
+                }
+                
                 if self.check(&TokenKind::Fn) {
-                    let mut func = self.parse_fn_decl(is_field_private, self.current_span())?;
+                    let mut func = self.parse_fn_decl(is_field_private, is_async, self.current_span())?;
                     if let Decl::Function {
                         is_override: ref mut override_flag,
                         ..
@@ -884,6 +913,7 @@ impl<'a> Parser<'a> {
                             is_static: false,
                             is_override: false,
                             is_private: is_field_private,
+                            is_async: false,
                             span: init_span_start.merge(body.span),
                         });
                         continue;
@@ -1057,6 +1087,7 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_fn_decl(
         &mut self,
         is_private: bool,
+        is_async: bool,
         start_span: pace_span::Span,
     ) -> Result<Decl, Diagnostic> {
         let start_tok = self.expect(TokenKind::Fn)?;
@@ -1135,6 +1166,7 @@ impl<'a> Parser<'a> {
             is_static: false,
             is_override: false,
             is_private,
+            is_async,
             span: if is_private {
                 start_span.merge(end_span)
             } else {

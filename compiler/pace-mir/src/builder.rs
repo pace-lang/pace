@@ -260,7 +260,7 @@ impl<'a> MirBuilder<'a> {
                     }
                 };
                 
-                let fn_body = fn_builder.finish(&mir_params);
+                let fn_body = fn_builder.finish(&mir_params, &ret_ty);
 
                 self.closure_functions.push(MirFunction {
                     name: closure_name.clone(),
@@ -1239,6 +1239,10 @@ impl<'a> MirBuilder<'a> {
                 }
                 rval
             }
+            Expr::Await(inner, _) => {
+                // Phase 2 will implement state machine lowering
+                self.build_expr(inner)
+            }
         }
     }
 
@@ -1424,7 +1428,7 @@ impl<'a> MirBuilder<'a> {
                             };
                             fn_builder.build_block(body);
                             let extracted_closures = std::mem::take(&mut fn_builder.closure_functions);
-                            let fn_body = fn_builder.finish(&mir_params);
+                            let fn_body = fn_builder.finish(&mir_params, &ret_ty);
 
                             functions.push(MirFunction {
                                 name: get_mangled_name(tc, name),
@@ -1486,7 +1490,7 @@ impl<'a> MirBuilder<'a> {
                     };
                     fn_builder.build_block(body);
                     let extracted_closures = std::mem::take(&mut fn_builder.closure_functions);
-                    let fn_body = fn_builder.finish(&mir_params);
+                    let fn_body = fn_builder.finish(&mir_params, &ret_ty);
                     functions.push(MirFunction {
                         name: tc
                             .resolved_global_names
@@ -1528,7 +1532,7 @@ impl<'a> MirBuilder<'a> {
 
         MirProgram {
             functions,
-            main_body: main_builder.finish(&[]),
+            main_body: main_builder.finish(&[], &Ty::Void),
             struct_defs: tc.struct_defs.clone(),
             class_defs: tc.class_defs.clone(),
             class_vtables: tc.class_vtables.clone(),
@@ -1539,11 +1543,11 @@ impl<'a> MirBuilder<'a> {
 }
 
 impl<'a> MirBuilder<'a> {
-    pub fn finish(mut self, params: &[Local]) -> MirBody {
+    pub fn finish(mut self, params: &[Local], ret_ty: &Ty) -> MirBody {
         let current_bb = self.current_block.0 as usize;
 
         if self.blocks[current_bb].terminator.is_none() {
-            let temp = self.new_local(Ty::Int);
+            let temp = self.new_local(ret_ty.clone());
             self.blocks[current_bb].statements.push(Statement::Assign(
                 Lvalue::Local(temp),
                 Rvalue::Constant(Constant::Int("0".to_string())),

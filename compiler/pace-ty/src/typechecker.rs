@@ -75,6 +75,7 @@ pub struct TypeChecker {
     pub function_calls: Vec<(pace_span::Span, Ty)>,
     pub reporter: Reporter,
     pub is_lib: bool,
+    pub in_async_context: bool,
 }
 
 impl Default for TypeChecker {
@@ -124,6 +125,7 @@ impl TypeChecker {
             next_id: 1000000,
             reporter: Reporter::new(),
             is_lib: false,
+            in_async_context: false,
         }
     }
 
@@ -156,6 +158,10 @@ impl TypeChecker {
             },
             pace_ast::Type::Generic(base, args, _) => {
                 if let pace_ast::Type::Named(id) = &**base {
+                    if id.name.as_str() == "Future" && args.len() == 1 {
+                        let inner = self.get_type(&args[0])?;
+                        return Ok(Ty::Future(Box::new(inner)));
+                    }
                     let mut final_args = Vec::new();
                     if let Some(template) = self.generic_templates.get(&id.name.to_string()) {
                         let generic_params = match template {
@@ -267,6 +273,10 @@ impl TypeChecker {
             }
             pace_ast::Type::Generic(base, args, _) => {
                 if let pace_ast::Type::Named(id) = &**base {
+                    if id.name.as_str() == "Future" && args.len() == 1 {
+                        let inner = self.resolve_type(&args[0])?;
+                        return Ok(Ty::Future(Box::new(inner)));
+                    }
                     self.instantiate_generic(&id.name, args)
                 } else {
                     Err("Complex generic base types not supported".to_string())
@@ -1320,6 +1330,7 @@ impl TypeChecker {
                 body,
                 span,
                 is_static,
+                is_async,
                 ..
             } => {
                 if generic_params.is_some() {
@@ -1444,13 +1455,28 @@ impl TypeChecker {
                 };
 
                 let returns_exhaustively = self.check_exhaustive_return(body);
-                if !returns_exhaustively && ret_ty != Ty::Void {
+                let requires_return = ret_ty != Ty::Void && !matches!(ret_ty, Ty::Future(ref inner) if **inner == Ty::Void);
+                if !returns_exhaustively && requires_return {
                     self.reporter.report(Diagnostic::error(format!("Function '{}' expects to return {:?}, but does not exhaustively return a value", name, ret_ty))
                         .with_span(*span)
                         .with_code(ErrorCode::NonExhaustiveReturn));
                 }
 
-                self.check_block(body, Some(&ret_ty))?;
+                let mut expected_block_ret = ret_ty.clone();
+                let prev_async = self.in_async_context;
+                if *is_async {
+                    self.in_async_context = true;
+                    if let Ty::Future(inner_ty) = &ret_ty {
+                        expected_block_ret = (**inner_ty).clone();
+                    } else {
+                        self.reporter.report(Diagnostic::error(format!("Async function '{}' must return Future<T>", name))
+                            .with_span(*span));
+                    }
+                }
+
+                self.check_block(body, Some(&expected_block_ret))?;
+                
+                self.in_async_context = prev_async;
                 self.current_fn_name = prev_fn;
                 self.env = outer_env;
                 Ok(())
@@ -2579,6 +2605,21 @@ impl TypeChecker {
 
                 Ok(Ty::Closure(param_tys, Box::new(expected_ret)))
             }
+            Expr::Await(inner, span) => {
+                if !self.in_async_context {
+                    self.reporter.report(Diagnostic::error("`await` can only be used inside `async` functions or closures")
+                        .with_span(*span));
+                }
+                let inner_ty = self.check_expr(inner)?;
+                match inner_ty {
+                    Ty::Future(t) => Ok(*t),
+                    _ => {
+                        self.reporter.report(Diagnostic::error(format!("`await` requires a Future type, found {:?}", inner_ty))
+                            .with_span(*span));
+                        Ok(Ty::Void)
+                    }
+                }
+            }
         }
     }
 
@@ -2976,6 +3017,7 @@ impl TypeChecker {
             Ty::Bool => "bool".to_string(),
             Ty::Void => "void".to_string(),
             Ty::Optional(inner) => format!("?{}", self.display_ty(inner)),
+            Ty::Future(inner) => format!("Future<{}>", self.display_ty(inner)),
             Ty::Function(args, ret) => {
                 let args_str = args
                     .iter()

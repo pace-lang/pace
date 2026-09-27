@@ -259,6 +259,7 @@ pub enum Decl {
         is_static: bool,
         is_override: bool,
         is_private: bool,
+        is_async: bool,
         span: Span,
     },
     Expr(Expr, Span),
@@ -334,6 +335,7 @@ pub enum Expr {
         captured_vars: Vec<HirId>,
         span: Span,
     },
+    Await(Box<Expr>, Span),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -389,6 +391,7 @@ impl Expr {
             Expr::Assign { span, .. } => *span,
             Expr::Match { span, .. } => *span,
             Expr::Closure { span, .. } => *span,
+            Expr::Await(_, span) => *span,
         }
     }
 }

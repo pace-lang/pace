@@ -10,8 +10,9 @@ import null_safety
 import operators
 import option_result
 import structs_classes
+import async_await
 
-fn main() {
+async fn main() -> Future<void> {
     hello()
     let b = Box<int>(value: 42)
     println(b.get())
@@ -28,5 +29,9 @@ fn main() {
     testOptionResult()
     testNullSafety()
     testClosures()
+    
+    // Async/Await
+    await testAsyncAwait()
+    
     h.hello()
 }

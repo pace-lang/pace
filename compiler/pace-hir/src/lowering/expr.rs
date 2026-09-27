@@ -219,6 +219,10 @@ impl LoweringContext {
                     span,
                 })
             }
+            ast::Expr::Await(inner, span) => {
+                let lowered_inner = self.lower_expr(*inner)?;
+                Ok(Expr::Await(Box::new(lowered_inner), span))
+            }
         }
     }
 }

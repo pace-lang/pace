@@ -1,0 +1,28 @@
+// Async/Await Showcase in Pace
+
+// An async function returns a Future<T> where T is the return type
+async fn fetchData(id: int) -> Future<String> {
+    // Simulating a network request delay (Phase 2 will actually suspend execution)
+    println("Fetching data for id ${id}...")
+    
+    // In Phase 2, this would yield execution
+    // await sleep(1000)
+    
+    return "Data payload for id ${id}"
+}
+
+async fn processData(data: String) -> Future<int> {
+    println("Processing data: ${data}")
+    return 42
+}
+
+async fn testAsyncAwait() -> Future<void> {
+    println("\n--- Testing Async/Await ---")
+    
+    // Call async functions and wait for their results using the `await` keyword
+    // Note: await can only be used inside async functions.
+    let data = await fetchData(42)
+    let length = await processData(data)
+    
+    println("Processed data length: ${length}")
+}
