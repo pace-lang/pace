@@ -41,7 +41,7 @@ impl CacheManager {
 
         // Use configurable registry or default
         let registry_url = std::env::var("PACE_REGISTRY_URL")
-            .unwrap_or_else(|_| "https://pace-registry.aniketkhote99.workers.dev/api/packages".to_string());
+            .unwrap_or_else(|_| "https://pace-registry.pace-lang.workers.dev/api/packages".to_string());
 
         let url = format!("{}/{}/download/{}", registry_url, name, version);
         let client = Client::new();
