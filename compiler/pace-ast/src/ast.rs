@@ -125,6 +125,15 @@ pub enum Decl {
         is_private: bool,
         span: Span,
     },
+    Actor {
+        name: Ident,
+        generic_params: Option<Vec<GenericParam>>,
+        with: Vec<Ident>,
+        fields: Vec<FieldDef>,
+        methods: Vec<Decl>, // Expects Decl::Function
+        is_private: bool,
+        span: Span,
+    },
     Trait {
         name: Ident,
         generic_params: Option<Vec<GenericParam>>,
@@ -333,6 +342,7 @@ impl Decl {
             Decl::Function { span, .. } => *span,
             Decl::Struct { span, .. } => *span,
             Decl::Class { span, .. } => *span,
+            Decl::Actor { span, .. } => *span,
             Decl::Trait { span, .. } => *span,
             Decl::Enum { span, .. } => *span,
             Decl::Expr(_, span) => *span,

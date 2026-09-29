@@ -19,6 +19,8 @@ pub enum TokenKind<'a> {
     Struct,
     #[token("class")]
     Class,
+    #[token("actor")]
+    Actor,
     #[token("trait")]
     Trait,
     #[token("enum")]

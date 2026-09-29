@@ -1,0 +1,28 @@
+// Demonstrates single-threaded Actors in Pace
+
+actor Counter {
+    count: int = 0
+
+    fn increment() {
+        self.count = self.count + 1
+        let c = self.count
+        println("Counter incremented. Current count: $c")
+    }
+
+    fn getCount() -> int {
+        return self.count
+    }
+}
+
+async fn testActor() -> Future<void> {
+    println("\n--- Actors (Single-Threaded Async) ---")
+    
+    let c = Counter()
+    
+    // Actor methods are implicitly async and return a Future, so we await them
+    await c.increment()
+    await c.increment()
+    
+    let finalCount = await c.getCount()
+    println("Final actor count: $finalCount")
+}

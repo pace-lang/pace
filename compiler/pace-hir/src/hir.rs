@@ -233,6 +233,16 @@ pub enum Decl {
         is_private: bool,
         span: Span,
     },
+    Actor {
+        id: HirId,
+        name: Symbol,
+        generic_params: Option<GenericParams>,
+        with: Vec<Symbol>,
+        fields: Vec<HirFieldDef>,
+        methods: Vec<Decl>,
+        is_private: bool,
+        span: Span,
+    },
     Trait {
         id: HirId,
         name: Symbol,

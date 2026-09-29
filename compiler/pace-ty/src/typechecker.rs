@@ -168,7 +168,8 @@ impl TypeChecker {
                             pace_hir::Decl::Struct { generic_params, .. } => {
                                 generic_params.clone().unwrap_or_default()
                             }
-                            pace_hir::Decl::Class { generic_params, .. } => {
+                            pace_hir::Decl::Class { generic_params, .. }
+                            | pace_hir::Decl::Actor { generic_params, .. } => {
                                 generic_params.clone().unwrap_or_default()
                             }
                             pace_hir::Decl::Enum { generic_params, .. } => {
@@ -255,10 +256,15 @@ impl TypeChecker {
                         };
 
                         if let Some(&(hir_id, kind)) = self.named_types.get(&mangled_name) {
+                            if other == "Counter" {
+                                println!("Resolving Counter: mangled_name={}, kind={}", mangled_name, kind);
+                            }
                             if kind == 1 {
                                 return Ok(Ty::Class(hir_id));
                             } else if kind == 0 {
                                 return Ok(Ty::Struct(hir_id));
+                            } else if kind == 3 {
+                                return Ok(Ty::Actor(hir_id));
                             } else {
                                 return Ok(Ty::Enum(hir_id));
                             }
@@ -423,6 +429,7 @@ impl TypeChecker {
                                 m_name.strip_prefix(&format!("{}_", name)).unwrap_or(m_name);
                             let method_mangled_name =
                                 format!("{}_{}", mangled_name, short_method_name);
+                            self.resolved_global_names.insert(*m_id, method_mangled_name.clone());
                             self.env.insert(
                                 *m_id,
                                 Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())),
@@ -502,6 +509,67 @@ impl TypeChecker {
                                 m_name.strip_prefix(&format!("{}_", name)).unwrap_or(m_name);
                             let method_mangled_name =
                                 format!("{}_{}", mangled_name, short_method_name);
+                            self.resolved_global_names.insert(*m_id, method_mangled_name.clone());
+                            self.env.insert(
+                                *m_id,
+                                Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())),
+                            );
+                            self.methods_env.insert(
+                                method_mangled_name,
+                                Ty::Function(param_tys, Box::new(ret_ty)),
+                            );
+                        }
+                    }
+                }
+                Decl::Actor {
+                    id,
+                    name,
+                    generic_params,
+                    methods,
+                    ..
+                } => {
+                    let mangled_name = format!("{}_{}", module_name, name);
+                    if generic_params.is_some() {
+                        self.generic_templates
+                            .insert(mangled_name.clone(), decl.clone());
+                        self.generic_templates_by_id
+                            .insert(*id, mangled_name.clone());
+                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                            scope.visible_symbols.insert(name.to_string(), mangled_name);
+                        }
+                        continue;
+                    }
+                    self.named_types.insert(mangled_name.clone(), (*id, 3));
+                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                        scope
+                            .visible_symbols
+                            .insert(name.to_string(), mangled_name.clone());
+                    }
+
+                    for method in methods {
+                        if let Decl::Function {
+                            name: m_name,
+                            params,
+                            return_type,
+                            id: m_id,
+                            ..
+                        } = method
+                        {
+                            let mut param_tys = Vec::new();
+                            for (_, _, pty) in params {
+                                param_tys.push(self.resolve_type(pty).unwrap_or(Ty::Int));
+                            }
+                            let ret_ty = if let Some(r) = return_type {
+                                self.resolve_type(r).unwrap_or(Ty::Void)
+                            } else {
+                                Ty::Void
+                            };
+                            let short_method_name =
+                                m_name.strip_prefix(&format!("{}_", name)).unwrap_or(m_name);
+                            let method_mangled_name =
+                                format!("{}_{}", mangled_name, short_method_name);
+                            println!("Pass 1 Actor {} method {}: id={:?}, mangled={}", name, m_name, m_id, method_mangled_name);
+                            self.resolved_global_names.insert(*m_id, method_mangled_name.clone());
                             self.env.insert(
                                 *m_id,
                                 Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())),
@@ -590,6 +658,13 @@ impl TypeChecker {
                         .insert(*id, with.iter().map(|w| w.to_string()).collect());
                 }
                 Decl::Class {
+                    id,
+                    generic_params,
+                    fields,
+                    with,
+                    ..
+                }
+                | Decl::Actor {
                     id,
                     generic_params,
                     fields,
@@ -1339,6 +1414,13 @@ impl TypeChecker {
                     self.generic_templates_by_id.insert(*id, name.to_string());
                     return Ok(());
                 }
+                
+                let mangled_name = if let Some(m) = self.resolved_global_names.get(id) {
+                    m.clone()
+                } else {
+                    format!("{}_{}", self.current_module.as_ref().unwrap_or(&"".to_string()), name)
+                };
+                
                 if name.contains('_') && name != "main" && !name.ends_with("_init") {
                     // Only warn for functions not generated by the compiler
                     let is_compiler_generated = self.named_types.keys().any(|k| {
@@ -1439,7 +1521,7 @@ impl TypeChecker {
 
                 let outer_env = self.env.clone();
                 let prev_fn = self.current_fn_name.take();
-                self.current_fn_name = Some(name.to_string());
+                self.current_fn_name = Some(mangled_name.clone());
                 for (param_id, param_name, pty) in params {
                     let ty = self.resolve_type(pty)?;
                     self.env.insert(*param_id, ty.clone());
@@ -1479,6 +1561,21 @@ impl TypeChecker {
                 self.in_async_context = prev_async;
                 self.current_fn_name = prev_fn;
                 self.env = outer_env;
+                Ok(())
+            }
+            Decl::Actor {
+                id,
+                generic_params,
+                methods,
+                ..
+            } => {
+                if generic_params.is_some() {
+                    return Ok(());
+                }
+                self.env.insert(*id, Ty::Actor(*id));
+                for method in methods {
+                    self.check_decl(method)?;
+                }
                 Ok(())
             }
             Decl::Trait { generic_params, .. } => {
@@ -1612,6 +1709,8 @@ impl TypeChecker {
                         Ty::Struct(hir_id)
                     } else if kind == 1 {
                         Ty::Class(hir_id)
+                    } else if kind == 3 {
+                        Ty::Actor(hir_id)
                     } else {
                         Ty::Enum(hir_id)
                     };
@@ -1845,7 +1944,8 @@ impl TypeChecker {
 
                         Err(format!("Struct has no member '{}'", member))
                     }
-                    Ty::Class(hir_id) => {
+                    Ty::Class(hir_id) | Ty::Actor(hir_id) => {
+                        let is_actor = matches!(obj_ty, Ty::Actor(_));
                         let mut class_name = "";
                         for (name, &(nid, _)) in &self.named_types {
                             if nid == hir_id {
@@ -1857,7 +1957,7 @@ impl TypeChecker {
                         let fields = self
                             .class_defs
                             .get(&hir_id)
-                            .ok_or("Class definition not found")?;
+                            .ok_or("Class/Actor definition not found")?;
                         for ResolvedField {
                             name: fname,
                             ty: fty,
@@ -1866,12 +1966,13 @@ impl TypeChecker {
                         } in fields
                         {
                             if fname == member {
-                                if *is_private {
+                                if *is_private || is_actor {
                                     let mut can_access = false;
-                                    if let Some(current_fn) = &self.current_fn_name
-                                        && current_fn.starts_with(&format!("{}_", class_name))
-                                    {
-                                        can_access = true;
+                                    if let Some(current_fn) = &self.current_fn_name {
+                                        println!("Checking access to field {} of class {}: current_fn={}", member, class_name, current_fn);
+                                        if current_fn.starts_with(&format!("{}_", class_name)) {
+                                            can_access = true;
+                                        }
                                     }
                                     if !can_access {
                                         return Err(format!(
@@ -1903,7 +2004,7 @@ impl TypeChecker {
                             return Ok(mty.clone());
                         }
 
-                        Err(format!("Class has no member '{}'", member))
+                        Err(format!("Class/Actor has no member '{}'", member))
                     }
                     Ty::Enum(hir_id) => {
                         let variants = self
@@ -2114,7 +2215,8 @@ impl TypeChecker {
                     return Ok(Ty::Struct(id));
                 }
 
-                if let Ty::Class(id) = callee_ty {
+                if let Ty::Class(id) | Ty::Actor(id) = callee_ty {
+                    let is_actor = matches!(callee_ty, Ty::Actor(_));
                     let mut class_name = "";
                     for (name, &(nid, _)) in &self.named_types {
                         if nid == id {
@@ -2167,7 +2269,7 @@ impl TypeChecker {
                                 ));
                             }
                         }
-                        return Ok(Ty::Class(id));
+                        if is_actor { return Ok(Ty::Actor(id)); } else { return Ok(Ty::Class(id)); }
                     }
 
                     let def_fields = self.class_defs.get(&id).unwrap().clone();
@@ -2228,7 +2330,7 @@ impl TypeChecker {
                             def_map.keys()
                         ));
                     }
-                    return Ok(Ty::Class(id));
+                    if is_actor { return Ok(Ty::Actor(id)); } else { return Ok(Ty::Class(id)); }
                 }
 
                 if let Ty::Function(_, ret_ty) = &callee_ty
@@ -2786,7 +2888,7 @@ impl TypeChecker {
                 const_fields,
                 generic_params,
                 methods,
-                ..
+                .. 
             } => {
                 *name = pace_span::intern(&mono_name);
                 *generic_params = None;
@@ -2994,6 +3096,7 @@ impl TypeChecker {
         match new_decl {
             pace_hir::Decl::Struct { id, .. } => Ok(Ty::Struct(id)),
             pace_hir::Decl::Class { id, .. } => Ok(Ty::Class(id)),
+            pace_hir::Decl::Actor { id, .. } => Ok(Ty::Actor(id)),
             pace_hir::Decl::Enum { id, variants, .. } => {
                 for v in variants {
                     if let Some(f) = &v.fields {
@@ -3042,7 +3145,7 @@ impl TypeChecker {
                     .join(", ");
                 format!("({}) => {}", args_str, self.display_ty(ret))
             }
-            Ty::Struct(id) | Ty::Class(id) | Ty::Enum(id) => {
+            Ty::Struct(id) | Ty::Class(id) | Ty::Enum(id) | Ty::Actor(id) => {
                 // Try to find the name in named_types (reverse lookup)
                 for (name, (nid, _)) in &self.named_types {
                     if nid == id {

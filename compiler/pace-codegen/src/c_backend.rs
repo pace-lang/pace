@@ -247,7 +247,7 @@ impl CGenerator {
             Ty::Float => "double".to_string(),
             Ty::String => "struct PaceString*".to_string(),
             Ty::Struct(id) => format!("struct pace_{}", id.0),
-            Ty::Class(id) => format!("struct pace_{}*", id.0),
+            Ty::Class(id) | Ty::Actor(id) => format!("struct pace_{}*", id.0),
             Ty::Enum(id) => format!("struct pace_{}", id.0),
             Ty::Closure(_, _) => "PaceClosure*".to_string(),
             Ty::Function(_, _) => "void*".to_string(),
@@ -267,7 +267,7 @@ impl CGenerator {
     fn emit_c_default_val(&self, ty: &Ty) -> String {
         match ty {
             Ty::Int | Ty::Bool | Ty::Float => "0".to_string(),
-            Ty::String | Ty::Class(_) | Ty::Function(_, _) | Ty::Closure(_, _) => "NULL".to_string(),
+            Ty::String | Ty::Class(_) | Ty::Actor(_) | Ty::Function(_, _) | Ty::Closure(_, _) => "NULL".to_string(),
             Ty::Struct(_) | Ty::Enum(_) => "{0}".to_string(),
             Ty::Optional(inner) => {
                 let default_val = self.emit_c_default_val(inner);
@@ -496,7 +496,7 @@ impl CGenerator {
         match lval {
             Lvalue::Local(local) => write!(&mut self.output, "_{}", local.0).unwrap(),
             Lvalue::FieldAccess(obj, field) => {
-                let is_ptr = matches!(locals[obj.0 as usize], Ty::Class(_));
+                let is_ptr = matches!(locals[obj.0 as usize], Ty::Class(_) | Ty::Actor(_));
                 if is_ptr {
                     write!(&mut self.output, "_{}->{}", obj.0, field).unwrap();
                 } else {
@@ -717,7 +717,7 @@ impl CGenerator {
                 write!(&mut self.output, "{}", name).unwrap();
             }
             Rvalue::FieldAccess(obj, field) => {
-                let is_ptr = matches!(locals[obj.0 as usize], Ty::Class(_));
+                let is_ptr = matches!(locals[obj.0 as usize], Ty::Class(_) | Ty::Actor(_));
                 if is_ptr {
                     write!(&mut self.output, "_{}->{}", obj.0, field).unwrap();
                 } else {
@@ -739,7 +739,7 @@ impl CGenerator {
                     }
                     self.output.push_str(" }");
                 }
-                Ty::Class(id) => {
+                Ty::Class(id) | Ty::Actor(id) => {
                     write!(&mut self.output, "memcpy(pace_alloc(sizeof(struct pace_{}), pace_{}_deinit), &(struct pace_{}){{ &pace_{}_vtable_inst", id.0, id.0, id.0, id.0).unwrap();
                     if !fields.is_empty() {
                         for arg in fields {

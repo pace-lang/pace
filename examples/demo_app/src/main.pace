@@ -11,6 +11,7 @@ import operators
 import option_result
 import structs_classes
 import async_await
+import actors
 
 async fn main() -> Future<void> {
     hello()
@@ -32,6 +33,9 @@ async fn main() -> Future<void> {
     
     // Async/Await
     await testAsyncAwait()
+    
+    // Actors
+    await testActor()
     
     h.hello()
 }

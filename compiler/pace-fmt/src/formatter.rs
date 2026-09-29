@@ -468,6 +468,80 @@ impl Formatter {
                 self.write_indent();
                 self.write("}\n");
             }
+
+            Decl::Actor {
+                name,
+                generic_params,
+                with,
+                fields,
+                methods,
+                is_private,
+                ..
+            } => {
+                if *is_private {
+                    self.write("private ");
+                }
+                self.write("actor ");
+                self.write(&name.name);
+                if let Some(gp) = generic_params {
+                    self.format_generic_params(gp);
+                }
+                if !with.is_empty() {
+                    self.write(" with ");
+                    let traits = with
+                        .iter()
+                        .map(|i| i.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    self.write(&traits);
+                }
+                self.write(" {\n");
+                self.indent();
+
+                for pace_ast::FieldDef {
+                    name: f_name,
+                    ty: f_ty,
+                    default_value: f_val,
+                    is_mut,
+                    is_private,
+                } in fields
+                {
+                    self.print_pending_comments_before(f_name.span);
+                    self.write_indent();
+                    if *is_private {
+                        self.write("private ");
+                    }
+                    if *is_mut {
+                        self.write("var ");
+                    } else {
+                        self.write("let ");
+                    }
+                    self.write(&f_name.name);
+                    self.write(": ");
+                    self.format_type(f_ty);
+                    if let Some(val) = f_val {
+                        self.write(" = ");
+                        self.format_expr(val);
+                    }
+                    self.newline();
+                }
+
+                if !fields.is_empty() && !methods.is_empty() {
+                    self.newline();
+                }
+
+                for (i, m) in methods.iter().enumerate() {
+                    self.format_decl(m);
+                    if i < methods.len() - 1 {
+                        self.newline();
+                    }
+                }
+
+                self.dedent();
+                self.write_indent();
+                self.write("}\n");
+            }
+
             Decl::Trait {
                 name,
                 generic_params,

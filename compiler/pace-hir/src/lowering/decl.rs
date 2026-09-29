@@ -472,6 +472,198 @@ impl LoweringContext {
                     span,
                 }))
             }
+
+            ast::Decl::Actor {
+                name,
+                generic_params,
+                with,
+                fields,
+                methods,
+                is_private,
+                span,
+                ..
+            } => {
+                let id = self.generate_id();
+                self.bind_global(name.name, id);
+                let mut lowered_fields = Vec::new();
+                for pace_ast::FieldDef {
+                    name: field_name,
+                    ty: field_ty,
+                    default_value: field_val,
+                    is_mut,
+                    is_private: is_field_private,
+                } in fields.clone()
+                {
+                    let lowered_val = match field_val {
+                        Some(v) => Some(self.lower_expr(v)?),
+                        None => None,
+                    };
+                    lowered_fields.push(crate::hir::HirFieldDef {
+                        name: field_name.name,
+                        ty: field_ty,
+                        default_value: lowered_val,
+                        is_mut,
+                        is_private: is_field_private,
+                    });
+                }
+
+                let mut initializers = Vec::new();
+                for pace_ast::FieldDef {
+                    name: field_name,
+                    default_value: field_val,
+                    ..
+                } in &fields
+                {
+                    if let Some(val) = field_val {
+                        let lhs = ast::Expr::MemberAccess {
+                            object: Box::new(ast::Expr::Ident(
+                                ast::Ident {
+                                    name: pace_span::intern("self"),
+                                    span: field_name.span,
+                                },
+                                None,
+                            )),
+                            member: field_name.clone(),
+                            span: field_name.span,
+                        };
+                        let stmt = ast::Stmt::ExprStmt(
+                            ast::Expr::Assign {
+                                target: Box::new(lhs),
+                                value: Box::new(val.clone()),
+                                span: val.span(),
+                            },
+                            val.span(),
+                        );
+                        initializers.push(stmt);
+                    }
+                }
+
+                let mut methods = methods;
+                if !initializers.is_empty() {
+                    let mut has_init = false;
+                    for method in &mut methods {
+                        if let ast::Decl::Function {
+                            name: m_name, body, ..
+                        } = method
+                            && m_name.name == "init"
+                        {
+                            has_init = true;
+                            for (i, init) in initializers.iter().enumerate() {
+                                body.statements.insert(i, init.clone());
+                            }
+                        }
+                    }
+                    if !has_init {
+                        let synthetic_init = ast::Decl::Function {
+                            name: ast::Ident {
+                                name: pace_span::intern("init"),
+                                span,
+                            },
+                            generic_params: None,
+                            params: vec![],
+                            return_type: None,
+                            body: ast::Block {
+                                statements: initializers,
+                                span,
+                            },
+                            is_static: false,
+                            is_override: false,
+                            is_private: false,
+                            is_async: false,
+                            span,
+                        };
+                        methods.push(synthetic_init);
+                    }
+                }
+
+                let mut lowered_methods = Vec::new();
+                for method in methods {
+                    if let ast::Decl::Function {
+                        name: m_name,
+                        generic_params: m_generic_params,
+                        params,
+                        return_type,
+                        body,
+                        span: m_span,
+                        is_static,
+                        is_override,
+                        is_private: is_method_private,
+                        is_async: _,
+                    } = method
+                    {
+                        let mut new_params = Vec::new();
+                        if !is_static {
+                            new_params.push((
+                                ast::Ident {
+                                    name: pace_span::intern("self"),
+                                    span: m_name.span,
+                                },
+                                ast::Type::Named(name.clone()),
+                            ));
+                        }
+                        new_params.extend(params);
+                        let new_return_type = match return_type {
+                            Some(ast::Type::Generic(ref base, _, _)) if let ast::Type::Named(id) = &**base && id.name.as_str() == "Future" => return_type,
+                            Some(t) => Some(ast::Type::Generic(
+                                Box::new(ast::Type::Named(ast::Ident {
+                                    name: pace_span::intern("Future"),
+                                    span: m_span,
+                                })),
+                                vec![t],
+                                m_span,
+                            )),
+                            None => Some(ast::Type::Generic(
+                                Box::new(ast::Type::Named(ast::Ident {
+                                    name: pace_span::intern("Future"),
+                                    span: m_span,
+                                })),
+                                vec![ast::Type::Named(ast::Ident {
+                                    name: pace_span::intern("void"),
+                                    span: m_span,
+                                })],
+                                m_span,
+                            )),
+                        };
+
+                        let m_decl = ast::Decl::Function {
+                            name: ast::Ident {
+                                name: pace_span::intern(&format!("{}_{}", name.name, m_name.name)),
+                                span: m_name.span,
+                            },
+                            generic_params: m_generic_params,
+                            params: new_params,
+                            return_type: new_return_type,
+                            body,
+                            span: m_span,
+                            is_static,
+                            is_override,
+                            is_private: is_method_private,
+                            is_async: true, // Actor methods are ALWAYS implicitly async!
+                        };
+                        if let Some(lowered) = self.lower_decl(m_decl)? {
+                            lowered_methods.push(lowered);
+                        }
+                    }
+                }
+                let hir_generic_params = generic_params.map(|params| {
+                    params
+                        .into_iter()
+                        .map(|p| (p.name.name, p.trait_bounds, p.default))
+                        .collect()
+                });
+                let hir_with = with.into_iter().map(|w| w.name).collect();
+                Ok(Some(Decl::Actor {
+                    id,
+                    name: name.name,
+                    generic_params: hir_generic_params,
+                    with: hir_with,
+                    fields: lowered_fields,
+                    methods: lowered_methods,
+                    is_private,
+                    span,
+                }))
+            }
+
             ast::Decl::Trait {
                 name,
                 generic_params,

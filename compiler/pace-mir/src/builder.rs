@@ -15,6 +15,9 @@ fn tc_get_type(tc: &TypeChecker, ty: &pace_ast::Type) -> Option<Ty> {
                     if kind == 0 {
                         return Some(Ty::Struct(hir_id));
                     }
+                    if kind == 3 {
+                        return Some(Ty::Actor(hir_id));
+                    }
                     return Some(Ty::Enum(hir_id));
                 }
             }
@@ -478,7 +481,7 @@ impl<'a> MirBuilder<'a> {
                         }
                         ft
                     }
-                    Ty::Class(id) => {
+                    Ty::Class(id) | Ty::Actor(id) => {
                         let mut ft = Ty::Int;
                         if let Some(fields) = self.class_defs.get(&id) {
                             for pace_ty::ResolvedField { name: n, ty: t, .. } in fields {
@@ -525,12 +528,14 @@ impl<'a> MirBuilder<'a> {
                 if let Expr::Ident(id, name, _, _) = &**callee {
                     if let Some(mangled) = self.resolved_global_names.get(id) {
                         if let Some(&(nid, kind)) = self.named_types.get(mangled) {
-                            if kind == 0 || kind == 1 {
+                            if kind == 0 || kind == 1 || kind == 3 {
                                 is_instantiation = true;
                                 inst_ty = Some(if kind == 0 {
                                     Ty::Struct(nid)
-                                } else {
+                                } else if kind == 1 {
                                     Ty::Class(nid)
+                                } else {
+                                    Ty::Actor(nid)
                                 });
                                 struct_name = mangled.clone();
                             } else {
@@ -538,7 +543,7 @@ impl<'a> MirBuilder<'a> {
                                 global_name = mangled.clone();
                             }
                         } else if let Some(ty) = self.local_types.get(id) {
-                            if let Ty::Struct(nid) | Ty::Class(nid) = ty {
+                            if let Ty::Struct(nid) | Ty::Class(nid) | Ty::Actor(nid) = ty {
                                 is_instantiation = true;
                                 inst_ty = Some(ty.clone());
                                 for (n, &(tid, _)) in self.named_types {
@@ -559,12 +564,13 @@ impl<'a> MirBuilder<'a> {
                         is_global = true;
                         global_name = name.clone();
                     } else if let Some(ty) = self.global_env.get(id) {
-                        if matches!(ty, Ty::Struct(_) | Ty::Class(_)) {
+                        if matches!(ty, Ty::Struct(_) | Ty::Class(_) | Ty::Actor(_)) {
                             is_instantiation = true;
                             inst_ty = Some(ty.clone());
                             let nid = match ty {
                                 Ty::Struct(i) => i,
                                 Ty::Class(i) => i,
+                                Ty::Actor(i) => i,
                                 _ => unreachable!(),
                             };
                             for (name, &(tid, _)) in self.named_types {
@@ -586,12 +592,14 @@ impl<'a> MirBuilder<'a> {
                             }
                         }
                     } else if let Some(&(nid, kind)) = self.named_types.get(&name.to_string()) {
-                        if kind == 0 || kind == 1 {
+                        if kind == 0 || kind == 1 || kind == 3 {
                             is_instantiation = true;
                             inst_ty = Some(if kind == 0 {
                                 Ty::Struct(nid)
-                            } else {
+                            } else if kind == 1 {
                                 Ty::Class(nid)
+                            } else {
+                                Ty::Actor(nid)
                             });
                             struct_name = name.to_string();
                         }
@@ -678,7 +686,7 @@ impl<'a> MirBuilder<'a> {
                                 is_static_method = true;
                             }
                         } else if let Some(&(nid, kind)) = self.named_types.get(&name.to_string()) {
-                            if kind == 0 || kind == 1 {
+                            if kind == 0 || kind == 1 || kind == 3 {
                                 let mut type_name = "";
                                 for (name, &(tid, _)) in self.named_types {
                                     if nid == tid {
@@ -725,7 +733,7 @@ impl<'a> MirBuilder<'a> {
                         let is_super = matches!(&**object, Expr::Super(_));
                         let obj_local = self.build_expr(object);
                         let obj_ty = self.locals[obj_local.0 as usize].clone();
-                        if let Ty::Struct(id) | Ty::Class(id) = obj_ty {
+                        if let Ty::Struct(id) | Ty::Class(id) | Ty::Actor(id) = obj_ty {
                             let mut target_id = id;
                             if is_super && let Some(&parent_id) = self.class_parents.get(&id) {
                                 target_id = parent_id;
@@ -1209,7 +1217,7 @@ impl<'a> MirBuilder<'a> {
                         let mut field_ty = Ty::Int;
                         let obj_ty = self.locals[obj.0 as usize].clone();
                         let mut found = false;
-                        if let Ty::Struct(id) | Ty::Class(id) = obj_ty {
+                        if let Ty::Struct(id) | Ty::Class(id) | Ty::Actor(id) = obj_ty {
                             let defs = if matches!(obj_ty, Ty::Struct(_)) {
                                 self.struct_defs.get(&id)
                             } else {
@@ -1226,6 +1234,7 @@ impl<'a> MirBuilder<'a> {
                             }
                         }
                         if !found {
+                            println!("Field not found: member={}, obj_ty={:?}", member, obj_ty);
                             panic!("Field not found");
                         }
                         field_ty
@@ -1282,6 +1291,12 @@ impl<'a> MirBuilder<'a> {
                     }
                 }
             } else if let pace_hir::Decl::Class { methods, .. } = decl {
+                for method in methods {
+                    if let pace_hir::Decl::Function { name, .. } = method {
+                        global_fns.insert(name.to_string(), name.to_string());
+                    }
+                }
+            } else if let pace_hir::Decl::Actor { methods, .. } = decl {
                 for method in methods {
                     if let pace_hir::Decl::Function { name, .. } = method {
                         global_fns.insert(name.to_string(), name.to_string());
@@ -1383,10 +1398,10 @@ impl<'a> MirBuilder<'a> {
                     } in static_fields
                     {
                         let global_name = format!("{}_{}", mangled_name, sf_name);
-                        let ty = tc_get_type(tc, sf_ty).unwrap_or(Ty::Int);
+                        let ty = tc_get_type(tc, &sf_ty).unwrap_or(Ty::Int);
                         global_vars.push((global_name.clone(), ty.clone()));
 
-                        let rval_local = main_builder.build_expr(sf_expr);
+                        let rval_local = main_builder.build_expr(&sf_expr);
                         main_builder.push_stmt(Statement::GlobalWrite(global_name, rval_local));
                     }
                     for pace_hir::HirConstFieldDef {
@@ -1397,15 +1412,16 @@ impl<'a> MirBuilder<'a> {
                     } in const_fields
                     {
                         let global_name = format!("{}_{}", mangled_name, cf_name);
-                        let ty = tc_get_type(tc, cf_ty).unwrap_or(Ty::Int);
+                        let ty = tc_get_type(tc, &cf_ty).unwrap_or(Ty::Int);
                         global_vars.push((global_name.clone(), ty.clone()));
 
-                        let rval_local = main_builder.build_expr(cf_expr);
+                        let rval_local = main_builder.build_expr(&cf_expr);
                         main_builder.push_stmt(Statement::GlobalWrite(global_name, rval_local));
                     }
                     for method in methods {
                         if let pace_hir::Decl::Function {
                             name,
+                            id: func_id,
                             params,
                             return_type,
                             body,
@@ -1430,7 +1446,10 @@ impl<'a> MirBuilder<'a> {
                             );
                             let mut mir_params = Vec::new();
                             for (param_id, param_name, pty) in params {
-                                let ty = tc_get_type(tc, pty).unwrap_or(Ty::Int);
+                                let ty = tc.local_types.get(param_id).cloned().unwrap_or(Ty::Int);
+                                if param_name == "self" {
+                                    println!("MIR Builder method={}, self type={:?}", tc.resolved_global_names.get(func_id).unwrap_or(&name.to_string()), ty);
+                                }
                                 let local = fn_builder.new_local(ty);
                                 if param_name == "self" {
                                     fn_builder.current_self_local = Some(local);
@@ -1449,7 +1468,7 @@ impl<'a> MirBuilder<'a> {
                             let fn_body = fn_builder.finish(&mir_params, &ret_ty);
 
                             functions.push(MirFunction {
-                                name: get_mangled_name(tc, name),
+                                name: tc.resolved_global_names.get(func_id).unwrap_or(&name.to_string()).clone(),
                                 params: mir_params,
                                 return_type: ret_ty,
                                 is_async: *is_async,
@@ -1494,7 +1513,7 @@ impl<'a> MirBuilder<'a> {
                     );
                     let mut mir_params = Vec::new();
                     for (param_id, param_name, pty) in params {
-                        let ty = tc_get_type(tc, pty).unwrap_or(Ty::Int);
+                        let ty = tc.local_types.get(param_id).cloned().unwrap_or(Ty::Int);
                         let local = fn_builder.new_local(ty);
                         if param_name == "self" {
                             fn_builder.current_self_local = Some(local);
@@ -1516,7 +1535,7 @@ impl<'a> MirBuilder<'a> {
                             .resolved_global_names
                             .get(func_id)
                             .cloned()
-                            .unwrap_or_else(|| get_mangled_name(tc, name)),
+                            .unwrap_or_else(|| name.to_string()),
                         params: mir_params,
                         return_type: ret_ty,
                         is_async: *is_async,
@@ -1526,6 +1545,88 @@ impl<'a> MirBuilder<'a> {
                     functions.extend(extracted_closures);
                 }
                 pace_hir::Decl::Enum { .. } => {}
+
+                pace_hir::Decl::Actor {
+                    id,
+                    name,
+                    methods,
+                    generic_params,
+                    ..
+                } => {
+                    let mut mangled_name = name.to_string();
+                    for (k, &(tid, _)) in &tc.named_types {
+                        if tid == *id {
+                            mangled_name = k.clone();
+                            break;
+                        }
+                    }
+                    if generic_params.is_some() {
+                        continue;
+                    }
+
+                    for method in methods {
+                        if let pace_hir::Decl::Function {
+                            name,
+                            id: func_id,
+                            params,
+                            return_type,
+                            body,
+                            is_async,
+                            ..
+                        } = method
+                        {
+                            let mut builder = MirBuilder::new(
+                                global_fns.clone(),
+                                &tc.struct_defs,
+                                &tc.class_defs,
+                                &tc.class_vtables,
+                                &tc.enum_defs,
+                                &tc.env,
+                                &tc.local_types,
+                                &tc.named_types,
+                                &tc.static_fields_env,
+                                &tc.methods_env,
+                                &tc.class_parents,
+                                &tc.global_functions,
+                                &tc.resolved_global_names,
+                            );
+                            
+                            let mut mir_params = Vec::new();
+                            for (p_id, param_name, _pty) in params {
+                                let param_ty = tc.local_types.get(p_id).cloned().unwrap_or(Ty::Int);
+                                println!("Actor method {} param {}: id={:?}, local_type={:?}", name, param_name, p_id, tc.local_types.get(p_id));
+                                let param_local = builder.new_local(param_ty);
+                                if param_name == "self" {
+                                    builder.current_self_local = Some(param_local);
+                                }
+                                builder.hir_to_local.insert(*p_id, param_local);
+                                mir_params.push(param_local);
+                            }
+                            
+                            let ret_ty = match tc.env.get(func_id) {
+                                Some(Ty::Function(_, r)) => *r.clone(),
+                                _ => Ty::Void,
+                            };
+                            builder.build_block(body);
+                            let extracted_closures = std::mem::take(&mut builder.closure_functions);
+                            let fn_body = builder.finish(&mir_params, &ret_ty);
+                            
+                            functions.push(MirFunction {
+                                name: tc.resolved_global_names.get(func_id).unwrap_or(&name.to_string()).clone(),
+                                params: mir_params,
+                                return_type: ret_ty,
+                                env_layout: None,
+                                body: MirBody {
+                                    locals: fn_body.locals,
+                                    blocks: fn_body.blocks,
+                                },
+                                is_async: *is_async,
+                            });
+                            functions.extend(extracted_closures);
+                        }
+                    }
+                }
+
                 pace_hir::Decl::Trait { .. } => {}
                 pace_hir::Decl::Import { .. } => {}
             }

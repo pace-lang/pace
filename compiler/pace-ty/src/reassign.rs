@@ -102,6 +102,14 @@ fn reassign_decl_ids_internal(
             reassign_expr_ids(tc, expr, id_map);
         }
         Decl::Import { .. } => {}
+        Decl::Actor { id, methods, .. } => {
+            let new_id = tc.generate_id();
+            id_map.insert(*id, new_id);
+            *id = new_id;
+            for m in methods {
+                reassign_decl_ids(tc, m);
+            }
+        }
     }
 }
 
