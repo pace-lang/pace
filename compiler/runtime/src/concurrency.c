@@ -1,4 +1,5 @@
 #define _XOPEN_SOURCE 600
+#ifndef _WIN32
 #include <stdlib.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -397,3 +398,70 @@ void pace_thread_pool_shutdown(void) {
     worker_threads = NULL;
     worker_count = 0;
 }
+
+
+#else // _WIN32
+
+#include <stdio.h>
+#include <stdlib.h>
+
+void pace_event_loop_init(void) {
+    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
+    exit(1);
+}
+
+void* pace_spawn_fiber(void (*func)(void*, void*), void* arg) {
+    (void)func;
+    (void)arg;
+    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
+    exit(1);
+}
+
+void* pace_await_fiber(void* fiber_ptr) {
+    (void)fiber_ptr;
+    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
+    exit(1);
+}
+
+void pace_event_loop_run(void) {
+    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
+    exit(1);
+}
+
+void pace_fiber_set_result(void* fiber_ptr, void* result) {
+    (void)fiber_ptr;
+    (void)result;
+    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
+    exit(1);
+}
+
+void pace_fiber_set_current_result(void* result) {
+    (void)result;
+    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
+    exit(1);
+}
+
+void* pace_sleep(long long ms) {
+    (void)ms;
+    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
+    exit(1);
+}
+
+void pace_thread_pool_init(size_t num_threads) {
+    (void)num_threads;
+    // On Windows, silently succeed init but abort if they actually spawn an actor message
+    // (This allows single-threaded scripts to compile/run without crashing immediately if init is called by default)
+}
+
+void* pace_send_actor_message(void* actor_ptr, void (*func)(void*, void*), void* arg) {
+    (void)actor_ptr;
+    (void)func;
+    (void)arg;
+    fprintf(stderr, "Actors (Multi-Threading) are not currently supported on Windows.\n");
+    exit(1);
+}
+
+void pace_thread_pool_shutdown(void) {
+}
+
+#endif // _WIN32
