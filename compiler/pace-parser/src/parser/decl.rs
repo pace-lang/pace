@@ -1336,7 +1336,14 @@ impl<'a> Parser<'a> {
             return_type = Some(self.parse_type()?);
         }
 
-        let body = self.parse_block()?;
+        let body = if self.check(&TokenKind::LBrace) {
+            self.parse_block()?
+        } else {
+            pace_ast::Block {
+                statements: vec![],
+                span: self.current_span(),
+            }
+        };
         let end_span = body.span;
 
         Ok(Decl::Function {

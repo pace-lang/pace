@@ -1,0 +1,26 @@
+trait Logger {
+    fn log(msg: string)
+}
+
+class AdvancedLogger with Logger {
+    fn log(msg: string) {
+        println(msg)
+    }
+}
+
+class Worker<T> {
+    data: T
+    
+    fn process(logger: AdvancedLogger) {
+        logger.log(msg: "Processing worker data...")
+    }
+}
+
+fn testTraits() {
+    println("--- Testing Trait Interfaces & Generics ---")
+    let logger = AdvancedLogger()
+    logger.log(msg: "Logger initialized.")
+    
+    let w = Worker<int>(data: 42)
+    w.process(logger: logger)
+}

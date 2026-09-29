@@ -10,6 +10,7 @@ import option_result
 import structs_classes
 import async_await
 import actors
+import traits
 
 async fn main() -> Future<void> {
 
@@ -33,4 +34,6 @@ async fn main() -> Future<void> {
     // Actors
     await testActor()
     
+    // Traits
+    testTraits()
 }
