@@ -342,17 +342,19 @@ impl LanguageServer for Backend {
                             let mut add_fields = |fields: &Vec<pace_ty::ResolvedField>| {
                                 for pace_ty::ResolvedField {
                                     name: fname,
+                                    ty: fty,
                                     is_private,
                                     ..
                                 } in fields
                                 {
+                                    let ty_str = tc.display_ty(fty);
                                     items.push(CompletionItem {
                                         label: fname.clone(),
                                         kind: Some(CompletionItemKind::FIELD),
                                         detail: Some(if *is_private {
-                                            "private field".to_string()
+                                            format!("private {}", ty_str)
                                         } else {
-                                            "field".to_string()
+                                            ty_str
                                         }),
                                         ..Default::default()
                                     });
@@ -373,19 +375,27 @@ impl LanguageServer for Backend {
                                                 let method_short_name = mname.trim_start_matches(
                                                     &format!("{}_", struct_name),
                                                 );
+                                                let detail_str = if let Some(mty) = tc.methods_env.get(mname) {
+                                                    tc.display_ty(mty)
+                                                } else {
+                                                    "method".to_string()
+                                                };
                                                 items.push(CompletionItem {
                                                     label: method_short_name.to_string(),
                                                     kind: Some(CompletionItemKind::METHOD),
-                                                    detail: Some("method".to_string()),
+                                                    detail: Some(detail_str),
                                                     ..Default::default()
                                                 });
                                             }
                                         }
                                     }
                                 }
-                                pace_ty::Ty::Class(cid) => {
+                                pace_ty::Ty::Class(cid) | pace_ty::Ty::Actor(cid) => {
+                                    let is_actor = matches!(ty, pace_ty::Ty::Actor(_));
                                     if let Some(fields) = tc.class_defs.get(cid) {
-                                        add_fields(fields);
+                                        if !is_actor {
+                                            add_fields(fields);
+                                        }
                                     }
                                     if let Some(class_name) =
                                         tc.named_types.iter().find_map(|(k, &(vid, _))| {
@@ -397,10 +407,15 @@ impl LanguageServer for Backend {
                                                 let method_short_name = mname.trim_start_matches(
                                                     &format!("{}_", class_name),
                                                 );
+                                                let detail_str = if let Some(mty) = tc.methods_env.get(mname) {
+                                                    tc.display_ty(mty)
+                                                } else {
+                                                    "method".to_string()
+                                                };
                                                 items.push(CompletionItem {
                                                     label: method_short_name.to_string(),
                                                     kind: Some(CompletionItemKind::METHOD),
-                                                    detail: Some("method".to_string()),
+                                                    detail: Some(detail_str),
                                                     ..Default::default()
                                                 });
                                             }
@@ -411,11 +426,16 @@ impl LanguageServer for Backend {
                             }
                         }
                     } else {
-                        for (_, name, _) in tc.declared_bindings {
+                        for (id, name, _) in &tc.declared_bindings {
+                            let detail = if let Some(ty) = tc.env.get(id) {
+                                tc.display_ty(ty)
+                            } else {
+                                "Local Variable".to_string()
+                            };
                             items.push(CompletionItem {
                                 label: name.clone(),
                                 kind: Some(CompletionItemKind::VARIABLE),
-                                detail: Some("Local Variable".to_string()),
+                                detail: Some(detail),
                                 ..Default::default()
                             });
                         }
