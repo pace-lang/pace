@@ -1539,8 +1539,8 @@ impl<'a> MirBuilder<'a> {
                 pace_hir::Decl::Enum { .. } => {}
 
                 pace_hir::Decl::Actor {
-                    id,
-                    name,
+                    id: _,
+                    name: _,
                     methods,
                     generic_params,
                     ..
