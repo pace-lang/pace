@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE 600
 #include <stdlib.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -271,6 +272,7 @@ static pthread_cond_t queue_cond = PTHREAD_COND_INITIALIZER;
 static int pool_shutdown = 0;
 
 static void* worker_thread_main(void* arg) {
+    (void)arg;
     while (1) {
         pthread_mutex_lock(&queue_mutex);
         while (!task_queue_head && !pool_shutdown) {

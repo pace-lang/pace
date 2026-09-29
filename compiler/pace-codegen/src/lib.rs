@@ -38,6 +38,7 @@ mod tests {
             class_defs: Default::default(),
             class_vtables: Default::default(),
             enum_defs: Default::default(),
+            actor_defs: Default::default(),
             global_vars: vec![],
         };
 
