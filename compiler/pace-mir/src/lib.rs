@@ -67,7 +67,7 @@ mod tests {
         builder.hir_to_local.insert(HirId(1), Local(0));
 
         let _result_local = builder.build_expr(&expr);
-        let body = builder.finish(&[]);
+        let body = builder.finish(&[], &pace_ty::Ty::Int);
 
         assert_eq!(body.blocks.len(), 1);
 
