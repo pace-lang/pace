@@ -26,17 +26,6 @@ fn tc_get_type(tc: &TypeChecker, ty: &pace_ast::Type) -> Option<Ty> {
     })
 }
 
-fn get_mangled_name(tc: &TypeChecker, name: &str) -> String {
-    if name == "main" {
-        return name.to_string();
-    }
-    for k in tc.global_functions.keys().chain(tc.methods_env.keys()) {
-        if k == name || k.ends_with(&format!("_{}", name)) {
-            return k.clone();
-        }
-    }
-    name.to_string()
-}
 
 pub struct MirBuilder<'a> {
     pub blocks: Vec<BasicBlock>,
@@ -1448,7 +1437,7 @@ impl<'a> MirBuilder<'a> {
                                 &tc.resolved_global_names,
                             );
                             let mut mir_params = Vec::new();
-                            for (param_id, param_name, pty) in params {
+                            for (param_id, param_name, _pty) in params {
                                 let ty = tc.local_types.get(param_id).cloned().unwrap_or(Ty::Int);
                                 if param_name == "self" {
                                     println!("MIR Builder method={}, self type={:?}", tc.resolved_global_names.get(func_id).unwrap_or(&name.to_string()), ty);
@@ -1515,7 +1504,7 @@ impl<'a> MirBuilder<'a> {
                         &tc.resolved_global_names,
                     );
                     let mut mir_params = Vec::new();
-                    for (param_id, param_name, pty) in params {
+                    for (param_id, param_name, _pty) in params {
                         let ty = tc.local_types.get(param_id).cloned().unwrap_or(Ty::Int);
                         let local = fn_builder.new_local(ty);
                         if param_name == "self" {
@@ -1556,13 +1545,6 @@ impl<'a> MirBuilder<'a> {
                     generic_params,
                     ..
                 } => {
-                    let mut mangled_name = name.to_string();
-                    for (k, &(tid, _)) in &tc.named_types {
-                        if tid == *id {
-                            mangled_name = k.clone();
-                            break;
-                        }
-                    }
                     if generic_params.is_some() {
                         continue;
                     }
@@ -1572,7 +1554,7 @@ impl<'a> MirBuilder<'a> {
                             name,
                             id: func_id,
                             params,
-                            return_type,
+                            return_type: _,
                             body,
                             is_async,
                             ..
