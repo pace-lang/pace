@@ -74,6 +74,8 @@ pub struct TypeChecker {
     pub inlay_hints: Vec<(pace_span::Span, String)>,
     pub function_calls: Vec<(pace_span::Span, Ty)>,
     pub hover_info: HashMap<pace_span::Span, String>,
+    pub definition_info: HashMap<pace_span::Span, pace_span::Span>,
+    pub global_spans: HashMap<String, pace_span::Span>,
     pub reporter: Reporter,
     pub is_lib: bool,
     pub in_async_context: bool,
@@ -123,6 +125,8 @@ impl TypeChecker {
             inlay_hints: Vec::new(),
             function_calls: Vec::new(),
             hover_info: HashMap::new(),
+            definition_info: HashMap::new(),
+            global_spans: HashMap::new(),
             loop_depth: 0,
             next_id: 1000000,
             reporter: Reporter::new(),
@@ -370,6 +374,7 @@ impl TypeChecker {
                     static_fields,
                     const_fields,
                     methods,
+                    span,
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
@@ -384,6 +389,7 @@ impl TypeChecker {
                         continue;
                     }
                     self.named_types.insert(mangled_name.clone(), (*id, 0));
+                    self.global_spans.insert(mangled_name.clone(), *span);
                     if let Some(scope) = self.module_scopes.get_mut(module_name) {
                         scope
                             .visible_symbols
@@ -415,6 +421,7 @@ impl TypeChecker {
                             params,
                             return_type,
                             id: m_id,
+                            span: m_span,
                             ..
                         } = method
                         {
@@ -437,9 +444,10 @@ impl TypeChecker {
                                 Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())),
                             );
                             self.methods_env.insert(
-                                method_mangled_name,
+                                method_mangled_name.clone(),
                                 Ty::Function(param_tys, Box::new(ret_ty)),
                             );
+                            self.global_spans.insert(method_mangled_name, *m_span);
                         }
                     }
                 }
@@ -450,6 +458,7 @@ impl TypeChecker {
                     static_fields,
                     const_fields,
                     methods,
+                    span,
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
@@ -464,6 +473,7 @@ impl TypeChecker {
                         continue;
                     }
                     self.named_types.insert(mangled_name.clone(), (*id, 1));
+                    self.global_spans.insert(mangled_name.clone(), *span);
                     if let Some(scope) = self.module_scopes.get_mut(module_name) {
                         scope
                             .visible_symbols
@@ -495,6 +505,7 @@ impl TypeChecker {
                             params,
                             return_type,
                             id: m_id,
+                            span: m_span,
                             ..
                         } = method
                         {
@@ -517,9 +528,10 @@ impl TypeChecker {
                                 Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())),
                             );
                             self.methods_env.insert(
-                                method_mangled_name,
+                                method_mangled_name.clone(),
                                 Ty::Function(param_tys, Box::new(ret_ty)),
                             );
+                            self.global_spans.insert(method_mangled_name, *m_span);
                         }
                     }
                 }
@@ -528,6 +540,7 @@ impl TypeChecker {
                     name,
                     generic_params,
                     methods,
+                    span,
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
@@ -542,6 +555,7 @@ impl TypeChecker {
                         continue;
                     }
                     self.named_types.insert(mangled_name.clone(), (*id, 3));
+                    self.global_spans.insert(mangled_name.clone(), *span);
                     if let Some(scope) = self.module_scopes.get_mut(module_name) {
                         scope
                             .visible_symbols
@@ -554,6 +568,7 @@ impl TypeChecker {
                             params,
                             return_type,
                             id: m_id,
+                            span: m_span,
                             ..
                         } = method
                         {
@@ -577,9 +592,10 @@ impl TypeChecker {
                                 Ty::Function(param_tys.clone(), Box::new(ret_ty.clone())),
                             );
                             self.methods_env.insert(
-                                method_mangled_name,
+                                method_mangled_name.clone(),
                                 Ty::Function(param_tys, Box::new(ret_ty)),
                             );
+                            self.global_spans.insert(method_mangled_name, *m_span);
                         }
                     }
                 }
@@ -591,6 +607,7 @@ impl TypeChecker {
                     name,
                     generic_params,
                     variants,
+                    span,
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
@@ -605,6 +622,7 @@ impl TypeChecker {
                         continue;
                     }
                     self.named_types.insert(mangled_name.clone(), (*id, 2));
+                    self.global_spans.insert(mangled_name.clone(), *span);
                     if let Some(scope) = self.module_scopes.get_mut(module_name) {
                         scope.visible_symbols.insert(name.to_string(), mangled_name);
                     }
@@ -783,6 +801,7 @@ impl TypeChecker {
                 generic_params,
                 params,
                 return_type,
+                span,
                 ..
             } = decl
             {
@@ -807,6 +826,7 @@ impl TypeChecker {
                     mangled_name.clone(),
                     Ty::Function(param_tys, Box::new(ret_ty)),
                 );
+                self.global_spans.insert(mangled_name.clone(), *span);
                 self.resolved_global_names
                     .insert(*func_id, mangled_name.clone());
 
@@ -1710,11 +1730,17 @@ impl TypeChecker {
 
                 if let Some(ty) = self.env.get(id).cloned() {
                     self.symbol_references.entry(*id).or_default().push(*span);
+                    if let Some((_, _, decl_span)) = self.declared_bindings.iter().find(|(d_id, _, _)| d_id == id) {
+                        self.definition_info.insert(*span, *decl_span);
+                    }
                     Ok(ty)
                 } else if let Some(ty) = self.global_functions.get(&mangled_name).cloned() {
                     self.used_bindings_by_name.insert(name.to_string());
                     self.resolved_global_names.insert(*id, mangled_name.clone());
                     self.local_types.insert(*id, ty.clone());
+                    if let Some(def_span) = self.global_spans.get(&mangled_name) {
+                        self.definition_info.insert(*span, *def_span);
+                    }
                     Ok(ty)
                 } else if let Some(&(hir_id, kind)) = self.named_types.get(&mangled_name) {
                     let ty = if kind == 0 {
@@ -1729,6 +1755,9 @@ impl TypeChecker {
                     self.env.insert(*id, ty.clone());
                     self.local_types.insert(*id, ty.clone());
                     self.resolved_global_names.insert(*id, mangled_name.clone());
+                    if let Some(def_span) = self.global_spans.get(&mangled_name) {
+                        self.definition_info.insert(*span, *def_span);
+                    }
                     Ok(ty)
                 } else if self.generic_templates.contains_key(&mangled_name) {
                     if let Some(args) = generic_args {
@@ -1860,7 +1889,7 @@ impl TypeChecker {
             Expr::MemberAccess {
                 object,
                 member,
-                span: _,
+                span,
             } => {
                 // Intercept module aliases (e.g. `d.hello` where `d` is an alias for `demo_lib`)
                 if let Expr::Ident(id, name, _, _) = &**object
@@ -1878,8 +1907,10 @@ impl TypeChecker {
                             .insert(*id, target_module.to_string());
                         self.used_bindings_by_name.insert(member.to_string());
 
-                        // Return the type of the resolved global function or type
                         if let Some(ty) = self.global_functions.get(mangled_name).cloned() {
+                            if let Some(def_span) = self.global_spans.get(mangled_name) {
+                                self.definition_info.insert(*span, *def_span);
+                            }
                             return Ok(ty);
                         } else if let Some(&(hir_id, kind)) = self.named_types.get(mangled_name) {
                             let ty = if kind == 0 {
@@ -1889,6 +1920,9 @@ impl TypeChecker {
                             } else {
                                 Ty::Enum(hir_id)
                             };
+                            if let Some(def_span) = self.global_spans.get(mangled_name) {
+                                self.definition_info.insert(*span, *def_span);
+                            }
                             return Ok(ty);
                         }
                     }
@@ -1951,6 +1985,9 @@ impl TypeChecker {
                             let short_struct = struct_name.split('_').next_back().unwrap();
                             self.used_bindings_by_name
                                 .insert(format!("{}_{}", short_struct, member));
+                            if let Some(def_span) = self.global_spans.get(&method_name) {
+                                self.definition_info.insert(*span, *def_span);
+                            }
                             return Ok(mty.clone());
                         }
 
@@ -2013,6 +2050,9 @@ impl TypeChecker {
                             let short_class = class_name.split('_').next_back().unwrap();
                             self.used_bindings_by_name
                                 .insert(format!("{}_{}", short_class, member));
+                            if let Some(def_span) = self.global_spans.get(&method_name) {
+                                self.definition_info.insert(*span, *def_span);
+                            }
                             return Ok(mty.clone());
                         }
 
