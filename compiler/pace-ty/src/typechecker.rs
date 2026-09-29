@@ -73,6 +73,7 @@ pub struct TypeChecker {
     pub symbol_references: HashMap<HirId, Vec<pace_span::Span>>,
     pub inlay_hints: Vec<(pace_span::Span, String)>,
     pub function_calls: Vec<(pace_span::Span, Ty)>,
+    pub hover_info: HashMap<pace_span::Span, String>,
     pub reporter: Reporter,
     pub is_lib: bool,
     pub in_async_context: bool,
@@ -121,6 +122,7 @@ impl TypeChecker {
             symbol_references: HashMap::new(),
             inlay_hints: Vec::new(),
             function_calls: Vec::new(),
+            hover_info: HashMap::new(),
             loop_depth: 0,
             next_id: 1000000,
             reporter: Reporter::new(),
@@ -1615,7 +1617,17 @@ impl TypeChecker {
         false
     }
 
-    fn check_expr(&mut self, expr: &Expr) -> Result<Ty, String> {
+    pub fn check_expr(&mut self, expr: &Expr) -> Result<Ty, String> {
+        let res = self.check_expr_inner(expr);
+        if let Ok(ty) = &res {
+            let span = expr.span();
+            let display = self.display_ty(ty);
+            self.hover_info.insert(span, format!("```pace\n{}\n```", display));
+        }
+        res
+    }
+
+    fn check_expr_inner(&mut self, expr: &Expr) -> Result<Ty, String> {
         match expr {
             Expr::IntLiteral(..) => Ok(Ty::Int),
             Expr::FloatLiteral(..) => Ok(Ty::Float),

@@ -253,6 +253,29 @@ impl LanguageServer for Backend {
                 if let Some(file_id) = source_map.get_file_id(file_path.to_string_lossy().as_ref())
                 {
                     let offset = find_node::position_to_offset(&text, position);
+                    
+                    let mut best_hover: Option<&String> = None;
+                    let mut best_len = usize::MAX;
+                    for (span, hover_text) in &tc.hover_info {
+                        if span.file_id == file_id && offset >= span.start as usize && offset <= span.end as usize {
+                            let len = (span.end - span.start) as usize;
+                            if len < best_len {
+                                best_len = len;
+                                best_hover = Some(hover_text);
+                            }
+                        }
+                    }
+                    
+                    if let Some(hover_text) = best_hover {
+                        return Ok(Some(Hover {
+                            contents: HoverContents::Scalar(MarkedString::String(
+                                hover_text.clone(),
+                            )),
+                            range: None,
+                        }));
+                    }
+                    
+                    // Fallback to old behavior for anything not yet in hover_info
                     if let Some(id) = find_node::find_ident_at_offset(&hir, file_id, offset)
                         && let Some(ty) = tc.local_types.get(&id).or_else(|| tc.env.get(&id))
                     {
