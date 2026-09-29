@@ -339,6 +339,7 @@ pub fn compile_file(opts: CompileOptions) -> Result<(), String> {
         .arg("-L")
         .arg(lib_dir)
         .arg("-lpace_rt")
+        .arg("-lpthread")
         .arg("-o")
         .arg(&bin_file)
         .status()

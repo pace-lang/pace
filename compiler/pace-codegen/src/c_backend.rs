@@ -32,6 +32,7 @@ impl CGenerator {
         self.output.push_str("#include <stdio.h>\n");
         self.output.push_str("#include <stdlib.h>\n");
         self.output.push_str("#include <string.h>\n");
+        self.output.push_str("#include <pthread.h>\n");
         self.output.push_str("#include \"pace_runtime.h\"\n\n");
 
         self.output.push_str("typedef struct PaceClosure {\n");
@@ -119,6 +120,12 @@ impl CGenerator {
             self.output.push_str(&format!("struct pace_{} {{\n", id.0));
             self.output
                 .push_str(&format!("    struct pace_{}_vtable* vtable;\n", id.0));
+            if program.actor_defs.contains(id) {
+                self.output.push_str("    pthread_mutex_t __mailbox_mutex;\n");
+                self.output.push_str("    void* __mailbox_head;\n");
+                self.output.push_str("    void* __mailbox_tail;\n");
+                self.output.push_str("    int __is_running;\n");
+            }
             for pace_ty::ResolvedField {
                 name: fname,
                 ty: fty,
@@ -227,6 +234,7 @@ impl CGenerator {
         self.output.push_str("}\n\n");
 
         self.output.push_str("int main() {\n");
+        self.output.push_str("    pace_thread_pool_init(4);\n");
         self.output.push_str("    pace_event_loop_init();\n");
         self.output.push_str("    pace_init();\n");
         let main_func = program.functions.iter().find(|f| f.name == "main");
@@ -236,6 +244,7 @@ impl CGenerator {
                 self.output.push_str("    pace_event_loop_run();\n");
             }
         }
+        self.output.push_str("    pace_thread_pool_shutdown();\n");
         self.output.push_str("    return 0;\n");
         self.output.push_str("}\n");
         self.output.clone()
@@ -375,7 +384,7 @@ impl CGenerator {
                 Some(Terminator::Return(local)) => {
                     if func.is_async {
                         if self.emit_c_type(&func.return_type) != "void" {
-                            self.output.push_str(&format!("    pace_fiber_set_result((void*)(long long)_{});\n", local.0));
+                            self.output.push_str(&format!("    pace_fiber_set_current_result((void*)(long long)_{});\n", local.0));
                         }
                         self.output.push_str("    return;\n");
                     } else {
@@ -431,6 +440,15 @@ impl CGenerator {
             }
             self.output.push_str(") {\n");
             
+            let mut is_actor_method = false;
+            let mut actor_param = None;
+            if let Some(param) = func.params.first() {
+                if let Ty::Actor(_) = func.body.locals[param.0 as usize] {
+                    is_actor_method = true;
+                    actor_param = Some(param.0);
+                }
+            }
+
             self.output.push_str(&format!("    struct __AsyncEnv_{}* __async_env = (struct __AsyncEnv_{}*)malloc(sizeof(struct __AsyncEnv_{}));\n", c_name, c_name, c_name));
             for param in func.params.iter() {
                 self.output.push_str(&format!("    __async_env->_{} = _{};\n", param.0, param.0));
@@ -438,7 +456,11 @@ impl CGenerator {
             if func.env_layout.is_some() {
                 self.output.push_str("    __async_env->__env = __env;\n");
             }
-            self.output.push_str(&format!("    return pace_spawn_fiber(__async_body_{}, __async_env);\n", c_name));
+            if is_actor_method {
+                self.output.push_str(&format!("    return pace_send_actor_message((void*)_{}, __async_body_{}, __async_env);\n", actor_param.unwrap(), c_name));
+            } else {
+                self.output.push_str(&format!("    return pace_spawn_fiber(__async_body_{}, __async_env);\n", c_name));
+            }
             self.output.push_str("}\n");
         }
     }
@@ -740,7 +762,17 @@ impl CGenerator {
                     self.output.push_str(" }");
                 }
                 Ty::Class(id) | Ty::Actor(id) => {
+                    let is_actor = matches!(ty, Ty::Actor(_));
                     write!(&mut self.output, "memcpy(pace_alloc(sizeof(struct pace_{}), pace_{}_deinit), &(struct pace_{}){{ &pace_{}_vtable_inst", id.0, id.0, id.0, id.0).unwrap();
+                    if is_actor {
+                        // pthread_mutex_t PTHREAD_MUTEX_INITIALIZER uses braces on some platforms,
+                        // but since it's inside a struct literal, we can just supply it as a field value.
+                        // Or we can just use zero-initialization and call pthread_mutex_init dynamically.
+                        // Wait, C allows `{ ... }` as an expression, but nested brace init is fine.
+                        // Wait, it's safer to just set to 0 and dynamically initialize if needed. Actually PTHREAD_MUTEX_INITIALIZER works as long as it's not nested in another brace if compiler is picky.
+                        // Let's output it as the macro:
+                        write!(&mut self.output, ", PTHREAD_MUTEX_INITIALIZER, NULL, NULL, 0").unwrap();
+                    }
                     if !fields.is_empty() {
                         for arg in fields {
                             write!(&mut self.output, ", _{}", arg.0).unwrap();

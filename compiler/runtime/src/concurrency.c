@@ -4,6 +4,7 @@
 #include <ucontext.h>
 #include <time.h>
 #include <unistd.h>
+#include "../pace_runtime.h"
 
 #define FIBER_STACK_SIZE (1024 * 1024)
 
@@ -22,7 +23,7 @@ typedef struct SleepEntry {
     struct SleepEntry* next;
 } SleepEntry;
 
-static PaceFiber* current_fiber = NULL;
+static __thread PaceFiber* current_fiber = NULL;
 static PaceFiber* ready_queue_head = NULL;
 static PaceFiber* ready_queue_tail = NULL;
 static SleepEntry* sleep_queue = NULL;
@@ -192,7 +193,14 @@ void pace_event_loop_run(void) {
     }
 }
 
-void pace_fiber_set_result(void* result) {
+void pace_fiber_set_result(void* fiber_ptr, void* result) {
+    PaceFiber* target = (PaceFiber*)fiber_ptr;
+    if (target) {
+        target->result = result;
+    }
+}
+
+void pace_fiber_set_current_result(void* result) {
     if (current_fiber) {
         current_fiber->result = result;
     }
@@ -246,4 +254,144 @@ void* pace_sleep(long long ms) {
 
     enqueue_fiber(fiber);
     return fiber;
+}
+
+// Thread Pool Implementation
+typedef struct ThreadTask {
+    struct PaceActorBase* actor;
+    struct ThreadTask* next;
+} ThreadTask;
+
+static pthread_t* worker_threads = NULL;
+static size_t worker_count = 0;
+static ThreadTask* task_queue_head = NULL;
+static ThreadTask* task_queue_tail = NULL;
+static pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t queue_cond = PTHREAD_COND_INITIALIZER;
+static int pool_shutdown = 0;
+
+static void* worker_thread_main(void* arg) {
+    while (1) {
+        pthread_mutex_lock(&queue_mutex);
+        while (!task_queue_head && !pool_shutdown) {
+            pthread_cond_wait(&queue_cond, &queue_mutex);
+        }
+        
+        if (pool_shutdown && !task_queue_head) {
+            pthread_mutex_unlock(&queue_mutex);
+            break;
+        }
+        
+        ThreadTask* task = task_queue_head;
+        task_queue_head = task->next;
+        if (!task_queue_head) task_queue_tail = NULL;
+        pthread_mutex_unlock(&queue_mutex);
+        
+        if (task) {
+            struct PaceActorBase* actor = task->actor;
+            free(task);
+            
+            while (1) {
+                pthread_mutex_lock(&actor->mailbox_mutex);
+                struct PaceActorMessage* msg = actor->mailbox_head;
+                if (msg) {
+                    actor->mailbox_head = msg->next;
+                    if (!actor->mailbox_head) {
+                        actor->mailbox_tail = NULL;
+                    }
+                } else {
+                    actor->is_running = 0;
+                    pthread_mutex_unlock(&actor->mailbox_mutex);
+                    break;
+                }
+                pthread_mutex_unlock(&actor->mailbox_mutex);
+                
+                current_fiber = (PaceFiber*)msg->future;
+                msg->func(msg->arg);
+                
+                if (msg->future) {
+                    ((PaceFiber*)msg->future)->is_done = 1;
+                }
+                current_fiber = NULL;
+                free(msg);
+            }
+        }
+    }
+    return NULL;
+}
+
+void pace_thread_pool_init(size_t num_threads) {
+    if (num_threads == 0) num_threads = 4; // Default to 4 threads
+    worker_count = num_threads;
+    worker_threads = (pthread_t*)malloc(sizeof(pthread_t) * num_threads);
+    for (size_t i = 0; i < num_threads; i++) {
+        pthread_create(&worker_threads[i], NULL, worker_thread_main, NULL);
+    }
+}
+
+void* pace_send_actor_message(void* actor_ptr, void (*func)(void*), void* arg) {
+    struct PaceActorBase* actor = (struct PaceActorBase*)actor_ptr;
+    
+    PaceFiber* future = (PaceFiber*)malloc(sizeof(PaceFiber));
+    future->stack = NULL;
+    future->is_done = 0;
+    future->result = NULL;
+    future->waiting_on = NULL;
+    future->next = NULL;
+
+    struct PaceActorMessage* msg = (struct PaceActorMessage*)malloc(sizeof(struct PaceActorMessage));
+    msg->func = func;
+    msg->arg = arg;
+    msg->future = future;
+    msg->next = NULL;
+    
+    pthread_mutex_lock(&actor->mailbox_mutex);
+    if (actor->mailbox_tail) {
+        actor->mailbox_tail->next = msg;
+        actor->mailbox_tail = msg;
+    } else {
+        actor->mailbox_head = actor->mailbox_tail = msg;
+    }
+    
+    int should_spawn = 0;
+    if (!actor->is_running) {
+        actor->is_running = 1;
+        should_spawn = 1;
+    }
+    pthread_mutex_unlock(&actor->mailbox_mutex);
+    
+    if (should_spawn) {
+        ThreadTask* task = (ThreadTask*)malloc(sizeof(ThreadTask));
+        task->actor = actor;
+        task->next = NULL;
+        
+        pthread_mutex_lock(&queue_mutex);
+        if (task_queue_tail) {
+            task_queue_tail->next = task;
+            task_queue_tail = task;
+        } else {
+            task_queue_head = task_queue_tail = task;
+        }
+        pthread_cond_signal(&queue_cond);
+        pthread_mutex_unlock(&queue_mutex);
+    }
+    
+    return future;
+}
+
+void pace_thread_pool_shutdown(void) {
+    if (!worker_threads) return;
+    
+    pthread_mutex_lock(&queue_mutex);
+    pool_shutdown = 1;
+    pthread_cond_broadcast(&queue_cond);
+    pthread_mutex_unlock(&queue_mutex);
+    
+    for (size_t i = 0; i < worker_count; i++) {
+        pthread_join(worker_threads[i], NULL);
+    }
+    
+    free(worker_threads);
+    worker_threads = NULL;
+    worker_count = 0;
 }

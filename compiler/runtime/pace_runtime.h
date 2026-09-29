@@ -34,13 +34,31 @@ void pace_event_loop_init(void);
 void pace_event_loop_run(void);
 void* pace_spawn_fiber(void (*func)(void*), void* arg);
 void* pace_await_fiber(void* fiber_ptr);
-void pace_fiber_set_result(void* result);
+void pace_fiber_set_result(void* fiber_ptr, void* result);
+void pace_fiber_set_current_result(void* result);
 void* pace_sleep(long long ms);
 
 // Thread Pool (for Actors)
 void pace_thread_pool_init(size_t num_threads);
-void pace_spawn_actor_task(void (*func)(void*), void* arg);
 void pace_thread_pool_shutdown(void);
+
+// Actor Mailbox implementation
+struct PaceActorMessage {
+    void (*func)(void*);
+    void* arg;
+    void* future; // PaceFiber*
+    struct PaceActorMessage* next;
+};
+
+struct PaceActorBase {
+    void* vtable;
+    pthread_mutex_t mailbox_mutex;
+    struct PaceActorMessage* mailbox_head;
+    struct PaceActorMessage* mailbox_tail;
+    int is_running;
+};
+
+void* pace_send_actor_message(void* actor, void (*func)(void*), void* arg);
 
 #ifdef __cplusplus
 }
