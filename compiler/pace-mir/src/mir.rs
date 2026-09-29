@@ -91,6 +91,7 @@ pub struct MirProgram {
     pub main_body: MirBody,
     pub struct_defs: std::collections::HashMap<pace_hir::HirId, Vec<pace_ty::ResolvedField>>,
     pub class_defs: std::collections::HashMap<pace_hir::HirId, Vec<pace_ty::ResolvedField>>,
+    pub actor_defs: std::collections::HashSet<pace_hir::HirId>,
     pub class_vtables: std::collections::HashMap<pace_hir::HirId, Vec<pace_ty::VTableEntry>>,
     #[allow(clippy::type_complexity)]
     pub enum_defs: std::collections::HashMap<

@@ -1,4 +1,4 @@
-// Demonstrates single-threaded Actors in Pace
+// Demonstrates Multi-threaded Actors in Pace
 
 actor Counter {
     count: int = 0
@@ -9,20 +9,70 @@ actor Counter {
         println("Counter incremented. Current count: $c")
     }
 
+    fn silent_increment() {
+        self.count = self.count + 1
+    }
+
     fn getCount() -> int {
         return self.count
     }
 }
 
+actor MathWorker {
+    total: int = 0
+    id: int = 0
+    
+    fn init(id: int) {
+        self.id = id
+    }
+
+    fn add(val: int) {
+        self.total = self.total + val
+    }
+    
+    fn getTotal() -> int {
+        return self.total
+    }
+}
+
 async fn testActor() -> Future<void> {
-    println("\n--- Actors (Single-Threaded Async) ---")
+    println("\n--- Actors (Multi-Threaded) ---")
     
     let c = Counter()
     
-    // Actor methods are implicitly async and return a Future, so we await them
+    // Sequential await
     await c.increment()
     await c.increment()
     
     let finalCount = await c.getCount()
-    println("Final actor count: $finalCount")
+    println("Count after sequential awaits: $finalCount")
+    
+    println("Starting stress test: firing 10,000 asynchronous messages to Counter...")
+    // Fire and forget 10,000 messages
+    var i = 0
+    while i < 10000 {
+        c.silent_increment()
+        i = i + 1
+    }
+    
+    println("Starting concurrent workers...")
+    let w1 = MathWorker(id: 1)
+    let w2 = MathWorker(id: 2)
+    
+    var j = 0
+    while j < 5000 {
+        w1.add(val: 2)
+        w2.add(val: 3)
+        j = j + 1
+    }
+    
+    let t1 = await w1.getTotal()
+    let t2 = await w2.getTotal()
+    println("Worker 1 total (should be 10000): $t1")
+    println("Worker 2 total (should be 15000): $t2")
+
+    // The getCount message will be enqueued AFTER the 10,000 increments,
+    // so it will safely await until the actor has processed them all.
+    let stressCount = await c.getCount()
+    println("Final actor count after stress test (should be 10002): $stressCount")
 }

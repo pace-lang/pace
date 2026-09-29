@@ -1652,11 +1652,19 @@ impl<'a> MirBuilder<'a> {
             resolved_enum_defs.insert(*id, res_variants);
         }
 
+        let mut actor_defs = std::collections::HashSet::new();
+        for (_, &(tid, kind)) in &tc.named_types {
+            if kind == 3 {
+                actor_defs.insert(tid);
+            }
+        }
+
         MirProgram {
             functions,
             main_body: main_builder.finish(&[], &Ty::Void),
             struct_defs: tc.struct_defs.clone(),
             class_defs: tc.class_defs.clone(),
+            actor_defs,
             class_vtables: tc.class_vtables.clone(),
             enum_defs: resolved_enum_defs,
             global_vars,
