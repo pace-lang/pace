@@ -1,9 +1,7 @@
 import closures
 import conditionals
-import demo_lib
 import enums_match
 import generics
-import hello_world as h
 import inheritance
 import loops
 import null_safety
@@ -14,9 +12,7 @@ import async_await
 import actors
 
 async fn main() -> Future<void> {
-    hello()
-    let b = Box<int>(value: 42)
-    println(b.get())
+
     println("\n==================================")
     println("PACE FEATURES SHOWCASE")
     println("==================================")
@@ -37,5 +33,4 @@ async fn main() -> Future<void> {
     // Actors
     await testActor()
     
-    h.hello()
 }

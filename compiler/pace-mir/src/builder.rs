@@ -810,6 +810,9 @@ impl<'a> MirBuilder<'a> {
                             break;
                         }
                     }
+                    if !has_init && self.methods_env.contains_key(&init_name) {
+                        has_init = true;
+                    }
 
                     let temp = self.new_local(ty.clone());
 
