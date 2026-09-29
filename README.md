@@ -17,6 +17,23 @@ Pace is a compiled, statically typed language designed for the modern cloud and 
 - **Expected Failures over Exceptions**: Traditional `try/catch` is banned in favor of `Result<T, E>`.
 - **Compiler-Driven Memory**: Features an advanced ARC memory model with Copy-on-Write (COW) collections, escape analysis, and no manual memory management.
 
+## 📦 Installation
+
+**Linux / macOS**
+```bash
+curl -fsSL https://raw.githubusercontent.com/pace-lang/pace/main/installer/install.sh | bash
+```
+
+**Windows (PowerShell)**
+```powershell
+irm https://raw.githubusercontent.com/pace-lang/pace/main/installer/install.ps1 | iex
+```
+
+**Docker**
+```bash
+docker pull ghcr.io/pace-lang/pace:0.2
+```
+
 ## 💻 Syntax Example
 
 ```pace
