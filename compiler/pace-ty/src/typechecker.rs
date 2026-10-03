@@ -2793,8 +2793,6 @@ impl TypeChecker {
                     self.local_types.insert(param.id, ty);
                 }
 
-                // TODO: closure environment capture analysis
-
                 let ret_ty = match body {
                     pace_hir::ClosureBody::Expr(e) => {
                         let prev_expected = self.current_expected_ty.take();

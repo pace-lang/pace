@@ -20,7 +20,9 @@ impl CacheManager {
             .unwrap_or_else(|| PathBuf::from("/tmp"))
             .join(".pace")
             .join("cache");
-        fs::create_dir_all(&cache_dir).unwrap();
+        if let Err(e) = fs::create_dir_all(&cache_dir) {
+            eprintln!("Warning: Failed to create cache directory: {}", e);
+        }
         Self { cache_dir }
     }
 

@@ -331,8 +331,8 @@ pub async fn list_outdated() -> Result<(), String> {
         };
 
         if let Ok(info) = resolver.get_package_info(pkg_name).await {
-            let mut highest_ver = semver::Version::parse("0.0.0").unwrap();
-            let mut highest_compatible_ver = semver::Version::parse("0.0.0").unwrap();
+            let mut highest_ver = semver::Version::new(0, 0, 0);
+            let mut highest_compatible_ver = semver::Version::new(0, 0, 0);
             let req_parsed = semver::VersionReq::parse(&required).ok();
 
             for v_info in &info.version_info {
@@ -350,11 +350,11 @@ pub async fn list_outdated() -> Result<(), String> {
             }
 
             let locked_ver = semver::Version::parse(&locked_pkg.version)
-                .unwrap_or_else(|_| semver::Version::parse("0.0.0").unwrap());
+                .unwrap_or_else(|_| semver::Version::new(0, 0, 0));
 
             let update_str = if required.is_empty() {
                 "".to_string()
-            } else if highest_compatible_ver > semver::Version::parse("0.0.0").unwrap() {
+            } else if highest_compatible_ver > semver::Version::new(0, 0, 0) {
                 highest_compatible_ver.to_string()
             } else {
                 required.clone()
@@ -385,7 +385,7 @@ use flate2::write::GzEncoder;
 use reqwest::multipart;
 
 pub fn login(token: &str) -> Result<(), String> {
-    let pace_dir = home::home_dir().unwrap().join(".pace");
+    let pace_dir = home::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp")).join(".pace");
     if !pace_dir.exists() {
         fs::create_dir_all(&pace_dir).map_err(|e| format!("Failed to create .pace dir: {}", e))?;
     }
@@ -418,7 +418,7 @@ pub async fn publish() -> Result<(), String> {
     }
 
     let token = env::var("PACE_TOKEN").or_else(|_| {
-        let creds_path = home::home_dir().unwrap().join(".pace/credentials.toml");
+        let creds_path = home::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp")).join(".pace/credentials.toml");
         if creds_path.exists() {
             let content = fs::read_to_string(&creds_path).unwrap_or_default();
             let doc = content
@@ -492,7 +492,7 @@ pub async fn publish() -> Result<(), String> {
             multipart::Part::bytes(tarball_bytes)
                 .file_name("package.tar.gz")
                 .mime_str("application/gzip")
-                .unwrap(),
+                .map_err(|e| format!("Failed to set mime string: {}", e))?,
         );
 
     let client = reqwest::Client::new();

@@ -75,13 +75,16 @@ impl DependencyResolver {
             Ok(i)
         } else {
             let mut v_info = Vec::new();
-            let cache_dir = home::home_dir().unwrap().join(".pace").join("cache");
+            let cache_dir = home::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+                .join(".pace")
+                .join("cache");
             let prefix = format!("{}-", name);
             if let Ok(entries) = fs::read_dir(cache_dir) {
                 for entry in entries.filter_map(|e| e.ok()) {
                     let fname = entry.file_name().to_string_lossy().to_string();
                     if fname.starts_with(&prefix) {
-                        let ver_str = fname.strip_prefix(&prefix).unwrap();
+                        let ver_str = fname.strip_prefix(&prefix).unwrap_or(&fname);
                         if Version::parse(ver_str).is_ok() {
                             let mut deps = HashMap::new();
                             if let Ok(manifest) =
@@ -190,7 +193,7 @@ impl DependencyResolver {
                     continue;
                 }
 
-                if highest_ver.is_none() || ver > *highest_ver.as_ref().unwrap() {
+                if highest_ver.is_none() || highest_ver.as_ref().map_or(false, |hv| ver > *hv) {
                     highest_ver = Some(ver);
                     best_match = Some(v_info);
                 }

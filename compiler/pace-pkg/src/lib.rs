@@ -67,7 +67,7 @@ fn validate_package_name(name: &str) -> Result<(), String> {
         return Err("Package name must be between 2 and 64 characters long".into());
     }
     let mut chars = name.chars();
-    let first = chars.next().unwrap();
+    let first = chars.next().ok_or("Package name cannot be empty")?;
     if !first.is_ascii_alphabetic() {
         return Err("Package name must start with a letter".into());
     }
