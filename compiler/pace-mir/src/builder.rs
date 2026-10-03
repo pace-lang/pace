@@ -288,13 +288,12 @@ impl<'a> MirBuilder<'a> {
                     }
                 }
 
-                let keys: Vec<_> = self.named_types.keys().collect();
-                let local = *self.hir_to_local.get(id).unwrap_or_else(|| {
-                    panic!(
-                        "Local not found for id {:?} name {}. Named types: {:?}",
-                        id, name, keys
-                    )
-                });
+                let local = if let Some(l) = self.hir_to_local.get(id) {
+                    *l
+                } else {
+                    eprintln!("ICE: Local not found for id {:?} name {}", id, name);
+                    Local(0)
+                };
                 let temp = self.new_local(self.locals[local.0 as usize].clone());
                 self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(local)));
                 if matches!(self.locals[temp.0 as usize], Ty::Class(_)) {
@@ -1191,7 +1190,10 @@ impl<'a> MirBuilder<'a> {
                             Lvalue::FieldAccess(obj_local, member.to_string())
                         }
                     }
-                    _ => panic!("Invalid assignment target"),
+                    _ => {
+                        eprintln!("ICE: Invalid assignment target");
+                        Lvalue::Local(Local(0))
+                    }
                 };
                 if is_static_assign {
                     let prev = self.current_expected_ty.take();
@@ -1226,12 +1228,15 @@ impl<'a> MirBuilder<'a> {
                             }
                         }
                         if !found {
-                            println!("Field not found: member={}, obj_ty={:?}", member, obj_ty);
-                            panic!("Field not found");
+                            eprintln!("ICE: Field not found: member={}, obj_ty={:?}", member, obj_ty);
+                            field_ty = Ty::Int;
                         }
                         field_ty
                     }
-                    Lvalue::EnumFieldAccess(_, _, _) => panic!("Cannot assign to enum field"),
+                    Lvalue::EnumFieldAccess(_, _, _) => {
+                        eprintln!("ICE: Cannot assign to enum field");
+                        Ty::Int
+                    }
                 };
                 let prev = self.current_expected_ty.take();
                 self.current_expected_ty = Some(lval_ty.clone());

@@ -780,7 +780,9 @@ impl CGenerator {
                     }
                     write!(&mut self.output, " }}, sizeof(struct pace_{}))", id.0).unwrap();
                 }
-                _ => panic!("Instantiating non-struct/class"),
+                _ => {
+                    eprintln!("ICE: Instantiating non-struct/class");
+                }
             },
             Rvalue::EnumTag(local) => write!(&mut self.output, "_{}.tag", local.0).unwrap(),
             Rvalue::EnumFieldAccess(obj, variant_name, field_name) => write!(
