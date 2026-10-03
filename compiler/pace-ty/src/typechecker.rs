@@ -312,7 +312,10 @@ impl TypeChecker {
     pub fn check_program(&mut self, program: &Program) -> Result<(), String> {
         // 0. Initialize module scopes
         for module_name in &program.module_order {
-            let module = program.modules.get(module_name).unwrap();
+            let module = match program.modules.get(module_name) {
+                Some(m) => m,
+                None => return Err(format!("ICE: Module {} not found", module_name)),
+            };
             let mut scope = ModuleScope::default();
             for decl in &module.declarations {
                 if let Decl::Import { path, alias, .. } = decl
@@ -332,7 +335,10 @@ impl TypeChecker {
 
         let mut declarations: Vec<(String, Decl)> = Vec::new();
         for module_name in &program.module_order {
-            let module = program.modules.get(module_name).unwrap();
+            let module = match program.modules.get(module_name) {
+                Some(m) => m,
+                None => return Err(format!("ICE: Module {} not found", module_name)),
+            };
             for decl in &module.declarations {
                 declarations.push((module_name.to_string(), decl.clone()));
             }
@@ -839,7 +845,10 @@ impl TypeChecker {
         // Resolve wildcard imports
         let mut wildcard_symbols_to_add: HashMap<String, Vec<(String, String)>> = HashMap::new();
         for module_name in &program.module_order {
-            let scope = self.module_scopes.get(&module_name.to_string()).unwrap();
+            let scope = match self.module_scopes.get(&module_name.to_string()) {
+                Some(s) => s,
+                None => return Err(format!("ICE: Module scope {} not found", module_name)),
+            };
             let mut symbols_to_add = Vec::new();
             for target_module in &scope.wildcard_imports {
                 if let Some(target_scope) = self.module_scopes.get(target_module) {
@@ -883,7 +892,7 @@ impl TypeChecker {
                     } = m
                     {
                         let mangled_class_name = format!("{}_{}", module_name, decl_name);
-                        let short_method_name = name.split('_').next_back().unwrap();
+                        let short_method_name = name.split('_').next_back().unwrap_or(name);
                         let method_mangled_name =
                             format!("{}_{}", mangled_class_name, short_method_name);
 
@@ -1044,7 +1053,17 @@ impl TypeChecker {
                         inferred
                     } else {
                         // Uninitialized variable
-                        let expected = expected_ty.clone().unwrap();
+                        let expected = match expected_ty.clone() {
+                            Some(ty) => ty,
+                            None => {
+                                self.reporter.report(
+                                    pace_errors::Diagnostic::error("Variable declaration must have a type or an initializer")
+                                        .with_span(*span)
+                                        .with_code(pace_errors::ErrorCode::TypeMismatch),
+                                );
+                                return Err("Variable declaration must have a type or an initializer".to_string());
+                            }
+                        };
                         if let Ty::Optional(_) = expected {
                             self.initialized_bindings.insert(*id); // Implicitly initialized to null
                         }
@@ -1070,7 +1089,7 @@ impl TypeChecker {
                                     "Type mismatch: expected {:?}, got {:?}",
                                     expected, ty
                                 ))
-                                .with_span(explicit_ty.as_ref().unwrap().span()),
+                                .with_span(explicit_ty.as_ref().map(|t| t.span()).unwrap_or(*span)),
                             );
                             return Err("Type mismatch".to_string());
                         }
@@ -1097,7 +1116,17 @@ impl TypeChecker {
                         inferred
                     } else {
                         // Uninitialized variable
-                        let explicit = explicit_ty.as_ref().unwrap(); // Guaranteed by parser
+                        let explicit = match explicit_ty.as_ref() {
+                            Some(t) => t,
+                            None => {
+                                self.reporter.report(
+                                    pace_errors::Diagnostic::error("Function parameter must have a type")
+                                        .with_span(*span)
+                                        .with_code(pace_errors::ErrorCode::TypeMismatch),
+                                );
+                                return Err("Function parameter must have a type".to_string());
+                            }
+                        };
                         let expected = self.resolve_type(explicit)?;
                         if let Ty::Optional(_) = expected {
                             self.initialized_bindings.insert(*id); // Implicitly initialized to null
@@ -1191,7 +1220,17 @@ impl TypeChecker {
                     self.current_expected_ty = prev_expected;
                     res?
                 } else {
-                    let expected = expected_ty.clone().unwrap();
+                    let expected = match expected_ty.clone() {
+                        Some(ty) => ty,
+                        None => {
+                            self.reporter.report(
+                                pace_errors::Diagnostic::error("Variable declaration must have a type or an initializer")
+                                    .with_span(*span)
+                                    .with_code(pace_errors::ErrorCode::TypeMismatch),
+                            );
+                            return Err("Variable declaration must have a type or an initializer".to_string());
+                        }
+                    };
                     if let Ty::Optional(_) = expected {
                         self.initialized_bindings.insert(*id);
                     }
@@ -1207,7 +1246,7 @@ impl TypeChecker {
                                 "Type mismatch: expected {:?}, got {:?}",
                                 expected, ty
                             ))
-                            .with_span(explicit_ty.as_ref().unwrap().span()),
+                            .with_span(explicit_ty.as_ref().map(|t| t.span()).unwrap_or(*span)),
                         );
                         return Err("Type mismatch".to_string());
                     }
@@ -1231,7 +1270,17 @@ impl TypeChecker {
                     self.initialized_bindings.insert(*id);
                     self.check_expr(val)?
                 } else {
-                    let explicit = explicit_ty.as_ref().unwrap();
+                    let explicit = match explicit_ty.as_ref() {
+                        Some(t) => t,
+                        None => {
+                            self.reporter.report(
+                                pace_errors::Diagnostic::error("Class field must have a type")
+                                    .with_span(*span)
+                                    .with_code(pace_errors::ErrorCode::TypeMismatch),
+                            );
+                            return Err("Class field must have a type".to_string());
+                        }
+                    };
                     let expected = self.resolve_type(explicit)?;
                     if let Ty::Optional(_) = expected {
                         self.initialized_bindings.insert(*id);
@@ -1982,7 +2031,7 @@ impl TypeChecker {
                         let method_name = format!("{}_{}", struct_name, member);
                         if let Some(mty) = self.methods_env.get(&method_name) {
                             self.used_bindings_by_name.insert(method_name.clone());
-                            let short_struct = struct_name.split('_').next_back().unwrap();
+                            let short_struct = struct_name.split('_').next_back().unwrap_or(struct_name);
                             self.used_bindings_by_name
                                 .insert(format!("{}_{}", short_struct, member));
                             if let Some(def_span) = self.global_spans.get(&method_name) {
@@ -2047,7 +2096,7 @@ impl TypeChecker {
                         let method_name = format!("{}_{}", class_name, member);
                         if let Some(mty) = self.methods_env.get(&method_name) {
                             self.used_bindings_by_name.insert(method_name.clone());
-                            let short_class = class_name.split('_').next_back().unwrap();
+                            let short_class = class_name.split('_').next_back().unwrap_or(class_name);
                             self.used_bindings_by_name
                                 .insert(format!("{}_{}", short_class, member));
                             if let Some(def_span) = self.global_spans.get(&method_name) {
@@ -2206,7 +2255,17 @@ impl TypeChecker {
                         return Ok(Ty::Struct(id));
                     }
 
-                    let def_fields = self.struct_defs.get(&id).unwrap().clone();
+                    let def_fields = match self.struct_defs.get(&id) {
+                        Some(fields) => fields.clone(),
+                        None => {
+                            self.reporter.report(
+                                Diagnostic::error(format!("Undefined struct ID: {:?}", id))
+                                    .with_span(*span)
+                                    .with_code(ErrorCode::UndefinedType),
+                            );
+                            return Err(format!("Undefined struct ID: {:?}", id));
+                        }
+                    };
                     let mut def_map: std::collections::HashMap<_, _> = def_fields
                         .into_iter()
                         .map(|f| (f.name.clone(), f.ty.clone()))
@@ -2324,7 +2383,17 @@ impl TypeChecker {
                         if is_actor { return Ok(Ty::Actor(id)); } else { return Ok(Ty::Class(id)); }
                     }
 
-                    let def_fields = self.class_defs.get(&id).unwrap().clone();
+                    let def_fields = match self.class_defs.get(&id) {
+                        Some(fields) => fields.clone(),
+                        None => {
+                            self.reporter.report(
+                                Diagnostic::error(format!("Undefined class ID: {:?}", id))
+                                    .with_span(*span)
+                                    .with_code(ErrorCode::UndefinedType),
+                            );
+                            return Err(format!("Undefined class ID: {:?}", id));
+                        }
+                    };
                     let mut def_map: std::collections::HashMap<_, _> = def_fields
                         .into_iter()
                         .map(|f| (f.name.clone(), f.ty.clone()))
@@ -2389,7 +2458,17 @@ impl TypeChecker {
                     && let Ty::Enum(enum_id) = **ret_ty
                 {
                     // Enum variant instantiation!
-                    let variants = self.enum_defs.get(&enum_id).unwrap();
+                    let variants = match self.enum_defs.get(&enum_id) {
+                        Some(v) => v,
+                        None => {
+                            self.reporter.report(
+                                Diagnostic::error(format!("Undefined enum ID: {:?}", enum_id))
+                                    .with_span(*span)
+                                    .with_code(ErrorCode::UndefinedType),
+                            );
+                            return Err(format!("Undefined enum ID: {:?}", enum_id));
+                        }
+                    };
                     let mut variant_name = "";
                     if let Expr::MemberAccess { member, .. } = &**callee {
                         variant_name = member;
@@ -2912,7 +2991,7 @@ impl TypeChecker {
             }),
         );
 
-        let short_template_name = template_name.split('_').next_back().unwrap().to_string();
+        let short_template_name = template_name.split('_').next_back().unwrap_or(&template_name).to_string();
         mapping.insert(
             pace_span::intern(&short_template_name),
             pace_ast::Type::Named(pace_ast::Ident {
@@ -2961,7 +3040,7 @@ impl TypeChecker {
                         ..
                     } = method
                     {
-                        let short_template_name = template_name.split('_').next_back().unwrap();
+                        let short_template_name = template_name.split('_').next_back().unwrap_or(template_name);
                         let base_method_name = m_name
                             .strip_prefix(&format!("{}_", short_template_name))
                             .unwrap_or(m_name)

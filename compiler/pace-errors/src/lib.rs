@@ -13,6 +13,7 @@ pub enum ErrorCode {
     UnknownField,
     ArityMismatch,
     InvalidArguments,
+    UndefinedType,
 }
 
 impl ErrorCode {
@@ -26,6 +27,7 @@ impl ErrorCode {
             ErrorCode::UnknownField => "E006",
             ErrorCode::ArityMismatch => "E007",
             ErrorCode::InvalidArguments => "E008",
+            ErrorCode::UndefinedType => "E009",
             ErrorCode::UnusedVariable => "W001",
             ErrorCode::SnakeCaseName => "W002",
         }
