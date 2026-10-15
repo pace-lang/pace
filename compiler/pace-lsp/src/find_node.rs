@@ -203,6 +203,9 @@ fn find_ident_in_expr(expr: &Expr, offset: usize) -> Option<HirId> {
                 }
             }
         }
+        Expr::Try(inner, _) | Expr::Await(inner, _) => {
+            return find_ident_in_expr(inner, offset);
+        }
         _ => {}
     }
     None

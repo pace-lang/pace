@@ -891,6 +891,10 @@ impl Formatter {
                 self.write("await ");
                 self.format_expr(inner);
             }
+            Expr::Try(inner, _) => {
+                self.format_expr(inner);
+                self.write("?");
+            }
         }
     }
 

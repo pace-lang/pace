@@ -219,7 +219,7 @@ pub fn reassign_expr_ids(
                 pace_hir::ClosureBody::Block(b) => reassign_block_ids(tc, b, id_map),
             }
         }
-        Expr::Await(inner, _) => {
+        Expr::Await(inner, _) | Expr::Try(inner, _) => {
             reassign_expr_ids(tc, inner, id_map);
         }
     }

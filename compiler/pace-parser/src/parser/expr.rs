@@ -85,6 +85,10 @@ impl<'a> Parser<'a> {
                     callee: Box::new(left),
                     args,
                 };
+            } else if self.check(&TokenKind::Question) {
+                let q_tok = self.expect(TokenKind::Question)?;
+                let span = left.span().merge(q_tok.span);
+                left = Expr::Try(Box::new(left), span);
             } else {
                 break;
             }

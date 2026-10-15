@@ -269,6 +269,14 @@ impl CGenerator {
                 }
             }
             Ty::Future(_) => "void*".to_string(),
+            Ty::Result(ok, _) => {
+                let ok_c = self.emit_c_type(ok);
+                if ok_c == "void" {
+                    "void*".to_string()
+                } else {
+                    ok_c
+                }
+            }
             Ty::Void => "void".to_string(),
         }
     }
@@ -288,6 +296,14 @@ impl CGenerator {
             }
             Ty::Future(inner) => {
                 let default_val = self.emit_c_default_val(inner);
+                if default_val.is_empty() {
+                    "NULL".to_string()
+                } else {
+                    default_val
+                }
+            }
+            Ty::Result(ok, _) => {
+                let default_val = self.emit_c_default_val(ok);
                 if default_val.is_empty() {
                     "NULL".to_string()
                 } else {

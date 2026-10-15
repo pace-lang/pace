@@ -366,5 +366,141 @@ mod tests {
         let mut tc = TypeChecker::new();
         tc.check_program(&hir).expect("Typecheck failed for Option<int>");
     }
+
+    #[test]
+    fn test_result_generic_and_try_operator_success() {
+        let source = "fn helper(r: Result<int, string>) -> Result<int, string> { let x: int = r? return r }";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+
+        let mut lowerer = LoweringContext::new();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
+
+        let mut tc = TypeChecker::new();
+        tc.check_program(&hir).expect("Typecheck failed for Result and ?");
+    }
+
+    #[test]
+    fn test_try_operator_in_non_result_function_diagnostic() {
+        let source = "fn helper(r: Result<int, string>) -> void { let x = r? }";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+
+        let mut lowerer = LoweringContext::new();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
+
+        let mut tc = TypeChecker::new();
+        let result = tc.check_program(&hir);
+        assert!(result.is_err(), "Expected error for ? in non-Result function");
+        assert!(
+            tc.reporter.diagnostics.iter().any(|d| d.message.contains("The '?' operator can only be used in a function that returns 'Result'")),
+            "Expected non-Result function error: {:?}",
+            tc.reporter.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_try_operator_error_type_mismatch_diagnostic() {
+        let source = "fn helper(r: Result<int, string>, res: Result<int, int>) -> Result<int, int> { let x = r? return res }";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+
+        let mut lowerer = LoweringContext::new();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
+
+        let mut tc = TypeChecker::new();
+        let result = tc.check_program(&hir);
+        assert!(result.is_err(), "Expected error for ? with mismatched error type");
+        assert!(
+            tc.reporter.diagnostics.iter().any(|d| d.message.contains("cannot propagate error type 'string' from function returning error type 'int'")),
+            "Expected error type mismatch error: {:?}",
+            tc.reporter.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_try_operator_optional_success() {
+        let source = "fn helper(opt: int?) -> int? { let x: int = opt? return opt }";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+
+        let mut lowerer = LoweringContext::new();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
+
+        let mut tc = TypeChecker::new();
+        tc.check_program(&hir).expect("Typecheck failed for ? on optional");
+    }
 }
 

@@ -173,6 +173,11 @@ impl TypeChecker {
                         let inner = self.get_type(&args[0])?;
                         return Ok(Ty::Optional(Box::new(inner)));
                     }
+                    if id.name.as_str() == "Result" && args.len() == 2 {
+                        let ok = self.get_type(&args[0])?;
+                        let err = self.get_type(&args[1])?;
+                        return Ok(Ty::Result(Box::new(ok), Box::new(err)));
+                    }
                     let mut final_args = Vec::new();
                     if let Some(template) = self.generic_templates.get(&id.name.to_string()) {
                         let generic_params = match template {
@@ -294,6 +299,11 @@ impl TypeChecker {
                     if id.name.as_str() == "Option" && args.len() == 1 {
                         let inner = self.resolve_type(&args[0])?;
                         return Ok(Ty::Optional(Box::new(inner)));
+                    }
+                    if id.name.as_str() == "Result" && args.len() == 2 {
+                        let ok = self.resolve_type(&args[0])?;
+                        let err = self.resolve_type(&args[1])?;
+                        return Ok(Ty::Result(Box::new(ok), Box::new(err)));
                     }
                     self.instantiate_generic(&id.name, args)
                 } else {
@@ -1272,8 +1282,20 @@ impl TypeChecker {
                         Ty::Void
                     };
 
-                    if let Some(expected) = expected_ret_ty {
-                        if ret_ty != *expected {
+                    let expected = expected_ret_ty.or(self.current_return_ty.as_ref());
+                    if let Some(expected) = expected {
+                        let mut type_matches = ret_ty == *expected;
+                        if !type_matches {
+                            if *expected == Ty::Optional(Box::new(ret_ty.clone())) {
+                                type_matches = true;
+                            } else if let (Ty::Optional(_), Ty::Optional(inner_val)) =
+                                (expected, &ret_ty)
+                                && **inner_val == Ty::Void
+                            {
+                                type_matches = true;
+                            }
+                        }
+                        if !type_matches {
                             self.reporter.report(
                                 Diagnostic::error(format!(
                                     "Type mismatch: function expects to return {}, but returned {}",
@@ -1750,8 +1772,12 @@ impl TypeChecker {
                     }
                 }
 
+                let prev_ret = self.current_return_ty.take();
+                self.current_return_ty = Some(expected_block_ret.clone());
+
                 self.check_block(body, Some(&expected_block_ret))?;
                 
+                self.current_return_ty = prev_ret;
                 self.in_async_context = prev_async;
                 self.current_fn_name = prev_fn;
                 self.env = outer_env;
@@ -3025,6 +3051,79 @@ impl TypeChecker {
                     }
                 }
             }
+            Expr::Try(inner, span) => {
+                let inner_ty = self.check_expr(inner)?;
+                match inner_ty {
+                    Ty::Result(ok_ty, err_ty) => {
+                        if let Some(ref ret_ty) = self.current_return_ty {
+                            if let Ty::Result(_, expected_err) = ret_ty {
+                                if *err_ty != **expected_err {
+                                    self.reporter.report(
+                                        Diagnostic::error(format!(
+                                            "Error type mismatch in '?' operator: cannot propagate error type '{}' from function returning error type '{}'",
+                                            self.display_ty(&err_ty),
+                                            self.display_ty(expected_err),
+                                        ))
+                                        .with_span(*span),
+                                    );
+                                    return Err("Error type mismatch in '?'".to_string());
+                                }
+                            } else {
+                                self.reporter.report(
+                                    Diagnostic::error(format!(
+                                        "The '?' operator can only be used in a function that returns 'Result', but enclosing function returns '{}'",
+                                        self.display_ty(ret_ty),
+                                    ))
+                                    .with_span(*span),
+                                );
+                                return Err("Cannot use '?' in non-Result function".to_string());
+                            }
+                        } else {
+                            self.reporter.report(
+                                Diagnostic::error(
+                                    "The '?' operator can only be used inside a function",
+                                )
+                                .with_span(*span),
+                            );
+                            return Err("Cannot use '?' outside of a function".to_string());
+                        }
+                        Ok(*ok_ty)
+                    }
+                    Ty::Optional(inner_val) => {
+                        if let Some(ref ret_ty) = self.current_return_ty {
+                            if !matches!(ret_ty, Ty::Optional(_)) {
+                                self.reporter.report(
+                                    Diagnostic::error(format!(
+                                        "The '?' operator on an optional type can only be used in a function that returns an optional, but enclosing function returns '{}'",
+                                        self.display_ty(ret_ty),
+                                    ))
+                                    .with_span(*span),
+                                );
+                                return Err("Cannot use '?' on optional in non-optional function".to_string());
+                            }
+                        } else {
+                            self.reporter.report(
+                                Diagnostic::error(
+                                    "The '?' operator can only be used inside a function",
+                                )
+                                .with_span(*span),
+                            );
+                            return Err("Cannot use '?' outside of a function".to_string());
+                        }
+                        Ok(*inner_val)
+                    }
+                    other => {
+                        self.reporter.report(
+                            Diagnostic::error(format!(
+                                "Cannot use '?' operator on type '{}'; expected 'Result' or optional type",
+                                self.display_ty(&other),
+                            ))
+                            .with_span(*span),
+                        );
+                        Err("Invalid type for '?' operator".to_string())
+                    }
+                }
+            }
         }
     }
 
@@ -3422,6 +3521,7 @@ impl TypeChecker {
             Ty::Void => "void".to_string(),
             Ty::Optional(inner) => format!("{}?", self.display_ty(inner)),
             Ty::Future(inner) => format!("Future<{}>", self.display_ty(inner)),
+            Ty::Result(ok, err) => format!("Result<{}, {}>", self.display_ty(ok), self.display_ty(err)),
             Ty::Function(args, ret) => {
                 let args_str = args
                     .iter()

@@ -261,6 +261,7 @@ pub enum Expr {
         span: Span,
     },
     Await(Box<Expr>, Span),
+    Try(Box<Expr>, Span),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -331,6 +332,7 @@ impl Expr {
             Expr::Match { span, .. } => *span,
             Expr::Closure { span, .. } => *span,
             Expr::Await(_, span) => *span,
+            Expr::Try(_, span) => *span,
         }
     }
 }

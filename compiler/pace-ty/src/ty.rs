@@ -12,5 +12,6 @@ pub enum Ty {
     Closure(Vec<Ty>, Box<Ty>),
     Optional(Box<Ty>),
     Future(Box<Ty>),
+    Result(Box<Ty>, Box<Ty>),
     Void,
 }

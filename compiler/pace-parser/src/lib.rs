@@ -199,4 +199,25 @@ mod tests {
             diags.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
     }
+
+    #[test]
+    fn test_parse_try_operator() {
+        let source = "fn run() -> void { let x = foo()? }";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+
+        let (declarations, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+        assert_eq!(declarations.len(), 1);
+        if let Decl::Function { body: block, .. } = &declarations[0] {
+            assert_eq!(block.statements.len(), 1);
+            if let Stmt::Let { value: Some(expr), .. } = &block.statements[0] {
+                assert!(matches!(expr, Expr::Try(..)));
+            } else {
+                panic!("Expected let statement with initializer");
+            }
+        } else {
+            panic!("Expected function declaration");
+        }
+    }
 }

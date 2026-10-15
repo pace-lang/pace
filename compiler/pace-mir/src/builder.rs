@@ -1286,6 +1286,21 @@ impl<'a> MirBuilder<'a> {
                 ));
                 temp
             }
+            Expr::Try(inner, _) => {
+                let inner_local = self.build_expr(inner);
+                let inner_ty = self.locals[inner_local.0 as usize].clone();
+                let ret_ty = match inner_ty {
+                    Ty::Result(ok, _) => *ok,
+                    Ty::Optional(val) => *val,
+                    other => other,
+                };
+                let temp = self.new_local(ret_ty);
+                self.push_stmt(Statement::Assign(
+                    Lvalue::Local(temp),
+                    Rvalue::Use(inner_local),
+                ));
+                temp
+            }
         }
     }
 
