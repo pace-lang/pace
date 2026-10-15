@@ -94,4 +94,15 @@ mod tests {
             _ => panic!("Expected Class declaration"),
         }
     }
+
+    #[test]
+    fn test_parser_synchronization() {
+        let source = "let = 42\nactor Worker {}\nimport math";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+
+        let (declarations, diags, _) = parser.parse_program();
+        assert!(!diags.is_empty(), "Expected syntax error on broken let");
+        assert_eq!(declarations.len(), 2, "Expected actor and import to recover and parse");
+    }
 }

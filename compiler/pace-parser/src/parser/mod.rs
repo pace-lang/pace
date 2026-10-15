@@ -81,14 +81,18 @@ impl<'a> Parser<'a> {
         while self.current.is_some() {
             if let Some(tok) = &self.current {
                 match tok.kind {
-                    TokenKind::Class
+                    TokenKind::Import
+                    | TokenKind::Class
                     | TokenKind::Struct
                     | TokenKind::Enum
                     | TokenKind::Trait
                     | TokenKind::Fn
                     | TokenKind::Let
                     | TokenKind::Const
-                    | TokenKind::Var => return,
+                    | TokenKind::Var
+                    | TokenKind::Actor
+                    | TokenKind::Async
+                    | TokenKind::Private => return,
                     _ => {}
                 }
             }
