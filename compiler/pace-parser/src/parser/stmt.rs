@@ -138,6 +138,18 @@ impl<'a> Parser<'a> {
         } else if self.check(&TokenKind::Continue) {
             let tok = self.expect(TokenKind::Continue)?;
             Ok(Stmt::Continue(tok.span))
+        } else if self.check(&TokenKind::Try) || self.check(&TokenKind::Catch) {
+            let span = self.current_span();
+            self.advance();
+            Err(Diagnostic::error(
+                "Traditional 'try/catch' exceptions are not supported in Pace. Pace uses 'Result<T, E>' and '?' for explicit error handling.",
+            ).with_span(span))
+        } else if self.check(&TokenKind::Throw) {
+            let span = self.current_span();
+            self.advance();
+            Err(Diagnostic::error(
+                "'throw' exceptions are not supported in Pace. Return an error value or use 'Result<T, E>' for explicit error handling.",
+            ).with_span(span))
         } else {
             let expr = self.parse_expr()?;
             let span = expr.span();

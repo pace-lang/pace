@@ -68,7 +68,8 @@ pub enum TokenKind<'a> {
     #[token("import")]
     Import,
 
-    // Errors
+    // Errors: traditional exceptions are intentionally disallowed in Pace in favor of Result<T, E>.
+    // These keywords remain reserved to provide informative compiler diagnostics when encountered.
     #[token("throw")]
     Throw,
     #[token("try")]

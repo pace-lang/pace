@@ -171,5 +171,34 @@ mod tests {
             panic!("Expected function declaration");
         }
     }
+
+    #[test]
+    fn test_try_catch_disallowed_diagnostic() {
+        let source = "fn run() -> void { try { let x = 1 } catch { } }";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+
+        let (_declarations, diags, _) = parser.parse_program();
+        assert!(
+            diags.iter().any(|d| d.message.contains("Traditional 'try/catch' exceptions are not supported")),
+            "Expected try/catch unsupported diagnostic, got: {:?}",
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_throw_disallowed_diagnostic() {
+        let source = "fn run() -> void { throw 42 }";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+
+        let (_declarations, diags, _) = parser.parse_program();
+        assert!(
+            diags.iter().any(|d| d.message.contains("'throw' exceptions are not supported")),
+            "Expected throw unsupported diagnostic, got: {:?}",
+            diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
 }
+
 
