@@ -18,6 +18,7 @@ pub struct ResolvedMethod {
     pub name: String,
     pub ty: crate::ty::Ty,
     pub mangled_name: String,
+    pub is_override: bool,
     pub is_private: bool,
     pub span: pace_span::Span,
 }
@@ -883,6 +884,7 @@ impl TypeChecker {
                     if let Decl::Function {
                         name,
                         is_override,
+                        is_private,
                         span,
                         ..
                     } = m
@@ -898,7 +900,8 @@ impl TypeChecker {
                                 name: base_name,
                                 ty: ty.clone(),
                                 mangled_name: method_mangled_name,
-                                is_private: *is_override,
+                                is_override: *is_override,
+                                is_private: *is_private,
                                 span: *span,
                             });
                         }
@@ -923,7 +926,7 @@ impl TypeChecker {
                         name: base_name,
                         ty,
                         mangled_name: full_name,
-                        is_private: is_override,
+                        is_override,
                         span,
                         ..
                     } in methods
