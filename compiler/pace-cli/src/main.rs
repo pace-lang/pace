@@ -10,7 +10,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[derive(ClapParser)]
 #[command(
     name = "pace",
-    version = "0.1.0",
+    version = env!("CARGO_PKG_VERSION"),
     about = "Pace Toolchain and Package Manager"
 )]
 struct Cli {
@@ -296,7 +296,7 @@ async fn main() {
             }
         }
         Commands::Version => {
-            println!("pace version 0.1.0");
+            println!("pace version {}", env!("CARGO_PKG_VERSION"));
         }
         Commands::Upgrade => {
             println!("Upgrading Pace toolchain from GitHub...");
