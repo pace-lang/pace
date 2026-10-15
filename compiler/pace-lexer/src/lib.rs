@@ -1,7 +1,7 @@
 pub mod lexer;
 pub mod token;
 
-pub use lexer::{Lexer, Token};
+pub use lexer::{LexError, Lexer, Token};
 pub use token::TokenKind;
 
 #[cfg(test)]

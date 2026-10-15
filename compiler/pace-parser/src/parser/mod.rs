@@ -32,15 +32,25 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn advance(&mut self) {
         loop {
-            let next = self.lexer.next().and_then(|r| r.ok());
-            if let Some(tok) = &next
-                && let TokenKind::Comment(text) = tok.kind
-            {
-                self.comments.push((tok.span, text.to_string()));
-                continue;
+            match self.lexer.next() {
+                Some(Ok(tok)) => {
+                    if let TokenKind::Comment(text) = tok.kind {
+                        self.comments.push((tok.span, text.to_string()));
+                        continue;
+                    }
+                    self.current = Some(tok);
+                    break;
+                }
+                Some(Err(err)) => {
+                    self.diagnostics
+                        .push(Diagnostic::error("Unrecognized token").with_span(err.span));
+                    continue;
+                }
+                None => {
+                    self.current = None;
+                    break;
+                }
             }
-            self.current = next;
-            break;
         }
     }
 

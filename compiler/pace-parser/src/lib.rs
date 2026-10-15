@@ -135,4 +135,17 @@ mod tests {
             panic!("Expected binary mod expression");
         }
     }
+
+    #[test]
+    fn test_unrecognized_token_diagnostic() {
+        let source = "let x = @123";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+
+        let (_declarations, diags, _) = parser.parse_program();
+        assert!(
+            diags.iter().any(|d| d.message.contains("Unrecognized token")),
+            "Expected Unrecognized token diagnostic"
+        );
+    }
 }

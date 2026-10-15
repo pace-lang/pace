@@ -33,8 +33,13 @@ impl<'a> Lexer<'a> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct LexError {
+    pub span: Span,
+}
+
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Result<Token<'a>, ()>;
+    type Item = Result<Token<'a>, LexError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let kind = self.inner.next()?;
@@ -45,7 +50,7 @@ impl<'a> Iterator for Lexer<'a> {
 
         match kind {
             Ok(k) => Some(Ok(Token { kind: k, span })),
-            Err(_) => Some(Err(())), // Logos returns Err for unknown tokens
+            Err(_) => Some(Err(LexError { span })),
         }
     }
 }
