@@ -199,6 +199,8 @@ pub enum Stmt {
     },
     ExprStmt(Expr, Span),
     Return(Option<Expr>, Span),
+    Break(Span),
+    Continue(Span),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -358,6 +360,7 @@ impl Stmt {
             Stmt::Var { span, .. } => *span,
             Stmt::ExprStmt(_, span) => *span,
             Stmt::Return(_, span) => *span,
+            Stmt::Break(span) | Stmt::Continue(span) => *span,
         }
     }
 }

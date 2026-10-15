@@ -136,6 +136,7 @@ pub fn reassign_block_ids(
                     reassign_expr_ids(tc, expr, id_map);
                 }
             }
+            Stmt::Break(_) | Stmt::Continue(_) => {}
         }
     }
 }

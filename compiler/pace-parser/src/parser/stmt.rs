@@ -132,6 +132,12 @@ impl<'a> Parser<'a> {
             }
 
             Ok(Stmt::Return(expr, start_tok.span.merge(end_span)))
+        } else if self.check(&TokenKind::Break) {
+            let tok = self.expect(TokenKind::Break)?;
+            Ok(Stmt::Break(tok.span))
+        } else if self.check(&TokenKind::Continue) {
+            let tok = self.expect(TokenKind::Continue)?;
+            Ok(Stmt::Continue(tok.span))
         } else {
             let expr = self.parse_expr()?;
             let span = expr.span();

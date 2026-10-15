@@ -148,4 +148,28 @@ mod tests {
             "Expected Unrecognized token diagnostic"
         );
     }
+
+    #[test]
+    fn test_parse_break_and_continue() {
+        let source = "fn loop_test() -> void { while true { break continue } }";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+
+        let (declarations, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+        assert_eq!(declarations.len(), 1);
+        if let Decl::Function { body: block, .. } = &declarations[0] {
+            assert_eq!(block.statements.len(), 1);
+            if let Stmt::ExprStmt(Expr::While { body, .. }, _) = &block.statements[0] {
+                assert_eq!(body.statements.len(), 2);
+                assert!(matches!(body.statements[0], Stmt::Break(_)));
+                assert!(matches!(body.statements[1], Stmt::Continue(_)));
+            } else {
+                panic!("Expected while loop statement");
+            }
+        } else {
+            panic!("Expected function declaration");
+        }
+    }
 }
+

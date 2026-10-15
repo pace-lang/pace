@@ -715,6 +715,14 @@ impl Formatter {
                 }
                 self.newline();
             }
+            Stmt::Break(_) => {
+                self.write("break");
+                self.newline();
+            }
+            Stmt::Continue(_) => {
+                self.write("continue");
+                self.newline();
+            }
         }
     }
 

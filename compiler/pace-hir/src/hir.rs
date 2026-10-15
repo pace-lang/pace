@@ -60,6 +60,8 @@ pub enum Stmt {
     },
     ExprStmt(Expr, Span),
     Return(Option<Expr>, Span),
+    Break(Span),
+    Continue(Span),
 }
 
 use pace_span::FileId;

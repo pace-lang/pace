@@ -1279,6 +1279,24 @@ impl TypeChecker {
                         self.current_return_ty = Some(ret_ty);
                     }
                 }
+                pace_hir::Stmt::Break(span) => {
+                    if self.loop_depth == 0 {
+                        self.reporter.report(
+                            Diagnostic::error("Cannot 'break' outside of a loop")
+                                .with_span(*span),
+                        );
+                        return Err("Cannot 'break' outside of a loop".to_string());
+                    }
+                }
+                pace_hir::Stmt::Continue(span) => {
+                    if self.loop_depth == 0 {
+                        self.reporter.report(
+                            Diagnostic::error("Cannot 'continue' outside of a loop")
+                                .with_span(*span),
+                        );
+                        return Err("Cannot 'continue' outside of a loop".to_string());
+                    }
+                }
             }
         }
         self.env = outer_env;
@@ -2726,7 +2744,10 @@ impl TypeChecker {
             }
             Expr::While { cond, body, .. } => {
                 self.check_expr(cond)?;
-                self.check_block(body, None)?;
+                self.loop_depth += 1;
+                let res = self.check_block(body, None);
+                self.loop_depth -= 1;
+                res?;
                 Ok(Ty::Int)
             }
             Expr::Assign {

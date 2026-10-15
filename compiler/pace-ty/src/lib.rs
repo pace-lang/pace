@@ -157,4 +157,110 @@ mod tests {
             "Expected type resolution failure"
         );
     }
+
+    #[test]
+    fn test_loop_break_continue_success() {
+        let source = "fn run() -> void { while true { if true { break } else { continue } } }";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+
+        let mut lowerer = LoweringContext::new();
+        let hir = lowerer.lower_program(program).unwrap();
+
+        let mut tc = TypeChecker::new();
+        tc.check_program(&hir).expect("Typecheck failed for valid break/continue");
+    }
+
+    #[test]
+    fn test_break_outside_loop_diagnostic() {
+        let source = "fn run() -> void { break }";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+
+        let mut lowerer = LoweringContext::new();
+        let hir = lowerer.lower_program(program).unwrap();
+
+        let mut tc = TypeChecker::new();
+        let result = tc.check_program(&hir);
+        assert!(result.is_err(), "Expected error for break outside loop");
+        assert!(
+            tc.reporter.diagnostics.iter().any(|d| d.message.contains("Cannot 'break' outside of a loop")),
+            "Expected \"Cannot 'break' outside of a loop\" error: {:?}",
+            tc.reporter.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_continue_outside_loop_diagnostic() {
+        let source = "fn run() -> void { continue }";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+
+        let mut lowerer = LoweringContext::new();
+        let hir = lowerer.lower_program(program).unwrap();
+
+        let mut tc = TypeChecker::new();
+        let result = tc.check_program(&hir);
+        assert!(result.is_err(), "Expected error for continue outside loop");
+        assert!(
+            tc.reporter.diagnostics.iter().any(|d| d.message.contains("Cannot 'continue' outside of a loop")),
+            "Expected \"Cannot 'continue' outside of a loop\" error: {:?}",
+            tc.reporter.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
 }
+

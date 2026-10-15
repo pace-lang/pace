@@ -117,6 +117,7 @@ fn find_ident_in_stmt(stmt: &Stmt, offset: usize) -> Option<HirId> {
                 return find_ident_in_expr(v, offset);
             }
         }
+        Stmt::Break(_) | Stmt::Continue(_) => {}
     }
     None
 }

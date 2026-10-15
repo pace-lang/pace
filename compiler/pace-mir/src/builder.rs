@@ -49,6 +49,7 @@ pub struct MirBuilder<'a> {
     pub resolved_global_names: &'a HashMap<pace_hir::HirId, String>,
     pub closure_functions: Vec<MirFunction>,
     pub closure_counter: usize,
+    pub loop_stack: Vec<(BasicBlockId, BasicBlockId)>,
 }
 
 impl<'a> MirBuilder<'a> {
@@ -94,6 +95,7 @@ impl<'a> MirBuilder<'a> {
             resolved_global_names,
             closure_functions: Vec::new(),
             closure_counter: 0,
+            loop_stack: Vec::new(),
         }
     }
 
@@ -166,6 +168,22 @@ impl<'a> MirBuilder<'a> {
                     let current_bb = self.current_block.0 as usize;
                     self.blocks[current_bb].terminator = Some(Terminator::Return(local));
                     break;
+                }
+                pace_hir::Stmt::Break(_) => {
+                    if let Some(&(_, merge_bb)) = self.loop_stack.last() {
+                        let current_bb = self.current_block.0 as usize;
+                        self.blocks[current_bb].terminator = Some(Terminator::Goto(merge_bb));
+                        self.current_block = self.new_block();
+                        break;
+                    }
+                }
+                pace_hir::Stmt::Continue(_) => {
+                    if let Some(&(cond_bb, _)) = self.loop_stack.last() {
+                        let current_bb = self.current_block.0 as usize;
+                        self.blocks[current_bb].terminator = Some(Terminator::Goto(cond_bb));
+                        self.current_block = self.new_block();
+                        break;
+                    }
                 }
             }
         }
@@ -974,7 +992,9 @@ impl<'a> MirBuilder<'a> {
                 });
 
                 self.current_block = body_bb;
+                self.loop_stack.push((cond_bb, merge_bb));
                 self.build_block(body);
+                self.loop_stack.pop();
                 if self.blocks[self.current_block.0 as usize]
                     .terminator
                     .is_none()

@@ -59,6 +59,12 @@ impl LoweringContext {
                     };
                     statements.push(Stmt::Return(lowered_expr, span));
                 }
+                ast::Stmt::Break(span) => {
+                    statements.push(Stmt::Break(span));
+                }
+                ast::Stmt::Continue(span) => {
+                    statements.push(Stmt::Continue(span));
+                }
             }
         }
         self.scope = outer_scope;
