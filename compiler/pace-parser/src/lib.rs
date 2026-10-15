@@ -105,4 +105,14 @@ mod tests {
         assert!(!diags.is_empty(), "Expected syntax error on broken let");
         assert_eq!(declarations.len(), 2, "Expected actor and import to recover and parse");
     }
+
+    #[test]
+    fn test_string_interpolation_diagnostics() {
+        let source = r#"let s = "hello ${let = 5} world""#;
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+
+        let (_declarations, diags, _) = parser.parse_program();
+        assert!(!diags.is_empty(), "Expected error from invalid syntax inside string interpolation");
+    }
 }

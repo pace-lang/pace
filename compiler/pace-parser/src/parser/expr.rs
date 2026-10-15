@@ -353,7 +353,8 @@ impl<'a> Parser<'a> {
                                 brace_pos + 1, // Skip '{'
                             );
                             let mut sub_parser = crate::Parser::new(sub_lexer);
-                            let (decls, _, _) = sub_parser.parse_program();
+                            let (decls, diags, _) = sub_parser.parse_program();
+                            self.diagnostics.extend(diags);
                             if !decls.is_empty()
                                 && let pace_ast::Decl::Expr(e, _) = &decls[0]
                             {
