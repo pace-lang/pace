@@ -367,7 +367,7 @@ impl TypeChecker {
             );
         }
 
-        // 1. Gather all top-level types (Structs/Classes/Functions)
+        // 1. Gather all top-level types (Structs/Classes/Actors/Enums/Traits)
         for (module_name, decl) in &declarations {
             self.current_module = Some(module_name.to_string());
             match decl {
@@ -375,9 +375,6 @@ impl TypeChecker {
                     id,
                     name,
                     generic_params,
-                    static_fields,
-                    const_fields,
-                    methods,
                     span,
                     ..
                 } => {
@@ -397,15 +394,118 @@ impl TypeChecker {
                     if let Some(scope) = self.module_scopes.get_mut(module_name) {
                         scope
                             .visible_symbols
-                            .insert(name.to_string(), mangled_name.clone());
+                            .insert(name.to_string(), mangled_name);
                     }
+                }
+                Decl::Class {
+                    id,
+                    name,
+                    generic_params,
+                    span,
+                    ..
+                } => {
+                    let mangled_name = format!("{}_{}", module_name, name);
+                    if generic_params.is_some() {
+                        self.generic_templates
+                            .insert(mangled_name.clone(), decl.clone());
+                        self.generic_templates_by_id
+                            .insert(*id, mangled_name.clone());
+                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                            scope.visible_symbols.insert(name.to_string(), mangled_name);
+                        }
+                        continue;
+                    }
+                    self.named_types.insert(mangled_name.clone(), (*id, 1));
+                    self.global_spans.insert(mangled_name.clone(), *span);
+                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                        scope
+                            .visible_symbols
+                            .insert(name.to_string(), mangled_name);
+                    }
+                }
+                Decl::Actor {
+                    id,
+                    name,
+                    generic_params,
+                    span,
+                    ..
+                } => {
+                    let mangled_name = format!("{}_{}", module_name, name);
+                    if generic_params.is_some() {
+                        self.generic_templates
+                            .insert(mangled_name.clone(), decl.clone());
+                        self.generic_templates_by_id
+                            .insert(*id, mangled_name.clone());
+                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                            scope.visible_symbols.insert(name.to_string(), mangled_name);
+                        }
+                        continue;
+                    }
+                    self.named_types.insert(mangled_name.clone(), (*id, 3));
+                    self.global_spans.insert(mangled_name.clone(), *span);
+                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                        scope
+                            .visible_symbols
+                            .insert(name.to_string(), mangled_name);
+                    }
+                }
+                Decl::Trait { name, .. } => {
+                    self.trait_defs.insert(name.to_string(), decl.clone());
+                }
+                Decl::Enum {
+                    id,
+                    name,
+                    generic_params,
+                    span,
+                    ..
+                } => {
+                    let mangled_name = format!("{}_{}", module_name, name);
+                    if generic_params.is_some() {
+                        self.generic_templates
+                            .insert(mangled_name.clone(), decl.clone());
+                        self.generic_templates_by_id
+                            .insert(*id, mangled_name.clone());
+                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                            scope.visible_symbols.insert(name.to_string(), mangled_name);
+                        }
+                        continue;
+                    }
+                    self.named_types.insert(mangled_name.clone(), (*id, 2));
+                    self.global_spans.insert(mangled_name.clone(), *span);
+                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                        scope.visible_symbols.insert(name.to_string(), mangled_name);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // 1.5. Register static fields, const fields, methods, and enum variants
+        for (module_name, decl) in &declarations {
+            self.current_module = Some(module_name.to_string());
+            match decl {
+                Decl::Struct {
+                    name,
+                    generic_params,
+                    static_fields,
+                    const_fields,
+                    methods,
+                    ..
+                } => {
+                    if generic_params.is_some() {
+                        continue;
+                    }
+                    let mangled_name = format!("{}_{}", module_name, name);
                     for pace_hir::HirStaticFieldDef {
                         name: sf_name,
                         ty: sf_ty,
                         ..
                     } in static_fields
                     {
-                        let resolved_ty = self.resolve_type(sf_ty).unwrap_or(Ty::Int);
+                        let resolved_ty = self.resolve_type(sf_ty).map_err(|e| {
+                            self.reporter.report(pace_errors::Diagnostic::error(e).with_span(sf_ty.span()));
+                            "Type resolution failed".to_string()
+                        })?;
                         self.static_fields_env
                             .insert(format!("{}_{}", mangled_name, sf_name), resolved_ty);
                     }
@@ -415,7 +515,10 @@ impl TypeChecker {
                         ..
                     } in const_fields
                     {
-                        let resolved_ty = self.resolve_type(cf_ty).unwrap_or(Ty::Int);
+                        let resolved_ty = self.resolve_type(cf_ty).map_err(|e| {
+                            self.reporter.report(pace_errors::Diagnostic::error(e).with_span(cf_ty.span()));
+                            "Type resolution failed".to_string()
+                        })?;
                         self.const_env
                             .insert(format!("{}_{}", mangled_name, cf_name), resolved_ty);
                     }
@@ -431,10 +534,17 @@ impl TypeChecker {
                         {
                             let mut param_tys = Vec::new();
                             for (_, _, pty) in params {
-                                param_tys.push(self.resolve_type(pty).unwrap_or(Ty::Int));
+                                let p_ty = self.resolve_type(pty).map_err(|e| {
+                                    self.reporter.report(pace_errors::Diagnostic::error(e).with_span(pty.span()));
+                                    "Type resolution failed".to_string()
+                                })?;
+                                param_tys.push(p_ty);
                             }
                             let ret_ty = if let Some(r) = return_type {
-                                self.resolve_type(r).unwrap_or(Ty::Void)
+                                self.resolve_type(r).map_err(|e| {
+                                    self.reporter.report(pace_errors::Diagnostic::error(e).with_span(r.span()));
+                                    "Type resolution failed".to_string()
+                                })?
                             } else {
                                 Ty::Void
                             };
@@ -456,40 +566,27 @@ impl TypeChecker {
                     }
                 }
                 Decl::Class {
-                    id,
                     name,
                     generic_params,
                     static_fields,
                     const_fields,
                     methods,
-                    span,
                     ..
                 } => {
-                    let mangled_name = format!("{}_{}", module_name, name);
                     if generic_params.is_some() {
-                        self.generic_templates
-                            .insert(mangled_name.clone(), decl.clone());
-                        self.generic_templates_by_id
-                            .insert(*id, mangled_name.clone());
-                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                            scope.visible_symbols.insert(name.to_string(), mangled_name);
-                        }
                         continue;
                     }
-                    self.named_types.insert(mangled_name.clone(), (*id, 1));
-                    self.global_spans.insert(mangled_name.clone(), *span);
-                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                        scope
-                            .visible_symbols
-                            .insert(name.to_string(), mangled_name.clone());
-                    }
+                    let mangled_name = format!("{}_{}", module_name, name);
                     for pace_hir::HirStaticFieldDef {
                         name: sf_name,
                         ty: sf_ty,
                         ..
                     } in static_fields
                     {
-                        let resolved_ty = self.resolve_type(sf_ty).unwrap_or(Ty::Int);
+                        let resolved_ty = self.resolve_type(sf_ty).map_err(|e| {
+                            self.reporter.report(pace_errors::Diagnostic::error(e).with_span(sf_ty.span()));
+                            "Type resolution failed".to_string()
+                        })?;
                         self.static_fields_env
                             .insert(format!("{}_{}", mangled_name, sf_name), resolved_ty);
                     }
@@ -499,7 +596,10 @@ impl TypeChecker {
                         ..
                     } in const_fields
                     {
-                        let resolved_ty = self.resolve_type(cf_ty).unwrap_or(Ty::Int);
+                        let resolved_ty = self.resolve_type(cf_ty).map_err(|e| {
+                            self.reporter.report(pace_errors::Diagnostic::error(e).with_span(cf_ty.span()));
+                            "Type resolution failed".to_string()
+                        })?;
                         self.const_env
                             .insert(format!("{}_{}", mangled_name, cf_name), resolved_ty);
                     }
@@ -515,10 +615,17 @@ impl TypeChecker {
                         {
                             let mut param_tys = Vec::new();
                             for (_, _, pty) in params {
-                                param_tys.push(self.resolve_type(pty).unwrap_or(Ty::Int));
+                                let p_ty = self.resolve_type(pty).map_err(|e| {
+                                    self.reporter.report(pace_errors::Diagnostic::error(e).with_span(pty.span()));
+                                    "Type resolution failed".to_string()
+                                })?;
+                                param_tys.push(p_ty);
                             }
                             let ret_ty = if let Some(r) = return_type {
-                                self.resolve_type(r).unwrap_or(Ty::Void)
+                                self.resolve_type(r).map_err(|e| {
+                                    self.reporter.report(pace_errors::Diagnostic::error(e).with_span(r.span()));
+                                    "Type resolution failed".to_string()
+                                })?
                             } else {
                                 Ty::Void
                             };
@@ -540,32 +647,15 @@ impl TypeChecker {
                     }
                 }
                 Decl::Actor {
-                    id,
                     name,
                     generic_params,
                     methods,
-                    span,
                     ..
                 } => {
-                    let mangled_name = format!("{}_{}", module_name, name);
                     if generic_params.is_some() {
-                        self.generic_templates
-                            .insert(mangled_name.clone(), decl.clone());
-                        self.generic_templates_by_id
-                            .insert(*id, mangled_name.clone());
-                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                            scope.visible_symbols.insert(name.to_string(), mangled_name);
-                        }
                         continue;
                     }
-                    self.named_types.insert(mangled_name.clone(), (*id, 3));
-                    self.global_spans.insert(mangled_name.clone(), *span);
-                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                        scope
-                            .visible_symbols
-                            .insert(name.to_string(), mangled_name.clone());
-                    }
-
+                    let mangled_name = format!("{}_{}", module_name, name);
                     for method in methods {
                         if let Decl::Function {
                             name: m_name,
@@ -578,10 +668,17 @@ impl TypeChecker {
                         {
                             let mut param_tys = Vec::new();
                             for (_, _, pty) in params {
-                                param_tys.push(self.resolve_type(pty).unwrap_or(Ty::Int));
+                                let p_ty = self.resolve_type(pty).map_err(|e| {
+                                    self.reporter.report(pace_errors::Diagnostic::error(e).with_span(pty.span()));
+                                    "Type resolution failed".to_string()
+                                })?;
+                                param_tys.push(p_ty);
                             }
                             let ret_ty = if let Some(r) = return_type {
-                                self.resolve_type(r).unwrap_or(Ty::Void)
+                                self.resolve_type(r).map_err(|e| {
+                                    self.reporter.report(pace_errors::Diagnostic::error(e).with_span(r.span()));
+                                    "Type resolution failed".to_string()
+                                })?
                             } else {
                                 Ty::Void
                             };
@@ -602,38 +699,24 @@ impl TypeChecker {
                         }
                     }
                 }
-                Decl::Trait { name, .. } => {
-                    self.trait_defs.insert(name.to_string(), decl.clone());
-                }
                 Decl::Enum {
                     id,
-                    name,
                     generic_params,
                     variants,
-                    span,
                     ..
                 } => {
-                    let mangled_name = format!("{}_{}", module_name, name);
                     if generic_params.is_some() {
-                        self.generic_templates
-                            .insert(mangled_name.clone(), decl.clone());
-                        self.generic_templates_by_id
-                            .insert(*id, mangled_name.clone());
-                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                            scope.visible_symbols.insert(name.to_string(), mangled_name);
-                        }
                         continue;
-                    }
-                    self.named_types.insert(mangled_name.clone(), (*id, 2));
-                    self.global_spans.insert(mangled_name.clone(), *span);
-                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
-                        scope.visible_symbols.insert(name.to_string(), mangled_name);
                     }
                     for v in variants {
                         if let Some(fields) = &v.fields {
                             let mut param_tys = Vec::new();
                             for (_, fty) in fields {
-                                param_tys.push(self.resolve_type(fty).unwrap_or(Ty::Int));
+                                let f_ty = self.resolve_type(fty).map_err(|e| {
+                                    self.reporter.report(pace_errors::Diagnostic::error(e).with_span(fty.span()));
+                                    "Type resolution failed".to_string()
+                                })?;
+                                param_tys.push(f_ty);
                             }
                             self.env
                                 .insert(v.id, Ty::Function(param_tys, Box::new(Ty::Enum(*id))));
@@ -2117,7 +2200,7 @@ impl TypeChecker {
                                 if let Some(fields) = &v.fields {
                                     let mut param_tys = Vec::new();
                                     for (_, fty) in fields {
-                                        param_tys.push(self.resolve_type(fty).unwrap_or(Ty::Int));
+                                        param_tys.push(self.resolve_type(fty)?);
                                     }
                                     return Ok(Ty::Function(param_tys, Box::new(Ty::Enum(hir_id))));
                                 } else {
@@ -2480,10 +2563,10 @@ impl TypeChecker {
                             def_fields = f.clone();
                         }
                     }
-                    let mut def_map: std::collections::HashMap<_, _> = def_fields
-                        .into_iter()
-                        .map(|(n, t)| (n, self.resolve_type(&t).unwrap_or(Ty::Int)))
-                        .collect();
+                    let mut def_map = std::collections::HashMap::new();
+                    for (n, t) in def_fields {
+                        def_map.insert(n, self.resolve_type(&t)?);
+                    }
                     for pace_hir::HirCallArg { label, expr: fexpr } in args {
                         let fty = self.check_expr(fexpr)?;
                         if let Some(fname) = label {
@@ -2723,7 +2806,7 @@ impl TypeChecker {
                         && vfields.len() == pfields.len()
                     {
                         for (i, (pf_id, _, _)) in pfields.iter().enumerate() {
-                            let fty = self.resolve_type(&vfields[i].1).unwrap_or(Ty::Int);
+                            let fty = self.resolve_type(&vfields[i].1)?;
                             arm_env.insert(*pf_id, fty.clone());
                             self.local_types.insert(*pf_id, fty);
                         }
@@ -2774,7 +2857,7 @@ impl TypeChecker {
                 let outer_env = self.env.clone();
                 for (i, param) in params.iter().enumerate() {
                     let ty = if let Some(t) = &param.ty {
-                        self.resolve_type(t).unwrap_or(Ty::Int)
+                        self.resolve_type(t)?
                     } else if let Some(inferred) = &inferred_param_tys {
                         inferred[i].clone()
                     } else {
@@ -3129,7 +3212,7 @@ impl TypeChecker {
                     ..
                 } in fields
                 {
-                    let ty = self.resolve_type(f_ty).unwrap_or(Ty::Int);
+                    let ty = self.resolve_type(f_ty)?;
                     resolved_fields.push(ResolvedField {
                         name: f_name.to_string(),
                         ty: ty.clone(),
@@ -3156,7 +3239,7 @@ impl TypeChecker {
                     ..
                 } in fields
                 {
-                    let ty = self.resolve_type(f_ty).unwrap_or(Ty::Int);
+                    let ty = self.resolve_type(f_ty)?;
                     resolved_fields.push(ResolvedField {
                         name: f_name.to_string(),
                         ty: ty.clone(),
@@ -3176,12 +3259,10 @@ impl TypeChecker {
                     {
                         let mut param_tys = Vec::new();
                         for (_, _, pty) in params {
-                            if let Ok(ty) = self.resolve_type(pty) {
-                                param_tys.push(ty);
-                            }
+                            param_tys.push(self.resolve_type(pty)?);
                         }
                         let ret_ty = if let Some(rty) = return_type {
-                            self.resolve_type(rty).unwrap_or(Ty::Void)
+                            self.resolve_type(rty)?
                         } else {
                             Ty::Void
                         };
@@ -3230,7 +3311,7 @@ impl TypeChecker {
                     if let Some(f) = &v.fields {
                         let mut param_tys = Vec::new();
                         for (_, fty) in f {
-                            param_tys.push(self.resolve_type(fty).unwrap_or(Ty::Int));
+                            param_tys.push(self.resolve_type(fty)?);
                         }
                         self.env
                             .insert(v.id, Ty::Function(param_tys, Box::new(Ty::Enum(id))));
