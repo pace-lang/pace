@@ -38,7 +38,7 @@ mod tests {
         };
 
         let mut lowerer = LoweringContext::new();
-        let hir = lowerer.lower_program(program).unwrap();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
 
         let mut tc = TypeChecker::new();
         tc.check_program(&hir).expect("Typecheck failed");
@@ -69,7 +69,7 @@ mod tests {
         };
 
         let mut lowerer = LoweringContext::new();
-        let hir = lowerer.lower_program(program).unwrap();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
 
         let mut tc = TypeChecker::new();
         let result = tc.check_program(&hir);
@@ -107,7 +107,7 @@ mod tests {
         };
 
         let mut lowerer = LoweringContext::new();
-        let hir = lowerer.lower_program(program).unwrap();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
 
         let mut tc = TypeChecker::new();
         let result = tc.check_program(&hir);
@@ -146,7 +146,7 @@ mod tests {
         };
 
         let mut lowerer = LoweringContext::new();
-        let hir = lowerer.lower_program(program).unwrap();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
 
         let mut tc = TypeChecker::new();
         let result = tc.check_program(&hir);
@@ -183,7 +183,7 @@ mod tests {
         };
 
         let mut lowerer = LoweringContext::new();
-        let hir = lowerer.lower_program(program).unwrap();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
 
         let mut tc = TypeChecker::new();
         tc.check_program(&hir).expect("Typecheck failed for valid break/continue");
@@ -214,7 +214,7 @@ mod tests {
         };
 
         let mut lowerer = LoweringContext::new();
-        let hir = lowerer.lower_program(program).unwrap();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
 
         let mut tc = TypeChecker::new();
         let result = tc.check_program(&hir);
@@ -251,7 +251,7 @@ mod tests {
         };
 
         let mut lowerer = LoweringContext::new();
-        let hir = lowerer.lower_program(program).unwrap();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
 
         let mut tc = TypeChecker::new();
         let result = tc.check_program(&hir);
@@ -288,7 +288,7 @@ mod tests {
         };
 
         let mut lowerer = LoweringContext::new();
-        let mut hir = lowerer.lower_program(program).unwrap();
+        let mut hir = lowerer.lower_program(program).expect("HIR lowering failed");
 
         let mut tc = TypeChecker::new();
         hir.resolve_traits(&mut tc.reporter);
@@ -325,7 +325,7 @@ mod tests {
         };
 
         let mut lowerer = LoweringContext::new();
-        let mut hir = lowerer.lower_program(program).unwrap();
+        let mut hir = lowerer.lower_program(program).expect("HIR lowering failed");
 
         let mut tc = TypeChecker::new();
         hir.resolve_traits(&mut tc.reporter);
@@ -361,7 +361,7 @@ mod tests {
         };
 
         let mut lowerer = LoweringContext::new();
-        let hir = lowerer.lower_program(program).unwrap();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
 
         let mut tc = TypeChecker::new();
         tc.check_program(&hir).expect("Typecheck failed for Option<int>");

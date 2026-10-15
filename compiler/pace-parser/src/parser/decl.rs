@@ -320,7 +320,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn parse_generic_args(&mut self) -> Result<Option<Vec<Type>>, Diagnostic> {
         if self.check(&TokenKind::Lt) {
             self.advance();
