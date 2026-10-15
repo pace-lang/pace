@@ -78,7 +78,46 @@ mod tests {
         assert!(
             result
                 .unwrap_err()
-                .contains("Type mismatch in binary operation: String and Int")
+                .contains("Type mismatch in binary operation: string and int")
+        );
+    }
+
+    #[test]
+    fn test_user_facing_type_diagnostics() {
+        let source = "class User {} let u: User = 123";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors");
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+
+        let mut lowerer = LoweringContext::new();
+        let hir = lowerer.lower_program(program).unwrap();
+
+        let mut tc = TypeChecker::new();
+        let result = tc.check_program(&hir);
+        assert!(result.is_err());
+        let errs = &tc.reporter.diagnostics;
+        assert!(!errs.is_empty());
+        assert!(
+            errs.iter().any(|d| d.message.contains("Type mismatch: expected User, got int")),
+            "Expected 'Type mismatch: expected User, got int' in diagnostics: {:?}",
+            errs.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
     }
 

@@ -379,6 +379,7 @@ impl TypeChecker {
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
+                    self.display_names.insert(mangled_name.clone(), name.to_string());
                     if generic_params.is_some() {
                         self.generic_templates
                             .insert(mangled_name.clone(), decl.clone());
@@ -405,6 +406,7 @@ impl TypeChecker {
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
+                    self.display_names.insert(mangled_name.clone(), name.to_string());
                     if generic_params.is_some() {
                         self.generic_templates
                             .insert(mangled_name.clone(), decl.clone());
@@ -431,6 +433,7 @@ impl TypeChecker {
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
+                    self.display_names.insert(mangled_name.clone(), name.to_string());
                     if generic_params.is_some() {
                         self.generic_templates
                             .insert(mangled_name.clone(), decl.clone());
@@ -460,6 +463,7 @@ impl TypeChecker {
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
+                    self.display_names.insert(mangled_name.clone(), name.to_string());
                     if generic_params.is_some() {
                         self.generic_templates
                             .insert(mangled_name.clone(), decl.clone());
@@ -1130,7 +1134,7 @@ impl TypeChecker {
                         self.current_expected_ty = prev_expected;
                         let inferred = res?;
                         if explicit_ty.is_none() && inferred != Ty::Void {
-                            self.inlay_hints.push((*span, format!(": {:?}", inferred)));
+                            self.inlay_hints.push((*span, format!(": {}", self.display_ty(&inferred))));
                         }
                         inferred
                     } else {
@@ -1168,8 +1172,9 @@ impl TypeChecker {
                         if !type_matches {
                             self.reporter.report(
                                 pace_errors::Diagnostic::error(format!(
-                                    "Type mismatch: expected {:?}, got {:?}",
-                                    expected, ty
+                                    "Type mismatch: expected {}, got {}",
+                                    self.display_ty(&expected),
+                                    self.display_ty(&ty)
                                 ))
                                 .with_span(explicit_ty.as_ref().map(|t| t.span()).unwrap_or(*span)),
                             );
@@ -1193,7 +1198,7 @@ impl TypeChecker {
                         self.initialized_bindings.insert(*id);
                         let inferred = self.check_expr(val)?;
                         if explicit_ty.is_none() && inferred != Ty::Void {
-                            self.inlay_hints.push((*span, format!(": {:?}", inferred)));
+                            self.inlay_hints.push((*span, format!(": {}", self.display_ty(&inferred))));
                         }
                         inferred
                     } else {
@@ -1233,8 +1238,9 @@ impl TypeChecker {
                         if !type_matches {
                             self.reporter.report(
                                 pace_errors::Diagnostic::error(format!(
-                                    "Type mismatch: expected {:?}, got {:?}",
-                                    expected, ty
+                                    "Type mismatch: expected {}, got {}",
+                                    self.display_ty(&expected),
+                                    self.display_ty(&ty)
                                 ))
                                 .with_span(explicit.span()),
                             );
@@ -1261,8 +1267,9 @@ impl TypeChecker {
                         if ret_ty != *expected {
                             self.reporter.report(
                                 Diagnostic::error(format!(
-                                    "Type mismatch: function expects to return {:?}, but returned {:?}",
-                                    expected, ret_ty
+                                    "Type mismatch: function expects to return {}, but returned {}",
+                                    self.display_ty(expected),
+                                    self.display_ty(&ret_ty)
                                 ))
                                 .with_span(*span)
                                 .with_code(ErrorCode::TypeMismatch),
@@ -1325,8 +1332,9 @@ impl TypeChecker {
                     if expected != Ty::Optional(Box::new(ty.clone())) {
                         self.reporter.report(
                             pace_errors::Diagnostic::error(format!(
-                                "Type mismatch: expected {:?}, got {:?}",
-                                expected, ty
+                                "Type mismatch: expected {}, got {}",
+                                self.display_ty(&expected),
+                                self.display_ty(&ty)
                             ))
                             .with_span(explicit_ty.as_ref().map(|t| t.span()).unwrap_or(*span)),
                         );
@@ -1376,8 +1384,9 @@ impl TypeChecker {
                         if expected != Ty::Optional(Box::new(ty.clone())) {
                             self.reporter.report(
                                 pace_errors::Diagnostic::error(format!(
-                                    "Type mismatch: expected {:?}, got {:?}",
-                                    expected, ty
+                                    "Type mismatch: expected {}, got {}",
+                                    self.display_ty(&expected),
+                                    self.display_ty(&ty)
                                 ))
                                 .with_span(explicit.span()),
                             );
@@ -1407,8 +1416,9 @@ impl TypeChecker {
                         if expected != Ty::Optional(Box::new(ty.clone())) {
                             self.reporter.report(
                                 pace_errors::Diagnostic::error(format!(
-                                    "Type mismatch: expected {:?}, got {:?}",
-                                    expected, ty
+                                    "Type mismatch: expected {}, got {}",
+                                    self.display_ty(&expected),
+                                    self.display_ty(&ty)
                                 ))
                                 .with_span(explicit.span()),
                             );
@@ -1445,8 +1455,9 @@ impl TypeChecker {
                     if expected_ty != expr_ty {
                         self.reporter.report(
                             Diagnostic::error(format!(
-                                "Type mismatch: expected {:?}, got {:?}",
-                                expected_ty, expr_ty
+                                "Type mismatch: expected {}, got {}",
+                                self.display_ty(&expected_ty),
+                                self.display_ty(&expr_ty)
                             ))
                             .with_span(sf_expr.span())
                             .with_code(ErrorCode::TypeMismatch),
@@ -1465,8 +1476,9 @@ impl TypeChecker {
                     if expected_ty != expr_ty {
                         self.reporter.report(
                             Diagnostic::error(format!(
-                                "Type mismatch: expected {:?}, got {:?}",
-                                expected_ty, expr_ty
+                                "Type mismatch: expected {}, got {}",
+                                self.display_ty(&expected_ty),
+                                self.display_ty(&expr_ty)
                             ))
                             .with_span(cf_expr.span())
                             .with_code(ErrorCode::TypeMismatch),
@@ -1502,8 +1514,9 @@ impl TypeChecker {
                     if expected_ty != expr_ty {
                         self.reporter.report(
                             Diagnostic::error(format!(
-                                "Type mismatch: expected {:?}, got {:?}",
-                                expected_ty, expr_ty
+                                "Type mismatch: expected {}, got {}",
+                                self.display_ty(&expected_ty),
+                                self.display_ty(&expr_ty)
                             ))
                             .with_span(sf_expr.span())
                             .with_code(ErrorCode::TypeMismatch),
@@ -1522,8 +1535,9 @@ impl TypeChecker {
                     if expected_ty != expr_ty {
                         self.reporter.report(
                             Diagnostic::error(format!(
-                                "Type mismatch: expected {:?}, got {:?}",
-                                expected_ty, expr_ty
+                                "Type mismatch: expected {}, got {}",
+                                self.display_ty(&expected_ty),
+                                self.display_ty(&expr_ty)
                             ))
                             .with_span(cf_expr.span())
                             .with_code(ErrorCode::TypeMismatch),
@@ -1692,7 +1706,7 @@ impl TypeChecker {
                 let returns_exhaustively = self.check_exhaustive_return(body);
                 let requires_return = ret_ty != Ty::Void && !matches!(ret_ty, Ty::Future(ref inner) if **inner == Ty::Void);
                 if !returns_exhaustively && requires_return {
-                    self.reporter.report(Diagnostic::error(format!("Function '{}' expects to return {:?}, but does not exhaustively return a value", name, ret_ty))
+                    self.reporter.report(Diagnostic::error(format!("Function '{}' expects to return {}, but does not exhaustively return a value", name, self.display_ty(&ret_ty)))
                         .with_span(*span)
                         .with_code(ErrorCode::NonExhaustiveReturn));
                 }
@@ -1944,8 +1958,9 @@ impl TypeChecker {
                             Ok(Ty::Float)
                         } else {
                             Err(format!(
-                                "Type mismatch in binary operation: {:?} and {:?}",
-                                left_ty, right_ty
+                                "Type mismatch in binary operation: {} and {}",
+                                self.display_ty(&left_ty),
+                                self.display_ty(&right_ty)
                             ))
                         }
                     }
@@ -1964,14 +1979,15 @@ impl TypeChecker {
                                 Ok(right_ty.clone())
                             } else {
                                 Err(format!(
-                                    "Type mismatch in '??': left is {:?}, but right is {:?}",
-                                    left_ty, right_ty
+                                    "Type mismatch in '??': left is {}, but right is {}",
+                                    self.display_ty(&left_ty),
+                                    self.display_ty(&right_ty)
                                 ))
                             }
                         } else {
                             Err(format!(
-                                "Left side of '??' must be an optional type, found {:?}",
-                                left_ty
+                                "Left side of '??' must be an optional type, found {}",
+                                self.display_ty(&left_ty)
                             ))
                         }
                     }
@@ -2010,11 +2026,11 @@ impl TypeChecker {
                         }
                     }
 
-                    Err(format!("Cannot optional chain on {:?}", inner))
+                    Err(format!("Cannot optional chain on {}", self.display_ty(&inner)))
                 } else {
                     Err(format!(
-                        "Left side of '?.' must be an optional type, found {:?}",
-                        obj_ty
+                        "Left side of '?.' must be an optional type, found {}",
+                        self.display_ty(&obj_ty)
                     ))
                 }
             }
@@ -2211,8 +2227,9 @@ impl TypeChecker {
                         Err(format!("Enum has no variant '{}'", member))
                     }
                     _ => Err(format!(
-                        "Cannot access member '{}' on type {:?}",
-                        member, obj_ty
+                        "Cannot access member '{}' on type {}",
+                        member,
+                        self.display_ty(&obj_ty)
                     )),
                 }
             }
@@ -2318,19 +2335,19 @@ impl TypeChecker {
                             if fty != param_tys[i + 1] {
                                 self.reporter.report(
                                     Diagnostic::error(format!(
-                                        "Argument {} expects type {:?}, got {:?}",
+                                        "Argument {} expects type {}, got {}",
                                         i,
-                                        param_tys[i + 1],
-                                        fty
+                                        self.display_ty(&param_tys[i + 1]),
+                                        self.display_ty(&fty)
                                     ))
                                     .with_span(*span)
                                     .with_code(ErrorCode::TypeMismatch),
                                 );
                                 return Err(format!(
-                                    "Argument {} expects type {:?}, got {:?}",
+                                    "Argument {} expects type {}, got {}",
                                     i,
-                                    param_tys[i + 1],
-                                    fty
+                                    self.display_ty(&param_tys[i + 1]),
+                                    self.display_ty(&fty)
                                 ));
                             }
                         }
@@ -2340,12 +2357,17 @@ impl TypeChecker {
                     let def_fields = match self.struct_defs.get(&id) {
                         Some(fields) => fields.clone(),
                         None => {
+                            let type_name = if struct_name.is_empty() {
+                                format!("{:?}", id)
+                            } else {
+                                struct_name.to_string()
+                            };
                             self.reporter.report(
-                                Diagnostic::error(format!("Undefined struct ID: {:?}", id))
+                                Diagnostic::error(format!("Undefined struct: '{}'", type_name))
                                     .with_span(*span)
                                     .with_code(ErrorCode::UndefinedType),
                             );
-                            return Err(format!("Undefined struct ID: {:?}", id));
+                            return Err(format!("Undefined struct: '{}'", type_name));
                         }
                     };
                     let mut def_map: std::collections::HashMap<_, _> = def_fields
@@ -2359,15 +2381,19 @@ impl TypeChecker {
                                 if fty != expected_ty {
                                     self.reporter.report(
                                         Diagnostic::error(format!(
-                                            "Field '{}' expects type {:?}, got {:?}",
-                                            fname, expected_ty, fty
+                                            "Field '{}' expects type {}, got {}",
+                                            fname,
+                                            self.display_ty(&expected_ty),
+                                            self.display_ty(&fty)
                                         ))
                                         .with_span(*span)
                                         .with_code(ErrorCode::TypeMismatch),
                                     );
                                     return Err(format!(
-                                        "Field '{}' expects type {:?}, got {:?}",
-                                        fname, expected_ty, fty
+                                        "Field '{}' expects type {}, got {}",
+                                        fname,
+                                        self.display_ty(&expected_ty),
+                                        self.display_ty(&fty)
                                     ));
                                 }
                             } else {
@@ -2446,19 +2472,19 @@ impl TypeChecker {
                             if fty != param_tys[i + 1] {
                                 self.reporter.report(
                                     Diagnostic::error(format!(
-                                        "Argument {} expects type {:?}, got {:?}",
+                                        "Argument {} expects type {}, got {}",
                                         i,
-                                        param_tys[i + 1],
-                                        fty
+                                        self.display_ty(&param_tys[i + 1]),
+                                        self.display_ty(&fty)
                                     ))
                                     .with_span(*span)
                                     .with_code(ErrorCode::TypeMismatch),
                                 );
                                 return Err(format!(
-                                    "Argument {} expects type {:?}, got {:?}",
+                                    "Argument {} expects type {}, got {}",
                                     i,
-                                    param_tys[i + 1],
-                                    fty
+                                    self.display_ty(&param_tys[i + 1]),
+                                    self.display_ty(&fty)
                                 ));
                             }
                         }
@@ -2468,12 +2494,17 @@ impl TypeChecker {
                     let def_fields = match self.class_defs.get(&id) {
                         Some(fields) => fields.clone(),
                         None => {
+                            let type_name = if class_name.is_empty() {
+                                format!("{:?}", id)
+                            } else {
+                                class_name.to_string()
+                            };
                             self.reporter.report(
-                                Diagnostic::error(format!("Undefined class ID: {:?}", id))
+                                Diagnostic::error(format!("Undefined class: '{}'", type_name))
                                     .with_span(*span)
                                     .with_code(ErrorCode::UndefinedType),
                             );
-                            return Err(format!("Undefined class ID: {:?}", id));
+                            return Err(format!("Undefined class: '{}'", type_name));
                         }
                     };
                     let mut def_map: std::collections::HashMap<_, _> = def_fields
@@ -2487,15 +2518,19 @@ impl TypeChecker {
                                 if fty != expected_ty {
                                     self.reporter.report(
                                         Diagnostic::error(format!(
-                                            "Field '{}' expects type {:?}, got {:?}",
-                                            fname, expected_ty, fty
+                                            "Field '{}' expects type {}, got {}",
+                                            fname,
+                                            self.display_ty(&expected_ty),
+                                            self.display_ty(&fty)
                                         ))
                                         .with_span(*span)
                                         .with_code(ErrorCode::TypeMismatch),
                                     );
                                     return Err(format!(
-                                        "Field '{}' expects type {:?}, got {:?}",
-                                        fname, expected_ty, fty
+                                        "Field '{}' expects type {}, got {}",
+                                        fname,
+                                        self.display_ty(&expected_ty),
+                                        self.display_ty(&fty)
                                     ));
                                 }
                             } else {
@@ -2543,12 +2578,24 @@ impl TypeChecker {
                     let variants = match self.enum_defs.get(&enum_id) {
                         Some(v) => v,
                         None => {
+                            let mut enum_name = String::new();
+                            for (name, &(nid, _)) in &self.named_types {
+                                if nid == enum_id {
+                                    enum_name = name.clone();
+                                    break;
+                                }
+                            }
+                            let type_name = if enum_name.is_empty() {
+                                format!("{:?}", enum_id)
+                            } else {
+                                enum_name
+                            };
                             self.reporter.report(
-                                Diagnostic::error(format!("Undefined enum ID: {:?}", enum_id))
+                                Diagnostic::error(format!("Undefined enum: '{}'", type_name))
                                     .with_span(*span)
                                     .with_code(ErrorCode::UndefinedType),
                             );
-                            return Err(format!("Undefined enum ID: {:?}", enum_id));
+                            return Err(format!("Undefined enum: '{}'", type_name));
                         }
                     };
                     let mut variant_name = "";
@@ -2574,15 +2621,19 @@ impl TypeChecker {
                                 if fty != expected_ty {
                                     self.reporter.report(
                                         Diagnostic::error(format!(
-                                            "Field '{}' expects type {:?}, got {:?}",
-                                            fname, expected_ty, fty
+                                            "Field '{}' expects type {}, got {}",
+                                            fname,
+                                            self.display_ty(&expected_ty),
+                                            self.display_ty(&fty)
                                         ))
                                         .with_span(*span)
                                         .with_code(ErrorCode::TypeMismatch),
                                     );
                                     return Err(format!(
-                                        "Field '{}' expects type {:?}, got {:?}",
-                                        fname, expected_ty, fty
+                                        "Field '{}' expects type {}, got {}",
+                                        fname,
+                                        self.display_ty(&expected_ty),
+                                        self.display_ty(&fty)
                                     ));
                                 }
                             } else {
@@ -2778,8 +2829,9 @@ impl TypeChecker {
                 if !type_matches {
                     self.reporter.report(
                         Diagnostic::error(format!(
-                            "Type mismatch in assignment: expected {:?}, got {:?}",
-                            target_ty, val_ty
+                            "Type mismatch in assignment: expected {}, got {}",
+                            self.display_ty(&target_ty),
+                            self.display_ty(&val_ty)
                         ))
                         .with_span(*span),
                     );
@@ -2824,8 +2876,9 @@ impl TypeChecker {
                         if *expected != arm_ty {
                             self.reporter.report(
                                 Diagnostic::error(format!(
-                                    "Match arms have incompatible types: {:?} and {:?}",
-                                    expected, arm_ty
+                                    "Match arms have incompatible types: {} and {}",
+                                    self.display_ty(expected),
+                                    self.display_ty(&arm_ty)
                                 ))
                                 .with_span(arm.span)
                                 .with_code(ErrorCode::TypeMismatch),
@@ -2915,8 +2968,9 @@ impl TypeChecker {
                 if ret_ty != expected_ret && expected_ret != Ty::Void {
                     self.reporter.report(
                         pace_errors::Diagnostic::error(format!(
-                            "Closure body returns {:?}, but is expected to return {:?}",
-                            ret_ty, expected_ret
+                            "Closure body returns {}, but is expected to return {}",
+                            self.display_ty(&ret_ty),
+                            self.display_ty(&expected_ret)
                         ))
                         .with_span(*span),
                     );
@@ -2935,7 +2989,7 @@ impl TypeChecker {
                 match inner_ty {
                     Ty::Future(t) => Ok(*t),
                     _ => {
-                        self.reporter.report(Diagnostic::error(format!("`await` requires a Future type, found {:?}", inner_ty))
+                        self.reporter.report(Diagnostic::error(format!("`await` requires a Future type, found {}", self.display_ty(&inner_ty)))
                             .with_span(*span));
                         Ok(Ty::Void)
                     }
@@ -3336,7 +3390,7 @@ impl TypeChecker {
             Ty::String => "string".to_string(),
             Ty::Bool => "bool".to_string(),
             Ty::Void => "void".to_string(),
-            Ty::Optional(inner) => format!("?{}", self.display_ty(inner)),
+            Ty::Optional(inner) => format!("{}?", self.display_ty(inner)),
             Ty::Future(inner) => format!("Future<{}>", self.display_ty(inner)),
             Ty::Function(args, ret) => {
                 let args_str = args
@@ -3360,6 +3414,9 @@ impl TypeChecker {
                     if nid == id {
                         if let Some(clean) = self.display_names.get(name) {
                             return clean.clone();
+                        }
+                        if let Some((_, base)) = name.split_once('_') {
+                            return base.to_string();
                         }
                         return name.to_string();
                     }
