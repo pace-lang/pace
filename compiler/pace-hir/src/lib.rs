@@ -91,4 +91,31 @@ mod tests {
             _ => panic!("Expected a struct"),
         }
     }
+
+    #[test]
+    fn test_nested_block_shadowing() {
+        let source = "fn test_scope() -> int { let x = 1 if true { let x = 2 } return x }";
+        let hir_program = parse_and_lower(source).expect("Lowering failed");
+
+        let module = hir_program.modules.get(&pace_span::intern("test")).unwrap();
+        assert_eq!(module.declarations.len(), 1);
+
+        match &module.declarations[0] {
+            Decl::Function { body, .. } => {
+                assert_eq!(body.statements.len(), 3);
+                let outer_id = match &body.statements[0] {
+                    Stmt::Let { id, .. } => *id,
+                    _ => panic!("Expected outer let"),
+                };
+                match &body.statements[2] {
+                    Stmt::Return(Some(Expr::Ident(ret_id, name, _, _)), _) => {
+                        assert_eq!(name.as_str(), "x");
+                        assert_eq!(*ret_id, outer_id, "Return should resolve to outer x, not inner shadowed x");
+                    }
+                    _ => panic!("Expected return with ident"),
+                }
+            }
+            _ => panic!("Expected a function"),
+        }
+    }
 }
