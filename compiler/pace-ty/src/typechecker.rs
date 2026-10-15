@@ -262,9 +262,6 @@ impl TypeChecker {
                         };
 
                         if let Some(&(hir_id, kind)) = self.named_types.get(&mangled_name) {
-                            if other == "Counter" {
-                                println!("Resolving Counter: mangled_name={}, kind={}", mangled_name, kind);
-                            }
                             if kind == 1 {
                                 return Ok(Ty::Class(hir_id));
                             } else if kind == 0 {
@@ -591,7 +588,6 @@ impl TypeChecker {
                                 m_name.strip_prefix(&format!("{}_", name)).unwrap_or(m_name);
                             let method_mangled_name =
                                 format!("{}_{}", mangled_name, short_method_name);
-                            println!("Pass 1 Actor {} method {}: id={:?}, mangled={}", name, m_name, m_id, method_mangled_name);
                             self.resolved_global_names.insert(*m_id, method_mangled_name.clone());
                             self.env.insert(
                                 *m_id,
@@ -2067,7 +2063,6 @@ impl TypeChecker {
                                 if *is_private || is_actor {
                                     let mut can_access = false;
                                     if let Some(current_fn) = &self.current_fn_name {
-                                        println!("Checking access to field {} of class {}: current_fn={}", member, class_name, current_fn);
                                         if current_fn.starts_with(&format!("{}_", class_name)) {
                                             can_access = true;
                                         }

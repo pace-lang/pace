@@ -1584,7 +1584,6 @@ impl<'a> MirBuilder<'a> {
                             let mut mir_params = Vec::new();
                             for (p_id, param_name, _pty) in params {
                                 let param_ty = tc.local_types.get(p_id).cloned().unwrap_or(Ty::Int);
-                                println!("Actor method {} param {}: id={:?}, local_type={:?}", name, param_name, p_id, tc.local_types.get(p_id));
                                 let param_local = builder.new_local(param_ty);
                                 if param_name == "self" {
                                     builder.current_self_local = Some(param_local);
