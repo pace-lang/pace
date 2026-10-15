@@ -262,5 +262,78 @@ mod tests {
             tc.reporter.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
     }
+
+    #[test]
+    fn test_trait_method_resolution() {
+        let source = "trait Printable { fn toString() -> string } struct Item with Printable { fn toString() -> string { return \"item\" } } fn main() -> void {}";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+
+        let mut lowerer = LoweringContext::new();
+        let mut hir = lowerer.lower_program(program).unwrap();
+
+        let mut tc = TypeChecker::new();
+        hir.resolve_traits(&mut tc.reporter);
+        assert!(
+            tc.reporter.diagnostics.is_empty(),
+            "Expected no trait resolution errors, got: {:?}",
+            tc.reporter.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+        tc.check_program(&hir).expect("Typecheck failed for trait method");
+    }
+
+    #[test]
+    fn test_trait_missing_method_diagnostic() {
+        let source = "trait Printable { fn toString() -> string } struct Item with Printable {} fn main() -> void {}";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+
+        let mut lowerer = LoweringContext::new();
+        let mut hir = lowerer.lower_program(program).unwrap();
+
+        let mut tc = TypeChecker::new();
+        hir.resolve_traits(&mut tc.reporter);
+        assert!(
+            tc.reporter.diagnostics.iter().any(|d| d.message.contains("required method 'toString'")),
+            "Expected diagnostic mentioning 'toString', got: {:?}",
+            tc.reporter.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
 }
 

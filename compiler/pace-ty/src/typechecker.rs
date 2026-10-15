@@ -977,7 +977,8 @@ impl TypeChecker {
                     } = m
                     {
                         let mangled_class_name = format!("{}_{}", module_name, decl_name);
-                        let short_method_name = name.split('_').next_back().unwrap_or(name);
+                        let class_prefix = format!("{}_", decl_name);
+                        let short_method_name = name.strip_prefix(&class_prefix).unwrap_or(name);
                         let method_mangled_name =
                             format!("{}_{}", mangled_class_name, short_method_name);
 

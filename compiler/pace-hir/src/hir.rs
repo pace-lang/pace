@@ -119,13 +119,15 @@ impl Program {
                                 } = t_method
                                 {
                                     // Extract actual method name (remove trait prefix)
+                                    let trait_prefix = format!("{}_", trait_name);
                                     let actual_name =
-                                        t_m_name.split('_').next_back().unwrap_or(t_m_name);
+                                        t_m_name.strip_prefix(&trait_prefix).unwrap_or(t_m_name);
 
                                     // Check if class already has this method
+                                    let class_prefix = format!("{}_", name);
                                     let has_method = methods.iter().any(|m| {
                                         if let Decl::Function { name: m_name, .. } = m {
-                                            m_name.split('_').next_back().unwrap_or(m_name)
+                                            m_name.strip_prefix(&class_prefix).unwrap_or(m_name)
                                                 == actual_name
                                         } else {
                                             false
