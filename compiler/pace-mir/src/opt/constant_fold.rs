@@ -69,7 +69,7 @@ impl ConstantFolder {
                         BinaryOp::Sub => Some(Constant::Int((v1 - v2).to_string())),
                         BinaryOp::Mul => Some(Constant::Int((v1 * v2).to_string())),
                         BinaryOp::Div if v2 != 0 => Some(Constant::Int((v1 / v2).to_string())),
-
+                        BinaryOp::Mod if v2 != 0 => Some(Constant::Int((v1 % v2).to_string())),
                         BinaryOp::EqEq => Some(Constant::Bool(v1 == v2)),
                         BinaryOp::NotEq => Some(Constant::Bool(v1 != v2)),
                         BinaryOp::Lt => Some(Constant::Bool(v1 < v2)),
@@ -159,6 +159,37 @@ mod tests {
                 assert_eq!(*val, false);
             }
             _ => panic!("Expected folded constant bool!"),
+        }
+    }
+
+    #[test]
+    fn test_constant_folding_mod() {
+        let mut block = BasicBlock {
+            statements: vec![
+                Statement::Assign(
+                    Lvalue::Local(Local(0)),
+                    Rvalue::Constant(Constant::Int("10".to_string())),
+                ),
+                Statement::Assign(
+                    Lvalue::Local(Local(1)),
+                    Rvalue::Constant(Constant::Int("3".to_string())),
+                ),
+                Statement::Assign(
+                    Lvalue::Local(Local(2)),
+                    Rvalue::BinaryOp(BinaryOp::Mod, Local(0), Local(1)),
+                ),
+            ],
+            terminator: Some(Terminator::Return(Local(2))),
+        };
+
+        let mut folder = ConstantFolder::new();
+        folder.optimize_block(&mut block);
+
+        match &block.statements[2] {
+            Statement::Assign(_, Rvalue::Constant(Constant::Int(val))) => {
+                assert_eq!(val, "1");
+            }
+            _ => panic!("Expected folded constant!"),
         }
     }
 }

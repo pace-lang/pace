@@ -763,6 +763,7 @@ impl Formatter {
                     BinaryOp::Sub => "-",
                     BinaryOp::Mul => "*",
                     BinaryOp::Div => "/",
+                    BinaryOp::Mod => "%",
                     BinaryOp::EqEq => "==",
                     BinaryOp::NotEq => "!=",
                     BinaryOp::Gt => ">",

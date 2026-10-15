@@ -115,6 +115,8 @@ impl<'a> Parser<'a> {
                 Some(pace_ast::BinaryOp::Mul)
             } else if self.check(&TokenKind::Slash) {
                 Some(pace_ast::BinaryOp::Div)
+            } else if self.check(&TokenKind::Percent) {
+                Some(pace_ast::BinaryOp::Mod)
             } else if self.check(&TokenKind::EqEq) {
                 Some(pace_ast::BinaryOp::EqEq)
             } else if self.check(&TokenKind::NotEq) {

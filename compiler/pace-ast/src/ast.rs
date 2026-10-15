@@ -297,6 +297,7 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    Mod,
     EqEq,
     NotEq,
     Gt,

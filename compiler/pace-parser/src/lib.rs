@@ -115,4 +115,24 @@ mod tests {
         let (_declarations, diags, _) = parser.parse_program();
         assert!(!diags.is_empty(), "Expected error from invalid syntax inside string interpolation");
     }
+
+    #[test]
+    fn test_parse_mod_operator() {
+        let source = "let rem = 10 % 3";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+
+        let (declarations, diags, _) = parser.parse_program();
+        assert!(diags.is_empty());
+        assert_eq!(declarations.len(), 1);
+        if let Decl::Let {
+            value: Some(Expr::Binary { op, .. }),
+            ..
+        } = &declarations[0]
+        {
+            assert_eq!(*op, pace_ast::BinaryOp::Mod);
+        } else {
+            panic!("Expected binary mod expression");
+        }
+    }
 }

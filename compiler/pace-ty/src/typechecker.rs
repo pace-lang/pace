@@ -1853,7 +1853,8 @@ impl TypeChecker {
                     pace_ast::BinaryOp::Add
                     | pace_ast::BinaryOp::Sub
                     | pace_ast::BinaryOp::Mul
-                    | pace_ast::BinaryOp::Div => {
+                    | pace_ast::BinaryOp::Div
+                    | pace_ast::BinaryOp::Mod => {
                         if left_ty == Ty::Int && right_ty == Ty::Int {
                             Ok(Ty::Int)
                         } else if left_ty == Ty::Float && right_ty == Ty::Float {
