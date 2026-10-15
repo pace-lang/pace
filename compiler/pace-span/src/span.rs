@@ -71,6 +71,12 @@ impl Span {
     /// Merges two spans into a single span that encompasses both.
     /// Panics if the spans belong to different files.
     pub fn merge(self, other: Self) -> Self {
+        if self.file_id == FileId::DUMMY {
+            return other;
+        }
+        if other.file_id == FileId::DUMMY {
+            return self;
+        }
         assert_eq!(
             self.file_id, other.file_id,
             "Cannot merge spans from different files"
@@ -134,5 +140,14 @@ mod tests {
         let span1 = Span::new(FileId(1), 5, 10);
         let span2 = Span::new(FileId(2), 15, 20);
         span1.merge(span2);
+    }
+
+    #[test]
+    fn test_span_merge_with_dummy() {
+        let span1 = Span::new(FileId(1), 5, 10);
+        let dummy = Span::DUMMY;
+
+        assert_eq!(span1.merge(dummy), span1);
+        assert_eq!(dummy.merge(span1), span1);
     }
 }
