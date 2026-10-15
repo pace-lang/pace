@@ -169,6 +169,10 @@ impl TypeChecker {
                         let inner = self.get_type(&args[0])?;
                         return Ok(Ty::Future(Box::new(inner)));
                     }
+                    if id.name.as_str() == "Option" && args.len() == 1 {
+                        let inner = self.get_type(&args[0])?;
+                        return Ok(Ty::Optional(Box::new(inner)));
+                    }
                     let mut final_args = Vec::new();
                     if let Some(template) = self.generic_templates.get(&id.name.to_string()) {
                         let generic_params = match template {
@@ -286,6 +290,10 @@ impl TypeChecker {
                     if id.name.as_str() == "Future" && args.len() == 1 {
                         let inner = self.resolve_type(&args[0])?;
                         return Ok(Ty::Future(Box::new(inner)));
+                    }
+                    if id.name.as_str() == "Option" && args.len() == 1 {
+                        let inner = self.resolve_type(&args[0])?;
+                        return Ok(Ty::Optional(Box::new(inner)));
                     }
                     self.instantiate_generic(&id.name, args)
                 } else {
