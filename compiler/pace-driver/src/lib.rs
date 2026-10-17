@@ -69,6 +69,28 @@ impl DependencyGraph {
     }
 }
 
+/// Sanitizes a file stem or module name into a valid C identifier.
+/// Replaces any characters that are not ASCII alphanumeric or '_' with '_',
+/// and prepends an '_' if the identifier begins with an ASCII digit.
+pub fn sanitize_module_name(name: &str) -> String {
+    let mut sanitized = String::with_capacity(name.len());
+    for (i, c) in name.chars().enumerate() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            if i == 0 && c.is_ascii_digit() {
+                sanitized.push('_');
+            }
+            sanitized.push(c);
+        } else {
+            sanitized.push('_');
+        }
+    }
+    if sanitized.is_empty() {
+        "unknown".to_string()
+    } else {
+        sanitized
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn parse_file_and_imports(
     file_path: &Path,
@@ -102,13 +124,15 @@ fn parse_file_and_imports(
     all_diags.extend(diags);
 
     let mut module_decls = Vec::new();
-    let module_name = module_name_opt.unwrap_or_else(|| {
+    let raw_module_name = module_name_opt.unwrap_or_else(|| {
         file_path
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown")
             .to_string()
     });
+    let module_name = sanitize_module_name(&raw_module_name);
+
 
     for decl in ast {
         module_decls.push(decl.clone());
@@ -391,13 +415,12 @@ pub fn format_file(file_path: &Path, write: bool) -> Result<bool, String> {
         return Err(format!("Syntax error in {}", file_path.display()));
     }
 
+    let raw_stem = file_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown");
     let module = pace_ast::Module {
-        name: pace_span::intern(
-            file_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown"),
-        ),
+        name: pace_span::intern(&sanitize_module_name(raw_stem)),
         file_id,
         declarations: ast,
         comments,
@@ -418,3 +441,23 @@ pub fn format_file(file_path: &Path, write: bool) -> Result<bool, String> {
 
     Ok(changed)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_module_name_dots_and_hyphens() {
+        assert_eq!(sanitize_module_name("destructors.test"), "destructors_test");
+        assert_eq!(sanitize_module_name("my-awesome-lib"), "my_awesome_lib");
+        assert_eq!(sanitize_module_name("foo.bar-baz_1"), "foo_bar_baz_1");
+    }
+
+    #[test]
+    fn test_sanitize_module_name_leading_digit_and_symbols() {
+        assert_eq!(sanitize_module_name("123app"), "_123app");
+        assert_eq!(sanitize_module_name("@scope/pkg"), "_scope_pkg");
+        assert_eq!(sanitize_module_name(""), "unknown");
+    }
+}
+
