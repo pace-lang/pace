@@ -1318,14 +1318,14 @@ checksum = "13c45bb4a6ae1280ec0803b1ef9d3455eb50f01efbbe1447ab020f1d54fba9d8"
 
 [[package]]
 name = "pace-ast"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pace-span",
 ]
 
 [[package]]
 name = "pace-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "mimalloc",
@@ -1338,7 +1338,7 @@ dependencies = [
 
 [[package]]
 name = "pace-codegen"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pace-ast",
  "pace-hir",
@@ -1348,7 +1348,7 @@ dependencies = [
 
 [[package]]
 name = "pace-driver"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pace-ast",
  "pace-codegen",
@@ -1364,7 +1364,7 @@ dependencies = [
 
 [[package]]
 name = "pace-errors"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ariadne",
  "pace-span",
@@ -1372,7 +1372,7 @@ dependencies = [
 
 [[package]]
 name = "pace-fmt"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pace-ast",
  "pace-lexer",
@@ -1382,7 +1382,7 @@ dependencies = [
 
 [[package]]
 name = "pace-hir"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pace-ast",
  "pace-errors",
@@ -1393,7 +1393,7 @@ dependencies = [
 
 [[package]]
 name = "pace-lexer"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "logos",
  "pace-span",
@@ -1401,7 +1401,7 @@ dependencies = [
 
 [[package]]
 name = "pace-lsp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pace-ast",
  "pace-driver",
@@ -1419,7 +1419,7 @@ dependencies = [
 
 [[package]]
 name = "pace-mir"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pace-ast",
  "pace-hir",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "pace-parser"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pace-ast",
  "pace-errors",
@@ -1439,7 +1439,7 @@ dependencies = [
 
 [[package]]
 name = "pace-pkg"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "dirs",
  "flate2",
@@ -1458,7 +1458,7 @@ dependencies = [
 
 [[package]]
 name = "pace-rt"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cc",
  "mimalloc",
@@ -1466,7 +1466,7 @@ dependencies = [
 
 [[package]]
 name = "pace-span"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "miette",
  "serde",
@@ -1475,7 +1475,7 @@ dependencies = [
 
 [[package]]
 name = "pace-ty"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "pace-ast",
  "pace-errors",

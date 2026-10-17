@@ -16,7 +16,7 @@
 
 | Tool | Version |
 | :--- | :--- |
-| **Pace** | `pace 0.2.0` (C Backend via GCC 13 `-O3`, mimalloc allocator) |
+| **Pace** | `pace 0.3.0` (C Backend via GCC 13 `-O3`, mimalloc allocator) |
 | **Rust** | `rustc 1.99.0` (LLVM 18, `-O` opt-level 3) |
 | **Zig** | `zig 0.16.0` (`-O ReleaseFast`) |
 | **Go** | `go version go1.26.6 linux/amd64` |
