@@ -228,7 +228,7 @@ void pace_map_set_int(PaceMap* map, int64_t key, void* val) {
     uint64_t h = hash_int(key);
     uint64_t mask = (uint64_t)(map->capacity - 1);
     size_t idx = (size_t)(h & mask);
-    ssize_t first_tombstone = -1;
+    int64_t first_tombstone = -1;
 
     while (1) {
         PaceMapEntry* e = &map->entries[idx];
@@ -246,7 +246,7 @@ void pace_map_set_int(PaceMap* map, int64_t key, void* val) {
             return;
         } else if (e->state == MAP_STATE_TOMBSTONE) {
             if (first_tombstone == -1) {
-                first_tombstone = (ssize_t)idx;
+                first_tombstone = (int64_t)idx;
             }
         } else if (e->state == MAP_STATE_OCCUPIED && e->hash == h && (int64_t)(intptr_t)e->key == key) {
             void* old = e->val;
@@ -320,7 +320,7 @@ void pace_map_set_str(PaceMap* map, struct PaceString* key, void* val) {
     uint64_t h = hash_str(key);
     uint64_t mask = (uint64_t)(map->capacity - 1);
     size_t idx = (size_t)(h & mask);
-    ssize_t first_tombstone = -1;
+    int64_t first_tombstone = -1;
 
     while (1) {
         PaceMapEntry* e = &map->entries[idx];
@@ -339,7 +339,7 @@ void pace_map_set_str(PaceMap* map, struct PaceString* key, void* val) {
             return;
         } else if (e->state == MAP_STATE_TOMBSTONE) {
             if (first_tombstone == -1) {
-                first_tombstone = (ssize_t)idx;
+                first_tombstone = (int64_t)idx;
             }
         } else if (e->state == MAP_STATE_OCCUPIED && e->hash == h && key_str_eq((struct PaceString*)e->key, key)) {
             void* old = e->val;
