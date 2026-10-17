@@ -357,7 +357,7 @@ pub fn compile_file(opts: CompileOptions) -> Result<(), String> {
         gcc_cmd.arg("-O3");
     }
 
-    let status = gcc_cmd
+    let gcc_res = gcc_cmd
         .arg(format!("-I{}", runtime_dir.display()))
         .arg(c_file)
         .arg("-L")
@@ -366,8 +366,12 @@ pub fn compile_file(opts: CompileOptions) -> Result<(), String> {
         .arg("-lpthread")
         .arg("-o")
         .arg(&bin_file)
-        .status()
-        .map_err(|e| format!("Failed to invoke gcc: {}", e))?;
+        .status();
+
+    // Clean up temporary runtime directory immediately after gcc linking
+    let _ = fs::remove_dir_all(&tmp_dir);
+
+    let status = gcc_res.map_err(|e| format!("Failed to invoke gcc: {}", e))?;
 
     if !status.success() {
         return Err("GCC compilation failed".to_string());

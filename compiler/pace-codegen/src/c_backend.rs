@@ -345,6 +345,7 @@ impl CGenerator {
             if func.env_layout.is_some() {
                 self.output.push_str("    void* __env = __async_env->__env;\n");
             }
+            self.output.push_str("    free(__async_env);\n");
         } else {
             self.output.push_str(&format!("{} {}(", ret_ty_str, c_name));
             let mut has_params = false;
