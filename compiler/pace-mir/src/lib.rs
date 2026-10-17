@@ -72,41 +72,36 @@ mod tests {
         assert_eq!(body.blocks.len(), 1);
 
         let stmts = &body.blocks[0].statements;
-        assert_eq!(stmts.len(), 6);
+        assert_eq!(stmts.len(), 5);
 
         match &stmts[0] {
-            Statement::Assign(_, Rvalue::Use(Local(0))) => {}
-            _ => panic!("Expected Use(Local(0))"),
-        }
-
-        match &stmts[1] {
             Statement::Assign(_, Rvalue::Constant(Constant::Int(v))) => assert_eq!(v, "1"),
             _ => panic!("Expected IntConstant 1"),
         }
 
-        match &stmts[2] {
-            Statement::Assign(_, Rvalue::BinaryOp(BinaryOp::Add, Local(1), Local(2))) => {}
-            _ => panic!("Expected Add(1, 2)"),
+        match &stmts[1] {
+            Statement::Assign(_, Rvalue::BinaryOp(BinaryOp::Add, Local(0), Local(1))) => {}
+            _ => panic!("Expected Add(0, 1)"),
         }
 
-        match &stmts[3] {
+        match &stmts[2] {
             Statement::Assign(_, Rvalue::Constant(Constant::Int(v))) => assert_eq!(v, "2"),
             _ => panic!("Expected IntConstant 2"),
         }
 
-        match &stmts[4] {
-            Statement::Assign(_, Rvalue::BinaryOp(BinaryOp::Add, Local(3), Local(4))) => {}
-            _ => panic!("Expected Add(3, 4)"),
+        match &stmts[3] {
+            Statement::Assign(_, Rvalue::BinaryOp(BinaryOp::Add, Local(2), Local(3))) => {}
+            _ => panic!("Expected Add(2, 3)"),
         }
 
-        match &stmts[5] {
+        match &stmts[4] {
             Statement::Assign(_, Rvalue::Constant(Constant::Int(v))) => assert_eq!(v, "0"),
             _ => panic!("Expected IntConstant 0 for return"),
         }
 
         match &body.blocks[0].terminator {
-            Some(Terminator::Return(Local(6))) => {}
-            _ => panic!("Expected Return(_6)"),
+            Some(Terminator::Return(Local(5))) => {}
+            _ => panic!("Expected Return(_5)"),
         }
     }
 }

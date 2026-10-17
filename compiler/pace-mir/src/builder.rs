@@ -197,12 +197,8 @@ impl<'a> MirBuilder<'a> {
     pub fn build_expr(&mut self, expr: &Expr) -> Local {
         match expr {
             Expr::Super(_) => {
-                let local = self
-                    .current_self_local
-                    .expect("Super used outside of a method");
-                let temp = self.new_local(self.locals[local.0 as usize].clone());
-                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(local)));
-                temp
+                self.current_self_local
+                    .expect("Super used outside of a method")
             }
             Expr::Closure { params, return_type: _, body, captured_vars, span: _ } => {
                 self.closure_counter += 1;
@@ -306,18 +302,12 @@ impl<'a> MirBuilder<'a> {
                     }
                 }
 
-                let local = if let Some(l) = self.hir_to_local.get(id) {
+                if let Some(l) = self.hir_to_local.get(id) {
                     *l
                 } else {
                     eprintln!("ICE: Local not found for id {:?} name {}", id, name);
                     Local(0)
-                };
-                let temp = self.new_local(self.locals[local.0 as usize].clone());
-                self.push_stmt(Statement::Assign(Lvalue::Local(temp), Rvalue::Use(local)));
-                if matches!(self.locals[temp.0 as usize], Ty::Class(_)) {
-                    self.push_stmt(Statement::Retain(Lvalue::Local(temp)));
                 }
-                temp
             }
             Expr::Null(_) => {
                 // In C, we can just represent null as 0 or a special Option struct
@@ -1263,12 +1253,10 @@ impl<'a> MirBuilder<'a> {
                 let rval = self.build_expr(value);
                 self.current_expected_ty = prev;
                 if matches!(lval_ty, Ty::Class(_)) {
+                    self.push_stmt(Statement::Retain(Lvalue::Local(rval)));
                     self.push_stmt(Statement::Release(lvalue.clone()));
                 }
                 self.push_stmt(Statement::Assign(lvalue.clone(), Rvalue::Use(rval)));
-                if matches!(lval_ty, Ty::Class(_)) {
-                    self.push_stmt(Statement::Retain(lvalue));
-                }
                 rval
             }
             Expr::Await(inner, _) => {
@@ -1706,23 +1694,18 @@ impl<'a> MirBuilder<'a> {
             self.blocks[current_bb].terminator = Some(Terminator::Return(temp));
         }
 
-        let mut return_locals = Vec::new();
-        for block in &self.blocks {
-            if let Some(Terminator::Return(r)) = &block.terminator {
-                return_locals.push(*r);
-            }
-        }
-
-        // ARC: Release all Class locals at the end, except return_local and params
-        for (i, ty) in self.locals.iter().enumerate() {
-            let local = Local(i as u32);
-            if matches!(ty, Ty::Class(_))
-                && !return_locals.contains(&local)
-                && !params.contains(&local)
-            {
-                self.blocks[current_bb]
-                    .statements
-                    .push(Statement::Release(Lvalue::Local(local)));
+        // ARC: Release all Class locals at return points, except the returned local and params
+        for block in &mut self.blocks {
+            if let Some(Terminator::Return(ret_local)) = block.terminator {
+                for (i, ty) in self.locals.iter().enumerate() {
+                    let local = Local(i as u32);
+                    if matches!(ty, Ty::Class(_))
+                        && local != ret_local
+                        && !params.contains(&local)
+                    {
+                        block.statements.push(Statement::Release(Lvalue::Local(local)));
+                    }
+                }
             }
         }
 
