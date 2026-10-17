@@ -3,7 +3,13 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#ifndef _WIN32
 #include <pthread.h>
+#else
+typedef void* pthread_mutex_t;
+#define PTHREAD_MUTEX_INITIALIZER NULL
+#endif
 
 #ifdef __cplusplus
 extern "C" {

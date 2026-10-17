@@ -32,7 +32,9 @@ impl CGenerator {
         self.output.push_str("#include <stdio.h>\n");
         self.output.push_str("#include <stdlib.h>\n");
         self.output.push_str("#include <string.h>\n");
+        self.output.push_str("#ifndef _WIN32\n");
         self.output.push_str("#include <pthread.h>\n");
+        self.output.push_str("#endif\n");
         self.output.push_str("#include \"pace_runtime.h\"\n\n");
 
         self.output.push_str("typedef struct PaceClosure {\n");
