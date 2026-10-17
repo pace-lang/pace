@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 pub struct FileId(pub u32);
 
 impl FileId {
-    pub const DUMMY: FileId = FileId(0);
+    pub const DUMMY: FileId = FileId(u32::MAX);
 }
+
 
 #[derive(Debug, Default)]
 pub struct SourceMap {
@@ -149,5 +150,16 @@ mod tests {
 
         assert_eq!(span1.merge(dummy), span1);
         assert_eq!(dummy.merge(span1), span1);
+    }
+
+    #[test]
+    fn test_span_merge_file_zero_not_dummy() {
+        let span1 = Span::new(FileId(0), 5, 10);
+        let span2 = Span::new(FileId(0), 15, 20);
+        let merged = span1.merge(span2);
+
+        assert_eq!(merged.file_id, FileId(0));
+        assert_eq!(merged.start, 5);
+        assert_eq!(merged.end, 20);
     }
 }
