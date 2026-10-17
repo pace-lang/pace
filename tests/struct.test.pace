@@ -1,11 +1,13 @@
 struct Point {
-    x: Int,
-    y: Int,
+    var x: int
+    var y: int
 }
 
-fn add(p: Point) -> Int {
+fn add(p: Point) -> int {
     return p.x + p.y
 }
 
-let p = Point { x: 10, y: 20 }
-print(add(p))
+fn main() {
+    let p = Point(x: 10, y: 20)
+    println(add(p))
+}

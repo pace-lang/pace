@@ -391,14 +391,38 @@ impl<'a> MirBuilder<'a> {
                 let obj = self.build_expr(object);
                 let obj_ty = self.locals[obj.0 as usize].clone();
 
-                let _inner_ty = if let Ty::Optional(inner) = obj_ty {
+                let inner_ty = if let Ty::Optional(inner) = obj_ty {
                     *inner
                 } else {
-                    Ty::Void // Fallback
+                    obj_ty
                 };
 
-                // We mock the field access type. In a real compiler we'd resolve it fully here.
-                let temp = self.new_local(Ty::Optional(Box::new(Ty::Void))); // We just use Option<Void> as a placeholder, Codegen will emit properly
+                let mut field_ty = Ty::Optional(Box::new(Ty::Void));
+                match inner_ty {
+                    Ty::Struct(id) => {
+                        if let Some(fields) = self.struct_defs.get(&id) {
+                            for pace_ty::ResolvedField { name: n, ty: t, .. } in fields {
+                                if n == member {
+                                    field_ty = Ty::Optional(Box::new(t.clone()));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Ty::Class(id) | Ty::Actor(id) => {
+                        if let Some(fields) = self.class_defs.get(&id) {
+                            for pace_ty::ResolvedField { name: n, ty: t, .. } in fields {
+                                if n == member {
+                                    field_ty = Ty::Optional(Box::new(t.clone()));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                let temp = self.new_local(field_ty);
                 self.push_stmt(Statement::Assign(
                     Lvalue::Local(temp),
                     Rvalue::OptionalFieldAccess(obj, member.to_string()),

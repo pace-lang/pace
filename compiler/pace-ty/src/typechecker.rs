@@ -2879,11 +2879,14 @@ impl TypeChecker {
 
                 let val_ty = val_ty_res?;
                 let mut type_matches = target_ty == val_ty;
-                if !type_matches
-                    && let (Ty::Optional(_), Ty::Optional(inner_val)) = (&target_ty, &val_ty)
-                    && **inner_val == Ty::Void
-                {
-                    type_matches = true;
+                if !type_matches {
+                    if target_ty == Ty::Optional(Box::new(val_ty.clone())) {
+                        type_matches = true;
+                    } else if let (Ty::Optional(_), Ty::Optional(inner_val)) = (&target_ty, &val_ty)
+                        && **inner_val == Ty::Void
+                    {
+                        type_matches = true;
+                    }
                 }
 
                 if !type_matches {

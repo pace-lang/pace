@@ -1,27 +1,23 @@
 class Inner {
-    val: Int,
-    init(v: Int) {
+    val: int,
+    init(v: int) {
         self.val = v
     }
 }
 
 class Outer {
     inner: Inner,
-    init(v: Int) {
-        self.inner = Inner(v: v)
+    init(v: int) {
+        self.inner = Inner(v)
     }
 }
 
 fn testDestructors() {
-    let o = Outer(v: 100)
-    print(o.inner.val)
-    // o goes out of scope here.
-    // o's ref count goes to 0 -> pace_release(o)
-    // o's deinit is called -> pace_release(o.inner)
-    // inner's ref count goes to 0 -> pace_release(inner)
-    // inner is freed!
+    let o = Outer(100)
+    println(o.inner.val)
 }
+
 fn main() {
     testDestructors()
-    print(42) // To show it didn't crash
+    println(42)
 }

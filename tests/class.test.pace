@@ -1,13 +1,19 @@
 class Counter {
-    val: Int,
+    val: int,
+
+    init(val: int) {
+        self.val = val
+    }
 }
 
-fn increment(c: Counter) -> Int {
+fn increment(c: Counter) -> int {
     c.val = c.val + 1
     return c.val
 }
 
-let counter = Counter { val: 0 }
-increment(counter)
-increment(counter)
-print(counter.val)
+fn main() {
+    let counter = Counter(0)
+    increment(counter)
+    increment(counter)
+    println(counter.val)
+}
