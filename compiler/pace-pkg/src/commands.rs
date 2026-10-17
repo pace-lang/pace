@@ -401,6 +401,29 @@ pub fn login(token: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn is_ignored_path(name: &str, relative: &std::path::Path, patterns: &[String]) -> bool {
+    let rel_str = relative.to_string_lossy();
+    for pat in patterns {
+        if pat.is_empty() {
+            continue;
+        }
+        if name == pat || rel_str == *pat || rel_str.starts_with(&format!("{}/", pat)) {
+            return true;
+        }
+        if let Some(ext) = pat.strip_prefix("*.") {
+            if name.ends_with(&format!(".{}", ext)) {
+                return true;
+            }
+        }
+        if let Some(prefix) = pat.strip_suffix("/*") {
+            if rel_str.starts_with(prefix) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 pub async fn publish() -> Result<(), String> {
     let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
     let manifest_path = find_manifest(&current_dir)
@@ -445,14 +468,44 @@ pub async fn publish() -> Result<(), String> {
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
 
+
+
+    let mut gitignore_patterns: Vec<String> = vec![
+        ".env".to_string(),
+        ".env.*".to_string(),
+        ".DS_Store".to_string(),
+    ];
+    let gitignore_path = root.join(".gitignore");
+    if gitignore_path.exists() {
+        if let Ok(content) = fs::read_to_string(&gitignore_path) {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                    gitignore_patterns.push(trimmed.trim_matches('/').to_string());
+                }
+            }
+        }
+    }
+
     let walker = walkdir::WalkDir::new(root).into_iter();
     for entry in walker.filter_entry(|e| {
         let name = e.file_name().to_string_lossy();
-        name != "target"
-            && name != "build"
-            && name != ".git"
-            && name != "pace.lock"
-            && name != ".pace"
+        if name == "target"
+            || name == "build"
+            || name == ".git"
+            || name == "pace.lock"
+            || name == ".pace"
+            || name == ".env"
+            || name.starts_with(".env.")
+        {
+            return false;
+        }
+        if let Ok(rel) = e.path().strip_prefix(root) {
+            if is_ignored_path(&name, rel, &gitignore_patterns) {
+                return false;
+            }
+        }
+        true
     }) {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
@@ -514,5 +567,29 @@ pub async fn publish() -> Result<(), String> {
         let status = res.status();
         let err_text = res.text().await.unwrap_or_default();
         Err(format!("Failed to publish: HTTP {} - {}", status, err_text))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_is_ignored_path() {
+        let patterns = vec![
+            ".env".to_string(),
+            "*.secret".to_string(),
+            "private/*".to_string(),
+            "target".to_string(),
+        ];
+
+        assert!(is_ignored_path(".env", Path::new(".env"), &patterns));
+        assert!(is_ignored_path("keys.secret", Path::new("config/keys.secret"), &patterns));
+        assert!(is_ignored_path("auth.pace", Path::new("private/auth.pace"), &patterns));
+        assert!(is_ignored_path("target", Path::new("target"), &patterns));
+
+        assert!(!is_ignored_path("main.pace", Path::new("src/main.pace"), &patterns));
+        assert!(!is_ignored_path("pace.toml", Path::new("pace.toml"), &patterns));
     }
 }

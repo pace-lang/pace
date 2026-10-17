@@ -34,7 +34,7 @@ impl CacheManager {
         &self,
         name: &str,
         version: &str,
-        _tarball_sha256: &str,
+        tarball_sha256: &str,
     ) -> Result<PathBuf, String> {
         let pkg_dir = self.get_package_path(name, version);
         if pkg_dir.exists() {
@@ -65,6 +65,19 @@ impl CacheManager {
             .bytes()
             .await
             .map_err(|e| format!("Failed to read body: {}", e))?;
+
+        if !tarball_sha256.is_empty() {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(&bytes);
+            let calculated = format!("{:x}", hasher.finalize());
+            if !calculated.eq_ignore_ascii_case(tarball_sha256) {
+                return Err(format!(
+                    "Checksum mismatch for package {}@{}: expected {}, got {}",
+                    name, version, tarball_sha256, calculated
+                ));
+            }
+        }
 
         let tar = GzDecoder::new(&bytes[..]);
         let mut archive = Archive::new(tar);
