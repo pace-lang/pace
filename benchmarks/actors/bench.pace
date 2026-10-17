@@ -1,0 +1,26 @@
+actor Counter {
+    count: int = 0
+    
+    fn increment() {
+        self.count = self.count + 1
+    }
+
+    fn getCount() -> int {
+        return self.count
+    }
+}
+
+async fn actorTest() -> Future<int> {
+    var i = 0
+    let c = Counter()
+    while i < 100000 {
+        c.increment()
+        i = i + 1
+    }
+    return await c.getCount()
+}
+
+async fn main() -> Future<void> {
+    let res = await actorTest()
+    println(res)
+}

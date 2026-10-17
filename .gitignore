@@ -14,8 +14,9 @@ target/
 
 # Ignore all markdown files in the repository
 *.md
-# But explicitly allow README.md
+# But explicitly allow README.md and benchmark results
 !README.md
+!benchmarks/BENCHMARK_RESULTS.md
 
 # Ignore IDE configs
 .idea/
@@ -27,9 +28,15 @@ editors/vscode/out/
 *.vsix
 
 # Local examples and test projects
-# Local examples and test projects
 build/
 test_output_dir/
-benchmarks/
+
+# Benchmark build artifacts
+benchmarks/**/build/
+benchmarks/**/bench
+benchmarks/**/bench_*
+benchmarks/**/bench.c
+benchmarks/**/bench.o
+benchmarks/**/Bench.class
 
 # Pace Design Docs

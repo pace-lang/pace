@@ -1,0 +1,14 @@
+fn concatTest() -> string {
+    var s = ""
+    var i = 0
+    while i < 100 {
+        s = "${s}a"
+        i = i + 1
+    }
+    return s
+}
+
+fn main() {
+    let res = concatTest()
+    println(res)
+}

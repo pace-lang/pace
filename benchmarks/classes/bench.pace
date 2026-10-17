@@ -1,0 +1,28 @@
+class Person {
+    age: int,
+    weight: int,
+    
+    init(age: int, weight: int) {
+        self.age = age
+        self.weight = weight
+    }
+
+    fn getValue() -> int {
+        return self.age + self.weight
+    }
+}
+
+fn classTest() -> int {
+    var sum = 0
+    var i = 0
+    while i < 1000000 {
+        let p = Person(i, i + 1)
+        sum = sum + p.getValue()
+        i = i + 1
+    }
+    return sum
+}
+
+fn main() {
+    println(classTest())
+}
