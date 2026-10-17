@@ -13,5 +13,7 @@ pub enum Ty {
     Optional(Box<Ty>),
     Future(Box<Ty>),
     Result(Box<Ty>, Box<Ty>),
+    List(Box<Ty>),
+    Map(Box<Ty>, Box<Ty>),
     Void,
 }

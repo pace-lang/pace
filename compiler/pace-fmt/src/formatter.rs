@@ -723,6 +723,15 @@ impl Formatter {
                 self.write("continue");
                 self.newline();
             }
+            Stmt::For { var, iter, body, .. } => {
+                self.write("for ");
+                self.write(&var.name);
+                self.write(" in ");
+                self.format_expr(iter);
+                self.write(" ");
+                self.format_block(body);
+                self.newline();
+            }
         }
     }
 
@@ -894,6 +903,34 @@ impl Formatter {
             Expr::Try(inner, _) => {
                 self.format_expr(inner);
                 self.write("?");
+            }
+            Expr::ListLiteral(elements, _) => {
+                self.write("[");
+                for (i, elem) in elements.iter().enumerate() {
+                    if i > 0 {
+                        self.write(", ");
+                    }
+                    self.format_expr(elem);
+                }
+                self.write("]");
+            }
+            Expr::MapLiteral(entries, _) => {
+                self.write("{");
+                for (i, (k, v)) in entries.iter().enumerate() {
+                    if i > 0 {
+                        self.write(", ");
+                    }
+                    self.format_expr(k);
+                    self.write(": ");
+                    self.format_expr(v);
+                }
+                self.write("}");
+            }
+            Expr::Index { target, index, .. } => {
+                self.format_expr(target);
+                self.write("[");
+                self.format_expr(index);
+                self.write("]");
             }
         }
     }

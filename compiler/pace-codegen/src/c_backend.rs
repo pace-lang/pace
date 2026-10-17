@@ -277,6 +277,8 @@ impl CGenerator {
                     ok_c
                 }
             }
+            Ty::List(_) => "struct PaceList*".to_string(),
+            Ty::Map(_, _) => "struct PaceMap*".to_string(),
             Ty::Void => "void".to_string(),
         }
     }
@@ -284,7 +286,7 @@ impl CGenerator {
     fn emit_c_default_val(&self, ty: &Ty) -> String {
         match ty {
             Ty::Int | Ty::Bool | Ty::Float => "0".to_string(),
-            Ty::String | Ty::Class(_) | Ty::Actor(_) | Ty::Function(_, _) | Ty::Closure(_, _) => "NULL".to_string(),
+            Ty::String | Ty::Class(_) | Ty::Actor(_) | Ty::Function(_, _) | Ty::Closure(_, _) | Ty::List(_) | Ty::Map(_, _) => "NULL".to_string(),
             Ty::Struct(_) | Ty::Enum(_) => "{0}".to_string(),
             Ty::Optional(inner) => {
                 let default_val = self.emit_c_default_val(inner);
@@ -498,6 +500,9 @@ impl CGenerator {
                             is_void = true;
                         }
                     }
+                    if matches!(rval, Rvalue::ListSet(_, _, _) | Rvalue::MapSet(_, _, _)) {
+                        is_void = true;
+                    }
 
                     if !is_void {
                         self.generate_lvalue(lval, locals);
@@ -506,6 +511,19 @@ impl CGenerator {
                             if name == "pace_await_fiber" {
                                 if let Lvalue::Local(local) = lval {
                                     self.output.push_str(&format!("({})", self.emit_c_type(&locals[local.0 as usize])));
+                                }
+                            }
+                        }
+                        if let Lvalue::Local(local) = lval {
+                            let dest_ty = &locals[local.0 as usize];
+                            if matches!(rval, Rvalue::ListGet(_, _) | Rvalue::MapGet(_, _))
+                                || matches!(rval, Rvalue::BuiltinCall(name, _) if name == "pace_list_pop")
+                            {
+                                let c_dest_ty = self.emit_c_type(dest_ty);
+                                if !c_dest_ty.contains('*') {
+                                    write!(&mut self.output, "({})(intptr_t)", c_dest_ty).unwrap();
+                                } else {
+                                    write!(&mut self.output, "({})", c_dest_ty).unwrap();
                                 }
                             }
                         }
@@ -686,6 +704,18 @@ impl CGenerator {
                         write!(&mut self.output, ", {}", t_arg).unwrap();
                     }
                     self.output.push(')');
+                    return;
+                } else if name == "pace_list_push" {
+                    let val_ty = &locals[args[1].0 as usize];
+                    let val_cast = if self.emit_c_type(val_ty).contains('*') {
+                        format!("(void*)_{}", args[1].0)
+                    } else {
+                        format!("(void*)(intptr_t)_{}", args[1].0)
+                    };
+                    write!(&mut self.output, "pace_list_push(_{}, {})", args[0].0, val_cast).unwrap();
+                    return;
+                } else if name == "pace_list_pop" {
+                    write!(&mut self.output, "pace_list_pop(_{})", args[0].0).unwrap();
                     return;
                 }
 
@@ -868,6 +898,51 @@ impl CGenerator {
                         write!(&mut self.output, "_{}", arg.0).unwrap();
                     }
                     write!(&mut self.output, " }}, sizeof(struct {})) }}, sizeof(PaceClosure))", env_struct_name).unwrap();
+                }
+            }
+            Rvalue::ListNew(elem_ty, cap_local) => {
+                let is_ref = matches!(elem_ty, Ty::Class(_) | Ty::String | Ty::List(_) | Ty::Map(_, _));
+                let dtor = if is_ref { "(void (*)(void*))pace_release" } else { "NULL" };
+                write!(&mut self.output, "pace_list_new(_{}, {})", cap_local.0, dtor).unwrap();
+            }
+            Rvalue::ListGet(list_local, idx_local) => {
+                write!(&mut self.output, "pace_list_get(_{}, _{})", list_local.0, idx_local.0).unwrap();
+            }
+            Rvalue::ListSet(list_local, idx_local, val_local) => {
+                let val_ty = &locals[val_local.0 as usize];
+                let val_cast = if self.emit_c_type(val_ty).contains('*') {
+                    format!("(void*)_{}", val_local.0)
+                } else {
+                    format!("(void*)(intptr_t)_{}", val_local.0)
+                };
+                write!(&mut self.output, "pace_list_set(_{}, _{}, {})", list_local.0, idx_local.0, val_cast).unwrap();
+            }
+            Rvalue::MapNew(k_ty, v_ty) => {
+                let key_is_str = if matches!(k_ty, Ty::String) { "1" } else { "0" };
+                let is_ref = matches!(v_ty, Ty::Class(_) | Ty::String | Ty::List(_) | Ty::Map(_, _));
+                let dtor = if is_ref { "(void (*)(void*))pace_release" } else { "NULL" };
+                write!(&mut self.output, "pace_map_new(16, {}, {})", key_is_str, dtor).unwrap();
+            }
+            Rvalue::MapGet(map_local, key_local) => {
+                let key_ty = &locals[key_local.0 as usize];
+                if matches!(key_ty, Ty::String) {
+                    write!(&mut self.output, "pace_map_get_str(_{}, _{}, NULL)", map_local.0, key_local.0).unwrap();
+                } else {
+                    write!(&mut self.output, "pace_map_get_int(_{}, _{}, NULL)", map_local.0, key_local.0).unwrap();
+                }
+            }
+            Rvalue::MapSet(map_local, key_local, val_local) => {
+                let key_ty = &locals[key_local.0 as usize];
+                let val_ty = &locals[val_local.0 as usize];
+                let val_cast = if self.emit_c_type(val_ty).contains('*') {
+                    format!("(void*)_{}", val_local.0)
+                } else {
+                    format!("(void*)(intptr_t)_{}", val_local.0)
+                };
+                if matches!(key_ty, Ty::String) {
+                    write!(&mut self.output, "pace_map_set_str(_{}, _{}, {})", map_local.0, key_local.0, val_cast).unwrap();
+                } else {
+                    write!(&mut self.output, "pace_map_set_int(_{}, _{}, {})", map_local.0, key_local.0, val_cast).unwrap();
                 }
             }
         }

@@ -227,6 +227,29 @@ impl LoweringContext {
                 let lowered_inner = self.lower_expr(*inner)?;
                 Ok(Expr::Try(Box::new(lowered_inner), span))
             }
+            ast::Expr::ListLiteral(elements, span) => {
+                let mut lowered = Vec::new();
+                for e in elements {
+                    lowered.push(self.lower_expr(e)?);
+                }
+                Ok(Expr::ListLiteral(lowered, span))
+            }
+            ast::Expr::MapLiteral(entries, span) => {
+                let mut lowered = Vec::new();
+                for (k, v) in entries {
+                    lowered.push((self.lower_expr(k)?, self.lower_expr(v)?));
+                }
+                Ok(Expr::MapLiteral(lowered, span))
+            }
+            ast::Expr::Index { target, index, span } => {
+                let lowered_target = self.lower_expr(*target)?;
+                let lowered_index = self.lower_expr(*index)?;
+                Ok(Expr::Index {
+                    target: Box::new(lowered_target),
+                    index: Box::new(lowered_index),
+                    span,
+                })
+            }
         }
     }
 }

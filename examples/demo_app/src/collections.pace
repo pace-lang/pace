@@ -1,0 +1,91 @@
+fn testCollections() {
+    println("--- Testing Native Collections (List & Map) ---")
+
+    // 1. List Literals & Indexing
+    println("1. List Literals & Indexing:")
+    let numbers = [10, 20, 30, 40]
+    println(numbers.len())
+    println(numbers[0])
+    println(numbers[1])
+    println(numbers[2])
+    println(numbers[3])
+
+    // 2. List Mutations & Methods
+    println("2. List Mutations & Methods:")
+    numbers[2] = 99
+    println(numbers[2])
+
+    numbers.push(50)
+    println(numbers.len())
+    println(numbers[4])
+
+    let popped = numbers.pop()
+    println(popped)
+    println(numbers.len())
+
+    numbers.set(0, 111)
+    println(numbers.get(0))
+
+    // 3. For-In Iteration Loop
+    println("3. For-In Iteration:")
+    for num in numbers {
+        println(num)
+    }
+
+    numbers.clear()
+    println(numbers.len())
+
+    // 4. List Constructor
+    println("4. List Constructor:")
+    let dynamicList = List<int>()
+    dynamicList.push(100)
+    dynamicList.push(200)
+    println(dynamicList.len())
+    println(dynamicList[0])
+    println(dynamicList[1])
+
+    // 5. Map Literals & String Keys
+    println("5. Map Literals (String Keys):")
+    let inventory = {"apple": 10, "banana": 25, "cherry": 50}
+    println(inventory.len())
+    println(inventory["apple"])
+    println(inventory["banana"])
+
+    // 6. Map Mutation & Methods
+    println("6. Map Mutation & Methods:")
+    inventory["banana"] = 30
+    inventory["date"] = 100
+    println(inventory.len())
+    println(inventory["banana"])
+    println(inventory["date"])
+
+    println(inventory.has("apple"))
+    println(inventory.has("grape"))
+
+    inventory.remove("cherry")
+    println(inventory.len())
+    println(inventory.has("cherry"))
+
+    inventory.set("elderberry", 75)
+    println(inventory.get("elderberry"))
+
+    inventory.clear()
+    println(inventory.len())
+
+    // 7. Map Constructor with Integer Keys
+    println("7. Map Constructor (Integer Keys):")
+    let cache = Map<int, int>()
+    cache[1] = 1000
+    cache[2] = 2000
+    cache[42] = 9999
+    println(cache.len())
+    println(cache[1])
+    println(cache[2])
+    println(cache[42])
+    println(cache.has(42))
+    println(cache.has(99))
+
+    cache.remove(1)
+    println(cache.len())
+    println(cache.has(1))
+}

@@ -39,6 +39,8 @@ pub enum TokenKind<'a> {
     While,
     #[token("for")]
     For,
+    #[token("in")]
+    In,
     #[token("match")]
     Match,
     #[token("break")]

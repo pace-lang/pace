@@ -305,6 +305,15 @@ impl TypeChecker {
                         let err = self.resolve_type(&args[1])?;
                         return Ok(Ty::Result(Box::new(ok), Box::new(err)));
                     }
+                    if id.name.as_str() == "List" && args.len() == 1 {
+                        let inner = self.resolve_type(&args[0])?;
+                        return Ok(Ty::List(Box::new(inner)));
+                    }
+                    if id.name.as_str() == "Map" && args.len() == 2 {
+                        let k = self.resolve_type(&args[0])?;
+                        let v = self.resolve_type(&args[1])?;
+                        return Ok(Ty::Map(Box::new(k), Box::new(v)));
+                    }
                     self.instantiate_generic(&id.name, args)
                 } else {
                     Err("Complex generic base types not supported".to_string())
@@ -1990,6 +1999,37 @@ impl TypeChecker {
                     } else {
                         Err(format!("Cannot infer type for generic template '{}'", name))
                     }
+                } else if name == "List" {
+                    if let Some(args) = generic_args && args.len() == 1 {
+                        let inner = self.resolve_type(&args[0])?;
+                        let inst_ty = Ty::List(Box::new(inner));
+                        self.env.insert(*id, inst_ty.clone());
+                        self.local_types.insert(*id, inst_ty.clone());
+                        return Ok(inst_ty);
+                    }
+                    if let Some(Ty::List(inner)) = &self.current_expected_ty {
+                        let inst_ty = Ty::List(inner.clone());
+                        self.env.insert(*id, inst_ty.clone());
+                        self.local_types.insert(*id, inst_ty.clone());
+                        return Ok(inst_ty);
+                    }
+                    return Err("List requires a type parameter, e.g. List<int>".to_string());
+                } else if name == "Map" {
+                    if let Some(args) = generic_args && args.len() == 2 {
+                        let k = self.resolve_type(&args[0])?;
+                        let v = self.resolve_type(&args[1])?;
+                        let inst_ty = Ty::Map(Box::new(k), Box::new(v));
+                        self.env.insert(*id, inst_ty.clone());
+                        self.local_types.insert(*id, inst_ty.clone());
+                        return Ok(inst_ty);
+                    }
+                    if let Some(Ty::Map(k, v)) = &self.current_expected_ty {
+                        let inst_ty = Ty::Map(k.clone(), v.clone());
+                        self.env.insert(*id, inst_ty.clone());
+                        self.local_types.insert(*id, inst_ty.clone());
+                        return Ok(inst_ty);
+                    }
+                    return Err("Map requires two type parameters, e.g. Map<int, int>".to_string());
                 } else {
                     let err_msg = format!("Cannot find value '{}' in this scope", name);
                     self.reporter
@@ -2282,6 +2322,28 @@ impl TypeChecker {
                             }
                         }
                         Err(format!("Enum has no variant '{}'", member))
+                    }
+                    Ty::List(elem) => {
+                        match member.as_str() {
+                            "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
+                            "push" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Void))),
+                            "pop" => Ok(Ty::Function(vec![], Box::new(Ty::Optional(elem.clone())))),
+                            "get" => Ok(Ty::Function(vec![Ty::Int], Box::new(*elem.clone()))),
+                            "set" => Ok(Ty::Function(vec![Ty::Int, *elem.clone()], Box::new(Ty::Void))),
+                            "clear" => Ok(Ty::Function(vec![], Box::new(Ty::Void))),
+                            _ => Err(format!("List has no member '{}'", member)),
+                        }
+                    }
+                    Ty::Map(k, v) => {
+                        match member.as_str() {
+                            "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
+                            "set" => Ok(Ty::Function(vec![*k.clone(), *v.clone()], Box::new(Ty::Void))),
+                            "get" => Ok(Ty::Function(vec![*k.clone()], Box::new(Ty::Optional(v.clone())))),
+                            "has" => Ok(Ty::Function(vec![*k.clone()], Box::new(Ty::Bool))),
+                            "remove" => Ok(Ty::Function(vec![*k.clone()], Box::new(Ty::Bool))),
+                            "clear" => Ok(Ty::Function(vec![], Box::new(Ty::Void))),
+                            _ => Err(format!("Map has no member '{}'", member)),
+                        }
                     }
                     _ => Err(format!(
                         "Cannot access member '{}' on type {}",
@@ -2743,6 +2805,9 @@ impl TypeChecker {
                 if let Ty::Function(_, ret_ty) | Ty::Closure(_, ret_ty) = callee_ty {
                     return Ok(*ret_ty);
                 }
+                if let Ty::List(_) | Ty::Map(_, _) = callee_ty {
+                    return Ok(callee_ty);
+                }
                 Ok(Ty::Int) // Fallback for MVP
             }
             Expr::BuiltinCall(name, args, _) => {
@@ -3128,6 +3193,130 @@ impl TypeChecker {
                             .with_span(*span),
                         );
                         Err("Invalid type for '?' operator".to_string())
+                    }
+                }
+            }
+            Expr::ListLiteral(elements, _span) => {
+                if elements.is_empty() {
+                    if let Some(Ty::List(inner)) = &self.current_expected_ty {
+                        return Ok(Ty::List(inner.clone()));
+                    }
+                    return Ok(Ty::List(Box::new(Ty::Int)));
+                }
+
+                let first_elem_ty = self.check_expr(&elements[0])?;
+                for elem in &elements[1..] {
+                    let prev_exp = self.current_expected_ty.take();
+                    self.current_expected_ty = Some(first_elem_ty.clone());
+                    let elem_ty = self.check_expr(elem)?;
+                    self.current_expected_ty = prev_exp;
+                    if elem_ty != first_elem_ty && !(first_elem_ty == Ty::Optional(Box::new(elem_ty.clone()))) {
+                        self.reporter.report(
+                            Diagnostic::error(format!(
+                                "List elements must have consistent types: expected {}, found {}",
+                                self.display_ty(&first_elem_ty),
+                                self.display_ty(&elem_ty)
+                            ))
+                            .with_span(elem.span()),
+                        );
+                    }
+                }
+                Ok(Ty::List(Box::new(first_elem_ty)))
+            }
+            Expr::MapLiteral(entries, _span) => {
+                if entries.is_empty() {
+                    if let Some(Ty::Map(k, v)) = &self.current_expected_ty {
+                        return Ok(Ty::Map(k.clone(), v.clone()));
+                    }
+                    return Ok(Ty::Map(Box::new(Ty::String), Box::new(Ty::Int)));
+                }
+
+                let first_k_ty = self.check_expr(&entries[0].0)?;
+                let first_v_ty = self.check_expr(&entries[0].1)?;
+
+                for (k, v) in &entries[1..] {
+                    let k_ty = self.check_expr(k)?;
+                    let v_ty = self.check_expr(v)?;
+                    if k_ty != first_k_ty {
+                        self.reporter.report(
+                            Diagnostic::error(format!(
+                                "Map keys must have consistent types: expected {}, found {}",
+                                self.display_ty(&first_k_ty),
+                                self.display_ty(&k_ty)
+                            ))
+                            .with_span(k.span()),
+                        );
+                    }
+                    if v_ty != first_v_ty {
+                        self.reporter.report(
+                            Diagnostic::error(format!(
+                                "Map values must have consistent types: expected {}, found {}",
+                                self.display_ty(&first_v_ty),
+                                self.display_ty(&v_ty)
+                            ))
+                            .with_span(v.span()),
+                        );
+                    }
+                }
+                Ok(Ty::Map(Box::new(first_k_ty), Box::new(first_v_ty)))
+            }
+            Expr::Index { target, index, span } => {
+                let target_ty = self.check_expr(target)?;
+                let prev_exp = self.current_expected_ty.take();
+                let index_ty = match &target_ty {
+                    Ty::List(_) => {
+                        self.current_expected_ty = Some(Ty::Int);
+                        let ty = self.check_expr(index)?;
+                        self.current_expected_ty = prev_exp;
+                        ty
+                    }
+                    Ty::Map(k, _) => {
+                        self.current_expected_ty = Some((**k).clone());
+                        let ty = self.check_expr(index)?;
+                        self.current_expected_ty = prev_exp;
+                        ty
+                    }
+                    _ => {
+                        self.current_expected_ty = prev_exp;
+                        self.check_expr(index)?
+                    }
+                };
+
+                match target_ty {
+                    Ty::List(elem) => {
+                        if index_ty != Ty::Int {
+                            self.reporter.report(
+                                Diagnostic::error(format!(
+                                    "List index must be int, got {}",
+                                    self.display_ty(&index_ty)
+                                ))
+                                .with_span(index.span()),
+                            );
+                        }
+                        Ok(*elem)
+                    }
+                    Ty::Map(k, v) => {
+                        if index_ty != *k {
+                            self.reporter.report(
+                                Diagnostic::error(format!(
+                                    "Map key must be {}, got {}",
+                                    self.display_ty(&k),
+                                    self.display_ty(&index_ty)
+                                ))
+                                .with_span(index.span()),
+                            );
+                        }
+                        Ok(Ty::Optional(v))
+                    }
+                    other => {
+                        self.reporter.report(
+                            Diagnostic::error(format!(
+                                "Cannot index into type '{}'",
+                                self.display_ty(&other)
+                            ))
+                            .with_span(*span),
+                        );
+                        Err(format!("Cannot index into type '{}'", self.display_ty(&other)))
                     }
                 }
             }
@@ -3529,6 +3718,8 @@ impl TypeChecker {
             Ty::Optional(inner) => format!("{}?", self.display_ty(inner)),
             Ty::Future(inner) => format!("Future<{}>", self.display_ty(inner)),
             Ty::Result(ok, err) => format!("Result<{}, {}>", self.display_ty(ok), self.display_ty(err)),
+            Ty::List(inner) => format!("List<{}>", self.display_ty(inner)),
+            Ty::Map(k, v) => format!("Map<{}, {}>", self.display_ty(k), self.display_ty(v)),
             Ty::Function(args, ret) => {
                 let args_str = args
                     .iter()

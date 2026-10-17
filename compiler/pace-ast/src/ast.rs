@@ -201,6 +201,12 @@ pub enum Stmt {
     Return(Option<Expr>, Span),
     Break(Span),
     Continue(Span),
+    For {
+        var: Ident,
+        iter: Expr,
+        body: Block,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -262,6 +268,13 @@ pub enum Expr {
     },
     Await(Box<Expr>, Span),
     Try(Box<Expr>, Span),
+    ListLiteral(Vec<Expr>, Span),
+    MapLiteral(Vec<(Expr, Expr)>, Span),
+    Index {
+        target: Box<Expr>,
+        index: Box<Expr>,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -333,6 +346,9 @@ impl Expr {
             Expr::Closure { span, .. } => *span,
             Expr::Await(_, span) => *span,
             Expr::Try(_, span) => *span,
+            Expr::ListLiteral(_, span) => *span,
+            Expr::MapLiteral(_, span) => *span,
+            Expr::Index { span, .. } => *span,
         }
     }
 }
@@ -363,6 +379,7 @@ impl Stmt {
             Stmt::ExprStmt(_, span) => *span,
             Stmt::Return(_, span) => *span,
             Stmt::Break(span) | Stmt::Continue(span) => *span,
+            Stmt::For { span, .. } => *span,
         }
     }
 }

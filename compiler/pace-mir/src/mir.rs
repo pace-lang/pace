@@ -54,6 +54,12 @@ pub enum Rvalue {
     InstantiateEnum(pace_hir::HirId, String, Vec<Local>),
     EnumTag(Local),
     MakeClosure(String, Vec<Local>),
+    ListNew(pace_ty::Ty, Local),
+    ListGet(Local, Local),
+    ListSet(Local, Local, Local),
+    MapNew(pace_ty::Ty, pace_ty::Ty),
+    MapGet(Local, Local),
+    MapSet(Local, Local, Local),
 }
 
 #[derive(Debug, Clone, PartialEq)]

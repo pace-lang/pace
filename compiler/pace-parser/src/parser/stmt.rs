@@ -138,6 +138,27 @@ impl<'a> Parser<'a> {
         } else if self.check(&TokenKind::Continue) {
             let tok = self.expect(TokenKind::Continue)?;
             Ok(Stmt::Continue(tok.span))
+        } else if self.check(&TokenKind::For) {
+            let start_tok = self.expect(TokenKind::For)?;
+            let var_tok = self.current.take().ok_or_else(|| {
+                Diagnostic::error("Expected variable name after 'for'").with_span(self.current_span())
+            })?;
+            let var = match var_tok.kind {
+                TokenKind::Ident(n) => Ident {
+                    name: pace_span::intern(n),
+                    span: var_tok.span,
+                },
+                _ => {
+                    return Err(Diagnostic::error("Expected variable name after 'for'")
+                        .with_span(self.current_span()));
+                }
+            };
+            self.advance();
+            self.expect(TokenKind::In)?;
+            let iter = self.parse_expr()?;
+            let body = self.parse_block()?;
+            let span = start_tok.span.merge(body.span);
+            Ok(Stmt::For { var, iter, body, span })
         } else if self.check(&TokenKind::Try) || self.check(&TokenKind::Catch) {
             let span = self.current_span();
             self.advance();

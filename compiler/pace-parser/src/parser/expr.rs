@@ -89,6 +89,16 @@ impl<'a> Parser<'a> {
                 let q_tok = self.expect(TokenKind::Question)?;
                 let span = left.span().merge(q_tok.span);
                 left = Expr::Try(Box::new(left), span);
+            } else if self.check(&TokenKind::LBracket) {
+                self.advance();
+                let index_expr = self.parse_expr()?;
+                let rbracket = self.expect(TokenKind::RBracket)?;
+                let span = left.span().merge(rbracket.span);
+                left = Expr::Index {
+                    target: Box::new(left),
+                    index: Box::new(index_expr),
+                    span,
+                };
             } else {
                 break;
             }
@@ -304,6 +314,70 @@ impl<'a> Parser<'a> {
         }
         if self.check(&TokenKind::Match) {
             return self.parse_match_expr();
+        }
+
+        if self.check(&TokenKind::LBracket) {
+            let start_tok = self.expect(TokenKind::LBracket)?;
+            let mut elements = Vec::new();
+            if !self.check(&TokenKind::RBracket) {
+                loop {
+                    elements.push(self.parse_expr()?);
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+            }
+            let rbracket = self.expect(TokenKind::RBracket)?;
+            return Ok(Expr::ListLiteral(elements, start_tok.span.merge(rbracket.span)));
+        }
+
+        if self.check(&TokenKind::LBrace) {
+            let saved_lexer = self.lexer.clone();
+            let saved_current = self.current.clone();
+
+            let start_tok = self.expect(TokenKind::LBrace)?;
+            if self.check(&TokenKind::RBrace) {
+                let rbrace = self.expect(TokenKind::RBrace)?;
+                return Ok(Expr::MapLiteral(Vec::new(), start_tok.span.merge(rbrace.span)));
+            }
+
+            let mut entries = Vec::new();
+            let mut is_map = false;
+            if let Ok(key) = self.parse_expr() {
+                if self.check(&TokenKind::Colon) {
+                    self.advance();
+                    if let Ok(val) = self.parse_expr() {
+                        entries.push((key, val));
+                        is_map = true;
+                        while self.check(&TokenKind::Comma) {
+                            self.advance();
+                            if self.check(&TokenKind::RBrace) {
+                                break;
+                            }
+                            if let Ok(k) = self.parse_expr() {
+                                if self.check(&TokenKind::Colon) {
+                                    self.advance();
+                                    if let Ok(v) = self.parse_expr() {
+                                        entries.push((k, v));
+                                        continue;
+                                    }
+                                }
+                            }
+                            is_map = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            if is_map && self.check(&TokenKind::RBrace) {
+                let rbrace = self.expect(TokenKind::RBrace)?;
+                return Ok(Expr::MapLiteral(entries, start_tok.span.merge(rbrace.span)));
+            } else {
+                self.lexer = saved_lexer;
+                self.current = saved_current;
+            }
         }
 
         let tok = self.current.take().ok_or_else(|| {

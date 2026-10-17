@@ -2,6 +2,7 @@
 #define PACE_RUNTIME_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,6 +60,33 @@ struct PaceActorBase {
 };
 
 void* pace_send_actor_message(void* actor, void (*func)(void*), void* arg);
+
+// Collections API
+struct PaceList;
+struct PaceMap;
+
+typedef struct PaceList PaceList;
+typedef struct PaceMap PaceMap;
+
+PaceList* pace_list_new(size_t capacity, void (*elem_deinit)(void*));
+void pace_list_push(PaceList* list, void* val);
+void* pace_list_pop(PaceList* list);
+void* pace_list_get(PaceList* list, int64_t index);
+void pace_list_set(PaceList* list, int64_t index, void* val);
+int64_t pace_list_len(PaceList* list);
+void pace_list_clear(PaceList* list);
+
+PaceMap* pace_map_new(size_t capacity, int key_is_string, void (*val_deinit)(void*));
+void pace_map_set_int(PaceMap* map, int64_t key, void* val);
+void* pace_map_get_int(PaceMap* map, int64_t key, int* found);
+int pace_map_has_int(PaceMap* map, int64_t key);
+int pace_map_remove_int(PaceMap* map, int64_t key);
+void pace_map_set_str(PaceMap* map, struct PaceString* key, void* val);
+void* pace_map_get_str(PaceMap* map, struct PaceString* key, int* found);
+int pace_map_has_str(PaceMap* map, struct PaceString* key);
+int pace_map_remove_str(PaceMap* map, struct PaceString* key);
+int64_t pace_map_len(PaceMap* map);
+void pace_map_clear(PaceMap* map);
 
 #ifdef __cplusplus
 }

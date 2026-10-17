@@ -222,6 +222,21 @@ pub fn reassign_expr_ids(
         Expr::Await(inner, _) | Expr::Try(inner, _) => {
             reassign_expr_ids(tc, inner, id_map);
         }
+        Expr::ListLiteral(elements, _) => {
+            for elem in elements {
+                reassign_expr_ids(tc, elem, id_map);
+            }
+        }
+        Expr::MapLiteral(entries, _) => {
+            for (k, v) in entries {
+                reassign_expr_ids(tc, k, id_map);
+                reassign_expr_ids(tc, v, id_map);
+            }
+        }
+        Expr::Index { target, index, .. } => {
+            reassign_expr_ids(tc, target, id_map);
+            reassign_expr_ids(tc, index, id_map);
+        }
     }
 }
 

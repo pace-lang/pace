@@ -351,6 +351,13 @@ pub enum Expr {
     },
     Await(Box<Expr>, Span),
     Try(Box<Expr>, Span),
+    ListLiteral(Vec<Expr>, Span),
+    MapLiteral(Vec<(Expr, Expr)>, Span),
+    Index {
+        target: Box<Expr>,
+        index: Box<Expr>,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -408,6 +415,9 @@ impl Expr {
             Expr::Closure { span, .. } => *span,
             Expr::Await(_, span) => *span,
             Expr::Try(_, span) => *span,
+            Expr::ListLiteral(_, span) => *span,
+            Expr::MapLiteral(_, span) => *span,
+            Expr::Index { span, .. } => *span,
         }
     }
 }

@@ -546,6 +546,56 @@ impl<'a> MirBuilder<'a> {
                 let mut global_name = String::new();
 
                 if let Expr::Ident(id, name, _, _) = &**callee {
+                    if name == "List" {
+                        let elem_ty = if let Some(ty) = self.local_types.get(id) {
+                            if let Ty::List(inner) = ty {
+                                *inner.clone()
+                            } else {
+                                Ty::Int
+                            }
+                        } else if let Some(Ty::List(inner)) = &self.current_expected_ty {
+                            *inner.clone()
+                        } else {
+                            Ty::Int
+                        };
+                        let cap_local = if !args.is_empty() {
+                            self.build_expr(&args[0].expr)
+                        } else {
+                            let cap = self.new_local(Ty::Int);
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(cap),
+                                Rvalue::Constant(Constant::Int("8".to_string())),
+                            ));
+                            cap
+                        };
+                        let list_ty = Ty::List(Box::new(elem_ty.clone()));
+                        let temp = self.new_local(list_ty);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(temp),
+                            Rvalue::ListNew(elem_ty, cap_local),
+                        ));
+                        return temp;
+                    } else if name == "Map" {
+                        let (k_ty, v_ty) = if let Some(ty) = self.local_types.get(id) {
+                            if let Ty::Map(k, v) = ty {
+                                (*k.clone(), *v.clone())
+                            } else {
+                                (Ty::String, Ty::Int)
+                            }
+                        } else if let Some(Ty::Map(k, v)) = &self.current_expected_ty {
+                            (*k.clone(), *v.clone())
+                        } else {
+                            (Ty::String, Ty::Int)
+                        };
+                        let map_ty = Ty::Map(Box::new(k_ty.clone()), Box::new(v_ty.clone()));
+                        let temp = self.new_local(map_ty);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(temp),
+                            Rvalue::MapNew(k_ty, v_ty),
+                        ));
+                        return temp;
+                    }
+
                     if let Some(mangled) = self.resolved_global_names.get(id) {
                         if let Some(&(nid, kind)) = self.named_types.get(mangled) {
                             if kind == 0 || kind == 1 || kind == 3 {
@@ -753,7 +803,143 @@ impl<'a> MirBuilder<'a> {
                         let is_super = matches!(&**object, Expr::Super(_));
                         let obj_local = self.build_expr(object);
                         let obj_ty = self.locals[obj_local.0 as usize].clone();
-                        if let Ty::Struct(id) | Ty::Class(id) | Ty::Actor(id) = obj_ty {
+                        if let Ty::List(elem_ty) = &obj_ty {
+                            match member.as_str() {
+                                "len" => {
+                                    let temp = self.new_local(Ty::Int);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_list_len".to_string(), vec![obj_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "push" => {
+                                    let prev = self.current_expected_ty.take();
+                                    self.current_expected_ty = Some(*elem_ty.clone());
+                                    let arg_local = self.build_expr(&args[0].expr);
+                                    self.current_expected_ty = prev;
+                                    let temp = self.new_local(Ty::Void);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_list_push".to_string(), vec![obj_local, arg_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "pop" => {
+                                    let temp = self.new_local(Ty::Optional(elem_ty.clone()));
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_list_pop".to_string(), vec![obj_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "clear" => {
+                                    let temp = self.new_local(Ty::Void);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_list_clear".to_string(), vec![obj_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "get" => {
+                                    let idx_local = self.build_expr(&args[0].expr);
+                                    let temp = self.new_local(*elem_ty.clone());
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::ListGet(obj_local, idx_local),
+                                    ));
+                                    return temp;
+                                }
+                                "set" => {
+                                    let idx_local = self.build_expr(&args[0].expr);
+                                    let prev = self.current_expected_ty.take();
+                                    self.current_expected_ty = Some(*elem_ty.clone());
+                                    let val_local = self.build_expr(&args[1].expr);
+                                    self.current_expected_ty = prev;
+                                    let temp = self.new_local(Ty::Void);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::ListSet(obj_local, idx_local, val_local),
+                                    ));
+                                    return temp;
+                                }
+                                _ => {}
+                            }
+                        } else if let Ty::Map(k_ty, v_ty) = &obj_ty {
+                            match member.as_str() {
+                                "len" => {
+                                    let temp = self.new_local(Ty::Int);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_map_len".to_string(), vec![obj_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "has" => {
+                                    let prev = self.current_expected_ty.take();
+                                    self.current_expected_ty = Some(*k_ty.clone());
+                                    let key_local = self.build_expr(&args[0].expr);
+                                    self.current_expected_ty = prev;
+                                    let is_str = matches!(**k_ty, Ty::String);
+                                    let fn_name = if is_str { "pace_map_has_str" } else { "pace_map_has_int" };
+                                    let temp = self.new_local(Ty::Bool);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall(fn_name.to_string(), vec![obj_local, key_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "remove" => {
+                                    let prev = self.current_expected_ty.take();
+                                    self.current_expected_ty = Some(*k_ty.clone());
+                                    let key_local = self.build_expr(&args[0].expr);
+                                    self.current_expected_ty = prev;
+                                    let is_str = matches!(**k_ty, Ty::String);
+                                    let fn_name = if is_str { "pace_map_remove_str" } else { "pace_map_remove_int" };
+                                    let temp = self.new_local(Ty::Bool);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall(fn_name.to_string(), vec![obj_local, key_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "clear" => {
+                                    let temp = self.new_local(Ty::Void);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_map_clear".to_string(), vec![obj_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "get" => {
+                                    let prev = self.current_expected_ty.take();
+                                    self.current_expected_ty = Some(*k_ty.clone());
+                                    let key_local = self.build_expr(&args[0].expr);
+                                    self.current_expected_ty = prev;
+                                    let temp = self.new_local(Ty::Optional(v_ty.clone()));
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::MapGet(obj_local, key_local),
+                                    ));
+                                    return temp;
+                                }
+                                "set" => {
+                                    let prev = self.current_expected_ty.take();
+                                    self.current_expected_ty = Some(*k_ty.clone());
+                                    let key_local = self.build_expr(&args[0].expr);
+                                    self.current_expected_ty = Some(*v_ty.clone());
+                                    let val_local = self.build_expr(&args[1].expr);
+                                    self.current_expected_ty = prev;
+                                    let temp = self.new_local(Ty::Void);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::MapSet(obj_local, key_local, val_local),
+                                    ));
+                                    return temp;
+                                }
+                                _ => {}
+                            }
+                        } else if let Ty::Struct(id) | Ty::Class(id) | Ty::Actor(id) = obj_ty {
                             let mut target_id = id;
                             if is_super && let Some(&parent_id) = self.class_parents.get(&id) {
                                 target_id = parent_id;
@@ -1172,6 +1358,45 @@ impl<'a> MirBuilder<'a> {
                 temp
             }
             Expr::Assign { target, value, .. } => {
+                if let Expr::Index { target: idx_target, index: idx_expr, span: _ } = &**target {
+                    let obj_local = self.build_expr(idx_target);
+                    let obj_ty = self.locals[obj_local.0 as usize].clone();
+                    let idx_local = self.build_expr(idx_expr);
+                    let prev = self.current_expected_ty.take();
+                    match &obj_ty {
+                        Ty::List(elem) => {
+                            self.current_expected_ty = Some(*elem.clone());
+                        }
+                        Ty::Map(_, val) => {
+                            self.current_expected_ty = Some(*val.clone());
+                        }
+                        _ => {}
+                    }
+                    let val_local = self.build_expr(value);
+                    self.current_expected_ty = prev;
+
+                    match obj_ty {
+                        Ty::List(_) => {
+                            let dummy = self.new_local(Ty::Void);
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(dummy),
+                                Rvalue::ListSet(obj_local, idx_local, val_local),
+                            ));
+                        }
+                        Ty::Map(_, _) => {
+                            let dummy = self.new_local(Ty::Void);
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(dummy),
+                                Rvalue::MapSet(obj_local, idx_local, val_local),
+                            ));
+                        }
+                        other => {
+                            eprintln!("ICE: Index assignment on non-collection type {:?}", other);
+                        }
+                    }
+                    return val_local;
+                }
+
                 let mut is_static_assign = false;
                 let mut static_name = String::new();
                 let lvalue = match &**target {
@@ -1276,7 +1501,7 @@ impl<'a> MirBuilder<'a> {
                 self.current_expected_ty = Some(lval_ty.clone());
                 let rval = self.build_expr(value);
                 self.current_expected_ty = prev;
-                if matches!(lval_ty, Ty::Class(_)) {
+                if matches!(lval_ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _)) {
                     self.push_stmt(Statement::Retain(Lvalue::Local(rval)));
                     self.push_stmt(Statement::Release(lvalue.clone()));
                 }
@@ -1312,6 +1537,108 @@ impl<'a> MirBuilder<'a> {
                     Rvalue::Use(inner_local),
                 ));
                 temp
+            }
+            Expr::ListLiteral(elements, _) => {
+                let elem_ty = if let Some(Ty::List(inner)) = &self.current_expected_ty {
+                    *inner.clone()
+                } else {
+                    Ty::Int
+                };
+                let cap_val = elements.len().max(4);
+                let cap_local = self.new_local(Ty::Int);
+                self.push_stmt(Statement::Assign(
+                    Lvalue::Local(cap_local),
+                    Rvalue::Constant(Constant::Int(cap_val.to_string())),
+                ));
+                let mut elem_locals = Vec::new();
+                for elem in elements {
+                    let prev = self.current_expected_ty.take();
+                    self.current_expected_ty = Some(elem_ty.clone());
+                    let el = self.build_expr(elem);
+                    self.current_expected_ty = prev;
+                    elem_locals.push(el);
+                }
+                let actual_elem_ty = if !elem_locals.is_empty() {
+                    self.locals[elem_locals[0].0 as usize].clone()
+                } else {
+                    elem_ty
+                };
+                let list_ty = Ty::List(Box::new(actual_elem_ty.clone()));
+                let list_local = self.new_local(list_ty);
+                self.push_stmt(Statement::Assign(
+                    Lvalue::Local(list_local),
+                    Rvalue::ListNew(actual_elem_ty, cap_local),
+                ));
+                for el in elem_locals {
+                    let dummy = self.new_local(Ty::Void);
+                    self.push_stmt(Statement::Assign(
+                        Lvalue::Local(dummy),
+                        Rvalue::BuiltinCall("pace_list_push".to_string(), vec![list_local, el]),
+                    ));
+                }
+                list_local
+            }
+            Expr::MapLiteral(entries, _) => {
+                let (mut k_ty, mut v_ty) = if let Some(Ty::Map(k, v)) = &self.current_expected_ty {
+                    (*k.clone(), *v.clone())
+                } else {
+                    (Ty::String, Ty::Int)
+                };
+                let mut evaluated_entries = Vec::new();
+                for (k, v) in entries {
+                    let prev = self.current_expected_ty.take();
+                    self.current_expected_ty = Some(k_ty.clone());
+                    let k_local = self.build_expr(k);
+                    self.current_expected_ty = Some(v_ty.clone());
+                    let v_local = self.build_expr(v);
+                    self.current_expected_ty = prev;
+                    evaluated_entries.push((k_local, v_local));
+                }
+                if !evaluated_entries.is_empty() {
+                    k_ty = self.locals[evaluated_entries[0].0.0 as usize].clone();
+                    v_ty = self.locals[evaluated_entries[0].1.0 as usize].clone();
+                }
+                let map_ty = Ty::Map(Box::new(k_ty.clone()), Box::new(v_ty.clone()));
+                let map_local = self.new_local(map_ty);
+                self.push_stmt(Statement::Assign(
+                    Lvalue::Local(map_local),
+                    Rvalue::MapNew(k_ty, v_ty),
+                ));
+                for (k_local, v_local) in evaluated_entries {
+                    let dummy = self.new_local(Ty::Void);
+                    self.push_stmt(Statement::Assign(
+                        Lvalue::Local(dummy),
+                        Rvalue::MapSet(map_local, k_local, v_local),
+                    ));
+                }
+                map_local
+            }
+            Expr::Index { target, index, span: _ } => {
+                let obj_local = self.build_expr(target);
+                let obj_ty = self.locals[obj_local.0 as usize].clone();
+                let idx_local = self.build_expr(index);
+                match obj_ty {
+                    Ty::List(elem_ty) => {
+                        let temp = self.new_local(*elem_ty);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(temp),
+                            Rvalue::ListGet(obj_local, idx_local),
+                        ));
+                        temp
+                    }
+                    Ty::Map(_, val_ty) => {
+                        let temp = self.new_local(Ty::Optional(val_ty));
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(temp),
+                            Rvalue::MapGet(obj_local, idx_local),
+                        ));
+                        temp
+                    }
+                    other => {
+                        eprintln!("ICE: Indexing non-collection type {:?}", other);
+                        self.new_local(Ty::Int)
+                    }
+                }
             }
         }
     }
@@ -1718,12 +2045,12 @@ impl<'a> MirBuilder<'a> {
             self.blocks[current_bb].terminator = Some(Terminator::Return(temp));
         }
 
-        // ARC: Release all Class locals at return points, except the returned local and params
+        // ARC: Release all Class, List, and Map locals at return points, except the returned local and params
         for block in &mut self.blocks {
             if let Some(Terminator::Return(ret_local)) = block.terminator {
                 for (i, ty) in self.locals.iter().enumerate() {
                     let local = Local(i as u32);
-                    if matches!(ty, Ty::Class(_))
+                    if matches!(ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _))
                         && local != ret_local
                         && !params.contains(&local)
                     {
