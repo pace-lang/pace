@@ -64,7 +64,10 @@ impl LanguageServer for Backend {
     ) -> Result<Option<DocumentSymbolResponse>> {
         let uri = params.text_document.uri;
         if let Some((ast, source_map, _diags, text)) = self.analyze_uri(uri.as_str()).await {
-            let file_path = uri.to_file_path().unwrap().to_string_lossy().to_string();
+            let file_path = match uri.to_file_path() {
+                Ok(p) => p.to_string_lossy().to_string(),
+                Err(_) => return Ok(None),
+            };
             let mut symbols = Vec::new();
             if let Some(fid) = source_map.get_file_id(&file_path) {
                 for module in ast.modules.values() {
@@ -235,10 +238,12 @@ impl LanguageServer for Backend {
                         let end = offset_to_position(span_text, span.end as usize);
 
                         let file_path = source_map.get_path(span.file_id).unwrap_or_default();
-                        return Ok(Some(GotoDefinitionResponse::Scalar(Location {
-                            uri: Url::from_file_path(file_path).unwrap(),
-                            range: Range { start, end },
-                        })));
+                        if let Ok(target_uri) = Url::from_file_path(file_path) {
+                            return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                                uri: target_uri,
+                                range: Range { start, end },
+                            })));
+                        }
                     }
                 }
             }
@@ -496,19 +501,19 @@ impl LanguageServer for Backend {
 
                                 let file_path =
                                     source_map.get_path(span.file_id).unwrap_or_default();
-                                let file_uri = Url::from_file_path(file_path).unwrap();
-
-                                let edit = TextEdit {
-                                    range: Range {
-                                        start: pos,
-                                        end: Position {
-                                            line: pos.line,
-                                            character: pos.character + new_name.len() as u32,
-                                        }, // approx
-                                    },
-                                    new_text: new_name.clone(),
-                                };
-                                changes.entry(file_uri).or_insert_with(Vec::new).push(edit);
+                                if let Ok(file_uri) = Url::from_file_path(file_path) {
+                                    let edit = TextEdit {
+                                        range: Range {
+                                            start: pos,
+                                            end: Position {
+                                                line: pos.line,
+                                                character: pos.character + new_name.len() as u32,
+                                            }, // approx
+                                        },
+                                        new_text: new_name.clone(),
+                                    };
+                                    changes.entry(file_uri).or_insert_with(Vec::new).push(edit);
+                                }
                             }
                         }
 
@@ -888,19 +893,19 @@ impl Backend {
 
         let mut dependencies = std::collections::HashMap::new();
         if let Some(manifest_path) = pace_pkg::find_manifest(&file_path) {
-            let root = manifest_path.parent().unwrap();
-            let lockfile_path = root.join("pace.lock");
-            if let Ok(lock) = pace_pkg::resolve::DependencyResolver::read_lockfile(&lockfile_path) {
-                let cache = pace_pkg::cache::CacheManager::new();
-                for (pkg_name, pkg_info) in &lock.packages {
-                    let mut pkg_path = cache.get_package_path(pkg_name, &pkg_info.version);
-                    if let Some(source) = &pkg_info.source
-                        && source.starts_with("local+")
-                    {
-                        let local_path = source.strip_prefix("local+").unwrap();
-                        pkg_path = root.join(local_path);
+            if let Some(root) = manifest_path.parent() {
+                let lockfile_path = root.join("pace.lock");
+                if let Ok(lock) = pace_pkg::resolve::DependencyResolver::read_lockfile(&lockfile_path) {
+                    let cache = pace_pkg::cache::CacheManager::new();
+                    for (pkg_name, pkg_info) in &lock.packages {
+                        let mut pkg_path = cache.get_package_path(pkg_name, &pkg_info.version);
+                        if let Some(source) = &pkg_info.source
+                            && let Some(local_path) = source.strip_prefix("local+")
+                        {
+                            pkg_path = root.join(local_path);
+                        }
+                        dependencies.insert(pkg_name.clone(), pkg_path);
                     }
-                    dependencies.insert(pkg_name.clone(), pkg_path);
                 }
             }
         }
@@ -1202,5 +1207,35 @@ fn decl_to_document_symbol(
             })
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_offset_to_position() {
+        let text = "hello\nworld\nfoo";
+        let pos0 = offset_to_position(text, 0);
+        assert_eq!(pos0.line, 0);
+        assert_eq!(pos0.character, 0);
+
+        let pos6 = offset_to_position(text, 6);
+        assert_eq!(pos6.line, 1);
+        assert_eq!(pos6.character, 0);
+
+        let pos8 = offset_to_position(text, 8);
+        assert_eq!(pos8.line, 1);
+        assert_eq!(pos8.character, 2);
+    }
+
+    #[test]
+    fn test_non_file_uri_handling() {
+        let untitled_uri = Url::parse("untitled:Untitled-1").unwrap();
+        assert!(untitled_uri.to_file_path().is_err());
+
+        let http_uri = Url::parse("https://example.com/test.pace").unwrap();
+        assert!(http_uri.to_file_path().is_err());
     }
 }
