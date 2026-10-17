@@ -13,11 +13,41 @@
 typedef struct PaceFiber {
     ucontext_t ctx;
     void* stack;
-    int is_done;
+    volatile int is_done;
     void* result;
     struct PaceFiber* waiting_on;
     struct PaceFiber* next;
+    int awaited;
+    struct PaceFiber* all_next;
 } PaceFiber;
+
+static PaceFiber* all_fibers_head = NULL;
+static pthread_mutex_t all_fibers_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void register_fiber(PaceFiber* fiber) {
+    fiber->awaited = 0;
+    fiber->all_next = NULL;
+    pthread_mutex_lock(&all_fibers_mutex);
+    fiber->all_next = all_fibers_head;
+    all_fibers_head = fiber;
+    pthread_mutex_unlock(&all_fibers_mutex);
+}
+
+static void cleanup_all_fibers(void) {
+    pthread_mutex_lock(&all_fibers_mutex);
+    PaceFiber* curr = all_fibers_head;
+    while (curr) {
+        PaceFiber* next = curr->all_next;
+        if (curr->stack) {
+            free(curr->stack);
+            curr->stack = NULL;
+        }
+        free(curr);
+        curr = next;
+    }
+    all_fibers_head = NULL;
+    pthread_mutex_unlock(&all_fibers_mutex);
+}
 
 typedef struct SleepEntry {
     PaceFiber* fiber;
@@ -78,6 +108,7 @@ void* pace_spawn_fiber(void (*func)(void*), void* arg) {
     fiber->result = NULL;
     fiber->waiting_on = NULL;
     fiber->next = NULL;
+    register_fiber(fiber);
 
     getcontext(&fiber->ctx);
     fiber->ctx.uc_stack.ss_sp = fiber->stack;
@@ -114,8 +145,13 @@ static void pace_check_sleep_queue(void) {
 }
 
 void* pace_await_fiber(void* fiber_ptr) {
+    if (!fiber_ptr) return NULL;
     PaceFiber* target = (PaceFiber*)fiber_ptr;
     
+    if (target->awaited) {
+        return target->result;
+    }
+
     if (!target->is_done) {
         if (current_fiber) {
             current_fiber->waiting_on = target;
@@ -137,16 +173,21 @@ void* pace_await_fiber(void* fiber_ptr) {
                     long long now = current_time_ms();
                     long long sleep_time = sleep_queue->wakeup_time_ms - now;
                     if (sleep_time > 0) {
-                        usleep(sleep_time * 1000);
+                        usleep(sleep_time > 10 ? 10 * 1000 : sleep_time * 1000);
                     }
+                } else {
+                    usleep(500);
                 }
             }
         }
     }
     
     void* result = target->result;
-    free(target->stack);
-    free(target);
+    target->awaited = 1;
+    if (target->stack) {
+        free(target->stack);
+        target->stack = NULL;
+    }
     return result;
 }
 
@@ -157,10 +198,10 @@ void pace_event_loop_run(void) {
         PaceFiber* f = dequeue_fiber();
         if (f) {
             if (f->waiting_on && f->waiting_on != (void*)1 && !f->waiting_on->is_done) {
-                // If it is waiting on another fiber that is still running, 
-                // wait, actually we shouldn't enqueue it here if it's explicitly waiting.
-                // But for now we just put it back.
                 enqueue_fiber(f);
+                if (ready_queue_head == f) {
+                    usleep(500);
+                }
                 continue;
             } else {
                 f->waiting_on = NULL;
@@ -170,18 +211,6 @@ void pace_event_loop_run(void) {
             swapcontext(&main_loop_ctx, &f->ctx);
             current_fiber = NULL;
 
-            // Notice we only re-enqueue if it's NOT explicitly sleeping or waiting.
-            // If it's waiting on a future or sleeping, it shouldn't be in the ready queue.
-            // The sleep function removes it from ready queue by not re-enqueuing.
-            // But wait, our current implementation re-enqueues unconditionally? No, only if not done.
-            // We should only re-enqueue if it's not waiting on something else and not in sleep queue.
-            // Actually, if it yielded due to await or sleep, its `waiting_on` is set, or it put itself in sleep queue.
-            // Wait, if it put itself in sleep queue, we shouldn't put it in ready queue.
-            // So we add a flag `is_sleeping`? Or just check if `waiting_on` is NULL.
-            // For now, let's just let it be. If we don't re-enqueue it, who does?
-            // `pace_await_fiber` sets `waiting_on`.
-            // `pace_sleep` puts it in `sleep_queue` and we should set `waiting_on = (void*)1` to prevent re-enqueueing?
-            // Yes, let's just use `waiting_on = (void*)1` as a hack for sleep.
             if (!f->is_done && f->waiting_on != (void*)1) {
                 enqueue_fiber(f);
             }
@@ -246,6 +275,7 @@ void* pace_sleep(long long ms) {
     fiber->result = NULL;
     fiber->waiting_on = NULL;
     fiber->next = NULL;
+    register_fiber(fiber);
 
     getcontext(&fiber->ctx);
     fiber->ctx.uc_stack.ss_sp = fiber->stack;
@@ -341,6 +371,7 @@ void* pace_send_actor_message(void* actor_ptr, void (*func)(void*), void* arg) {
     future->result = NULL;
     future->waiting_on = NULL;
     future->next = NULL;
+    register_fiber(future);
 
     struct PaceActorMessage* msg = (struct PaceActorMessage*)malloc(sizeof(struct PaceActorMessage));
     msg->func = func;
@@ -397,6 +428,8 @@ void pace_thread_pool_shutdown(void) {
     free(worker_threads);
     worker_threads = NULL;
     worker_count = 0;
+    
+    cleanup_all_fibers();
 }
 
 
