@@ -1479,9 +1479,6 @@ impl<'a> MirBuilder<'a> {
                             let mut mir_params = Vec::new();
                             for (param_id, param_name, _pty) in params {
                                 let ty = tc.local_types.get(param_id).cloned().unwrap_or(Ty::Int);
-                                if param_name == "self" {
-                                    println!("MIR Builder method={}, self type={:?}", tc.resolved_global_names.get(func_id).unwrap_or(&name.to_string()), ty);
-                                }
                                 let local = fn_builder.new_local(ty);
                                 if param_name == "self" {
                                     fn_builder.current_self_local = Some(local);
