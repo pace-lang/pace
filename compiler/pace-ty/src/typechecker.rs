@@ -2821,6 +2821,17 @@ impl TypeChecker {
                         return Err(format!("{} takes exactly 1 argument", name));
                     }
                     Ok(Ty::Int)
+                } else if name == "assert" {
+                    if arg_types.is_empty() || arg_types.len() > 2 {
+                        return Err("assert takes 1 or 2 arguments: assert(condition, [message])".to_string());
+                    }
+                    if !matches!(arg_types[0], Ty::Bool | Ty::Int) {
+                        return Err("assert condition must evaluate to a boolean".to_string());
+                    }
+                    if arg_types.len() == 2 && !matches!(arg_types[1], Ty::String) {
+                        return Err("assert message must be a string".to_string());
+                    }
+                    Ok(Ty::Void)
                 } else if name == "sleep" {
                     if arg_types.len() != 1 {
                         return Err(format!("{} takes exactly 1 argument", name));

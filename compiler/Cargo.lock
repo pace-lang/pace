@@ -1334,6 +1334,7 @@ dependencies = [
  "pace-pkg",
  "semver",
  "tokio",
+ "walkdir",
 ]
 
 [[package]]

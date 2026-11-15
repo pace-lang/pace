@@ -9,6 +9,17 @@ void pace_println() {
     printf("\n");
 }
 
+void pace_assert(int cond, struct PaceString* msg) {
+    if (!cond) {
+        if (msg && msg->data) {
+            printf("Assertion failed: %.*s\n", (int)msg->length, msg->data);
+        } else {
+            printf("Assertion failed\n");
+        }
+        abort();
+    }
+}
+
 char* pace_format_string(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -79,6 +90,15 @@ void pace_print_bool(int val) {
 
 void pace_print_string(const char* val) {
     printf("%s\n", val);
+}
+
+int pace_string_equals(struct PaceString* a, struct PaceString* b) {
+    if (a == b) return 1;
+    if (!a || !b) return 0;
+    if (a->length != b->length) return 0;
+    if (a->length == 0) return 1;
+    if (!a->data || !b->data) return a->data == b->data;
+    return memcmp(a->data, b->data, a->length) == 0;
 }
 
 // ---------------------------------------------------------

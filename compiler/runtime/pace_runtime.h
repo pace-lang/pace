@@ -35,6 +35,8 @@ void pace_print_float(double val);
 void pace_print_bool(int val);
 void pace_print_string(struct PaceString* val);
 void pace_println();
+void pace_assert(int cond, struct PaceString* msg);
+int pace_string_equals(struct PaceString* a, struct PaceString* b);
 
 // Concurrency API
 // Event Loop (Single-threaded)

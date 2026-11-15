@@ -498,7 +498,7 @@ impl CGenerator {
                         }
                     }
                     if let Rvalue::BuiltinCall(name, _) = rval {
-                        if name == "print" || name == "println" {
+                        if name == "print" || name == "println" || name == "assert" {
                             is_void = true;
                         }
                     }
@@ -600,21 +600,29 @@ impl CGenerator {
                 } else if matches!(op, BinaryOp::Or) {
                     write!(&mut self.output, "_{} || _{}", lhs.0, rhs.0).unwrap();
                 } else {
-                    let op_str = match op {
-                        BinaryOp::Add => "+",
-                        BinaryOp::Sub => "-",
-                        BinaryOp::Mul => "*",
-                        BinaryOp::Div => "/",
-                        BinaryOp::Mod => "%",
-                        BinaryOp::EqEq => "==",
-                        BinaryOp::NotEq => "!=",
-                        BinaryOp::Gt => ">",
-                        BinaryOp::Lt => "<",
-                        BinaryOp::GtEq => ">=",
-                        BinaryOp::LtEq => "<=",
-                        _ => unreachable!(),
-                    };
-                    write!(&mut self.output, "_{} {} _{}", lhs.0, op_str, rhs.0).unwrap();
+                    let is_string = matches!(locals[lhs.0 as usize], Ty::String)
+                        || matches!(locals[rhs.0 as usize], Ty::String);
+                    if is_string && matches!(op, BinaryOp::EqEq) {
+                        write!(&mut self.output, "pace_string_equals(_{}, _{})", lhs.0, rhs.0).unwrap();
+                    } else if is_string && matches!(op, BinaryOp::NotEq) {
+                        write!(&mut self.output, "!pace_string_equals(_{}, _{})", lhs.0, rhs.0).unwrap();
+                    } else {
+                        let op_str = match op {
+                            BinaryOp::Add => "+",
+                            BinaryOp::Sub => "-",
+                            BinaryOp::Mul => "*",
+                            BinaryOp::Div => "/",
+                            BinaryOp::Mod => "%",
+                            BinaryOp::EqEq => "==",
+                            BinaryOp::NotEq => "!=",
+                            BinaryOp::Gt => ">",
+                            BinaryOp::Lt => "<",
+                            BinaryOp::GtEq => ">=",
+                            BinaryOp::LtEq => "<=",
+                            _ => unreachable!(),
+                        };
+                        write!(&mut self.output, "_{} {} _{}", lhs.0, op_str, rhs.0).unwrap();
+                    }
                 }
             }
             Rvalue::OptionalFieldAccess(obj, field) => {
@@ -718,6 +726,13 @@ impl CGenerator {
                     return;
                 } else if name == "pace_list_pop" {
                     write!(&mut self.output, "pace_list_pop(_{})", args[0].0).unwrap();
+                    return;
+                } else if name == "assert" {
+                    if args.len() == 1 {
+                        write!(&mut self.output, "pace_assert(_{}, NULL)", args[0].0).unwrap();
+                    } else {
+                        write!(&mut self.output, "pace_assert(_{}, _{})", args[0].0, args[1].0).unwrap();
+                    }
                     return;
                 }
 

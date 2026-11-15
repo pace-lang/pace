@@ -15,3 +15,4 @@ pace-lsp = { path = "../pace-lsp" }
 tokio = { version = "1.0", features = ["full"] }
 semver = "1.0.28"
 mimalloc = "0.1.43"
+walkdir = "2.5"

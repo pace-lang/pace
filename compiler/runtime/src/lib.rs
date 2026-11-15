@@ -16,6 +16,7 @@ unsafe extern "C" {
     fn strlen(s: *const c_char) -> usize;
     fn abort() -> !;
     fn memcpy(dest: *mut c_void, src: *const c_void, n: usize) -> *mut c_void;
+    fn memcmp(s1: *const c_void, s2: *const c_void, n: usize) -> c_int;
 }
 
 #[cfg(not(test))]
@@ -43,6 +44,24 @@ pub extern "C" fn pace_panic(msg: *const c_char) -> ! {
     unsafe {
         printf(c"Fatal error: %s\n".as_ptr(), msg);
         abort();
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pace_assert(cond: c_int, msg: *mut PaceString) {
+    if cond == 0 {
+        unsafe {
+            if msg.is_null() {
+                printf(c"Assertion failed\n".as_ptr());
+            } else {
+                printf(
+                    c"Assertion failed: %.*s\n".as_ptr(),
+                    (*msg).length as c_int,
+                    (*msg).data,
+                );
+            }
+            abort();
+        }
     }
 }
 
@@ -194,5 +213,32 @@ pub extern "C" fn pace_print_string(val: *mut PaceString) {
     }
     unsafe {
         printf(c"%s\n".as_ptr(), (*val).data);
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pace_string_equals(a: *const PaceString, b: *const PaceString) -> c_int {
+    if a == b {
+        return 1;
+    }
+    if a.is_null() || b.is_null() {
+        return 0;
+    }
+    unsafe {
+        if (*a).length != (*b).length {
+            return 0;
+        }
+        if (*a).length == 0 {
+            return 1;
+        }
+        if (*a).data.is_null() || (*b).data.is_null() {
+            return if (*a).data == (*b).data { 1 } else { 0 };
+        }
+        let res = memcmp(
+            (*a).data as *const c_void,
+            (*b).data as *const c_void,
+            (*a).length,
+        );
+        if res == 0 { 1 } else { 0 }
     }
 }

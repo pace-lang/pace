@@ -274,6 +274,7 @@ pub struct CompileOptions<'a> {
     pub release: bool,
     pub dependencies: &'a std::collections::HashMap<String, PathBuf>,
     pub is_lib: bool,
+    pub capture_output: bool,
 }
 
 pub fn compile_file(opts: CompileOptions) -> Result<(), String> {
@@ -387,11 +388,35 @@ pub fn compile_file(opts: CompileOptions) -> Result<(), String> {
     }
 
     if opts.run {
-        let run_status = Command::new(&bin_file)
-            .status()
-            .map_err(|e| format!("Failed to run executable: {}", e))?;
-        if !run_status.success() {
-            return Err("Execution failed".to_string());
+        if opts.capture_output {
+            let output = Command::new(&bin_file)
+                .output()
+                .map_err(|e| format!("Failed to run executable: {}", e))?;
+            if !output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let mut msg = String::new();
+                if !stdout.is_empty() {
+                    msg.push_str(&stdout);
+                }
+                if !stderr.is_empty() {
+                    if !msg.is_empty() {
+                        msg.push('\n');
+                    }
+                    msg.push_str(&stderr);
+                }
+                if msg.is_empty() {
+                    msg = "Execution failed with non-zero exit code".to_string();
+                }
+                return Err(msg);
+            }
+        } else {
+            let run_status = Command::new(&bin_file)
+                .status()
+                .map_err(|e| format!("Failed to run executable: {}", e))?;
+            if !run_status.success() {
+                return Err("Execution failed".to_string());
+            }
         }
     }
 

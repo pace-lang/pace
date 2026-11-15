@@ -1,38 +1,38 @@
 fn main() {
     let scores = {"alice": 100, "bob": 200}
-    println(scores.len())
-    println(scores["alice"])
-    println(scores["bob"])
+    assert(scores.len() == 2)
+    assert(scores["alice"] == 100)
+    assert(scores["bob"] == 200)
 
     scores["charlie"] = 300
-    println(scores.len())
-    println(scores["charlie"])
+    assert(scores.len() == 3)
+    assert(scores["charlie"] == 300)
 
     scores["bob"] = 250
-    println(scores["bob"])
+    assert(scores["bob"] == 250)
 
-    println(scores.has("alice"))
-    println(scores.has("dave"))
+    assert(scores.has("alice") == true)
+    assert(scores.has("dave") == false)
 
     scores.remove("alice")
-    println(scores.len())
-    println(scores.has("alice"))
+    assert(scores.len() == 2)
+    assert(scores.has("alice") == false)
 
     scores.clear()
-    println(scores.len())
+    assert(scores.len() == 0)
 
     let counts = Map<int, int>()
     counts[1] = 10
     counts[2] = 20
     counts[42] = 999
-    println(counts.len())
-    println(counts[1])
-    println(counts[2])
-    println(counts[42])
-    println(counts.has(42))
-    println(counts.has(99))
+    assert(counts.len() == 3)
+    assert(counts[1] == 10)
+    assert(counts[2] == 20)
+    assert(counts[42] == 999)
+    assert(counts.has(42) == true)
+    assert(counts.has(99) == false)
 
     counts.remove(2)
-    println(counts.len())
-    println(counts.has(2))
+    assert(counts.len() == 2)
+    assert(counts.has(2) == false)
 }

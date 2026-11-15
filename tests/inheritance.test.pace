@@ -1,0 +1,50 @@
+class Animal {
+    name: string,
+    
+    init(name: string) {
+        self.name = name
+    }
+    
+    fn speak() {
+        println("Animal speaks")
+    }
+}
+
+class Dog extends Animal {
+    breed: string,
+    
+    init(name: string, breed: string) {
+        super.init(name)
+        self.breed = breed
+    }
+    
+    override fn speak() {
+        println("Dog barks")
+    }
+}
+
+class Cat extends Animal {
+    init(name: string) {
+        super.init(name)
+    }
+    
+    override fn speak() {
+        println("Cat meows")
+    }
+}
+
+fn makeAnimalSpeak(animal: Animal) {
+    animal.speak()
+}
+
+fn main() {
+    let d = Dog("Rex", "German Shepherd")
+    let c = Cat("Whiskers")
+    
+    assert(d.name == "Rex", "Dog name must be Rex")
+    assert(d.breed == "German Shepherd", "Dog breed must match")
+    assert(c.name == "Whiskers", "Cat name must be Whiskers")
+
+    makeAnimalSpeak(d)
+    makeAnimalSpeak(c)
+}

@@ -1,32 +1,34 @@
 fn main() {
     let xs = [10, 20, 30]
-    println(xs.len())
-    println(xs[0])
-    println(xs[1])
-    println(xs[2])
+    assert(xs.len() == 3, "Initial length must be 3")
+    assert(xs[0] == 10)
+    assert(xs[1] == 20)
+    assert(xs[2] == 30)
 
     xs.push(40)
-    println(xs.len())
-    println(xs[3])
+    assert(xs.len() == 4)
+    assert(xs[3] == 40)
 
     xs[1] = 99
-    println(xs[1])
+    assert(xs[1] == 99)
 
     let popped = xs.pop()
-    println(popped)
-    println(xs.len())
+    assert(popped == 40)
+    assert(xs.len() == 3)
 
+    var sum = 0
     for item in xs {
-        println(item)
+        sum = sum + item
     }
+    assert(sum == 139)
 
     xs.clear()
-    println(xs.len())
+    assert(xs.len() == 0)
 
     let ys = List<int>()
     ys.push(100)
     ys.push(200)
-    println(ys.len())
-    println(ys[0])
-    println(ys[1])
+    assert(ys.len() == 2)
+    assert(ys[0] == 100)
+    assert(ys[1] == 200)
 }

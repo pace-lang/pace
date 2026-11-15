@@ -43,6 +43,11 @@ enum Commands {
         /// Optional path to a specific .pace file to run in script mode
         file: Option<String>,
     },
+    /// Run test files (.test.pace) in the package
+    Test {
+        /// Optional path to a specific test file or filter pattern
+        filter: Option<String>,
+    },
     /// Print the toolchain version
     Version,
     /// Upgrade the toolchain to the latest version
@@ -135,6 +140,7 @@ async fn execute_build_or_run(
             release,
             dependencies: &empty_deps,
             is_lib: false,
+            capture_output: false,
         })
     } else {
         let (root, project_name) = get_project_info()?;
@@ -214,6 +220,7 @@ async fn execute_build_or_run(
             release,
             dependencies: &dependencies,
             is_lib,
+            capture_output: false,
         })
     }
 }
@@ -263,6 +270,121 @@ fn execute_fmt(file: Option<String>, write: bool) -> Result<(), String> {
     }
 }
 
+async fn execute_test(filter: Option<String>) -> Result<(), String> {
+    let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
+
+    let mut test_files = Vec::new();
+
+    if let Some(ref f) = filter {
+        let p = PathBuf::from(f);
+        if p.is_file() {
+            test_files.push(p);
+        }
+    }
+
+    if test_files.is_empty() {
+        let search_dirs = [current_dir.join("tests"), current_dir.join("src"), current_dir.clone()];
+        for dir in &search_dirs {
+            if dir.is_dir() {
+                for entry in walkdir::WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+                    let path = entry.path();
+                    if path.is_file() {
+                        let fname = path.file_name().unwrap_or_default().to_string_lossy();
+                        if fname.ends_with(".test.pace") {
+                            if let Some(ref f) = filter {
+                                if path.to_string_lossy().contains(f) {
+                                    test_files.push(path.to_path_buf());
+                                }
+                            } else {
+                                test_files.push(path.to_path_buf());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    test_files.sort();
+    test_files.dedup();
+
+    if test_files.is_empty() {
+        println!("No test files (*.test.pace) found.");
+        return Ok(());
+    }
+
+    println!("\x1b[1mpace test\x1b[0m v{}", env!("CARGO_PKG_VERSION"));
+    println!("Running {} test file(s)...\n", test_files.len());
+
+    let mut passed = 0;
+    let mut failed = 0;
+    let suite_start = std::time::Instant::now();
+
+    let output_dir = std::env::temp_dir().join(format!("pace-test-{}", std::process::id()));
+    let _ = fs::create_dir_all(&output_dir);
+    let _guard = std::mem::DropGuard::new(output_dir.clone(), |dir| {
+        let _ = fs::remove_dir_all(&dir);
+    });
+
+    for test_file in &test_files {
+        let rel_path = test_file.strip_prefix(&current_dir).unwrap_or(test_file);
+        let test_name = test_file
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        let start = std::time::Instant::now();
+        let empty_deps = std::collections::HashMap::new();
+
+        let res = pace_driver::compile_file(pace_driver::CompileOptions {
+            file_path: test_file,
+            output_dir: &output_dir,
+            output_name: &test_name,
+            run: true,
+            check_only: false,
+            release: false,
+            dependencies: &empty_deps,
+            is_lib: false,
+            capture_output: true,
+        });
+
+        let duration = start.elapsed();
+        let duration_str = format!("{:.1}ms", duration.as_secs_f64() * 1000.0);
+
+        match res {
+            Ok(()) => {
+                println!("  \x1b[32m✓\x1b[0m {} \x1b[2m({})\x1b[0m", rel_path.display(), duration_str);
+                passed += 1;
+            }
+            Err(e) => {
+                println!("  \x1b[31m✗\x1b[0m {} \x1b[2m({})\x1b[0m", rel_path.display(), duration_str);
+                eprintln!("    \x1b[31mError:\x1b[0m {}", e.lines().collect::<Vec<_>>().join("\n    "));
+                failed += 1;
+            }
+        }
+    }
+
+    let total_duration = suite_start.elapsed();
+    println!();
+    if failed == 0 {
+        println!(
+            "\x1b[32m\x1b[1m{} passed\x1b[0m ({:.1}ms)",
+            passed,
+            total_duration.as_secs_f64() * 1000.0
+        );
+        Ok(())
+    } else {
+        println!(
+            "\x1b[31m\x1b[1m{} failed\x1b[0m, \x1b[32m{} passed\x1b[0m ({:.1}ms)",
+            failed,
+            passed,
+            total_duration.as_secs_f64() * 1000.0
+        );
+        Err(format!("{} test(s) failed", failed))
+    }
+}
+
 fn fatal_exit(err: impl std::fmt::Display) -> ! {
     eprintln!("{}", err);
     std::process::exit(1);
@@ -293,6 +415,11 @@ async fn main() {
         }
         Commands::Run { file } => {
             if let Err(e) = execute_build_or_run(file, true, false, false).await {
+                fatal_exit(e);
+            }
+        }
+        Commands::Test { filter } => {
+            if let Err(e) = execute_test(filter).await {
                 fatal_exit(e);
             }
         }
