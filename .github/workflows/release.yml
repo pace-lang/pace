@@ -107,8 +107,5 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: |
-            pace-*
-            pace-*.exe
-            pace-*.sha256
+          files: pace-*
           generate_release_notes: true
