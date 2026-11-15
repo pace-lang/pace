@@ -22,7 +22,9 @@ impl LoweringContext {
                 if ident.name == "false" {
                     return Ok(Expr::BoolLiteral(false, ident.span));
                 }
-                let id = if let Some(id) = self.resolve_local(ident.name) {
+                let id = if generic_args.is_some() {
+                    self.generate_id()
+                } else if let Some(id) = self.resolve_local(ident.name) {
                     id
                 } else {
                     let id = self.generate_id();

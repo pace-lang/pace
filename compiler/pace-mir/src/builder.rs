@@ -944,15 +944,25 @@ impl<'a> MirBuilder<'a> {
                             if is_super && let Some(&parent_id) = self.class_parents.get(&id) {
                                 target_id = parent_id;
                             }
-                            let mut type_name = "";
-                            for (name, &(tid, _)) in self.named_types {
-                                if target_id == tid {
-                                    type_name = name;
+                            let mut curr_id = Some(target_id);
+                            let mut resolved_method_name = None;
+                            while let Some(cid) = curr_id {
+                                let mut tname = "";
+                                for (name, &(tid, _)) in self.named_types {
+                                    if cid == tid {
+                                        tname = name;
+                                        break;
+                                    }
+                                }
+                                let mname = format!("{}_{}", tname, member);
+                                if self.methods_env.contains_key(&mname) {
+                                    resolved_method_name = Some(mname);
                                     break;
                                 }
+                                curr_id = self.class_parents.get(&cid).copied();
                             }
-                            let method_name = format!("{}_{}", type_name, member);
-                            if self.methods_env.contains_key(&method_name) {
+
+                            if let Some(method_name) = resolved_method_name {
                                 global_name = method_name;
 
                                 // Insert the object as the first argument (self)

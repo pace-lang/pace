@@ -1,3 +1,9 @@
 # hello_world
 
-Welcome to your new Pace project!
+A simple Pace library package demonstrating package distribution and native tests.
+
+## Running Tests
+
+```bash
+pace test
+```

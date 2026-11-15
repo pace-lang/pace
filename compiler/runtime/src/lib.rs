@@ -13,6 +13,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 unsafe extern "C" {
     fn printf(format: *const c_char, ...) -> c_int;
+    fn dprintf(fd: c_int, format: *const c_char, ...) -> c_int;
     fn strlen(s: *const c_char) -> usize;
     fn abort() -> !;
     fn memcpy(dest: *mut c_void, src: *const c_void, n: usize) -> *mut c_void;
@@ -23,7 +24,7 @@ unsafe extern "C" {
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe {
-        printf(c"Rust panic!\n".as_ptr());
+        dprintf(2, c"Rust panic!\n".as_ptr());
         abort();
     }
 }
@@ -42,7 +43,7 @@ pub struct ArcHeader {
 #[unsafe(no_mangle)]
 pub extern "C" fn pace_panic(msg: *const c_char) -> ! {
     unsafe {
-        printf(c"Fatal error: %s\n".as_ptr(), msg);
+        dprintf(2, c"Fatal error: %s\n".as_ptr(), msg);
         abort();
     }
 }
@@ -52,9 +53,10 @@ pub extern "C" fn pace_assert(cond: c_int, msg: *mut PaceString) {
     if cond == 0 {
         unsafe {
             if msg.is_null() {
-                printf(c"Assertion failed\n".as_ptr());
+                dprintf(2, c"Assertion failed\n".as_ptr());
             } else {
-                printf(
+                dprintf(
+                    2,
                     c"Assertion failed: %.*s\n".as_ptr(),
                     (*msg).length as c_int,
                     (*msg).data,

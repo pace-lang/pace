@@ -12,9 +12,9 @@ void pace_println() {
 void pace_assert(int cond, struct PaceString* msg) {
     if (!cond) {
         if (msg && msg->data) {
-            printf("Assertion failed: %.*s\n", (int)msg->length, msg->data);
+            fprintf(stderr, "Assertion failed: %.*s\n", (int)msg->length, msg->data);
         } else {
-            printf("Assertion failed\n");
+            fprintf(stderr, "Assertion failed\n");
         }
         abort();
     }

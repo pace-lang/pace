@@ -1,0 +1,21 @@
+import demo_lib
+
+fn main() {
+    hello()
+
+    // 1. Math functions
+    assert(add(10, 25) == 35, "add(10, 25) should equal 35")
+    assert(multiply(6, 7) == 42, "multiply(6, 7) should equal 42")
+
+    // 2. Generic Box<int>
+    let intBox = Box<int>(value: 100)
+    assert(intBox.get() == 100, "intBox.get() should return 100")
+    intBox.set(250)
+    assert(intBox.get() == 250, "intBox.get() after set should return 250")
+
+    // 3. Generic Box<string> with string equality
+    let strBox = Box<string>(value: "pace-lang")
+    assert(strBox.get() == "pace-lang", "strBox value should match pace-lang")
+    strBox.set("modern-pace")
+    assert(strBox.get() == "modern-pace", "strBox value after set should match modern-pace")
+}

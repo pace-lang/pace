@@ -95,6 +95,8 @@ pub fn scaffold_project(path: &str, is_lib: bool) -> Result<(), String> {
 
     fs::create_dir_all(project_dir.join("src"))
         .map_err(|e| format!("Failed to create src directory: {}", e))?;
+    fs::create_dir_all(project_dir.join("tests"))
+        .map_err(|e| format!("Failed to create tests directory: {}", e))?;
 
     let toml_content = if is_lib {
         format!(
@@ -115,7 +117,17 @@ pub fn scaffold_project(path: &str, is_lib: bool) -> Result<(), String> {
     fs::write(project_dir.join(".gitignore"), gitignore_content)
         .map_err(|e| format!("Failed to write .gitignore: {}", e))?;
 
-    let readme_content = format!("# {}\n\nWelcome to your new Pace project!", pkg_name);
+    let readme_content = if is_lib {
+        format!(
+            "# {}\n\nWelcome to your new Pace library!\n\n## Getting Started\n\nRun the test suite:\n\n```bash\npace test\n```\n",
+            pkg_name
+        )
+    } else {
+        format!(
+            "# {}\n\nWelcome to your new Pace project!\n\n## Getting Started\n\nRun the application:\n\n```bash\npace run\n```\n\nRun the test suite:\n\n```bash\npace test\n```\n",
+            pkg_name
+        )
+    };
     fs::write(project_dir.join("README.md"), readme_content)
         .map_err(|e| format!("Failed to write README.md: {}", e))?;
 
@@ -131,14 +143,26 @@ pub fn scaffold_project(path: &str, is_lib: bool) -> Result<(), String> {
         )
         .map_err(|e| format!("Failed to write CHANGELOG.md: {}", e))?;
 
-        let lib_content = "fn greet() {\n    println(\"⚡ Hello from your Pace library!\")\n}\n";
+        let lib_content = "fn add(a: int, b: int) -> int {\n    return a + b\n}\n\nfn greet() {\n    println(\"⚡ Hello from your Pace library!\")\n}\n";
         fs::write(project_dir.join("src/lib.pace"), lib_content)
             .map_err(|e| format!("Failed to write src/lib.pace: {}", e))?;
+
+        let test_content = format!(
+            "import {}\n\nfn main() {{\n    greet()\n    assert(add(2, 3) == 5, \"add(2, 3) should equal 5\")\n}}\n",
+            pkg_name
+        );
+        fs::write(project_dir.join("tests/lib.test.pace"), test_content)
+            .map_err(|e| format!("Failed to write tests/lib.test.pace: {}", e))?;
     } else {
         let main_content =
             "fn main() {\n    println(\"⚡ Pace is ready. Build something fast.\")\n}\n";
         fs::write(project_dir.join("src/main.pace"), main_content)
             .map_err(|e| format!("Failed to write src/main.pace: {}", e))?;
+
+        let test_content =
+            "fn main() {\n    assert(1 + 1 == 2, \"Sanity check\")\n}\n";
+        fs::write(project_dir.join("tests/main.test.pace"), test_content)
+            .map_err(|e| format!("Failed to write tests/main.test.pace: {}", e))?;
     }
 
     Ok(())
@@ -162,4 +186,42 @@ pub fn parse_manifest(path: &Path) -> Result<PaceToml, String> {
     let content =
         fs::read_to_string(path).map_err(|e| format!("Failed to read pace.toml: {}", e))?;
     toml::from_str(&content).map_err(|e| format!("Failed to parse pace.toml: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scaffold_binary_project() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("pace_scaffold_bin_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        let res = scaffold_project(temp_dir.to_str().unwrap(), false);
+        assert!(res.is_ok());
+        assert!(temp_dir.join("pace.toml").exists());
+        assert!(temp_dir.join("src/main.pace").exists());
+        assert!(temp_dir.join("tests/main.test.pace").exists());
+        assert!(temp_dir.join("README.md").exists());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_scaffold_lib_project() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("pace_scaffold_lib_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        let res = scaffold_project(temp_dir.to_str().unwrap(), true);
+        assert!(res.is_ok());
+        assert!(temp_dir.join("pace.toml").exists());
+        assert!(temp_dir.join("src/lib.pace").exists());
+        assert!(temp_dir.join("tests/lib.test.pace").exists());
+        assert!(temp_dir.join("LICENSE").exists());
+        assert!(temp_dir.join("CHANGELOG.md").exists());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }

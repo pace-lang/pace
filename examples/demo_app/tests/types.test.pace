@@ -1,0 +1,50 @@
+struct Point {
+    x: int,
+    y: int,
+}
+
+class User {
+    name: string
+    age: int
+
+    init(name: string, age: int) {
+        self.name = name
+        self.age = age
+    }
+
+    fn isAdult() -> bool {
+        if self.age >= 18 {
+            return true
+        }
+        return false
+    }
+}
+
+class Admin extends User {
+    role: string
+
+    init(name: string, age: int, role: string) {
+        super.init(name, age)
+        self.role = role
+    }
+}
+
+fn main() {
+    // 1. Value semantics struct
+    let p = Point(x: 10, y: 20)
+    assert(p.x == 10, "Point x should be 10")
+    assert(p.y == 20, "Point y should be 20")
+
+    // 2. Reference semantics class
+    let user = User("Alice", 20)
+    assert(user.name == "Alice", "User name should be Alice")
+    assert(user.age == 20, "User age should be 20")
+    assert(user.isAdult() == true, "User should be adult")
+
+    // 3. Inheritance
+    let admin = Admin("Bob", 30, "superadmin")
+    assert(admin.name == "Bob", "Admin name should be Bob")
+    assert(admin.age == 30, "Admin age should be 30")
+    assert(admin.role == "superadmin", "Admin role should be superadmin")
+    assert(admin.isAdult() == true, "Admin should be adult")
+}

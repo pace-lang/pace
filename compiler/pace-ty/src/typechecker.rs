@@ -1939,6 +1939,28 @@ impl TypeChecker {
                     name.to_string()
                 };
 
+                if generic_args.is_some()
+                    && (self.generic_templates.contains_key(&mangled_name)
+                        || self.generic_templates.contains_key(name.as_str()))
+                {
+                    let gname = if self.generic_templates.contains_key(&mangled_name) {
+                        &mangled_name
+                    } else {
+                        name.as_str()
+                    };
+                    if let Some(args) = generic_args {
+                        match self.instantiate_generic(gname, args) {
+                            Ok(inst_ty) => {
+                                self.env.insert(*id, inst_ty.clone());
+                                self.local_types.insert(*id, inst_ty.clone());
+                                self.resolved_global_names.insert(*id, mangled_name.clone());
+                                return Ok(inst_ty);
+                            }
+                            Err(_e) => {}
+                        }
+                    }
+                }
+
                 if let Some(ty) = self.env.get(id).cloned() {
                     self.symbol_references.entry(*id).or_default().push(*span);
                     if let Some((_, _, decl_span)) = self.declared_bindings.iter().find(|(d_id, _, _)| d_id == id) {
@@ -1970,9 +1992,16 @@ impl TypeChecker {
                         self.definition_info.insert(*span, *def_span);
                     }
                     Ok(ty)
-                } else if self.generic_templates.contains_key(&mangled_name) {
+                } else if self.generic_templates.contains_key(&mangled_name)
+                    || self.generic_templates.contains_key(name.as_str())
+                {
+                    let gname = if self.generic_templates.contains_key(&mangled_name) {
+                        &mangled_name
+                    } else {
+                        name.as_str()
+                    };
                     if let Some(args) = generic_args {
-                        match self.instantiate_generic(&mangled_name, args) {
+                        match self.instantiate_generic(gname, args) {
                             Ok(inst_ty) => {
                                 self.env.insert(*id, inst_ty.clone());
                                 self.local_types.insert(*id, inst_ty.clone());
@@ -2287,17 +2316,28 @@ impl TypeChecker {
                             return Ok(sfty.clone());
                         }
 
-                        // Check if it's a method
-                        let method_name = format!("{}_{}", class_name, member);
-                        if let Some(mty) = self.methods_env.get(&method_name) {
-                            self.used_bindings_by_name.insert(method_name.clone());
-                            let short_class = class_name.split('_').next_back().unwrap_or(class_name);
-                            self.used_bindings_by_name
-                                .insert(format!("{}_{}", short_class, member));
-                            if let Some(def_span) = self.global_spans.get(&method_name) {
-                                self.definition_info.insert(*span, *def_span);
+                        // Check if it's a method (including inherited methods)
+                        let mut curr_class_id = Some(hir_id);
+                        while let Some(cid) = curr_class_id {
+                            let mut cname = "";
+                            for (name, &(nid, _)) in &self.named_types {
+                                if nid == cid {
+                                    cname = name;
+                                    break;
+                                }
                             }
-                            return Ok(mty.clone());
+                            let method_name = format!("{}_{}", cname, member);
+                            if let Some(mty) = self.methods_env.get(&method_name) {
+                                self.used_bindings_by_name.insert(method_name.clone());
+                                let short_class = cname.split('_').next_back().unwrap_or(cname);
+                                self.used_bindings_by_name
+                                    .insert(format!("{}_{}", short_class, member));
+                                if let Some(def_span) = self.global_spans.get(&method_name) {
+                                    self.definition_info.insert(*span, *def_span);
+                                }
+                                return Ok(mty.clone());
+                            }
+                            curr_class_id = self.class_parents.get(&cid).copied();
                         }
 
                         Err(format!("Class/Actor has no member '{}'", member))
@@ -2355,8 +2395,28 @@ impl TypeChecker {
             Expr::Call { callee, args, span } => {
                 let mut generic_instantiation = None;
                 if let Expr::Ident(_, name, generic_args, _) = &**callee {
-                    if let Some(explicit_args) = generic_args {
-                        if let Ok(func_ty) = self.instantiate_generic(name, explicit_args) {
+                    let mangled_name = if let Some(curr) = &self.current_module {
+                        if let Some(scope) = self.module_scopes.get(curr) {
+                            scope
+                                .visible_symbols
+                                .get(&name.to_string())
+                                .cloned()
+                                .unwrap_or_else(|| name.to_string())
+                        } else {
+                            name.to_string()
+                        }
+                    } else {
+                        name.to_string()
+                    };
+                    let gname = if self.generic_templates.contains_key(&mangled_name) {
+                        Some(mangled_name.as_str())
+                    } else if self.generic_templates.contains_key(name.as_str()) {
+                        Some(name.as_str())
+                    } else {
+                        None
+                    };
+                    if let (Some(explicit_args), Some(gname)) = (generic_args, gname) {
+                        if let Ok(func_ty) = self.instantiate_generic(gname, explicit_args) {
                             generic_instantiation = Some(func_ty);
                         }
                     } else if self.generic_templates.contains_key(&name.to_string()) {

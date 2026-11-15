@@ -270,6 +270,53 @@ fn execute_fmt(file: Option<String>, write: bool) -> Result<(), String> {
     }
 }
 
+async fn resolve_package_deps_for_dir(
+    dir: &Path,
+) -> std::collections::HashMap<String, PathBuf> {
+    let mut deps = std::collections::HashMap::new();
+
+    let mut curr = Some(dir);
+    let mut manifest_dir = None;
+    while let Some(d) = curr {
+        if d.join("pace.toml").exists() {
+            manifest_dir = Some(d);
+            break;
+        }
+        curr = d.parent();
+    }
+
+    if let Some(root) = manifest_dir {
+        let toml_path = root.join("pace.toml");
+        if let Ok(toml) = pace_pkg::parse_manifest(&toml_path) {
+            deps.insert(toml.package.name.clone(), root.to_path_buf());
+
+            let mut resolver = pace_pkg::resolve::DependencyResolver::new();
+            let lockfile_path = root.join("pace.lock");
+            if lockfile_path.exists()
+                && let Ok(lock) =
+                    pace_pkg::resolve::DependencyResolver::read_lockfile(&lockfile_path)
+            {
+                resolver.load_lock(lock);
+            }
+            if let Ok(lock) = resolver.resolve(&toml).await {
+                let cache = pace_pkg::cache::CacheManager::new();
+                for (name, info) in &lock.packages {
+                    let mut path = cache.get_package_path(name, &info.version);
+                    if let Some(source) = &info.source {
+                        if source.starts_with("local+") {
+                            if let Some(local_path) = source.strip_prefix("local+") {
+                                path = root.join(local_path);
+                            }
+                        }
+                    }
+                    deps.insert(name.clone(), path);
+                }
+            }
+        }
+    }
+    deps
+}
+
 async fn execute_test(filter: Option<String>) -> Result<(), String> {
     let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
 
@@ -326,6 +373,11 @@ async fn execute_test(filter: Option<String>) -> Result<(), String> {
         let _ = fs::remove_dir_all(&dir);
     });
 
+    let mut package_deps_cache: std::collections::HashMap<
+        PathBuf,
+        std::collections::HashMap<String, PathBuf>,
+    > = std::collections::HashMap::new();
+
     for test_file in &test_files {
         let rel_path = test_file.strip_prefix(&current_dir).unwrap_or(test_file);
         let test_name = test_file
@@ -335,7 +387,15 @@ async fn execute_test(filter: Option<String>) -> Result<(), String> {
             .to_string();
 
         let start = std::time::Instant::now();
-        let empty_deps = std::collections::HashMap::new();
+        let test_dir = test_file.parent().unwrap_or(&current_dir);
+        let deps = match package_deps_cache.get(test_dir) {
+            Some(d) => d.clone(),
+            None => {
+                let d = resolve_package_deps_for_dir(test_dir).await;
+                package_deps_cache.insert(test_dir.to_path_buf(), d.clone());
+                d
+            }
+        };
 
         let res = pace_driver::compile_file(pace_driver::CompileOptions {
             file_path: test_file,
@@ -344,7 +404,7 @@ async fn execute_test(filter: Option<String>) -> Result<(), String> {
             run: true,
             check_only: false,
             release: false,
-            dependencies: &empty_deps,
+            dependencies: &deps,
             is_lib: false,
             capture_output: true,
         });
