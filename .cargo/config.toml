@@ -1,0 +1,7 @@
+[registry]
+# Cooldown period for newly published dependencies to mitigate supply-chain attacks
+global-min-publish-age = "4 days"
+
+[resolver]
+incompatible-publish-age = "deny"
+

@@ -580,7 +580,7 @@ impl TypeChecker {
                                 Ty::Void
                             };
                             let short_method_name =
-                                m_name.strip_prefix(&format!("{}_", name)).unwrap_or(m_name);
+                                m_name.trim_prefix(&format!("{}_", name));
                             let method_mangled_name =
                                 format!("{}_{}", mangled_name, short_method_name);
                             self.resolved_global_names.insert(*m_id, method_mangled_name.clone());
@@ -661,7 +661,7 @@ impl TypeChecker {
                                 Ty::Void
                             };
                             let short_method_name =
-                                m_name.strip_prefix(&format!("{}_", name)).unwrap_or(m_name);
+                                m_name.trim_prefix(&format!("{}_", name));
                             let method_mangled_name =
                                 format!("{}_{}", mangled_name, short_method_name);
                             self.resolved_global_names.insert(*m_id, method_mangled_name.clone());
@@ -714,7 +714,7 @@ impl TypeChecker {
                                 Ty::Void
                             };
                             let short_method_name =
-                                m_name.strip_prefix(&format!("{}_", name)).unwrap_or(m_name);
+                                m_name.trim_prefix(&format!("{}_", name));
                             let method_mangled_name =
                                 format!("{}_{}", mangled_name, short_method_name);
                             self.resolved_global_names.insert(*m_id, method_mangled_name.clone());
@@ -1005,7 +1005,7 @@ impl TypeChecker {
                     {
                         let mangled_class_name = format!("{}_{}", module_name, decl_name);
                         let class_prefix = format!("{}_", decl_name);
-                        let short_method_name = name.strip_prefix(&class_prefix).unwrap_or(name);
+                        let short_method_name = name.trim_prefix(&class_prefix);
                         let method_mangled_name =
                             format!("{}_{}", mangled_class_name, short_method_name);
 
@@ -2328,7 +2328,7 @@ impl TypeChecker {
                             "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
                             "push" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Void))),
                             "pop" => Ok(Ty::Function(vec![], Box::new(Ty::Optional(elem.clone())))),
-                            "get" => Ok(Ty::Function(vec![Ty::Int], Box::new(*elem.clone()))),
+                            "get" => Ok(Ty::Function(vec![Ty::Int], elem.clone())),
                             "set" => Ok(Ty::Function(vec![Ty::Int, *elem.clone()], Box::new(Ty::Void))),
                             "clear" => Ok(Ty::Function(vec![], Box::new(Ty::Void))),
                             _ => Err(format!("List has no member '{}'", member)),
@@ -3501,8 +3501,7 @@ impl TypeChecker {
                     {
                         let short_template_name = template_name.split('_').next_back().unwrap_or(template_name);
                         let base_method_name = m_name
-                            .strip_prefix(&format!("{}_", short_template_name))
-                            .unwrap_or(m_name)
+                            .trim_prefix(&format!("{}_", short_template_name))
                             .to_string();
                         *m_name = pace_span::intern(&format!("{}_{}", mono_name, base_method_name));
                         for (_, _, param_ty) in params.iter_mut() {
@@ -3658,8 +3657,7 @@ impl TypeChecker {
                         && let Some(ty) = self.methods_env.get(&m_name.to_string())
                     {
                         let base_name = m_name
-                            .strip_prefix(&format!("{}_", name))
-                            .unwrap_or(m_name)
+                            .trim_prefix(&format!("{}_", name))
                             .to_string();
                         vtable.push(VTableEntry {
                             name: base_name.clone(),

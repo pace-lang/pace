@@ -84,7 +84,7 @@ impl DependencyResolver {
                 for entry in entries.filter_map(|e| e.ok()) {
                     let fname = entry.file_name().to_string_lossy().to_string();
                     if fname.starts_with(&prefix) {
-                        let ver_str = fname.strip_prefix(&prefix).unwrap_or(&fname);
+                        let ver_str = fname.trim_prefix(&prefix);
                         if Version::parse(ver_str).is_ok() {
                             let mut deps = HashMap::new();
                             if let Ok(manifest) =

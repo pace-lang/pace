@@ -263,6 +263,11 @@ fn execute_fmt(file: Option<String>, write: bool) -> Result<(), String> {
     }
 }
 
+fn fatal_exit(err: impl std::fmt::Display) -> ! {
+    eprintln!("{}", err);
+    std::process::exit(1);
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -273,26 +278,22 @@ async fn main() {
         }
         Commands::New { name, lib } => {
             if let Err(e) = pace_pkg::scaffold_project(&name, lib) {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
+                fatal_exit(format!("Error: {}", e));
             }
         }
         Commands::Build { file } => {
             if let Err(e) = execute_build_or_run(file, false, false, true).await {
-                eprintln!("{}", e);
-                std::process::exit(1);
+                fatal_exit(e);
             }
         }
         Commands::Check { file } => {
             if let Err(e) = execute_build_or_run(file, false, true, false).await {
-                eprintln!("{}", e);
-                std::process::exit(1);
+                fatal_exit(e);
             }
         }
         Commands::Run { file } => {
             if let Err(e) = execute_build_or_run(file, true, false, false).await {
-                eprintln!("{}", e);
-                std::process::exit(1);
+                fatal_exit(e);
             }
         }
         Commands::Version => {
@@ -308,64 +309,53 @@ async fn main() {
             if status.success() {
                 println!("Upgrade complete!");
             } else {
-                eprintln!("Upgrade failed.");
-                std::process::exit(1);
+                fatal_exit("Upgrade failed.");
             }
         }
         Commands::Fmt { file, stdout } => {
             if let Err(e) = execute_fmt(file, !stdout) {
-                eprintln!("{}", e);
-                std::process::exit(1);
+                fatal_exit(e);
             }
         }
         Commands::Add { name, version, dev } => {
-            if let Err(e) = pace_pkg::commands::add_dependency(&name, version.as_deref(), dev).await
-            {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
+            if let Err(e) = pace_pkg::commands::add_dependency(&name, version.as_deref(), dev).await {
+                fatal_exit(format!("Error: {}", e));
             }
         }
         Commands::Install => {
             // Install behaves the same as update without `--latest`
             if let Err(e) = pace_pkg::commands::update_dependencies(false).await {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
+                fatal_exit(format!("Error: {}", e));
             }
         }
         Commands::Update { latest } => {
             if let Err(e) = pace_pkg::commands::update_dependencies(latest).await {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
+                fatal_exit(format!("Error: {}", e));
             }
         }
         Commands::Outdated => {
             if let Err(e) = pace_pkg::commands::list_outdated().await {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
+                fatal_exit(format!("Error: {}", e));
             }
         }
         Commands::Publish => {
             if let Err(e) = pace_pkg::commands::publish().await {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
+                fatal_exit(format!("Error: {}", e));
             }
         }
         Commands::Login { token } => {
             if let Err(e) = pace_pkg::commands::login(&token) {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
+                fatal_exit(format!("Error: {}", e));
             }
         }
         Commands::Remove { name } => {
             if let Err(e) = pace_pkg::commands::remove_dependency(&name).await {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
+                fatal_exit(format!("Error: {}", e));
             }
         }
         Commands::Clean { cache } => {
             if let Err(e) = pace_pkg::commands::clean(cache) {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
+                fatal_exit(format!("Error: {}", e));
             }
         }
     }

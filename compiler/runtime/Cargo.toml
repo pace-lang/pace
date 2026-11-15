@@ -7,11 +7,6 @@ edition = "2024"
 name = "pace_rt"
 crate-type = ["staticlib"]
 
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
 
 [dependencies]
 mimalloc = "0.1.43"

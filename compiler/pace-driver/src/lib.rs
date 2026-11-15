@@ -342,6 +342,9 @@ pub fn compile_file(opts: CompileOptions) -> Result<(), String> {
 
     // Find runtime paths
     let tmp_dir = std::env::temp_dir().join(format!("pace-rt-{}", std::process::id()));
+    let _tmp_guard = std::mem::DropGuard::new(tmp_dir.clone(), |dir| {
+        let _ = fs::remove_dir_all(&dir);
+    });
     fs::create_dir_all(&tmp_dir).map_err(|e| format!("Failed to create tmp dir: {}", e))?;
     let tmp_lib = tmp_dir.join("libpace_rt.a");
     let tmp_header = tmp_dir.join("pace_runtime.h");

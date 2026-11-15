@@ -119,6 +119,12 @@ impl Reporter {
             .any(|d| d.severity == Severity::Error)
     }
 
+    pub fn fatal(&mut self, diag: Diagnostic, source_map: &pace_span::SourceMap) -> ! {
+        self.report(diag);
+        self.emit_all(source_map);
+        std::process::exit(1);
+    }
+
     pub fn emit_all(&self, source_map: &pace_span::SourceMap) {
         use ariadne::{Color, Label, Report, ReportKind, Source};
 
