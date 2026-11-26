@@ -1,0 +1,58 @@
+var globalHits = 0
+
+fn bumpGlobal(val: bool) -> bool {
+    globalHits = globalHits + 1
+    return val
+}
+
+class Tracker {
+    count: int
+
+    init() {
+        self.count = 0
+    }
+}
+
+fn bumpAndReturn(t: Tracker, val: bool) -> bool {
+    t.count = t.count + 1
+    return val
+}
+
+fn main() {
+    // Integer arithmetic & precedence
+    assert(1 + 2 * 3 == 7, "multiplication before addition")
+    assert((1 + 2) * 3 == 9, "parentheses override precedence")
+    assert(20 / 3 == 6, "integer division")
+    assert(20 % 3 == 2, "modulo")
+
+    // Float arithmetic
+    let f = 1.5 + 2.5 * 2.0
+    assert((f > 6.4) && (f < 6.6), "float precedence")
+    assert((7.5 / 2.5 > 2.9) && (7.5 / 2.5 < 3.1), "float division")
+
+    // Comparisons
+    assert(5 > 3 && 3 >= 3, "gt and gte")
+    assert(2 < 4 && 4 <= 4, "lt and lte")
+    assert(5 != 6 && 5 == 5, "eq and neq")
+
+    // Logical short-circuiting
+    let t = Tracker()
+    let a = false && bumpAndReturn(t, true)
+    assert(!a, "false && ... is false")
+    assert(t.count == 0, "&& short-circuited RHS")
+
+    let b = true || bumpAndReturn(t, false)
+    assert(b, "true || ... is true")
+    assert(t.count == 0, "|| short-circuited RHS")
+
+    let c = true && bumpAndReturn(t, true)
+    assert(c, "true && true is true")
+    assert(t.count == 1, "&& evaluated RHS when LHS is true")
+
+    // Global var read & write with short-circuiting
+    globalHits = 0
+    let g1 = false && bumpGlobal(true)
+    assert(!g1 && globalHits == 0, "global && short-circuit")
+    let g2 = true && bumpGlobal(true)
+    assert(g2 && globalHits == 1, "global && evaluated")
+}

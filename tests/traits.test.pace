@@ -1,0 +1,50 @@
+trait Describable {
+    fn describe() -> string
+
+    fn tag() -> string {
+        return "[item]"
+    }
+}
+
+trait Scorable {
+    fn score() -> int
+}
+
+class Article with Describable, Scorable {
+    title: string
+    points: int
+
+    init(title: string, points: int) {
+        self.title = title
+        self.points = points
+    }
+
+    fn describe() -> string {
+        return self.title
+    }
+
+    fn score() -> int {
+        return self.points
+    }
+}
+
+class CustomTag with Describable {
+    fn describe() -> string {
+        return "custom"
+    }
+
+    fn tag() -> string {
+        return "[custom]"
+    }
+}
+
+fn main() {
+    let a = Article("Pace v0.5", 100)
+    assert(a.describe() == "Pace v0.5", "trait required method")
+    assert(a.tag() == "[item]", "trait default mixin method")
+    assert(a.score() == 100, "second trait method")
+
+    let ct = CustomTag()
+    assert(ct.describe() == "custom", "custom describe")
+    assert(ct.tag() == "[custom]", "overridden default trait method")
+}

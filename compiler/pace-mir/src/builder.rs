@@ -341,6 +341,18 @@ impl<'a> MirBuilder<'a> {
 
                 if let Some(l) = self.hir_to_local.get(id) {
                     *l
+                } else if let Some(ty) = self.global_env.get(id) {
+                    let g_name = self
+                        .resolved_global_names
+                        .get(id)
+                        .cloned()
+                        .unwrap_or_else(|| name.to_string());
+                    let temp = self.new_local(ty.clone());
+                    self.push_stmt(Statement::Assign(
+                        Lvalue::Local(temp),
+                        Rvalue::GlobalRead(g_name),
+                    ));
+                    temp
                 } else {
                     eprintln!("ICE: Local not found for id {:?} name {}", id, name);
                     Local(0)
@@ -372,16 +384,57 @@ impl<'a> MirBuilder<'a> {
             Expr::Binary {
                 left, op, right, ..
             } => {
-                let lhs = self.build_expr(left);
+                if *op == pace_ast::BinaryOp::And || *op == pace_ast::BinaryOp::Or {
+                    let is_and = *op == pace_ast::BinaryOp::And;
+                    let lhs = self.build_expr(left);
+                    let res_local = self.new_local(Ty::Bool);
+                    let rhs_bb = self.new_block();
+                    let short_bb = self.new_block();
+                    let merge_bb = self.new_block();
 
-                // For short-circuiting like ??, &&, ||, we should ideally use basic blocks
-                // but for MVP, we just emit a binary op if C supports it, or lower to ternary
+                    let (true_bb, false_bb) = if is_and {
+                        (rhs_bb, short_bb)
+                    } else {
+                        (short_bb, rhs_bb)
+                    };
+                    self.blocks[self.current_block.0 as usize].terminator =
+                        Some(Terminator::Branch {
+                            cond: lhs,
+                            then_block: true_bb,
+                            else_block: false_bb,
+                        });
+
+                    self.current_block = short_bb;
+                    self.push_stmt(Statement::Assign(
+                        Lvalue::Local(res_local),
+                        Rvalue::Constant(Constant::Bool(!is_and)),
+                    ));
+                    self.blocks[self.current_block.0 as usize].terminator =
+                        Some(Terminator::Goto(merge_bb));
+
+                    self.current_block = rhs_bb;
+                    let rhs = self.build_expr(right);
+                    self.push_stmt(Statement::Assign(
+                        Lvalue::Local(res_local),
+                        Rvalue::Use(rhs),
+                    ));
+                    if self.blocks[self.current_block.0 as usize]
+                        .terminator
+                        .is_none()
+                    {
+                        self.blocks[self.current_block.0 as usize].terminator =
+                            Some(Terminator::Goto(merge_bb));
+                    }
+
+                    self.current_block = merge_bb;
+                    return res_local;
+                }
+
+                let lhs = self.build_expr(left);
                 let rhs = self.build_expr(right);
 
                 let ret_ty = if *op == pace_ast::BinaryOp::NullCoalesce {
                     self.locals[rhs.0 as usize].clone()
-                } else if *op == pace_ast::BinaryOp::And || *op == pace_ast::BinaryOp::Or {
-                    Ty::Bool
                 } else if matches!(
                     op,
                     pace_ast::BinaryOp::Add
@@ -1372,33 +1425,45 @@ impl<'a> MirBuilder<'a> {
                                 }
                             }
                         }
-                    } else if let pace_hir::Pattern::Ident(id, _, _) = &arm.pattern {
+                    } else if let pace_hir::Pattern::Ident(id, name, _) = &arm.pattern {
                         let subject_ty = self.locals[subject_local.0 as usize].clone();
-                        let f_local = self.new_local(subject_ty);
-                        self.hir_to_local.insert(*id, f_local);
-                        self.push_stmt(Statement::Assign(
-                            Lvalue::Local(f_local),
-                            Rvalue::Use(subject_local),
-                        ));
-
-                        self.blocks[current_bb.0 as usize].terminator =
-                            Some(Terminator::Goto(body_bb));
-                        self.current_block = body_bb;
-                        let arm_local = self.build_expr(&arm.body);
-                        self.push_stmt(Statement::Assign(
-                            Lvalue::Local(temp),
-                            Rvalue::Use(arm_local),
-                        ));
-                        if self.blocks[self.current_block.0 as usize]
-                            .terminator
-                            .is_none()
+                        let matched_variant_tag = if let Ty::Enum(enum_id) = subject_ty
+                            && let Some(variants) = self.enum_defs.get(&enum_id)
                         {
-                            self.blocks[self.current_block.0 as usize].terminator =
-                                Some(Terminator::Goto(merge_bb));
+                            variants.iter().position(|v| v.name == *name).map(|i| i as i32)
+                        } else {
+                            None
+                        };
+
+                        if let Some(tag) = matched_variant_tag {
+                            arm_tag = tag;
+                        } else {
+                            let f_local = self.new_local(subject_ty);
+                            self.hir_to_local.insert(*id, f_local);
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(f_local),
+                                Rvalue::Use(subject_local),
+                            ));
+
+                            self.blocks[current_bb.0 as usize].terminator =
+                                Some(Terminator::Goto(body_bb));
+                            self.current_block = body_bb;
+                            let arm_local = self.build_expr(&arm.body);
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(temp),
+                                Rvalue::Use(arm_local),
+                            ));
+                            if self.blocks[self.current_block.0 as usize]
+                                .terminator
+                                .is_none()
+                            {
+                                self.blocks[self.current_block.0 as usize].terminator =
+                                    Some(Terminator::Goto(merge_bb));
+                            }
+                            current_bb = next_arm_bb;
+                            self.current_block = next_arm_bb;
+                            continue;
                         }
-                        current_bb = next_arm_bb;
-                        self.current_block = next_arm_bb;
-                        continue;
                     } else if let pace_hir::Pattern::CatchAll(_) = &arm.pattern {
                         self.blocks[current_bb.0 as usize].terminator =
                             Some(Terminator::Goto(body_bb));
@@ -1536,8 +1601,18 @@ impl<'a> MirBuilder<'a> {
                 let mut is_static_assign = false;
                 let mut static_name = String::new();
                 let lvalue = match &**target {
-                    Expr::Ident(id, _name, _, _) => {
-                        Lvalue::Local(*self.hir_to_local.get(id).unwrap())
+                    Expr::Ident(id, name, _, _) => {
+                        if let Some(l) = self.hir_to_local.get(id) {
+                            Lvalue::Local(*l)
+                        } else {
+                            is_static_assign = true;
+                            static_name = self
+                                .resolved_global_names
+                                .get(id)
+                                .cloned()
+                                .unwrap_or_else(|| name.to_string());
+                            Lvalue::Local(Local(0))
+                        }
                     }
                     Expr::MemberAccess { object, member, .. } => {
                         if let Expr::Ident(id, name, generic_args, _) = &**object {
@@ -1898,19 +1973,18 @@ impl<'a> MirBuilder<'a> {
 
         for decl in declarations.iter().chain(tc.instantiated_generics.iter()) {
             match decl {
-                pace_hir::Decl::Let { id, value, .. } | pace_hir::Decl::Var { id, value, .. } => {
+                pace_hir::Decl::Let { id, name, value, .. }
+                | pace_hir::Decl::Var { id, name, value, .. } => {
+                    let global_name = tc
+                        .resolved_global_names
+                        .get(id)
+                        .cloned()
+                        .unwrap_or_else(|| name.to_string());
                     if let Some(val) = value {
                         let rval_local = main_builder.build_expr(val);
                         let var_ty = main_builder.locals[rval_local.0 as usize].clone();
-                        let var_local = main_builder.new_local(var_ty.clone());
-                        main_builder.hir_to_local.insert(*id, var_local);
-                        main_builder.push_stmt(Statement::Assign(
-                            Lvalue::Local(var_local),
-                            Rvalue::Use(rval_local),
-                        ));
-                        if matches!(var_ty, Ty::Class(_)) {
-                            main_builder.push_stmt(Statement::Retain(Lvalue::Local(var_local)));
-                        }
+                        global_vars.push((global_name.clone(), var_ty.clone()));
+                        main_builder.push_stmt(Statement::GlobalWrite(global_name, rval_local));
                         _main_last_local = rval_local;
                     } else {
                         // Uninitialized global variable
@@ -1919,9 +1993,7 @@ impl<'a> MirBuilder<'a> {
                             .get(id)
                             .expect("Type not found in local_types")
                             .clone();
-                        let var_local = main_builder.new_local(var_ty.clone());
-                        main_builder.hir_to_local.insert(*id, var_local);
-                        // No assignment, C handles initialization
+                        global_vars.push((global_name, var_ty));
                     }
                 }
                 pace_hir::Decl::Const {

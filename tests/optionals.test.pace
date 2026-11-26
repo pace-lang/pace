@@ -1,0 +1,36 @@
+class Profile {
+    name: string
+
+    init(name: string) {
+        self.name = name
+    }
+
+    fn label() -> string {
+        return "user:${self.name}"
+    }
+}
+
+fn maybeDouble(x: int?) -> int? {
+    let v = x?
+    return v * 2
+}
+
+fn main() {
+    // String optional + coalescing
+    let s1: string? = null
+    let s2: string? = "pace"
+    assert((s1 ?? "default") == "default", "null string coalesces")
+    assert((s2 ?? "default") == "pace", "present string kept")
+
+    // Class optional + optional chaining on field
+    let p1: Profile? = null
+    let p2: Profile? = Profile("aniket")
+    assert((p1?.name ?? "none") == "none", "null ?. returns null")
+    assert((p2?.name ?? "none") == "aniket", "present ?. reads field")
+
+    // Optional ? propagation
+    let d1 = maybeDouble(null)
+    let d2 = maybeDouble(21)
+    assert(d1 == null, "null propagates through ?")
+    assert((d2 ?? 0) == 42, "present value unwraps through ?")
+}

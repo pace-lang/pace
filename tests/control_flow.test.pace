@@ -1,0 +1,62 @@
+fn classify(n: int) -> string {
+    if n < 0 {
+        return "neg"
+    }
+    if n == 0 {
+        return "zero"
+    }
+    return "pos"
+}
+
+fn findFirstEvenGreaterThan(limit: int) -> int {
+    var i = 0
+    while i < 100 {
+        i = i + 1
+        if i <= limit {
+            continue
+        }
+        if i % 2 == 0 {
+            return i
+        }
+    }
+    return -1
+}
+
+fn main() {
+    assert(classify(-5) == "neg", "negative branch")
+    assert(classify(0) == "zero", "zero branch")
+    assert(classify(42) == "pos", "positive branch")
+
+    // while + break + continue
+    var sum = 0
+    var i = 0
+    while i < 20 {
+        i = i + 1
+        if i % 2 == 1 {
+            continue
+        }
+        if i > 10 {
+            break
+        }
+        sum = sum + i
+    }
+    assert(sum == 30, "2+4+6+8+10 = 30")
+
+    // nested loops with break
+    var pairs = 0
+    var x = 0
+    while x < 4 {
+        var y = 0
+        while y < 4 {
+            if y == 2 {
+                break
+            }
+            pairs = pairs + 1
+            y = y + 1
+        }
+        x = x + 1
+    }
+    assert(pairs == 8, "inner break only breaks inner loop")
+
+    assert(findFirstEvenGreaterThan(5) == 6, "early return from while loop")
+}

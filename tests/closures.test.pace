@@ -1,0 +1,38 @@
+class Counter {
+    val: int
+
+    init(val: int) {
+        self.val = val
+    }
+
+    fn add(n: int) -> int {
+        self.val = self.val + n
+        return self.val
+    }
+}
+
+fn apply(f: (int) -> int, x: int) -> int {
+    return f(x)
+}
+
+fn main() {
+    // Inline arrow closure with primitive capture
+    let factor = 3
+    let mul = (x: int) -> int => x * factor
+    assert(apply(mul, 5) == 15, "inline closure captures primitive")
+    assert(apply(mul, 7) == 21, "inline closure reusable")
+
+    // Block closure
+    let addTen = (x: int) => {
+        let base = 10
+        return x + base
+    }
+    assert(apply(addTen, 4) == 14, "block closure")
+
+    // Closure capturing reference type (class) called multiple times
+    let c = Counter(10)
+    let inc = (delta: int) -> int => c.add(delta)
+    assert(inc(5) == 15, "first call mutates captured Counter")
+    assert(inc(7) == 22, "second call sees updated Counter")
+    assert(c.val == 22, "outer reference reflects mutations")
+}

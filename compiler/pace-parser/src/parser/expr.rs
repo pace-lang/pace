@@ -126,8 +126,43 @@ impl<'a> Parser<'a> {
         self.parse_postfix_expr()
     }
 
+    fn peek_binary_op(&self) -> Option<(pace_ast::BinaryOp, u8)> {
+        let op = if self.check(&TokenKind::OrOr) {
+            (pace_ast::BinaryOp::Or, 1)
+        } else if self.check(&TokenKind::AndAnd) {
+            (pace_ast::BinaryOp::And, 2)
+        } else if self.check(&TokenKind::NullCoalesce) {
+            (pace_ast::BinaryOp::NullCoalesce, 3)
+        } else if self.check(&TokenKind::EqEq) {
+            (pace_ast::BinaryOp::EqEq, 4)
+        } else if self.check(&TokenKind::NotEq) {
+            (pace_ast::BinaryOp::NotEq, 4)
+        } else if self.check(&TokenKind::Gt) {
+            (pace_ast::BinaryOp::Gt, 5)
+        } else if self.check(&TokenKind::Lt) {
+            (pace_ast::BinaryOp::Lt, 5)
+        } else if self.check(&TokenKind::GtEq) {
+            (pace_ast::BinaryOp::GtEq, 5)
+        } else if self.check(&TokenKind::LtEq) {
+            (pace_ast::BinaryOp::LtEq, 5)
+        } else if self.check(&TokenKind::Plus) {
+            (pace_ast::BinaryOp::Add, 6)
+        } else if self.check(&TokenKind::Minus) {
+            (pace_ast::BinaryOp::Sub, 6)
+        } else if self.check(&TokenKind::Star) {
+            (pace_ast::BinaryOp::Mul, 7)
+        } else if self.check(&TokenKind::Slash) {
+            (pace_ast::BinaryOp::Div, 7)
+        } else if self.check(&TokenKind::Percent) {
+            (pace_ast::BinaryOp::Mod, 7)
+        } else {
+            return None;
+        };
+        Some(op)
+    }
+
     pub(crate) fn parse_expr(&mut self) -> Result<Expr, Diagnostic> {
-        let mut left = self.parse_unary_expr()?;
+        let left = self.parse_unary_expr()?;
 
         if self.check(&TokenKind::Eq) {
             self.advance();
@@ -140,53 +175,30 @@ impl<'a> Parser<'a> {
             });
         }
 
-        loop {
-            let op = if self.check(&TokenKind::Plus) {
-                Some(pace_ast::BinaryOp::Add)
-            } else if self.check(&TokenKind::Minus) {
-                Some(pace_ast::BinaryOp::Sub)
-            } else if self.check(&TokenKind::Star) {
-                Some(pace_ast::BinaryOp::Mul)
-            } else if self.check(&TokenKind::Slash) {
-                Some(pace_ast::BinaryOp::Div)
-            } else if self.check(&TokenKind::Percent) {
-                Some(pace_ast::BinaryOp::Mod)
-            } else if self.check(&TokenKind::EqEq) {
-                Some(pace_ast::BinaryOp::EqEq)
-            } else if self.check(&TokenKind::NotEq) {
-                Some(pace_ast::BinaryOp::NotEq)
-            } else if self.check(&TokenKind::Gt) {
-                Some(pace_ast::BinaryOp::Gt)
-            } else if self.check(&TokenKind::Lt) {
-                Some(pace_ast::BinaryOp::Lt)
-            } else if self.check(&TokenKind::GtEq) {
-                Some(pace_ast::BinaryOp::GtEq)
-            } else if self.check(&TokenKind::LtEq) {
-                Some(pace_ast::BinaryOp::LtEq)
-            } else if self.check(&TokenKind::AndAnd) {
-                Some(pace_ast::BinaryOp::And)
-            } else if self.check(&TokenKind::OrOr) {
-                Some(pace_ast::BinaryOp::Or)
-            } else if self.check(&TokenKind::NullCoalesce) {
-                Some(pace_ast::BinaryOp::NullCoalesce)
-            } else {
-                None
-            };
+        self.parse_binary_rhs(left, 1)
+    }
 
-            if let Some(op) = op {
-                self.advance();
-                let right = self.parse_unary_expr()?;
-                left = Expr::Binary {
-                    span: left.span().merge(right.span()),
-                    left: Box::new(left),
-                    op,
-                    right: Box::new(right),
-                };
-            } else {
+    fn parse_binary_rhs(&mut self, mut left: Expr, min_prec: u8) -> Result<Expr, Diagnostic> {
+        while let Some((op, prec)) = self.peek_binary_op() {
+            if prec < min_prec {
                 break;
             }
+            self.advance();
+            let mut right = self.parse_unary_expr()?;
+            while let Some((_, next_prec)) = self.peek_binary_op() {
+                if next_prec > prec {
+                    right = self.parse_binary_rhs(right, prec + 1)?;
+                } else {
+                    break;
+                }
+            }
+            left = Expr::Binary {
+                span: left.span().merge(right.span()),
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            };
         }
-
         Ok(left)
     }
 

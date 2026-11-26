@@ -1,0 +1,60 @@
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+
+enum Shape {
+    Circle(r: int),
+    Rect(w: int, h: int)
+}
+
+class Box<T> {
+    value: T
+
+    init(value: T) {
+        self.value = value
+    }
+
+    fn get() -> T {
+        return self.value
+    }
+}
+
+fn identity<T>(x: T) -> T {
+    return x
+}
+
+fn areaApprox(s: Shape) -> int {
+    return match s {
+        Circle(r) => r * r * 3,
+        Rect(w, h) => w * h
+    }
+}
+
+fn colorCode(c: Color) -> int {
+    return match c {
+        Red => 1,
+        Green => 2,
+        _ => 3
+    }
+}
+
+fn main() {
+    assert(colorCode(Color.Red) == 1, "unit enum match Red")
+    assert(colorCode(Color.Green) == 2, "unit enum match Green")
+    assert(colorCode(Color.Blue) == 3, "wildcard enum match Blue")
+
+    let c = Shape.Circle(r: 4)
+    let r = Shape.Rect(w: 5, h: 6)
+    assert(areaApprox(c) == 48, "payload enum Circle")
+    assert(areaApprox(r) == 30, "payload enum Rect")
+
+    assert(identity<int>(99) == 99, "generic fn int")
+    assert(identity<string>("ok") == "ok", "generic fn string")
+
+    let intBox = Box<int>(42)
+    let strBox = Box<string>("pace")
+    assert(intBox.get() == 42, "generic class int")
+    assert(strBox.get() == "pace", "generic class string")
+}

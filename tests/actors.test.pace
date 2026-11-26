@@ -1,0 +1,29 @@
+actor Accumulator {
+    total: int = 0
+
+    fn add(n: int) {
+        self.total = self.total + n
+    }
+
+    fn get() -> int {
+        return self.total
+    }
+}
+
+async fn sumRange(count: int) -> Future<int> {
+    let acc = Accumulator()
+    var i = 1
+    while i <= count {
+        acc.add(i)
+        i = i + 1
+    }
+    return await acc.get()
+}
+
+async fn main() -> Future<Unit> {
+    let r1 = await sumRange(10)
+    let r2 = await sumRange(5)
+
+    assert(r1 == 55, "actor 1 sum 1..10 = 55")
+    assert(r2 == 15, "actor 2 sum 1..5 = 15")
+}

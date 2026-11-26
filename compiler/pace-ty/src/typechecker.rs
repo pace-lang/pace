@@ -1986,11 +1986,11 @@ impl TypeChecker {
                         name.as_str()
                     };
                     if let Some(args) = generic_args {
-                        match self.instantiate_generic(gname, args) {
-                            Ok(inst_ty) => {
+                        match self.instantiate_generic_named(gname, args) {
+                            Ok((inst_ty, mono_name)) => {
                                 self.env.insert(*id, inst_ty.clone());
                                 self.local_types.insert(*id, inst_ty.clone());
-                                self.resolved_global_names.insert(*id, mangled_name.clone());
+                                self.resolved_global_names.insert(*id, mono_name);
                                 return Ok(inst_ty);
                             }
                             Err(_e) => {}
@@ -2038,11 +2038,11 @@ impl TypeChecker {
                         name.as_str()
                     };
                     if let Some(args) = generic_args {
-                        match self.instantiate_generic(gname, args) {
-                            Ok(inst_ty) => {
+                        match self.instantiate_generic_named(gname, args) {
+                            Ok((inst_ty, mono_name)) => {
                                 self.env.insert(*id, inst_ty.clone());
                                 self.local_types.insert(*id, inst_ty.clone());
-                                self.resolved_global_names.insert(*id, mangled_name.clone());
+                                self.resolved_global_names.insert(*id, mono_name);
                                 return Ok(inst_ty);
                             }
                             Err(_e) => {}
@@ -2471,7 +2471,7 @@ impl TypeChecker {
             }
             Expr::Call { callee, args, span } => {
                 let mut generic_instantiation = None;
-                if let Expr::Ident(_, name, generic_args, _) = &**callee {
+                if let Expr::Ident(callee_id, name, generic_args, _) = &**callee {
                     let mangled_name = if let Some(curr) = &self.current_module {
                         if let Some(scope) = self.module_scopes.get(curr) {
                             scope
@@ -2493,7 +2493,10 @@ impl TypeChecker {
                         None
                     };
                     if let (Some(explicit_args), Some(gname)) = (generic_args, gname) {
-                        if let Ok(func_ty) = self.instantiate_generic(gname, explicit_args) {
+                        if let Ok((func_ty, mono_name)) =
+                            self.instantiate_generic_named(gname, explicit_args)
+                        {
+                            self.resolved_global_names.insert(*callee_id, mono_name);
                             generic_instantiation = Some(func_ty);
                         }
                     } else if self.generic_templates.contains_key(&name.to_string()) {
@@ -2540,8 +2543,10 @@ impl TypeChecker {
                             }
 
                             if ast_args.len() == generic_params.len()
-                                && let Ok(func_ty) = self.instantiate_generic(name, &ast_args)
+                                && let Ok((func_ty, mono_name)) =
+                                    self.instantiate_generic_named(name, &ast_args)
                             {
+                                self.resolved_global_names.insert(*callee_id, mono_name);
                                 generic_instantiation = Some(func_ty);
                             }
                         }
@@ -3566,6 +3571,15 @@ impl TypeChecker {
         template_name: &str,
         args: &[pace_ast::Type],
     ) -> Result<Ty, String> {
+        self.instantiate_generic_named(template_name, args)
+            .map(|(ty, _)| ty)
+    }
+
+    pub fn instantiate_generic_named(
+        &mut self,
+        template_name: &str,
+        args: &[pace_ast::Type],
+    ) -> Result<(Ty, String), String> {
         let template = match self.generic_templates.get(template_name) {
             Some(t) => t.clone(),
             None => return Err(format!("Generic template not found for {}", template_name)),
@@ -3670,12 +3684,15 @@ impl TypeChecker {
 
         if let Some(&(hir_id, kind)) = self.named_types.get(&mono_name) {
             if kind == 1 {
-                return Ok(Ty::Class(hir_id));
+                return Ok((Ty::Class(hir_id), mono_name));
             } else if kind == 0 {
-                return Ok(Ty::Struct(hir_id));
+                return Ok((Ty::Struct(hir_id), mono_name));
             } else {
-                return Ok(Ty::Enum(hir_id));
+                return Ok((Ty::Enum(hir_id), mono_name));
             }
+        }
+        if let Some(fn_ty) = self.methods_env.get(&mono_name).cloned() {
+            return Ok((fn_ty, mono_name));
         }
 
         let mut new_decl = template.clone();
@@ -3918,9 +3935,9 @@ impl TypeChecker {
         self.check_decl(&new_decl)?;
 
         match new_decl {
-            pace_hir::Decl::Struct { id, .. } => Ok(Ty::Struct(id)),
-            pace_hir::Decl::Class { id, .. } => Ok(Ty::Class(id)),
-            pace_hir::Decl::Actor { id, .. } => Ok(Ty::Actor(id)),
+            pace_hir::Decl::Struct { id, .. } => Ok((Ty::Struct(id), mono_name)),
+            pace_hir::Decl::Class { id, .. } => Ok((Ty::Class(id), mono_name)),
+            pace_hir::Decl::Actor { id, .. } => Ok((Ty::Actor(id), mono_name)),
             pace_hir::Decl::Enum { id, variants, .. } => {
                 for v in variants {
                     if let Some(f) = &v.fields {
@@ -3934,12 +3951,16 @@ impl TypeChecker {
                         self.env.insert(v.id, Ty::Enum(id));
                     }
                 }
-                Ok(Ty::Enum(id))
+                Ok((Ty::Enum(id), mono_name))
             }
-            pace_hir::Decl::Function { .. } => Ok(Ty::Function(
-                vec![], // A bit hacky, but Expr::Call doesn't actually use this Ty::Function for the callee type if it's already instantiated
-                Box::new(Ty::Void),
-            )),
+            pace_hir::Decl::Function { name, .. } => {
+                let fn_ty = self
+                    .methods_env
+                    .get(&name.to_string())
+                    .cloned()
+                    .unwrap_or_else(|| Ty::Function(vec![], Box::new(Ty::Void)));
+                Ok((fn_ty, mono_name))
+            }
             _ => Err("Unsupported declaration".to_string()),
         }
     }

@@ -1,0 +1,26 @@
+struct Point {
+    x: int,
+    y: int
+}
+
+fn greet(name: string) -> string {
+    return "Hello, $name!"
+}
+
+fn main() {
+    let empty = ""
+    assert(empty == "", "empty string equality")
+    assert(empty != "a", "empty vs non-empty")
+
+    let name = "Pace"
+    let ver = 5
+    let msg = "Lang: $name v0.$ver"
+    assert(msg == "Lang: Pace v0.5", "simple dollar-var interpolation")
+
+    let p = Point(x: 3, y: 4)
+    let exprMsg = "sum=${p.x + p.y}, greet=${greet(name)}"
+    assert(exprMsg == "sum=7, greet=Hello, Pace!", "braced expr interpolation")
+
+    let escaped = "line1\nline2\t\"ok\"\\"
+    assert(escaped != "", "escaped characters compile and compare")
+}
