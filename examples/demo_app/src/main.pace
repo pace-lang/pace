@@ -13,7 +13,7 @@ import async_await
 import actors
 import traits
 
-async fn main() -> Future<void> {
+async fn main() -> Future<Unit> {
 
     println("\n==================================")
     println("PACE FEATURES SHOWCASE")

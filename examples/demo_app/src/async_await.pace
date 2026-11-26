@@ -17,7 +17,7 @@ async fn processData(data: String) -> Future<int> {
     return 42
 }
 
-async fn testAsyncAwait() -> Future<void> {
+async fn testAsyncAwait() -> Future<Unit> {
     println("\n--- Testing Async/Await ---")
     
     // Call async functions and wait for their results using the `await` keyword

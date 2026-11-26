@@ -16,4 +16,5 @@ pub enum Ty {
     List(Box<Ty>),
     Map(Box<Ty>, Box<Ty>),
     Void,
+    Never,
 }

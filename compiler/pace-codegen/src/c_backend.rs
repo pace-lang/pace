@@ -327,7 +327,7 @@ impl CGenerator {
             }
             Ty::List(_) => "struct PaceList*".to_string(),
             Ty::Map(_, _) => "struct PaceMap*".to_string(),
-            Ty::Void => "void".to_string(),
+            Ty::Void | Ty::Never => "void".to_string(),
         }
     }
 
@@ -368,7 +368,7 @@ impl CGenerator {
                     default_val
                 }
             }
-            Ty::Void => "".to_string(),
+            Ty::Void | Ty::Never => "".to_string(),
         }
     }
 

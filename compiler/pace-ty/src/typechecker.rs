@@ -150,7 +150,8 @@ impl TypeChecker {
                 "Float" | "float" => Ok(Ty::Float),
                 "String" | "string" => Ok(Ty::String),
                 "Bool" | "bool" => Ok(Ty::Bool),
-                "Void" | "void" => Ok(Ty::Void),
+                "Unit" | "Void" | "void" => Ok(Ty::Void),
+                "Never" => Ok(Ty::Never),
                 other => {
                     if let Some(&(hir_id, kind)) = self.named_types.get(other) {
                         if kind == 1 {
@@ -256,7 +257,8 @@ impl TypeChecker {
                     "Float" | "float" => Ok(Ty::Float),
                     "String" | "string" => Ok(Ty::String),
                     "Bool" | "bool" => Ok(Ty::Bool),
-                    "Void" | "void" => Ok(Ty::Void),
+                    "Unit" | "Void" | "void" => Ok(Ty::Void),
+                    "Never" => Ok(Ty::Never),
                     other => {
                         let mangled_name = if let Some(curr) = &self.current_module {
                             if let Some(scope) = self.module_scopes.get(curr) {
@@ -1799,7 +1801,9 @@ impl TypeChecker {
                 };
 
                 let returns_exhaustively = self.check_exhaustive_return(body);
-                let requires_return = ret_ty != Ty::Void && !matches!(ret_ty, Ty::Future(ref inner) if **inner == Ty::Void);
+                let requires_return = ret_ty != Ty::Void
+                    && ret_ty != Ty::Never
+                    && !matches!(ret_ty, Ty::Future(ref inner) if **inner == Ty::Void || **inner == Ty::Never);
                 if !returns_exhaustively && requires_return {
                     self.reporter.report(Diagnostic::error(format!("Function '{}' expects to return {}, but does not exhaustively return a value", name, self.display_ty(&ret_ty)))
                         .with_span(*span)
@@ -3896,7 +3900,8 @@ impl TypeChecker {
             Ty::Float => "float".to_string(),
             Ty::String => "string".to_string(),
             Ty::Bool => "bool".to_string(),
-            Ty::Void => "void".to_string(),
+            Ty::Void => "Unit".to_string(),
+            Ty::Never => "Never".to_string(),
             Ty::Optional(inner) => format!("{}?", self.display_ty(inner)),
             Ty::Future(inner) => format!("Future<{}>", self.display_ty(inner)),
             Ty::Result(ok, err) => format!("Result<{}, {}>", self.display_ty(ok), self.display_ty(err)),

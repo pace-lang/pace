@@ -35,7 +35,7 @@ actor MathWorker {
     }
 }
 
-async fn testActor() -> Future<void> {
+async fn testActor() -> Future<Unit> {
     println("\n--- Actors (Multi-Threaded) ---")
     
     let c = Counter()
