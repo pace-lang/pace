@@ -20,7 +20,7 @@ async fn actorTest() -> Future<int> {
     return await c.getCount()
 }
 
-async fn main() -> Future<void> {
+async fn main() -> Future<Unit> {
     let res = await actorTest()
     println(res)
 }
