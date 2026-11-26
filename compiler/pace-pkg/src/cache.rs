@@ -70,7 +70,8 @@ impl CacheManager {
             use sha2::{Digest, Sha256};
             let mut hasher = Sha256::new();
             hasher.update(&bytes);
-            let calculated = format!("{:x}", hasher.finalize());
+            let digest = hasher.finalize();
+            let calculated: String = digest.iter().map(|b| format!("{:02x}", b)).collect();
             if !calculated.eq_ignore_ascii_case(tarball_sha256) {
                 return Err(format!(
                     "Checksum mismatch for package {}@{}: expected {}, got {}",
