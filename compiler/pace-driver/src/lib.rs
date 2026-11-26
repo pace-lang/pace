@@ -94,13 +94,13 @@ pub fn sanitize_module_name(name: &str) -> String {
 #[allow(clippy::too_many_arguments)]
 fn get_virtual_stdlib_module(name: &str) -> Option<&'static str> {
     match name {
-        "io" => Some(include_str!("../../../std/io.pace")),
-        "math" => Some(include_str!("../../../std/math.pace")),
-        "os" => Some(include_str!("../../../std/os.pace")),
-        "env" => Some(include_str!("../../../std/env.pace")),
-        "process" => Some(include_str!("../../../std/process.pace")),
-        "time" => Some(include_str!("../../../std/time.pace")),
-        "test" => Some(include_str!("../../../std/test.pace")),
+        "io" => Some(include_str!("../std/io.pace")),
+        "math" => Some(include_str!("../std/math.pace")),
+        "os" => Some(include_str!("../std/os.pace")),
+        "env" => Some(include_str!("../std/env.pace")),
+        "process" => Some(include_str!("../std/process.pace")),
+        "time" => Some(include_str!("../std/time.pace")),
+        "test" => Some(include_str!("../std/test.pace")),
         _ => None,
     }
 }
