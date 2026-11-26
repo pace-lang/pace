@@ -1097,12 +1097,6 @@ impl CGenerator {
                     let is_actor = matches!(ty, Ty::Actor(_));
                     write!(&mut self.output, "memcpy(pace_alloc(sizeof(struct pace_{}), pace_{}_deinit), &(struct pace_{}){{ &pace_{}_vtable_inst", id.0, id.0, id.0, id.0).unwrap();
                     if is_actor {
-                        // pthread_mutex_t PTHREAD_MUTEX_INITIALIZER uses braces on some platforms,
-                        // but since it's inside a struct literal, we can just supply it as a field value.
-                        // Or we can just use zero-initialization and call pthread_mutex_init dynamically.
-                        // Wait, C allows `{ ... }` as an expression, but nested brace init is fine.
-                        // Wait, it's safer to just set to 0 and dynamically initialize if needed. Actually PTHREAD_MUTEX_INITIALIZER works as long as it's not nested in another brace if compiler is picky.
-                        // Let's output it as the macro:
                         write!(&mut self.output, ", PTHREAD_MUTEX_INITIALIZER, NULL, NULL, 0").unwrap();
                     }
                     if !fields.is_empty() {
@@ -1116,6 +1110,17 @@ impl CGenerator {
                     eprintln!("ICE: Instantiating non-struct/class");
                 }
             },
+            Rvalue::StackInstantiate(ty, fields) => {
+                if let Ty::Class(id) = ty {
+                    write!(&mut self.output, "&(struct pace_{}){{ &pace_{}_vtable_inst", id.0, id.0).unwrap();
+                    for arg in fields {
+                        write!(&mut self.output, ", _{}", arg.0).unwrap();
+                    }
+                    self.output.push_str(" }");
+                } else {
+                    self.output.push_str("NULL");
+                }
+            }
             Rvalue::EnumTag(local) => write!(&mut self.output, "_{}.tag", local.0).unwrap(),
             Rvalue::EnumFieldAccess(obj, variant_name, field_name) => write!(
                 &mut self.output,

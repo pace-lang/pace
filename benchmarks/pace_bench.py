@@ -162,7 +162,7 @@ def main():
                     continue
                 compile_ms = (t1 - t0) * 1000
 
-            if (d / "bench").exists() and not (d / "build" / "bench").exists():
+            if (d / "bench").exists():
                 import shutil
                 shutil.copy(d / "bench", d / "build" / "bench")
 

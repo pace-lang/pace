@@ -52,6 +52,7 @@ pub enum Rvalue {
     OptionalFieldAccess(Local, String),
     EnumFieldAccess(Local, String, String),
     Instantiate(pace_ty::Ty, Vec<Local>),
+    StackInstantiate(pace_ty::Ty, Vec<Local>),
     InstantiateEnum(pace_hir::HirId, String, Vec<Local>),
     EnumTag(Local),
     MakeClosure(String, Vec<Local>),
