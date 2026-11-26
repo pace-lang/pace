@@ -561,5 +561,94 @@ mod tests {
             err
         );
     }
+
+    #[test]
+    fn test_enum_match_non_exhaustive_diagnostic() {
+        let source = "
+            enum Status { ok, pending, failed }
+            fn check(s: Status) -> int {
+                match s {
+                    ok => 1
+                    pending => 2
+                }
+            }
+            fn main() {}
+        ";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+        let mut lowerer = LoweringContext::new();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
+        let mut tc = TypeChecker::new();
+        let res = tc.check_program(&hir);
+        assert!(res.is_err(), "Expected non-exhaustive match error");
+        assert!(
+            tc.reporter.diagnostics.iter().any(|d| d.message.contains("Non-exhaustive match: missing variant 'failed'")),
+            "Expected missing variant 'failed', got: {:?}",
+            tc.reporter.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_enum_match_exhaustive_and_catchall_success() {
+        let source = "
+            enum Status { ok, pending, failed }
+            fn checkAll(s: Status) -> int {
+                match s {
+                    ok => 1
+                    pending => 2
+                    failed => 3
+                }
+            }
+            fn checkCatchAll(s: Status) -> int {
+                match s {
+                    ok => 1
+                    _ => 0
+                }
+            }
+            fn main() {}
+        ";
+        let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+        let mut parser = Parser::new(lexer);
+        let (ast, diags, _) = parser.parse_program();
+        assert!(diags.is_empty(), "Parse errors: {:?}", diags);
+
+        let mut modules = std::collections::HashMap::new();
+        modules.insert(
+            pace_span::intern("main"),
+            pace_ast::Module {
+                name: pace_span::intern("main"),
+                file_id: pace_span::FileId::DUMMY,
+                declarations: ast,
+                comments: vec![],
+            },
+        );
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+        let mut lowerer = LoweringContext::new();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
+        let mut tc = TypeChecker::new();
+        tc.check_program(&hir).expect("Exhaustive match should typecheck");
+    }
 }
 

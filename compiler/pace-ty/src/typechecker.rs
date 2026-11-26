@@ -3108,16 +3108,40 @@ impl TypeChecker {
             Expr::Match {
                 subject,
                 arms,
-                span: _,
+                span,
             } => {
                 let subject_ty = self.check_expr(subject)?;
                 let mut ret_ty = None;
+                let mut has_catch_all = false;
+                let mut covered_variants = HashSet::new();
+                let enum_variants = if let Ty::Enum(enum_id) = subject_ty {
+                    self.enum_defs.get(&enum_id).cloned()
+                } else {
+                    None
+                };
 
                 for arm in arms {
+                    match &arm.pattern {
+                        pace_hir::Pattern::CatchAll(_) => {
+                            has_catch_all = true;
+                        }
+                        pace_hir::Pattern::Variant { name, .. } => {
+                            covered_variants.insert(*name);
+                        }
+                        pace_hir::Pattern::Ident(_, name, _) => {
+                            if let Some(variants) = &enum_variants
+                                && variants.iter().any(|v| v.name == *name)
+                            {
+                                covered_variants.insert(*name);
+                            } else {
+                                has_catch_all = true;
+                            }
+                        }
+                    }
+
                     let mut arm_env = HashMap::new();
                     if let pace_hir::Pattern::Variant { name, fields, .. } = &arm.pattern
-                        && let Ty::Enum(enum_id) = subject_ty
-                        && let Some(variants) = self.enum_defs.get(&enum_id).cloned()
+                        && let Some(variants) = &enum_variants
                         && let Some(v) = variants.iter().find(|v| v.name == *name)
                         && let Some(vfields) = &v.fields
                         && let Some(pfields) = fields
@@ -3152,6 +3176,28 @@ impl TypeChecker {
                         }
                     } else {
                         ret_ty = Some(arm_ty);
+                    }
+                }
+
+                if let Some(variants) = &enum_variants
+                    && !has_catch_all
+                {
+                    let missing: Vec<String> = variants
+                        .iter()
+                        .filter(|v| !covered_variants.contains(&v.name))
+                        .map(|v| v.name.to_string())
+                        .collect();
+                    if !missing.is_empty() {
+                        let msg = format!(
+                            "Non-exhaustive match: missing variant '{}'",
+                            missing.join("', '")
+                        );
+                        self.reporter.report(
+                            Diagnostic::error(&msg)
+                                .with_span(*span)
+                                .with_hint("Handle all enum variants or add a '_ =>' catch-all arm"),
+                        );
+                        return Err(msg);
                     }
                 }
 
