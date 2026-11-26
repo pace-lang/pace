@@ -275,6 +275,17 @@ pub enum Expr {
         index: Box<Expr>,
         span: Span,
     },
+    Unary {
+        op: UnaryOp,
+        expr: Box<Expr>,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOp {
+    Neg,
+    Not,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -349,6 +360,7 @@ impl Expr {
             Expr::ListLiteral(_, span) => *span,
             Expr::MapLiteral(_, span) => *span,
             Expr::Index { span, .. } => *span,
+            Expr::Unary { span, .. } => *span,
         }
     }
 }

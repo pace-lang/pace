@@ -319,6 +319,19 @@ impl<'a> MirBuilder<'a> {
                 ));
                 local
             }
+            Expr::Unary { op, expr, .. } => {
+                let inner = self.build_expr(expr);
+                let ret_ty = match op {
+                    pace_ast::UnaryOp::Neg => self.locals[inner.0 as usize].clone(),
+                    pace_ast::UnaryOp::Not => Ty::Bool,
+                };
+                let temp = self.new_local(ret_ty);
+                self.push_stmt(Statement::Assign(
+                    Lvalue::Local(temp),
+                    Rvalue::UnaryOp(*op, inner),
+                ));
+                temp
+            }
             Expr::Binary {
                 left, op, right, ..
             } => {
@@ -332,6 +345,15 @@ impl<'a> MirBuilder<'a> {
                     self.locals[rhs.0 as usize].clone()
                 } else if *op == pace_ast::BinaryOp::And || *op == pace_ast::BinaryOp::Or {
                     Ty::Bool
+                } else if matches!(
+                    op,
+                    pace_ast::BinaryOp::Add
+                        | pace_ast::BinaryOp::Sub
+                        | pace_ast::BinaryOp::Mul
+                        | pace_ast::BinaryOp::Div
+                        | pace_ast::BinaryOp::Mod
+                ) {
+                    self.locals[lhs.0 as usize].clone()
                 } else {
                     Ty::Int
                 };

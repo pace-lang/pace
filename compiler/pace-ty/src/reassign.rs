@@ -161,6 +161,9 @@ pub fn reassign_expr_ids(
             reassign_expr_ids(tc, left, id_map);
             reassign_expr_ids(tc, right, id_map);
         }
+        Expr::Unary { expr, .. } => {
+            reassign_expr_ids(tc, expr, id_map);
+        }
         Expr::MemberAccess { object, .. } | Expr::OptionalMemberAccess { object, .. } => {
             reassign_expr_ids(tc, object, id_map);
         }

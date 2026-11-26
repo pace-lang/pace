@@ -144,6 +144,11 @@ fn find_ident_in_expr(expr: &Expr, offset: usize) -> Option<HirId> {
                 return Some(id);
             }
         }
+        Expr::Unary { expr, .. } => {
+            if let Some(id) = find_ident_in_expr(expr, offset) {
+                return Some(id);
+            }
+        }
         Expr::Call { callee, args, .. } => {
             if let Some(id) = find_ident_in_expr(callee, offset) {
                 return Some(id);

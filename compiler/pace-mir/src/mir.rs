@@ -41,6 +41,7 @@ pub enum Constant {
 pub enum Rvalue {
     Use(Local),
     BinaryOp(BinaryOp, Local, Local),
+    UnaryOp(pace_ast::UnaryOp, Local),
     Constant(Constant),
     Call(Local, Vec<Local>),
     BuiltinCall(String, Vec<Local>),

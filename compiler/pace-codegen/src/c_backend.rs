@@ -696,6 +696,10 @@ impl CGenerator {
     fn generate_rvalue(&mut self, rvalue: &Rvalue, locals: &[Ty]) {
         match rvalue {
             Rvalue::Use(local) => write!(&mut self.output, "_{}", local.0).unwrap(),
+            Rvalue::UnaryOp(op, local) => match op {
+                pace_ast::UnaryOp::Neg => write!(&mut self.output, "-_{}", local.0).unwrap(),
+                pace_ast::UnaryOp::Not => write!(&mut self.output, "!_{}", local.0).unwrap(),
+            },
             Rvalue::Constant(Constant::Int(val)) => write!(&mut self.output, "{}", val).unwrap(),
             Rvalue::Constant(Constant::Float(val)) => write!(&mut self.output, "{}", val).unwrap(),
             Rvalue::Constant(Constant::Bool(val)) => {

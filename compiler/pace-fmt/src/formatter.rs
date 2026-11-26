@@ -794,6 +794,13 @@ impl Formatter {
                 self.write(" ");
                 self.format_expr(right);
             }
+            Expr::Unary { op, expr, .. } => {
+                self.write(match op {
+                    pace_ast::UnaryOp::Neg => "-",
+                    pace_ast::UnaryOp::Not => "!",
+                });
+                self.format_expr(expr);
+            }
             Expr::MemberAccess { object, member, .. } => {
                 self.format_expr(object);
                 self.write(".");

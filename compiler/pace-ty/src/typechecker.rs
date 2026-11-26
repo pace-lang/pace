@@ -24,7 +24,7 @@ pub struct ResolvedMethod {
 }
 
 use pace_hir::{Decl, Expr, HirId, Program, Stmt};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ty::Ty;
 
@@ -33,6 +33,7 @@ use pace_errors::{Diagnostic, ErrorCode, Reporter};
 #[derive(Debug, Clone, Default)]
 pub struct ModuleScope {
     pub visible_symbols: HashMap<String, String>, // e.g. "test_operators" -> "operators::test_operators"
+    pub private_symbols: HashSet<String>,
     pub aliases: HashMap<String, String>,         // e.g. "op" -> "operators"
     pub wildcard_imports: Vec<String>,
 }
@@ -401,12 +402,18 @@ impl TypeChecker {
                 Decl::Struct {
                     id,
                     name,
+                    is_private,
                     generic_params,
                     span,
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
                     self.display_names.insert(mangled_name.clone(), name.to_string());
+                    if *is_private {
+                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                            scope.private_symbols.insert(name.to_string());
+                        }
+                    }
                     if generic_params.is_some() {
                         self.generic_templates
                             .insert(mangled_name.clone(), decl.clone());
@@ -428,12 +435,18 @@ impl TypeChecker {
                 Decl::Class {
                     id,
                     name,
+                    is_private,
                     generic_params,
                     span,
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
                     self.display_names.insert(mangled_name.clone(), name.to_string());
+                    if *is_private {
+                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                            scope.private_symbols.insert(name.to_string());
+                        }
+                    }
                     if generic_params.is_some() {
                         self.generic_templates
                             .insert(mangled_name.clone(), decl.clone());
@@ -455,12 +468,18 @@ impl TypeChecker {
                 Decl::Actor {
                     id,
                     name,
+                    is_private,
                     generic_params,
                     span,
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
                     self.display_names.insert(mangled_name.clone(), name.to_string());
+                    if *is_private {
+                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                            scope.private_symbols.insert(name.to_string());
+                        }
+                    }
                     if generic_params.is_some() {
                         self.generic_templates
                             .insert(mangled_name.clone(), decl.clone());
@@ -485,12 +504,18 @@ impl TypeChecker {
                 Decl::Enum {
                     id,
                     name,
+                    is_private,
                     generic_params,
                     span,
                     ..
                 } => {
                     let mangled_name = format!("{}_{}", module_name, name);
                     self.display_names.insert(mangled_name.clone(), name.to_string());
+                    if *is_private {
+                        if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                            scope.private_symbols.insert(name.to_string());
+                        }
+                    }
                     if generic_params.is_some() {
                         self.generic_templates
                             .insert(mangled_name.clone(), decl.clone());
@@ -915,6 +940,7 @@ impl TypeChecker {
             if let Decl::Function {
                 id: func_id,
                 name,
+                is_private,
                 generic_params,
                 params,
                 return_type,
@@ -922,6 +948,11 @@ impl TypeChecker {
                 ..
             } = decl
             {
+                if *is_private {
+                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                        scope.private_symbols.insert(name.to_string());
+                    }
+                }
                 if generic_params.is_some() {
                     continue;
                 }
@@ -964,7 +995,9 @@ impl TypeChecker {
             for target_module in &scope.wildcard_imports {
                 if let Some(target_scope) = self.module_scopes.get(target_module) {
                     for (symbol_name, mangled_name) in &target_scope.visible_symbols {
-                        if !scope.visible_symbols.contains_key(symbol_name) {
+                        if !target_scope.private_symbols.contains(symbol_name)
+                            && !scope.visible_symbols.contains_key(symbol_name)
+                        {
                             symbols_to_add.push((symbol_name.clone(), mangled_name.clone()));
                         }
                     }
@@ -2066,6 +2099,31 @@ impl TypeChecker {
                     Err(err_msg)
                 }
             }
+            Expr::Unary { op, expr, .. } => {
+                let inner_ty = self.check_expr(expr)?;
+                match op {
+                    pace_ast::UnaryOp::Neg => {
+                        if inner_ty == Ty::Int || inner_ty == Ty::Float {
+                            Ok(inner_ty)
+                        } else {
+                            Err(format!(
+                                "Unary '-' requires int or float, found {}",
+                                self.display_ty(&inner_ty)
+                            ))
+                        }
+                    }
+                    pace_ast::UnaryOp::Not => {
+                        if inner_ty == Ty::Bool || inner_ty == Ty::Int {
+                            Ok(Ty::Bool)
+                        } else {
+                            Err(format!(
+                                "Unary '!' requires bool, found {}",
+                                self.display_ty(&inner_ty)
+                            ))
+                        }
+                    }
+                }
+            }
             Expr::Binary {
                 left, op, right, ..
             } => {
@@ -2172,10 +2230,18 @@ impl TypeChecker {
                     && let Some(target_module) = scope.aliases.get(&name.to_string())
                 {
                     // It IS a module alias access!
-                    if let Some(target_scope) = self.module_scopes.get(target_module)
-                        && let Some(mangled_name) =
+                    if let Some(target_scope) = self.module_scopes.get(target_module) {
+                        if target_scope.private_symbols.contains(&member.to_string()) {
+                            let err = format!(
+                                "Symbol '{}' is private in module '{}'",
+                                member, target_module
+                            );
+                            self.reporter.report(Diagnostic::error(&err).with_span(*span));
+                            return Err(err);
+                        }
+                        if let Some(mangled_name) =
                             target_scope.visible_symbols.get(&member.to_string())
-                    {
+                        {
                         // The object is a module reference. Record the target module so MirBuilder can use it.
                         self.resolved_global_names
                             .insert(*id, target_module.to_string());
@@ -2200,6 +2266,7 @@ impl TypeChecker {
                             return Ok(ty);
                         }
                     }
+                }
                 }
 
                 let obj_ty = self.check_expr(object)?;

@@ -502,5 +502,64 @@ mod tests {
         let mut tc = TypeChecker::new();
         tc.check_program(&hir).expect("Typecheck failed for ? on optional");
     }
+
+    fn check_two_modules(secret_src: &str, main_src: &str) -> Result<(), Vec<String>> {
+        let mut modules = std::collections::HashMap::new();
+        for (name, src) in [("secret", secret_src), ("main", main_src)] {
+            let lexer = Lexer::new(src, pace_span::FileId::DUMMY);
+            let mut parser = Parser::new(lexer);
+            let (ast, diags, _) = parser.parse_program();
+            assert!(diags.is_empty(), "Parse errors in {}: {:?}", name, diags);
+            modules.insert(
+                pace_span::intern(name),
+                pace_ast::Module {
+                    name: pace_span::intern(name),
+                    file_id: pace_span::FileId::DUMMY,
+                    declarations: ast,
+                    comments: vec![],
+                },
+            );
+        }
+        let program = pace_ast::Program {
+            modules,
+            module_order: vec![pace_span::intern("secret"), pace_span::intern("main")],
+            span: pace_span::Span::DUMMY,
+        };
+        let mut lowerer = LoweringContext::new();
+        let hir = lowerer.lower_program(program).expect("HIR lowering failed");
+        let mut tc = TypeChecker::new();
+        match tc.check_program(&hir) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let mut msgs: Vec<String> =
+                    tc.reporter.diagnostics.iter().map(|d| d.message.clone()).collect();
+                msgs.push(e);
+                Err(msgs)
+            }
+        }
+    }
+
+    #[test]
+    fn test_top_level_private_wildcard_import_blocked() {
+        let secret = "private fn hiddenFn() -> int { return 1 }\nfn publicFn() -> int { return hiddenFn() }";
+        let main = "import secret\nfn main() { let x = hiddenFn() }";
+        let res = check_two_modules(secret, main);
+        assert!(res.is_err(), "Expected private symbol to be inaccessible via wildcard import");
+
+        let main_ok = "import secret\nfn main() { let x = publicFn() }";
+        assert!(check_two_modules(secret, main_ok).is_ok(), "Public symbol should be accessible");
+    }
+
+    #[test]
+    fn test_top_level_private_alias_import_blocked() {
+        let secret = "private fn hiddenFn() -> int { return 1 }\nprivate struct HiddenData { x: int }";
+        let main = "import secret as s\nfn main() { let x = s.hiddenFn() }";
+        let err = check_two_modules(secret, main).expect_err("Expected private symbol error");
+        assert!(
+            err.iter().any(|m| m.contains("is private in module 'secret'")),
+            "Expected private diagnostic, got: {:?}",
+            err
+        );
+    }
 }
 

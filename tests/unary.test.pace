@@ -1,0 +1,18 @@
+fn main() {
+    let a = -5
+    let b = -a
+    assert(a == (0 - 5), "unary minus literal")
+    assert(b == 5, "unary minus variable")
+    assert(--a == -5, "double unary minus")
+
+    let f = -2.5
+    assert(f == -2.5, "unary minus float eq")
+    assert(f == (0.0 - 2.5), "unary minus float sub")
+
+    let t = true
+    let fbool = !t
+    assert(fbool == false, "unary !true")
+    assert(!false == true, "unary !false")
+    assert(!(1 == 2), "unary ! on comparison")
+}
+

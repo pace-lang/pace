@@ -106,8 +106,28 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
+    fn parse_unary_expr(&mut self) -> Result<Expr, Diagnostic> {
+        if self.check(&TokenKind::Minus) || self.check(&TokenKind::Bang) {
+            let tok = self.current.take().unwrap();
+            self.advance();
+            let op = match tok.kind {
+                TokenKind::Minus => pace_ast::UnaryOp::Neg,
+                TokenKind::Bang => pace_ast::UnaryOp::Not,
+                _ => unreachable!(),
+            };
+            let expr = self.parse_unary_expr()?;
+            let span = tok.span.merge(expr.span());
+            return Ok(Expr::Unary {
+                op,
+                expr: Box::new(expr),
+                span,
+            });
+        }
+        self.parse_postfix_expr()
+    }
+
     pub(crate) fn parse_expr(&mut self) -> Result<Expr, Diagnostic> {
-        let mut left = self.parse_postfix_expr()?;
+        let mut left = self.parse_unary_expr()?;
 
         if self.check(&TokenKind::Eq) {
             self.advance();
@@ -155,7 +175,7 @@ impl<'a> Parser<'a> {
 
             if let Some(op) = op {
                 self.advance();
-                let right = self.parse_postfix_expr()?;
+                let right = self.parse_unary_expr()?;
                 left = Expr::Binary {
                     span: left.span().merge(right.span()),
                     left: Box::new(left),

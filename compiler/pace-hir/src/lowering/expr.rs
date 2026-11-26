@@ -46,6 +46,11 @@ impl LoweringContext {
                 right: Box::new(self.lower_expr(*right)?),
                 span,
             }),
+            ast::Expr::Unary { op, expr, span } => Ok(Expr::Unary {
+                op,
+                expr: Box::new(self.lower_expr(*expr)?),
+                span,
+            }),
             ast::Expr::Null(span) => Ok(Expr::Null(span)),
             ast::Expr::MemberAccess {
                 object,
