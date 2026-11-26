@@ -50,6 +50,8 @@ pub struct MirBuilder<'a> {
     pub closure_functions: Vec<MirFunction>,
     pub closure_counter: usize,
     pub loop_stack: Vec<(BasicBlockId, BasicBlockId)>,
+    pub scope_stack: Vec<Vec<Local>>,
+    pub scope_managed_locals: std::collections::HashSet<Local>,
 }
 
 impl<'a> MirBuilder<'a> {
@@ -96,12 +98,19 @@ impl<'a> MirBuilder<'a> {
             closure_functions: Vec::new(),
             closure_counter: 0,
             loop_stack: Vec::new(),
+            scope_stack: Vec::new(),
+            scope_managed_locals: std::collections::HashSet::new(),
         }
     }
 
     pub fn new_local(&mut self, ty: Ty) -> Local {
         let l = Local(self.locals.len() as u32);
+        let is_rc = matches!(ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _));
         self.locals.push(ty);
+        if is_rc && self.scope_stack.len() > 1 {
+            self.scope_stack.last_mut().unwrap().push(l);
+            self.scope_managed_locals.insert(l);
+        }
         l
     }
 
@@ -115,6 +124,8 @@ impl<'a> MirBuilder<'a> {
     }
 
     pub fn build_block(&mut self, block: &pace_hir::Block) {
+        self.scope_stack.push(Vec::new());
+        let is_inner_scope = self.scope_stack.len() > 1;
         for stmt in &block.statements {
             match stmt {
                 pace_hir::Stmt::Let { id, value, .. } | pace_hir::Stmt::Var { id, value, .. } => {
@@ -134,7 +145,7 @@ impl<'a> MirBuilder<'a> {
                             Lvalue::Local(var_local),
                             Rvalue::Use(rval_local),
                         ));
-                        if matches!(var_ty, Ty::Class(_)) {
+                        if matches!(var_ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _)) {
                             self.push_stmt(Statement::Retain(Lvalue::Local(var_local)));
                         }
                     } else {
@@ -165,6 +176,19 @@ impl<'a> MirBuilder<'a> {
                         }
                     };
 
+                    // Release inner-scope locals before early return
+                    let to_release: Vec<Local> = self
+                        .scope_stack
+                        .iter()
+                        .skip(1)
+                        .rev()
+                        .flat_map(|s| s.iter().rev().copied())
+                        .filter(|&l| l != local)
+                        .collect();
+                    for l in to_release {
+                        self.push_stmt(Statement::Release(Lvalue::Local(l)));
+                    }
+
                     let current_bb = self.current_block.0 as usize;
                     self.blocks[current_bb].terminator = Some(Terminator::Return(local));
                     break;
@@ -185,6 +209,17 @@ impl<'a> MirBuilder<'a> {
                         break;
                     }
                 }
+            }
+        }
+
+        let scope_locals = self.scope_stack.pop().unwrap();
+        if is_inner_scope
+            && self.blocks[self.current_block.0 as usize]
+                .terminator
+                .is_none()
+        {
+            for l in scope_locals.into_iter().rev() {
+                self.push_stmt(Statement::Release(Lvalue::Local(l)));
             }
         }
     }
@@ -2219,6 +2254,7 @@ impl<'a> MirBuilder<'a> {
                     if matches!(ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _))
                         && local != ret_local
                         && !params.contains(&local)
+                        && !self.scope_managed_locals.contains(&local)
                     {
                         block.statements.push(Statement::Release(Lvalue::Local(local)));
                     }

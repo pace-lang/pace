@@ -1,0 +1,27 @@
+class Node {
+    val: int
+    init(v: int) {
+        self.val = v
+    }
+}
+
+fn main() {
+    if true {
+        let n = Node(10)
+        assert(n.val == 10, "if-block Node")
+    }
+
+    var i = 0
+    while i < 1000 {
+        let n = Node(i)
+        let xs = [i, i + 1]
+        assert(n.val == i, "while-loop Node")
+        assert(xs.len() == 2, "while-loop List")
+        i = i + 1
+    }
+
+    var r = Node(1)
+    assert(r.val == 1, "initial r")
+    r = Node(2)
+    assert(r.val == 2, "reassigned r")
+}
