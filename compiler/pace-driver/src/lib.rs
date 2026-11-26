@@ -396,7 +396,9 @@ pub fn compile_file(opts: CompileOptions) -> Result<(), String> {
 
     // 4.5 Optimize MIR
     pace_mir::opt::ConstantFolder::new().optimize_program(&mut mir);
+    pace_mir::opt::Devirtualizer::new().optimize_program(&mut mir);
     pace_mir::opt::EscapeAnalyzer::new().optimize_program(&mut mir);
+    pace_mir::opt::DceOptimizer::new().optimize_program(&mut mir);
 
     // 5. Generate C Code
     let mut codegen = CGenerator::new();
