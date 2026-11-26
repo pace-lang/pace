@@ -1,0 +1,30 @@
+struct Point {
+    x: int
+    y: int
+}
+
+fn main() {
+    var pts: List<Point> = [Point(x: 1, y: 2), Point(x: 3, y: 4)]
+    pts.push(Point(x: 5, y: 6))
+
+    let p0 = pts[0]
+    let p2 = pts[2]
+    assert(p0.x == 1, "List<Point> index 0 x")
+    assert(p0.y == 2, "List<Point> index 0 y")
+    assert(p2.x == 5, "List<Point> push x")
+    assert(p2.y == 6, "List<Point> push y")
+
+    pts[1] = Point(x: 30, y: 40)
+    let p1 = pts[1]
+    assert(p1.x == 30, "List<Point> set x")
+    assert(p1.y == 40, "List<Point> set y")
+
+    var m: Map<string, Point> = {"origin": Point(x: 0, y: 0)}
+    m["target"] = Point(x: 10, y: 20)
+    let orig = m["origin"] ?? Point(x: 99, y: 99)
+    let targ = m["target"] ?? Point(x: 99, y: 99)
+    assert(orig.x == 0, "Map<string, Point> origin x")
+    assert(orig.y == 0, "Map<string, Point> origin y")
+    assert(targ.x == 10, "Map<string, Point> target x")
+    assert(targ.y == 20, "Map<string, Point> target y")
+}
