@@ -1161,12 +1161,7 @@ impl TypeChecker {
 
         // Pass 4: Unused Variables and Functions Linter Sweep
         for (id, name, span) in &self.declared_bindings {
-            let is_compiler_generated = self.named_types.keys().any(|k| {
-                name.starts_with(k)
-                    || k.split('_')
-                        .next_back()
-                        .is_some_and(|short_k| name.starts_with(&format!("{}_", short_k)))
-            });
+            let is_compiler_generated = self.is_compiler_generated_name(*id, name);
             if !self.used_bindings.contains(id)
                 && !self.used_bindings_by_name.contains(name)
                 && !name.starts_with('_')
@@ -1188,6 +1183,21 @@ impl TypeChecker {
         }
 
         Ok(())
+    }
+
+    /// Returns true for compiler-synthesized methods (on named types) and
+    /// monomorphized generic declarations so lint passes do not warn on them.
+    fn is_compiler_generated_name(&self, id: HirId, name: &str) -> bool {
+        self.named_types.keys().any(|k| {
+            name.starts_with(k)
+                || k.split('_')
+                    .next_back()
+                    .is_some_and(|short_k| name.starts_with(&format!("{}_", short_k)))
+        }) || self.display_names.contains_key(name)
+            || self
+                .resolved_global_names
+                .get(&id)
+                .is_some_and(|m| self.display_names.contains_key(m))
     }
 
     pub fn check_block(
@@ -1702,12 +1712,7 @@ impl TypeChecker {
                     format!("{}_{}", self.current_module.as_ref().unwrap_or(&"".to_string()), name)
                 };
                 
-                let is_compiler_generated = self.named_types.keys().any(|k| {
-                    name.starts_with(k)
-                        || k.split('_')
-                            .next_back()
-                            .is_some_and(|short_k| name.starts_with(&format!("{}_", short_k)))
-                });
+                let is_compiler_generated = self.is_compiler_generated_name(*id, name);
 
                 if !is_compiler_generated {
                     let offset = if *is_static {
