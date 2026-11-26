@@ -111,6 +111,30 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse_type(&mut self) -> Result<Type, Diagnostic> {
+        if self.check(&TokenKind::LParen) {
+            let lparen = self.expect(TokenKind::LParen)?;
+            let mut params = Vec::new();
+            while !self.check(&TokenKind::RParen) && self.current.is_some() {
+                params.push(self.parse_type()?);
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+            self.expect(TokenKind::RParen)?;
+            self.expect(TokenKind::Arrow)?;
+            let ret = self.parse_type()?;
+            let span = lparen.span.merge(ret.span());
+            let mut ty = Type::Closure(params, Box::new(ret), span);
+            if self.check(&TokenKind::Question) {
+                let q_span = ty.span().merge(self.current.as_ref().unwrap().span);
+                self.advance();
+                ty = Type::Optional(Box::new(ty), q_span);
+            }
+            return Ok(ty);
+        }
+
         let (ident_name, ident_span) = match &self.current {
             Some(Token {
                 kind: TokenKind::Ident(name),

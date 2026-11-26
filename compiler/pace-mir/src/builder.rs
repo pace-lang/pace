@@ -266,7 +266,9 @@ impl<'a> MirBuilder<'a> {
                     }
                 };
                 
-                let fn_body = fn_builder.finish(&mir_params, &ret_ty);
+                let mut non_released = mir_params.clone();
+                non_released.extend(env_layout.iter().map(|(l, _)| *l));
+                let fn_body = fn_builder.finish(&non_released, &ret_ty);
 
                 self.closure_functions.push(MirFunction {
                     name: closure_name.clone(),
@@ -1140,7 +1142,11 @@ impl<'a> MirBuilder<'a> {
                 }
 
                 let callee_local = self.build_expr(callee);
-                let temp = self.new_local(Ty::Int); // Placeholder MVP return ty
+                let ret_ty = match &self.locals[callee_local.0 as usize] {
+                    Ty::Closure(_, ret) | Ty::Function(_, ret) => *ret.clone(),
+                    _ => Ty::Int,
+                };
+                let temp = self.new_local(ret_ty);
                 self.push_stmt(Statement::Assign(
                     Lvalue::Local(temp),
                     Rvalue::Call(callee_local, arg_locals),

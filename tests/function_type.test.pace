@@ -1,0 +1,23 @@
+fn apply(a: int, b: int, op: (int, int) -> int) -> int {
+    return op(a, b)
+}
+
+fn runCallback(cb: () -> Unit) {
+    cb()
+}
+
+fn main() {
+    let sum = apply(3, 4, (x: int, y: int) => x + y)
+    assert(sum == 7, "function type (int, int) -> int")
+
+    var xs: List<int> = []
+    runCallback(() => {
+        xs.push(42)
+    })
+    assert(xs.len() == 1, "function type () -> Unit len")
+    assert(xs[0] == 42, "function type () -> Unit value")
+
+    let name = "Pace"
+    let msg = "Hello $name ${sum}"
+    assert(msg == "Hello Pace 7", "Dart-style string interpolation")
+}

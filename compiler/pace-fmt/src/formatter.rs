@@ -689,7 +689,7 @@ impl Formatter {
                     }
                     self.format_type(p);
                 }
-                self.write(") => ");
+                self.write(") -> ");
                 self.format_type(ret);
             }
         }
@@ -920,7 +920,7 @@ impl Formatter {
                         self.format_type(ty);
                     }
                 }
-                self.write(") => ");
+                self.write(") -> ");
                 if let Some(ty) = return_type {
                     self.format_type(ty);
                     self.write(" ");
