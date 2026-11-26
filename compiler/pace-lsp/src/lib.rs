@@ -39,7 +39,7 @@ impl LanguageServer for Backend {
                 }),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
-                    trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
+                    trigger_characters: Some(vec![".".to_string(), ":".to_string(), "@".to_string()]),
                     ..Default::default()
                 }),
                 document_symbol_provider: Some(OneOf::Left(true)),
@@ -176,8 +176,9 @@ impl LanguageServer for Backend {
             && diags.is_empty()
         {
             let mut lowerer = pace_hir::LoweringContext::new();
-            if let Ok(hir) = lowerer.lower_program(ast) {
+            if let Ok(mut hir) = lowerer.lower_program(ast) {
                 let mut tc = pace_ty::TypeChecker::new();
+                hir.resolve_traits(&mut tc.reporter);
                 let _ = tc.check_program(&hir);
 
                 let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
@@ -263,9 +264,18 @@ impl LanguageServer for Backend {
         if let Some((ast, source_map, diags, text)) = self.analyze_uri(&uri).await
             && diags.is_empty()
         {
+            let offset = find_node::position_to_offset(&text, position);
+            if let Some(ann_hover) = annotation_hover_at(&text, offset) {
+                return Ok(Some(Hover {
+                    contents: HoverContents::Scalar(MarkedString::String(ann_hover.to_string())),
+                    range: None,
+                }));
+            }
+
             let mut lowerer = pace_hir::LoweringContext::new();
-            if let Ok(hir) = lowerer.lower_program(ast) {
+            if let Ok(mut hir) = lowerer.lower_program(ast) {
                 let mut tc = pace_ty::TypeChecker::new();
+                hir.resolve_traits(&mut tc.reporter);
                 let _ = tc.check_program(&hir);
 
                 let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
@@ -318,9 +328,17 @@ impl LanguageServer for Backend {
         let mut items = Vec::new();
 
         if let Some((ast, source_map, _diags, text)) = self.analyze_uri(&uri).await {
+            let offset = find_node::position_to_offset(&text, position);
+            let before = &text[..offset.min(text.len())];
+            let trimmed_ident = before.trim_end_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+            if trimmed_ident.ends_with('@') {
+                return Ok(Some(CompletionResponse::Array(annotation_completions())));
+            }
+
             let mut lowerer = pace_hir::LoweringContext::new();
-            if let Ok(hir) = lowerer.lower_program(ast) {
+            if let Ok(mut hir) = lowerer.lower_program(ast) {
                 let mut tc = pace_ty::TypeChecker::new();
+                hir.resolve_traits(&mut tc.reporter);
                 let _ = tc.check_program(&hir);
 
                 let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
@@ -427,6 +445,128 @@ impl LanguageServer for Backend {
                                         }
                                     }
                                 }
+                                pace_ty::Ty::List(_) => {
+                                    for (label, detail, is_prop) in [
+                                        ("len", "() -> int", false),
+                                        ("isEmpty", "bool", true),
+                                        ("isNotEmpty", "bool", true),
+                                        ("first", "T?", true),
+                                        ("last", "T?", true),
+                                        ("push", "(T) -> Unit", false),
+                                        ("add", "(T) -> Unit", false),
+                                        ("pop", "() -> T?", false),
+                                        ("insert", "(int, T) -> Unit", false),
+                                        ("removeAt", "(int) -> T", false),
+                                        ("contains", "(T) -> bool", false),
+                                        ("indexOf", "(T) -> int", false),
+                                        ("slice", "(int, int) -> List<T>", false),
+                                        ("reversed", "() -> List<T>", false),
+                                        ("join", "(string) -> string", false),
+                                        ("clear", "() -> Unit", false),
+                                        ("forEach", "((T) -> Unit) -> Unit", false),
+                                        ("map", "((T) -> U) -> List<U>", false),
+                                        ("filter", "((T) -> bool) -> List<T>", false),
+                                        ("find", "((T) -> bool) -> T?", false),
+                                        ("any", "((T) -> bool) -> bool", false),
+                                        ("every", "((T) -> bool) -> bool", false),
+                                        ("reduce", "(U, (U, T) -> U) -> U", false),
+                                    ] {
+                                        items.push(CompletionItem {
+                                            label: label.to_string(),
+                                            kind: Some(if is_prop { CompletionItemKind::PROPERTY } else { CompletionItemKind::METHOD }),
+                                            detail: Some(detail.to_string()),
+                                            ..Default::default()
+                                        });
+                                    }
+                                }
+                                pace_ty::Ty::Map(_, _) => {
+                                    for (label, detail, is_prop) in [
+                                        ("len", "() -> int", false),
+                                        ("isEmpty", "bool", true),
+                                        ("isNotEmpty", "bool", true),
+                                        ("get", "(K) -> V?", false),
+                                        ("set", "(K, V) -> Unit", false),
+                                        ("has", "(K) -> bool", false),
+                                        ("containsKey", "(K) -> bool", false),
+                                        ("getOrDefault", "(K, V) -> V", false),
+                                        ("remove", "(K) -> bool", false),
+                                        ("keys", "() -> List<K>", false),
+                                        ("values", "() -> List<V>", false),
+                                        ("forEach", "((K, V) -> Unit) -> Unit", false),
+                                        ("clear", "() -> Unit", false),
+                                    ] {
+                                        items.push(CompletionItem {
+                                            label: label.to_string(),
+                                            kind: Some(if is_prop { CompletionItemKind::PROPERTY } else { CompletionItemKind::METHOD }),
+                                            detail: Some(detail.to_string()),
+                                            ..Default::default()
+                                        });
+                                    }
+                                }
+                                pace_ty::Ty::Set(_) => {
+                                    for (label, detail, is_prop) in [
+                                        ("len", "() -> int", false),
+                                        ("isEmpty", "bool", true),
+                                        ("isNotEmpty", "bool", true),
+                                        ("add", "(T) -> bool", false),
+                                        ("has", "(T) -> bool", false),
+                                        ("contains", "(T) -> bool", false),
+                                        ("remove", "(T) -> bool", false),
+                                        ("clear", "() -> Unit", false),
+                                        ("toList", "() -> List<T>", false),
+                                        ("union", "(Set<T>) -> Set<T>", false),
+                                        ("intersection", "(Set<T>) -> Set<T>", false),
+                                        ("difference", "(Set<T>) -> Set<T>", false),
+                                    ] {
+                                        items.push(CompletionItem {
+                                            label: label.to_string(),
+                                            kind: Some(if is_prop { CompletionItemKind::PROPERTY } else { CompletionItemKind::METHOD }),
+                                            detail: Some(detail.to_string()),
+                                            ..Default::default()
+                                        });
+                                    }
+                                }
+                                pace_ty::Ty::String => {
+                                    for (label, detail, is_prop) in [
+                                        ("len", "() -> int", false),
+                                        ("isEmpty", "bool", true),
+                                        ("isNotEmpty", "bool", true),
+                                        ("contains", "(string) -> bool", false),
+                                        ("startsWith", "(string) -> bool", false),
+                                        ("endsWith", "(string) -> bool", false),
+                                        ("indexOf", "(string) -> int", false),
+                                        ("trim", "() -> string", false),
+                                        ("slice", "(int, int) -> string", false),
+                                        ("replace", "(string, string) -> string", false),
+                                        ("toLower", "() -> string", false),
+                                        ("toUpper", "() -> string", false),
+                                        ("split", "(string) -> List<string>", false),
+                                    ] {
+                                        items.push(CompletionItem {
+                                            label: label.to_string(),
+                                            kind: Some(if is_prop { CompletionItemKind::PROPERTY } else { CompletionItemKind::METHOD }),
+                                            detail: Some(detail.to_string()),
+                                            ..Default::default()
+                                        });
+                                    }
+                                }
+                                pace_ty::Ty::StringBuilder => {
+                                    for (label, detail, is_prop) in [
+                                        ("len", "() -> int", false),
+                                        ("isEmpty", "bool", true),
+                                        ("isNotEmpty", "bool", true),
+                                        ("append", "(string) -> Unit", false),
+                                        ("toString", "() -> string", false),
+                                        ("clear", "() -> Unit", false),
+                                    ] {
+                                        items.push(CompletionItem {
+                                            label: label.to_string(),
+                                            kind: Some(if is_prop { CompletionItemKind::PROPERTY } else { CompletionItemKind::METHOD }),
+                                            detail: Some(detail.to_string()),
+                                            ..Default::default()
+                                        });
+                                    }
+                                }
                                 _ => {}
                             }
                         }
@@ -461,8 +601,9 @@ impl LanguageServer for Backend {
             && diags.is_empty()
         {
             let mut lowerer = pace_hir::LoweringContext::new();
-            if let Ok(hir) = lowerer.lower_program(ast) {
+            if let Ok(mut hir) = lowerer.lower_program(ast) {
                 let mut tc = pace_ty::TypeChecker::new();
+                hir.resolve_traits(&mut tc.reporter);
                 let _ = tc.check_program(&hir);
 
                 let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
@@ -549,8 +690,9 @@ impl LanguageServer for Backend {
             && diags.is_empty()
         {
             let mut lowerer = pace_hir::LoweringContext::new();
-            if let Ok(hir) = lowerer.lower_program(ast) {
+            if let Ok(mut hir) = lowerer.lower_program(ast) {
                 let mut tc = pace_ty::TypeChecker::new();
+                hir.resolve_traits(&mut tc.reporter);
                 let _ = tc.check_program(&hir);
 
                 let file_path = std::path::PathBuf::from(uri.replace("file://", ""));
@@ -665,8 +807,9 @@ impl LanguageServer for Backend {
             && diags.is_empty()
         {
             let mut lowerer = pace_hir::LoweringContext::new();
-            if let Ok(hir) = lowerer.lower_program(ast) {
+            if let Ok(mut hir) = lowerer.lower_program(ast) {
                 let mut tc = pace_ty::TypeChecker::new();
+                hir.resolve_traits(&mut tc.reporter);
                 let _ = tc.check_program(&hir);
 
                 let offset = find_node::position_to_offset(&text, position);
@@ -843,21 +986,37 @@ impl Backend {
 
             if lsp_diags.is_empty() {
                 let mut lowerer = pace_hir::LoweringContext::new();
-                if let Ok(hir) = lowerer.lower_program(ast) {
+                if let Ok(mut hir) = lowerer.lower_program(ast) {
                     let mut tc = pace_ty::TypeChecker::new();
-                    if let Err(msg) = tc.check_program(&hir) {
-                        let range = Range {
-                            start: Position {
-                                line: 0,
-                                character: 0,
-                            },
-                            end: Position {
-                                line: 0,
-                                character: 1,
-                            },
-                        };
+                    hir.resolve_traits(&mut tc.reporter);
+                    let res = tc.check_program(&hir);
+                    for diag in &tc.reporter.diagnostics {
+                        if let Some(span) = diag.span {
+                            if let Some(cf_id) = current_file_id
+                                && span.file_id != cf_id
+                            {
+                                continue;
+                            }
+                            let start = offset_to_position(&text, span.start as usize);
+                            let end = offset_to_position(&text, span.end as usize);
+                            let severity = match diag.severity {
+                                pace_errors::Severity::Warning => DiagnosticSeverity::WARNING,
+                                _ => DiagnosticSeverity::ERROR,
+                            };
+                            lsp_diags.push(Diagnostic {
+                                range: Range { start, end },
+                                severity: Some(severity),
+                                message: diag.message.clone(),
+                                ..Default::default()
+                            });
+                        }
+                    }
+                    if let Err(msg) = res && !lsp_diags.iter().any(|d| d.severity == Some(DiagnosticSeverity::ERROR)) {
                         lsp_diags.push(Diagnostic {
-                            range,
+                            range: Range {
+                                start: Position { line: 0, character: 0 },
+                                end: Position { line: 0, character: 1 },
+                            },
                             severity: Some(DiagnosticSeverity::ERROR),
                             message: msg,
                             ..Default::default()
@@ -1210,6 +1369,49 @@ fn decl_to_document_symbol(
     }
 }
 
+fn annotation_hover_at(text: &str, offset: usize) -> Option<&'static str> {
+    let bytes = text.as_bytes();
+    if bytes.is_empty() {
+        return None;
+    }
+    let mut start = offset.min(bytes.len());
+    while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+        start -= 1;
+    }
+    if start == 0 || bytes[start - 1] != b'@' {
+        return None;
+    }
+    let mut end = offset.min(bytes.len());
+    while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+        end += 1;
+    }
+    match &text[start..end] {
+        "override" => Some("`@override` — Marks a method as overriding a base class method."),
+        "deprecated" => Some("`@deprecated(\"reason\")` — Marks a function, type, or method as deprecated."),
+        "inline" => Some("`@inline` — Hints to the compiler to inline this function."),
+        "test" => Some("`@test` — Marks a function as a test entry point."),
+        _ => None,
+    }
+}
+
+fn annotation_completions() -> Vec<CompletionItem> {
+    [
+        ("override", "Override a method from a base class"),
+        ("deprecated", "Mark a symbol as deprecated"),
+        ("inline", "Hint to inline this function"),
+        ("test", "Mark a function as a test case"),
+    ]
+    .into_iter()
+    .map(|(label, doc)| CompletionItem {
+        label: label.to_string(),
+        kind: Some(CompletionItemKind::KEYWORD),
+        detail: Some(format!("@{}", label)),
+        documentation: Some(Documentation::String(doc.to_string())),
+        ..Default::default()
+    })
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1237,5 +1439,15 @@ mod tests {
 
         let http_uri = Url::parse("https://example.com/test.pace").unwrap();
         assert!(http_uri.to_file_path().is_err());
+    }
+
+    #[test]
+    fn test_annotation_hover_and_completions() {
+        let src = "@override\nfn speak() {}";
+        assert!(annotation_hover_at(src, 3).is_some());
+        assert!(annotation_hover_at(src, 12).is_none());
+        let comps = annotation_completions();
+        assert!(comps.iter().any(|c| c.label == "override"));
+        assert!(comps.iter().any(|c| c.label == "deprecated"));
     }
 }
