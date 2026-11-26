@@ -18,10 +18,6 @@ fn main() {
     );
     println!(
         "cargo:rerun-if-changed={}",
-        runtime_dir.join("pace_runtime.c").display()
-    );
-    println!(
-        "cargo:rerun-if-changed={}",
         runtime_dir.join("pace_runtime.h").display()
     );
 
