@@ -23,7 +23,7 @@ go build bench.go
 python3 ../../time_it.py ./bench
 
 echo "> Running Java..."
-javac --release 17 Bench.java
+javac --release 27 Bench.java
 python3 ../../time_it.py java Bench
 
 echo "> Running Dart..."
@@ -55,7 +55,7 @@ go build bench.go
 python3 ../../time_it.py ./bench
 
 echo "> Running Java..."
-javac --release 17 Bench.java
+javac --release 27 Bench.java
 python3 ../../time_it.py java Bench
 
 echo "> Running Dart..."
@@ -87,7 +87,7 @@ go build bench.go
 python3 ../../time_it.py ./bench
 
 echo "> Running Java..."
-javac --release 17 Bench.java
+javac --release 27 Bench.java
 python3 ../../time_it.py java Bench
 
 echo "> Running Dart..."
@@ -119,7 +119,7 @@ go build bench.go
 python3 ../../time_it.py ./bench
 
 echo "> Running Java..."
-javac --release 17 Bench.java
+javac --release 27 Bench.java
 python3 ../../time_it.py java Bench
 
 echo "> Running Dart..."
@@ -150,7 +150,7 @@ go build bench.go
 python3 ../../time_it.py ./bench
 
 echo "> Running Java..."
-javac --release 17 Bench.java
+javac --release 27 Bench.java
 python3 ../../time_it.py java Bench
 
 echo "> Running Dart..."

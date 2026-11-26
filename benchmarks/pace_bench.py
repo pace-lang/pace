@@ -45,8 +45,8 @@ def get_tool_versions():
         "go": "go version",
         "java": "javac --version",
         "dart": "dart --version",
-        "python": "python3 --version",
-        "pace": "../target/release/pace --version"
+        "python": "python3.15 --version",
+        "pace": "../compiler/target/release/pace --version"
     }
     
     for lang, cmd in cmds.items():

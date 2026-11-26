@@ -2,7 +2,7 @@
   "name": "Actors (N=100K Msgs)",
   "targets": {
     "pace": {
-      "build": "../../target/release/pace build bench.pace",
+      "build": "../../compiler/target/release/pace build bench.pace",
       "run": "./build/bench"
     }
   }

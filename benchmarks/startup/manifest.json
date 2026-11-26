@@ -2,7 +2,7 @@
   "name": "Startup Time",
   "targets": {
     "pace": {
-      "build": "../../target/release/pace build bench.pace",
+      "build": "../../compiler/target/release/pace build bench.pace",
       "run": "./build/bench"
     },
     "rust": {
@@ -18,7 +18,7 @@
       "run": "./build/bench_go"
     },
     "java": {
-      "build": "javac 17 Bench.java",
+      "build": "javac --release 27 Bench.java",
       "run": "java Bench"
     },
     "dart": {
@@ -26,7 +26,7 @@
       "run": "./build/bench_dart"
     },
     "python": {
-      "run": "python3 bench.py"
+      "run": "python3.15 bench.py"
     }
   }
 }
