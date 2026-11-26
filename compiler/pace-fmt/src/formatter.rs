@@ -213,15 +213,31 @@ impl Formatter {
                 return_type,
                 body,
                 is_static,
-                is_override,
                 is_private,
+                annotations,
                 ..
             } => {
+                for ann in annotations {
+                    self.write("@");
+                    self.write(&ann.name.name);
+                    if let Some(args) = &ann.args {
+                        self.write("(");
+                        for (i, arg) in args.iter().enumerate() {
+                            if i > 0 {
+                                self.write(", ");
+                            }
+                            if let Some(lbl) = &arg.label {
+                                self.write(&lbl.name);
+                                self.write(": ");
+                            }
+                            self.format_expr(&arg.expr);
+                        }
+                        self.write(")");
+                    }
+                    self.newline();
+                }
                 if *is_private {
                     self.write("private ");
-                }
-                if *is_override {
-                    self.write("override ");
                 }
                 if *is_static {
                     self.write("static ");
@@ -326,8 +342,15 @@ impl Formatter {
                     default_value: f_val,
                     is_mut,
                     is_private,
+                    annotations: f_annots,
                 } in fields
                 {
+                    for ann in f_annots {
+                        self.write_indent();
+                        self.write("@");
+                        self.write(&ann.name.name);
+                        self.newline();
+                    }
                     self.print_pending_comments_before(f_name.span);
                     self.write_indent();
                     if *is_private {
@@ -438,8 +461,15 @@ impl Formatter {
                     default_value: f_val,
                     is_mut,
                     is_private,
+                    annotations: f_annots,
                 } in fields
                 {
+                    for ann in f_annots {
+                        self.write_indent();
+                        self.write("@");
+                        self.write(&ann.name.name);
+                        self.newline();
+                    }
                     self.print_pending_comments_before(f_name.span);
                     self.write_indent();
                     if *is_private {
@@ -504,8 +534,15 @@ impl Formatter {
                     default_value: f_val,
                     is_mut,
                     is_private,
+                    annotations: f_annots,
                 } in fields
                 {
+                    for ann in f_annots {
+                        self.write_indent();
+                        self.write("@");
+                        self.write(&ann.name.name);
+                        self.newline();
+                    }
                     self.print_pending_comments_before(f_name.span);
                     self.write_indent();
                     if *is_private {

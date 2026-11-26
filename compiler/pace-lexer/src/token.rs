@@ -59,8 +59,6 @@ pub enum TokenKind<'a> {
     With,
     #[token("extends")]
     Extends,
-    #[token("override")]
-    Override,
     #[token("super")]
     Super,
 
@@ -181,4 +179,6 @@ pub enum TokenKind<'a> {
     FatArrow,
     #[token("->")]
     Arrow,
+    #[token("@")]
+    At,
 }

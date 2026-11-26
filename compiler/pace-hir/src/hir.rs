@@ -2,12 +2,20 @@ use pace_ast::{BinaryOp, Type};
 use pace_span::{Span, Symbol};
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct HirAnnotation {
+    pub name: Symbol,
+    pub args: Option<Vec<HirCallArg>>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct HirFieldDef {
     pub name: Symbol,
     pub ty: Type,
     pub default_value: Option<Expr>,
     pub is_mut: bool,
     pub is_private: bool,
+    pub annotations: Vec<HirAnnotation>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -222,6 +230,7 @@ pub enum Decl {
         const_fields: Vec<HirConstFieldDef>,
         methods: Vec<Decl>, // Lowered to global functions anyway, but kept for namespacing if needed
         is_private: bool,
+        annotations: Vec<HirAnnotation>,
         span: Span,
     },
     Class {
@@ -235,6 +244,7 @@ pub enum Decl {
         const_fields: Vec<HirConstFieldDef>,
         methods: Vec<Decl>,
         is_private: bool,
+        annotations: Vec<HirAnnotation>,
         span: Span,
     },
     Actor {
@@ -245,6 +255,7 @@ pub enum Decl {
         fields: Vec<HirFieldDef>,
         methods: Vec<Decl>,
         is_private: bool,
+        annotations: Vec<HirAnnotation>,
         span: Span,
     },
     Trait {
@@ -253,6 +264,7 @@ pub enum Decl {
         generic_params: Option<GenericParams>,
         methods: Vec<Decl>,
         is_private: bool,
+        annotations: Vec<HirAnnotation>,
         span: Span,
     },
     Enum {
@@ -261,6 +273,7 @@ pub enum Decl {
         generic_params: Option<GenericParams>,
         variants: Vec<EnumVariant>,
         is_private: bool,
+        annotations: Vec<HirAnnotation>,
         span: Span,
     },
     Function {
@@ -271,12 +284,34 @@ pub enum Decl {
         return_type: Option<Type>,
         body: Block,
         is_static: bool,
-        is_override: bool,
         is_private: bool,
         is_async: bool,
+        annotations: Vec<HirAnnotation>,
         span: Span,
     },
     Expr(Expr, Span),
+}
+
+impl Decl {
+    pub fn annotations(&self) -> &[HirAnnotation] {
+        match self {
+            Decl::Struct { annotations, .. }
+            | Decl::Class { annotations, .. }
+            | Decl::Actor { annotations, .. }
+            | Decl::Trait { annotations, .. }
+            | Decl::Enum { annotations, .. }
+            | Decl::Function { annotations, .. } => annotations,
+            _ => &[],
+        }
+    }
+
+    pub fn has_annotation(&self, name: &str) -> bool {
+        self.annotations().iter().any(|a| a.name.as_str() == name)
+    }
+
+    pub fn get_annotation(&self, name: &str) -> Option<&HirAnnotation> {
+        self.annotations().iter().find(|a| a.name.as_str() == name)
+    }
 }
 
 pub type GenericParams = Vec<(Symbol, Vec<Type>, Option<Type>)>;
@@ -286,6 +321,7 @@ pub struct EnumVariant {
     pub name: Symbol,
     pub id: HirId,
     pub fields: Option<Vec<(Symbol, Type)>>,
+    pub annotations: Vec<HirAnnotation>,
     pub span: Span,
 }
 

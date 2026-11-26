@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_unrecognized_token_diagnostic() {
-        let source = "let x = @123";
+        let source = "let x = #123";
         let lexer = Lexer::new(source, pace_span::FileId::DUMMY);
         let mut parser = Parser::new(lexer);
 

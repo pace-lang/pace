@@ -1,11 +1,99 @@
-use pace_ast::{Decl, EnumVariant, GenericParam, Ident, Type};
+use pace_ast::{Annotation, CallArg, Decl, EnumVariant, GenericParam, Ident, Type};
 use pace_errors::Diagnostic;
 use pace_lexer::{Token, TokenKind};
 
 use super::Parser;
 
 impl<'a> Parser<'a> {
+    fn attach_annotations(decl: &mut Decl, annots: Vec<Annotation>) {
+        match decl {
+            Decl::Function { annotations, .. }
+            | Decl::Struct { annotations, .. }
+            | Decl::Class { annotations, .. }
+            | Decl::Actor { annotations, .. }
+            | Decl::Trait { annotations, .. }
+            | Decl::Enum { annotations, .. } => {
+                *annotations = annots;
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn parse_annotations(&mut self) -> Result<Vec<Annotation>, Diagnostic> {
+        let mut annotations = Vec::new();
+        while self.check(&TokenKind::At) {
+            let at_tok = self.expect(TokenKind::At)?;
+            let name = match &self.current {
+                Some(Token {
+                    kind: TokenKind::Ident(n),
+                    span,
+                }) => {
+                    let ident = Ident {
+                        name: pace_span::intern(n),
+                        span: *span,
+                    };
+                    self.advance();
+                    ident
+                }
+                _ => {
+                    return Err(Diagnostic::error("Expected annotation name after '@'")
+                        .with_span(self.current_span()));
+                }
+            };
+            let mut end_span = name.span;
+            let args = if self.check(&TokenKind::LParen) {
+                self.advance();
+                let mut call_args = Vec::new();
+                while !self.check(&TokenKind::RParen) && self.current.is_some() {
+                    let arg_start = self.current_span();
+                    let label = if let Some(Token {
+                        kind: TokenKind::Ident(lbl),
+                        span: lbl_span,
+                    }) = self.current.clone()
+                    {
+                        let saved_lexer = self.lexer.clone();
+                        let saved_current = self.current.clone();
+                        self.advance();
+                        if self.check(&TokenKind::Colon) {
+                            self.advance();
+                            Some(Ident {
+                                name: pace_span::intern(&lbl),
+                                span: lbl_span,
+                            })
+                        } else {
+                            self.lexer = saved_lexer;
+                            self.current = saved_current;
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    let expr = self.parse_expr()?;
+                    let _ = arg_start.merge(expr.span());
+                    call_args.push(CallArg { label, expr });
+                    if self.check(&TokenKind::Comma) {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+                let rparen = self.expect(TokenKind::RParen)?;
+                end_span = rparen.span;
+                Some(call_args)
+            } else {
+                None
+            };
+            annotations.push(Annotation {
+                name,
+                args,
+                span: at_tok.span.merge(end_span),
+            });
+        }
+        Ok(annotations)
+    }
+
     pub(crate) fn parse_decl(&mut self) -> Result<Decl, Diagnostic> {
+        let annotations = self.parse_annotations()?;
         let mut is_private = false;
         let mut start_span = self.current_span();
         if self.check(&TokenKind::Private) {
@@ -233,19 +321,33 @@ impl<'a> Parser<'a> {
             })
         } else if self.check(&TokenKind::Async) {
             self.advance();
-            self.parse_fn_decl(is_private, true, start_span)
+            let mut decl = self.parse_fn_decl(is_private, true, start_span)?;
+            Self::attach_annotations(&mut decl, annotations);
+            Ok(decl)
         } else if self.check(&TokenKind::Fn) {
-            self.parse_fn_decl(is_private, false, start_span)
+            let mut decl = self.parse_fn_decl(is_private, false, start_span)?;
+            Self::attach_annotations(&mut decl, annotations);
+            Ok(decl)
         } else if self.check(&TokenKind::Struct) {
-            self.parse_struct_decl(is_private, start_span)
+            let mut decl = self.parse_struct_decl(is_private, start_span)?;
+            Self::attach_annotations(&mut decl, annotations);
+            Ok(decl)
         } else if self.check(&TokenKind::Class) {
-            self.parse_class_decl(is_private, start_span)
+            let mut decl = self.parse_class_decl(is_private, start_span)?;
+            Self::attach_annotations(&mut decl, annotations);
+            Ok(decl)
         } else if self.check(&TokenKind::Actor) {
-            self.parse_actor_decl(is_private, start_span)
+            let mut decl = self.parse_actor_decl(is_private, start_span)?;
+            Self::attach_annotations(&mut decl, annotations);
+            Ok(decl)
         } else if self.check(&TokenKind::Trait) {
-            self.parse_trait_decl(is_private, start_span)
+            let mut decl = self.parse_trait_decl(is_private, start_span)?;
+            Self::attach_annotations(&mut decl, annotations);
+            Ok(decl)
         } else if self.check(&TokenKind::Enum) {
-            self.parse_enum_decl(is_private, start_span)
+            let mut decl = self.parse_enum_decl(is_private, start_span)?;
+            Self::attach_annotations(&mut decl, annotations);
+            Ok(decl)
         } else if self.check(&TokenKind::Try) || self.check(&TokenKind::Catch) {
             let span = self.current_span();
             self.advance();
@@ -402,6 +504,7 @@ impl<'a> Parser<'a> {
         let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            let member_annotations = self.parse_annotations()?;
             let mut is_field_private = false;
             if self.check(&TokenKind::Private) {
                 self.advance();
@@ -494,9 +597,13 @@ impl<'a> Parser<'a> {
                 }
             } else if self.check(&TokenKind::Async) {
                 self.advance();
-                methods.push(self.parse_fn_decl(is_field_private, true, self.current_span())?);
+                let mut func = self.parse_fn_decl(is_field_private, true, self.current_span())?;
+                Self::attach_annotations(&mut func, member_annotations);
+                methods.push(func);
             } else if self.check(&TokenKind::Fn) {
-                methods.push(self.parse_fn_decl(is_field_private, false, self.current_span())?);
+                let mut func = self.parse_fn_decl(is_field_private, false, self.current_span())?;
+                Self::attach_annotations(&mut func, member_annotations);
+                methods.push(func);
             } else if self.check(&TokenKind::Let)
                 || self.check(&TokenKind::Var)
                 || matches!(
@@ -562,9 +669,9 @@ impl<'a> Parser<'a> {
                             return_type: None,
                             body: body.clone(),
                             is_static: false,
-                            is_override: false,
                             is_private: is_field_private,
                             is_async: false,
+                            annotations: member_annotations,
                             span: init_span_start.merge(body.span),
                         });
                         continue;
@@ -591,6 +698,7 @@ impl<'a> Parser<'a> {
                         default_value: field_value,
                         is_mut,
                         is_private: is_field_private,
+                        annotations: member_annotations,
                     });
                 } else {
                     return Err(Diagnostic::error("Expected field name after let/var")
@@ -617,6 +725,7 @@ impl<'a> Parser<'a> {
             const_fields,
             methods,
             is_private,
+            annotations: Vec::new(),
             span: if is_private {
                 start_span.merge(end_tok.span)
             } else {
@@ -656,6 +765,7 @@ impl<'a> Parser<'a> {
         let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            let member_annotations = self.parse_annotations()?;
             let mut is_field_private = false;
             if self.check(&TokenKind::Private) {
                 self.advance();
@@ -664,9 +774,13 @@ impl<'a> Parser<'a> {
 
             if self.check(&TokenKind::Async) {
                 self.advance();
-                methods.push(self.parse_fn_decl(is_field_private, true, self.current_span())?);
+                let mut func = self.parse_fn_decl(is_field_private, true, self.current_span())?;
+                Self::attach_annotations(&mut func, member_annotations);
+                methods.push(func);
             } else if self.check(&TokenKind::Fn) {
-                methods.push(self.parse_fn_decl(is_field_private, false, self.current_span())?);
+                let mut func = self.parse_fn_decl(is_field_private, false, self.current_span())?;
+                Self::attach_annotations(&mut func, member_annotations);
+                methods.push(func);
             } else {
                 return Err(
                     Diagnostic::error("Expected method in trait").with_span(self.current_span())
@@ -680,6 +794,7 @@ impl<'a> Parser<'a> {
             generic_params,
             methods,
             is_private,
+            annotations: Vec::new(),
             span: if is_private {
                 start_span.merge(end_tok.span)
             } else {
@@ -743,6 +858,7 @@ impl<'a> Parser<'a> {
         let mut methods = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            let member_annotations = self.parse_annotations()?;
             let mut is_field_private = false;
             if self.check(&TokenKind::Private) {
                 self.advance();
@@ -833,12 +949,14 @@ impl<'a> Parser<'a> {
                     )
                     .with_span(self.current_span()));
                 }
-            } else if self.check(&TokenKind::Async) || self.check(&TokenKind::Fn) || self.check(&TokenKind::Override) {
-                let is_override = self.check(&TokenKind::Override);
-                if is_override {
-                    self.advance();
-                }
-                
+            } else if matches!(&self.current, Some(Token { kind: TokenKind::Ident("override"), .. })) {
+                let span = self.current_span();
+                return Err(Diagnostic::error(
+                    "The 'override' keyword was replaced by '@override' in v0.5.0",
+                )
+                .with_span(span)
+                .with_hint("Use '@override fn ...' instead of 'override fn ...'"));
+            } else if self.check(&TokenKind::Async) || self.check(&TokenKind::Fn) {
                 let mut is_async = false;
                 if self.check(&TokenKind::Async) {
                     self.advance();
@@ -847,196 +965,7 @@ impl<'a> Parser<'a> {
                 
                 if self.check(&TokenKind::Fn) {
                     let mut func = self.parse_fn_decl(is_field_private, is_async, self.current_span())?;
-                    if let Decl::Function {
-                        is_override: ref mut override_flag,
-                        ..
-                    } = func
-                    {
-                        *override_flag = is_override;
-                    }
-                    methods.push(func);
-                } else {
-                    return Err(Diagnostic::error("Expected 'fn' after 'override'")
-                        .with_span(self.current_span()));
-                }
-            } else if self.check(&TokenKind::Let)
-                || self.check(&TokenKind::Var)
-                || matches!(
-                    &self.current,
-                    Some(Token {
-                        kind: TokenKind::Ident(_),
-                        ..
-                    })
-                )
-            {
-                let mut is_mut = true;
-                if self.check(&TokenKind::Let) {
-                    is_mut = false;
-                    self.advance();
-                } else if self.check(&TokenKind::Var) {
-                    self.advance();
-                }
-
-                if let Some(Token {
-                    kind: TokenKind::Ident(name),
-                    span,
-                }) = self.current.clone()
-                {
-                    if name == "init" && is_mut {
-                        let init_span_start = span;
-                        self.advance(); // consume 'init'
-                        let ident = Ident {
-                            name: pace_span::intern("init"),
-                            span: init_span_start,
-                        };
-
-                        self.expect(TokenKind::LParen)?;
-                        let mut params = Vec::new();
-                        while !self.check(&TokenKind::RParen) && self.current.is_some() {
-                            let param_name = match &self.current {
-                                Some(Token {
-                                    kind: TokenKind::Ident(n),
-                                    span,
-                                }) => Ident {
-                                    name: pace_span::intern(n),
-                                    span: *span,
-                                },
-                                _ => {
-                                    return Err(Diagnostic::error("Expected parameter name")
-                                        .with_span(self.current_span()));
-                                }
-                            };
-                            self.advance();
-                            self.expect(TokenKind::Colon)?;
-                            let param_ty = self.parse_type()?;
-                            params.push((param_name, param_ty));
-                            if self.check(&TokenKind::Comma) {
-                                self.advance();
-                            }
-                        }
-                        self.expect(TokenKind::RParen)?;
-
-                        let body = self.parse_block()?;
-                        methods.push(Decl::Function {
-                            name: ident,
-                            generic_params: None,
-                            params,
-                            return_type: None,
-                            body: body.clone(),
-                            is_static: false,
-                            is_override: false,
-                            is_private: is_field_private,
-                            is_async: false,
-                            span: init_span_start.merge(body.span),
-                        });
-                        continue;
-                    }
-
-                    let field_name = Ident {
-                        name: pace_span::intern(name),
-                        span,
-                    };
-                    self.advance();
-
-                    self.expect(TokenKind::Colon)?;
-                    let field_type = self.parse_type()?;
-
-                    let mut field_value = None;
-                    if self.check(&TokenKind::Eq) {
-                        self.advance();
-                        field_value = Some(self.parse_expr()?);
-                    }
-
-                    fields.push(pace_ast::FieldDef {
-                        name: field_name,
-                        ty: field_type,
-                        default_value: field_value,
-                        is_mut,
-                        is_private: is_field_private,
-                    });
-                } else {
-                    return Err(Diagnostic::error("Expected field name after let/var")
-                        .with_span(self.current_span()));
-                }
-
-                if self.check(&TokenKind::Comma) {
-                    self.advance();
-                }
-            } else {
-                return Err(Diagnostic::error("Expected field or method in class")
-                    .with_span(self.current_span()));
-            }
-        }
-
-        let end_tok = self.expect(TokenKind::RBrace)?;
-
-        Ok(Decl::Class {
-            name: name_tok,
-            generic_params,
-            extends,
-            with,
-            fields,
-            static_fields,
-            const_fields,
-            methods,
-            is_private,
-            span: if is_private {
-                start_span.merge(end_tok.span)
-            } else {
-                start_tok.span.merge(end_tok.span)
-            },
-        })
-    }
-
-
-    pub(crate) fn parse_actor_decl(
-        &mut self,
-        is_private: bool,
-        start_span: pace_span::Span,
-    ) -> Result<Decl, Diagnostic> {
-        let start_tok = self.expect(TokenKind::Actor)?;
-
-        let name_tok = match &self.current {
-            Some(Token {
-                kind: TokenKind::Ident(name),
-                span,
-            }) => {
-                let ident = Ident {
-                    name: pace_span::intern(name),
-                    span: *span,
-                };
-                self.advance();
-                ident
-            }
-            _ => {
-                return Err(Diagnostic::error("Expected identifier after 'actor'")
-                    .with_span(self.current_span()));
-            }
-        };
-
-        let generic_params = self.parse_generic_params()?;
-        let with = self.parse_with_clause()?;
-
-        self.expect(TokenKind::LBrace)?;
-        let mut fields = Vec::new();
-        let mut methods = Vec::new();
-
-        while !self.check(&TokenKind::RBrace) && self.current.is_some() {
-            let mut is_field_private = false;
-            if self.check(&TokenKind::Private) {
-                self.advance();
-                is_field_private = true;
-            }
-
-            if self.check(&TokenKind::Async) || self.check(&TokenKind::Fn) {
-                let mut is_async = false;
-                if self.check(&TokenKind::Async) {
-                    self.advance();
-                    is_async = true;
-                }
-                
-                if self.check(&TokenKind::Fn) {
-                    let func = self.parse_fn_decl(is_field_private, is_async, self.current_span())?;
+                    Self::attach_annotations(&mut func, member_annotations);
                     methods.push(func);
                 } else {
                     return Err(Diagnostic::error("Expected 'fn' after 'async'")
@@ -1107,9 +1036,9 @@ impl<'a> Parser<'a> {
                             return_type: None,
                             body: body.clone(),
                             is_static: false,
-                            is_override: false,
                             is_private: is_field_private,
                             is_async: false,
+                            annotations: member_annotations,
                             span: init_span_start.merge(body.span),
                         });
                         continue;
@@ -1136,6 +1065,194 @@ impl<'a> Parser<'a> {
                         default_value: field_value,
                         is_mut,
                         is_private: is_field_private,
+                        annotations: member_annotations,
+                    });
+                } else {
+                    return Err(Diagnostic::error("Expected field name after let/var")
+                        .with_span(self.current_span()));
+                }
+
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                }
+            } else {
+                return Err(Diagnostic::error("Expected field or method in class")
+                    .with_span(self.current_span()));
+            }
+        }
+
+        let end_tok = self.expect(TokenKind::RBrace)?;
+
+        Ok(Decl::Class {
+            name: name_tok,
+            generic_params,
+            extends,
+            with,
+            fields,
+            static_fields,
+            const_fields,
+            methods,
+            is_private,
+            annotations: Vec::new(),
+            span: if is_private {
+                start_span.merge(end_tok.span)
+            } else {
+                start_tok.span.merge(end_tok.span)
+            },
+        })
+    }
+
+
+    pub(crate) fn parse_actor_decl(
+        &mut self,
+        is_private: bool,
+        start_span: pace_span::Span,
+    ) -> Result<Decl, Diagnostic> {
+        let start_tok = self.expect(TokenKind::Actor)?;
+
+        let name_tok = match &self.current {
+            Some(Token {
+                kind: TokenKind::Ident(name),
+                span,
+            }) => {
+                let ident = Ident {
+                    name: pace_span::intern(name),
+                    span: *span,
+                };
+                self.advance();
+                ident
+            }
+            _ => {
+                return Err(Diagnostic::error("Expected identifier after 'actor'")
+                    .with_span(self.current_span()));
+            }
+        };
+
+        let generic_params = self.parse_generic_params()?;
+        let with = self.parse_with_clause()?;
+
+        self.expect(TokenKind::LBrace)?;
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+
+        while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            let member_annotations = self.parse_annotations()?;
+            let mut is_field_private = false;
+            if self.check(&TokenKind::Private) {
+                self.advance();
+                is_field_private = true;
+            }
+
+            if self.check(&TokenKind::Async) || self.check(&TokenKind::Fn) {
+                let mut is_async = false;
+                if self.check(&TokenKind::Async) {
+                    self.advance();
+                    is_async = true;
+                }
+                
+                if self.check(&TokenKind::Fn) {
+                    let mut func = self.parse_fn_decl(is_field_private, is_async, self.current_span())?;
+                    Self::attach_annotations(&mut func, member_annotations);
+                    methods.push(func);
+                } else {
+                    return Err(Diagnostic::error("Expected 'fn' after 'async'")
+                        .with_span(self.current_span()));
+                }
+            } else if self.check(&TokenKind::Let)
+                || self.check(&TokenKind::Var)
+                || matches!(
+                    &self.current,
+                    Some(Token {
+                        kind: TokenKind::Ident(_),
+                        ..
+                    })
+                )
+            {
+                let mut is_mut = true;
+                if self.check(&TokenKind::Let) {
+                    is_mut = false;
+                    self.advance();
+                } else if self.check(&TokenKind::Var) {
+                    self.advance();
+                }
+
+                if let Some(Token {
+                    kind: TokenKind::Ident(name),
+                    span,
+                }) = self.current.clone()
+                {
+                    if name == "init" && is_mut {
+                        let init_span_start = span;
+                        self.advance(); // consume 'init'
+                        let ident = Ident {
+                            name: pace_span::intern("init"),
+                            span: init_span_start,
+                        };
+
+                        self.expect(TokenKind::LParen)?;
+                        let mut params = Vec::new();
+                        while !self.check(&TokenKind::RParen) && self.current.is_some() {
+                            let param_name = match &self.current {
+                                Some(Token {
+                                    kind: TokenKind::Ident(n),
+                                    span,
+                                }) => Ident {
+                                    name: pace_span::intern(n),
+                                    span: *span,
+                                },
+                                _ => {
+                                    return Err(Diagnostic::error("Expected parameter name")
+                                        .with_span(self.current_span()));
+                                }
+                            };
+                            self.advance();
+                            self.expect(TokenKind::Colon)?;
+                            let param_ty = self.parse_type()?;
+                            params.push((param_name, param_ty));
+                            if self.check(&TokenKind::Comma) {
+                                self.advance();
+                            }
+                        }
+                        self.expect(TokenKind::RParen)?;
+
+                        let body = self.parse_block()?;
+                        methods.push(Decl::Function {
+                            name: ident,
+                            generic_params: None,
+                            params,
+                            return_type: None,
+                            body: body.clone(),
+                            is_static: false,
+                            is_private: is_field_private,
+                            is_async: false,
+                            annotations: member_annotations,
+                            span: init_span_start.merge(body.span),
+                        });
+                        continue;
+                    }
+
+                    let field_name = Ident {
+                        name: pace_span::intern(name),
+                        span,
+                    };
+                    self.advance();
+
+                    self.expect(TokenKind::Colon)?;
+                    let field_type = self.parse_type()?;
+
+                    let mut field_value = None;
+                    if self.check(&TokenKind::Eq) {
+                        self.advance();
+                        field_value = Some(self.parse_expr()?);
+                    }
+
+                    fields.push(pace_ast::FieldDef {
+                        name: field_name,
+                        ty: field_type,
+                        default_value: field_value,
+                        is_mut,
+                        is_private: is_field_private,
+                        annotations: member_annotations,
                     });
                 } else {
                     return Err(Diagnostic::error("Expected field name after let/var")
@@ -1160,6 +1277,7 @@ impl<'a> Parser<'a> {
             fields,
             methods,
             is_private,
+            annotations: Vec::new(),
             span: if is_private {
                 start_span.merge(end_tok.span)
             } else {
@@ -1199,6 +1317,7 @@ impl<'a> Parser<'a> {
         let mut variants = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && self.current.is_some() {
+            let variant_annotations = self.parse_annotations()?;
             let variant_name = match &self.current {
                 Some(Token {
                     kind: TokenKind::Ident(name),
@@ -1258,6 +1377,7 @@ impl<'a> Parser<'a> {
             variants.push(EnumVariant {
                 name: variant_name.clone(),
                 fields,
+                annotations: variant_annotations,
                 span: variant_name.span.merge(v_end_span),
             });
         }
@@ -1269,6 +1389,7 @@ impl<'a> Parser<'a> {
             generic_params,
             variants,
             is_private,
+            annotations: Vec::new(),
             span: if is_private {
                 start_span.merge(end_tok.span)
             } else {
@@ -1364,9 +1485,9 @@ impl<'a> Parser<'a> {
             return_type,
             body,
             is_static: false,
-            is_override: false,
             is_private,
             is_async,
+            annotations: Vec::new(),
             span: if is_private {
                 start_span.merge(end_span)
             } else {

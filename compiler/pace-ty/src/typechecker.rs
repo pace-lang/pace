@@ -1032,7 +1032,7 @@ impl TypeChecker {
                 for m in methods {
                     if let Decl::Function {
                         name,
-                        is_override,
+                        annotations,
                         is_private,
                         span,
                         ..
@@ -1050,7 +1050,7 @@ impl TypeChecker {
                                 name: base_name,
                                 ty: ty.clone(),
                                 mangled_name: method_mangled_name,
-                                is_override: *is_override,
+                                is_override: annotations.iter().any(|a| a.name.as_str() == "override"),
                                 is_private: *is_private,
                                 span: *span,
                             });
@@ -1120,7 +1120,7 @@ impl TypeChecker {
                             }
                         } else {
                             if vtable.iter().any(|v| &v.name == base_name) && base_name != "init" {
-                                self.reporter.report(pace_errors::Diagnostic::error(format!("Method '{}' shadows a parent method. Use 'override' keyword", base_name)).with_span(*span));
+                                self.reporter.report(pace_errors::Diagnostic::error(format!("Method '{}' shadows a parent method. Use '@override' annotation", base_name)).with_span(*span));
                                 return Err("Missing override keyword".to_string());
                             }
                             vtable.push(VTableEntry {

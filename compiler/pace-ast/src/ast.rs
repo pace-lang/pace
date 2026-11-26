@@ -1,12 +1,20 @@
 use pace_span::{FileId, Span, Symbol};
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Annotation {
+    pub name: Ident,
+    pub args: Option<Vec<CallArg>>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct FieldDef {
     pub name: Ident,
     pub ty: Type,
     pub default_value: Option<Expr>,
     pub is_mut: bool,
     pub is_private: bool,
+    pub annotations: Vec<Annotation>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,9 +105,9 @@ pub enum Decl {
         return_type: Option<Type>,
         body: Block,
         is_static: bool,
-        is_override: bool,
         is_private: bool,
         is_async: bool,
+        annotations: Vec<Annotation>,
         span: Span,
     },
     Struct {
@@ -111,6 +119,7 @@ pub enum Decl {
         const_fields: Vec<ConstFieldDef>,
         methods: Vec<Decl>, // Expects Decl::Function
         is_private: bool,
+        annotations: Vec<Annotation>,
         span: Span,
     },
     Class {
@@ -123,6 +132,7 @@ pub enum Decl {
         const_fields: Vec<ConstFieldDef>,
         methods: Vec<Decl>, // Expects Decl::Function
         is_private: bool,
+        annotations: Vec<Annotation>,
         span: Span,
     },
     Actor {
@@ -132,6 +142,7 @@ pub enum Decl {
         fields: Vec<FieldDef>,
         methods: Vec<Decl>, // Expects Decl::Function
         is_private: bool,
+        annotations: Vec<Annotation>,
         span: Span,
     },
     Trait {
@@ -139,6 +150,7 @@ pub enum Decl {
         generic_params: Option<Vec<GenericParam>>,
         methods: Vec<Decl>, // Expects Decl::Function
         is_private: bool,
+        annotations: Vec<Annotation>,
         span: Span,
     },
     Enum {
@@ -146,6 +158,7 @@ pub enum Decl {
         generic_params: Option<Vec<GenericParam>>,
         variants: Vec<EnumVariant>,
         is_private: bool,
+        annotations: Vec<Annotation>,
         span: Span,
     },
     Expr(Expr, Span),
@@ -155,6 +168,7 @@ pub enum Decl {
 pub struct EnumVariant {
     pub name: Ident,
     pub fields: Option<Vec<(Ident, Type)>>,
+    pub annotations: Vec<Annotation>,
     pub span: Span,
 }
 

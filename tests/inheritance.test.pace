@@ -18,7 +18,8 @@ class Dog extends Animal {
         self.breed = breed
     }
     
-    override fn speak() {
+    @override
+    fn speak() {
         println("Dog barks")
     }
 }
@@ -28,7 +29,8 @@ class Cat extends Animal {
         super.init(name)
     }
     
-    override fn speak() {
+    @override
+    fn speak() {
         println("Cat meows")
     }
 }

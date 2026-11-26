@@ -4,6 +4,34 @@ use pace_ast as ast;
 use super::LoweringContext;
 
 impl LoweringContext {
+    pub(crate) fn lower_annotations(
+        &mut self,
+        annots: Vec<ast::Annotation>,
+    ) -> Result<Vec<HirAnnotation>, String> {
+        let mut out = Vec::with_capacity(annots.len());
+        for a in annots {
+            let args = match a.args {
+                Some(list) => {
+                    let mut lowered_args = Vec::with_capacity(list.len());
+                    for arg in list {
+                        lowered_args.push(HirCallArg {
+                            label: arg.label.map(|l| l.name),
+                            expr: self.lower_expr(arg.expr)?,
+                        });
+                    }
+                    Some(lowered_args)
+                }
+                None => None,
+            };
+            out.push(HirAnnotation {
+                name: a.name.name,
+                args,
+                span: a.span,
+            });
+        }
+        Ok(out)
+    }
+
     pub(crate) fn lower_decl(&mut self, decl: ast::Decl) -> Result<Option<Decl>, String> {
         match decl {
             ast::Decl::Import { path, alias, span } => Ok(Some(Decl::Import {
@@ -64,6 +92,7 @@ impl LoweringContext {
                 const_fields,
                 methods,
                 is_private,
+                annotations,
                 span,
                 ..
             } => {
@@ -76,18 +105,21 @@ impl LoweringContext {
                     default_value: field_val,
                     is_mut,
                     is_private: is_field_private,
+                    annotations: field_annotations,
                 } in fields.clone()
                 {
                     let lowered_val = match field_val {
                         Some(v) => Some(self.lower_expr(v)?),
                         None => None,
                     };
+                    let lowered_annots = self.lower_annotations(field_annotations)?;
                     lowered_fields.push(crate::hir::HirFieldDef {
                         name: field_name.name,
                         ty: field_ty.clone(),
                         default_value: lowered_val,
                         is_mut,
                         is_private: is_field_private,
+                        annotations: lowered_annots,
                     });
                 }
 
@@ -182,7 +214,7 @@ impl LoweringContext {
                                 span,
                             },
                             is_static: false,
-                            is_override: false,
+                            annotations: vec![],
                             is_private: false,
                             is_async: false,
                             span,
@@ -201,7 +233,7 @@ impl LoweringContext {
                         body,
                         span: m_span,
                         is_static,
-                        is_override,
+                        annotations,
                         is_private: is_method_private,
                         is_async,
                     } = method
@@ -228,7 +260,7 @@ impl LoweringContext {
                             body,
                             span: m_span,
                             is_static,
-                            is_override,
+                            annotations,
                             is_private: is_method_private,
                             is_async,
                         };
@@ -254,6 +286,7 @@ impl LoweringContext {
                     const_fields: lowered_const,
                     methods: lowered_methods,
                     is_private,
+                    annotations: self.lower_annotations(annotations)?,
                     span,
                 }))
             }
@@ -267,6 +300,7 @@ impl LoweringContext {
                 const_fields,
                 methods,
                 is_private,
+                annotations,
                 span,
                 ..
             } => {
@@ -279,6 +313,7 @@ impl LoweringContext {
                     default_value: field_val,
                     is_mut,
                     is_private: is_field_private,
+                    annotations: field_annotations,
                 } in fields.clone()
                 {
                     let lowered_val = match field_val {
@@ -291,6 +326,7 @@ impl LoweringContext {
                         default_value: lowered_val,
                         is_mut,
                         is_private: is_field_private,
+                        annotations: self.lower_annotations(field_annotations)?,
                     });
                 }
 
@@ -395,7 +431,7 @@ impl LoweringContext {
                                 span,
                             },
                             is_static: false,
-                            is_override: false,
+                            annotations: vec![],
                             is_private: false,
                             is_async: false,
                             span,
@@ -414,7 +450,7 @@ impl LoweringContext {
                         body,
                         span: m_span,
                         is_static,
-                        is_override,
+                        annotations,
                         is_private: is_method_private,
                         is_async,
                     } = method
@@ -441,7 +477,7 @@ impl LoweringContext {
                             body,
                             span: m_span,
                             is_static,
-                            is_override,
+                            annotations,
                             is_private: is_method_private,
                             is_async,
                         };
@@ -469,6 +505,7 @@ impl LoweringContext {
                     const_fields: lowered_const,
                     methods: lowered_methods,
                     is_private,
+                    annotations: self.lower_annotations(annotations)?,
                     span,
                 }))
             }
@@ -480,6 +517,7 @@ impl LoweringContext {
                 fields,
                 methods,
                 is_private,
+                annotations,
                 span,
                 ..
             } => {
@@ -492,6 +530,7 @@ impl LoweringContext {
                     default_value: field_val,
                     is_mut,
                     is_private: is_field_private,
+                    annotations: field_annotations,
                 } in fields.clone()
                 {
                     let lowered_val = match field_val {
@@ -504,6 +543,7 @@ impl LoweringContext {
                         default_value: lowered_val,
                         is_mut,
                         is_private: is_field_private,
+                        annotations: self.lower_annotations(field_annotations)?,
                     });
                 }
 
@@ -567,7 +607,7 @@ impl LoweringContext {
                                 span,
                             },
                             is_static: false,
-                            is_override: false,
+                            annotations: vec![],
                             is_private: false,
                             is_async: false,
                             span,
@@ -586,7 +626,7 @@ impl LoweringContext {
                         body,
                         span: m_span,
                         is_static,
-                        is_override,
+                        annotations,
                         is_private: is_method_private,
                         is_async: _,
                     } = method
@@ -636,7 +676,7 @@ impl LoweringContext {
                             body,
                             span: m_span,
                             is_static,
-                            is_override,
+                            annotations,
                             is_private: is_method_private,
                             is_async: true, // Actor methods are ALWAYS implicitly async!
                         };
@@ -660,6 +700,7 @@ impl LoweringContext {
                     fields: lowered_fields,
                     methods: lowered_methods,
                     is_private,
+                    annotations: self.lower_annotations(annotations)?,
                     span,
                 }))
             }
@@ -669,6 +710,7 @@ impl LoweringContext {
                 generic_params,
                 methods,
                 is_private,
+                annotations,
                 span,
                 ..
             } => {
@@ -685,7 +727,7 @@ impl LoweringContext {
                         body,
                         span: m_span,
                         is_static,
-                        is_override,
+                        annotations,
                         is_private: is_method_private,
                         is_async,
                     } = method
@@ -712,7 +754,7 @@ impl LoweringContext {
                             body,
                             span: m_span,
                             is_static,
-                            is_override,
+                            annotations,
                             is_private: is_method_private,
                             is_async,
                         };
@@ -733,6 +775,7 @@ impl LoweringContext {
                     generic_params: hir_generic_params,
                     methods: lowered_methods,
                     is_private,
+                    annotations: self.lower_annotations(annotations)?,
                     span,
                 }))
             }
@@ -745,6 +788,7 @@ impl LoweringContext {
                 generic_params,
                 variants,
                 is_private,
+                annotations,
                 span,
             } => {
                 let id = self.generate_id();
@@ -766,6 +810,7 @@ impl LoweringContext {
                         name: v.name.name,
                         id: var_id,
                         fields: lowered_fields,
+                        annotations: self.lower_annotations(v.annotations)?,
                         span: v.span,
                     });
                 }
@@ -781,6 +826,7 @@ impl LoweringContext {
                     generic_params: hir_generic_params,
                     variants: lowered_variants,
                     is_private,
+                    annotations: self.lower_annotations(annotations)?,
                     span,
                 }))
             }
@@ -792,7 +838,7 @@ impl LoweringContext {
                 body,
                 span,
                 is_static,
-                is_override,
+                annotations,
                 is_private,
                 is_async,
             } => {
@@ -827,9 +873,9 @@ impl LoweringContext {
                     return_type,
                     body: lowered_body,
                     is_static,
-                    is_override,
                     is_private,
                     is_async,
+                    annotations: self.lower_annotations(annotations)?,
                     span,
                 }))
             }

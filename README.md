@@ -50,7 +50,8 @@ class User with Serializable {
         self.name = name
     }
     
-    override fn toJson() -> string {
+    @override
+    fn toJson() -> string {
         return "{ \"name\": \"{self.name}\" }"
     }
 }
