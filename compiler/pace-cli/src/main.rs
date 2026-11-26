@@ -28,25 +28,34 @@ enum Commands {
         #[arg(long)]
         lib: bool,
     },
-    /// Build the current package
+    /// Build the current package (defaults to release)
     Build {
         /// Optional path to a specific .pace file to build in script mode
         file: Option<String>,
+        /// Build in debug mode (unoptimized)
+        #[arg(long)]
+        debug: bool,
     },
     /// Typecheck the current package
     Check {
         /// Optional path to a specific .pace file to check in script mode
         file: Option<String>,
     },
-    /// Build and run the current package
+    /// Build and run the current package (defaults to debug)
     Run {
         /// Optional path to a specific .pace file to run in script mode
         file: Option<String>,
+        /// Run with release optimizations enabled
+        #[arg(long)]
+        release: bool,
     },
     /// Run test files (.test.pace) in the package
     Test {
         /// Optional path to a specific test file or filter pattern
         filter: Option<String>,
+        /// Stop immediately on the first test failure
+        #[arg(long)]
+        fail_fast: bool,
     },
     /// Print the toolchain version
     Version,
@@ -317,7 +326,7 @@ async fn resolve_package_deps_for_dir(
     deps
 }
 
-async fn execute_test(filter: Option<String>) -> Result<(), String> {
+async fn execute_test(filter: Option<String>, fail_fast: bool) -> Result<(), String> {
     let current_dir = env::current_dir().map_err(|_| "Failed to get current directory")?;
 
     let mut test_files = Vec::new();
@@ -379,47 +388,99 @@ async fn execute_test(filter: Option<String>) -> Result<(), String> {
     > = std::collections::HashMap::new();
 
     for test_file in &test_files {
-        let rel_path = test_file.strip_prefix(&current_dir).unwrap_or(test_file);
+        let test_dir = test_file.parent().unwrap_or(&current_dir);
+        if !package_deps_cache.contains_key(test_dir) {
+            let d = resolve_package_deps_for_dir(test_dir).await;
+            package_deps_cache.insert(test_dir.to_path_buf(), d);
+        }
+    }
+
+    let concurrency = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(concurrency));
+    let aborted = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut handles = Vec::with_capacity(test_files.len());
+
+    for (idx, test_file) in test_files.iter().enumerate() {
+        let rel_path = test_file
+            .strip_prefix(&current_dir)
+            .unwrap_or(test_file)
+            .to_path_buf();
         let test_name = test_file
             .file_stem()
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
-
-        let start = std::time::Instant::now();
         let test_dir = test_file.parent().unwrap_or(&current_dir);
-        let deps = match package_deps_cache.get(test_dir) {
-            Some(d) => d.clone(),
-            None => {
-                let d = resolve_package_deps_for_dir(test_dir).await;
-                package_deps_cache.insert(test_dir.to_path_buf(), d.clone());
-                d
+        let deps = package_deps_cache
+            .get(test_dir)
+            .cloned()
+            .unwrap_or_default();
+        let test_out_dir = output_dir.join(format!("test_{}", idx));
+        let test_file = test_file.clone();
+        let sem = semaphore.clone();
+        let aborted_flag = aborted.clone();
+
+        handles.push(tokio::spawn(async move {
+            let _permit = sem.acquire_owned().await.unwrap();
+            if fail_fast && aborted_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                return (rel_path, None);
             }
+            let _ = fs::create_dir_all(&test_out_dir);
+            let start = std::time::Instant::now();
+            let res = tokio::task::spawn_blocking(move || {
+                pace_driver::compile_file(pace_driver::CompileOptions {
+                    file_path: &test_file,
+                    output_dir: &test_out_dir,
+                    output_name: &test_name,
+                    run: true,
+                    check_only: false,
+                    release: false,
+                    dependencies: &deps,
+                    is_lib: false,
+                    capture_output: true,
+                })
+            })
+            .await
+            .unwrap_or_else(|e| Err(format!("Task panicked: {}", e)));
+
+            let duration = start.elapsed();
+            if res.is_err() && fail_fast {
+                aborted_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            (rel_path, Some((res, duration)))
+        }));
+    }
+
+    for handle in handles {
+        let (rel_path, outcome) = handle
+            .await
+            .map_err(|e| format!("Test runner join error: {}", e))?;
+        let Some((res, duration)) = outcome else {
+            continue;
         };
-
-        let res = pace_driver::compile_file(pace_driver::CompileOptions {
-            file_path: test_file,
-            output_dir: &output_dir,
-            output_name: &test_name,
-            run: true,
-            check_only: false,
-            release: false,
-            dependencies: &deps,
-            is_lib: false,
-            capture_output: true,
-        });
-
-        let duration = start.elapsed();
         let duration_str = format!("{:.1}ms", duration.as_secs_f64() * 1000.0);
 
         match res {
             Ok(()) => {
-                println!("  \x1b[32m✓\x1b[0m {} \x1b[2m({})\x1b[0m", rel_path.display(), duration_str);
+                println!(
+                    "  \x1b[32m✓\x1b[0m {} \x1b[2m({})\x1b[0m",
+                    rel_path.display(),
+                    duration_str
+                );
                 passed += 1;
             }
             Err(e) => {
-                println!("  \x1b[31m✗\x1b[0m {} \x1b[2m({})\x1b[0m", rel_path.display(), duration_str);
-                eprintln!("    \x1b[31mError:\x1b[0m {}", e.lines().collect::<Vec<_>>().join("\n    "));
+                println!(
+                    "  \x1b[31m✗\x1b[0m {} \x1b[2m({})\x1b[0m",
+                    rel_path.display(),
+                    duration_str
+                );
+                eprintln!(
+                    "    \x1b[31mError:\x1b[0m {}",
+                    e.lines().collect::<Vec<_>>().join("\n    ")
+                );
                 failed += 1;
             }
         }
@@ -463,8 +524,8 @@ async fn main() {
                 fatal_exit(format!("Error: {}", e));
             }
         }
-        Commands::Build { file } => {
-            if let Err(e) = execute_build_or_run(file, false, false, true).await {
+        Commands::Build { file, debug } => {
+            if let Err(e) = execute_build_or_run(file, false, false, !debug).await {
                 fatal_exit(e);
             }
         }
@@ -473,13 +534,13 @@ async fn main() {
                 fatal_exit(e);
             }
         }
-        Commands::Run { file } => {
-            if let Err(e) = execute_build_or_run(file, true, false, false).await {
+        Commands::Run { file, release } => {
+            if let Err(e) = execute_build_or_run(file, true, false, release).await {
                 fatal_exit(e);
             }
         }
-        Commands::Test { filter } => {
-            if let Err(e) = execute_test(filter).await {
+        Commands::Test { filter, fail_fast } => {
+            if let Err(e) = execute_test(filter, fail_fast).await {
                 fatal_exit(e);
             }
         }

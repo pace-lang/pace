@@ -341,8 +341,10 @@ pub fn compile_file(opts: CompileOptions) -> Result<(), String> {
 
     let bin_file = opts.output_dir.join(opts.output_name);
 
-    // Find runtime paths
-    let tmp_dir = std::env::temp_dir().join(format!("pace-rt-{}", std::process::id()));
+    // Find runtime paths (unique per compile invocation to avoid parallel test races)
+    static RT_TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let tmp_id = RT_TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp_dir = std::env::temp_dir().join(format!("pace-rt-{}-{}", std::process::id(), tmp_id));
     let _tmp_guard = std::mem::DropGuard::new(tmp_dir.clone(), |dir| {
         let _ = fs::remove_dir_all(&dir);
     });

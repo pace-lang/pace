@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include "../pace_runtime.h"
 
-#define FIBER_STACK_SIZE (1024 * 1024)
+#define FIBER_STACK_SIZE (64 * 1024)
 
 typedef struct PaceFiber {
     ucontext_t ctx;
@@ -353,11 +353,18 @@ static void* worker_thread_main(void* arg) {
     return NULL;
 }
 
+static size_t configured_thread_count = 4;
+
 void pace_thread_pool_init(size_t num_threads) {
-    if (num_threads == 0) num_threads = 4; // Default to 4 threads
-    worker_count = num_threads;
-    worker_threads = (pthread_t*)malloc(sizeof(pthread_t) * num_threads);
-    for (size_t i = 0; i < num_threads; i++) {
+    configured_thread_count = (num_threads == 0) ? 4 : num_threads;
+}
+
+static void ensure_thread_pool_started(void) {
+    if (worker_threads) return;
+    size_t count = (configured_thread_count == 0) ? 4 : configured_thread_count;
+    worker_count = count;
+    worker_threads = (pthread_t*)malloc(sizeof(pthread_t) * count);
+    for (size_t i = 0; i < count; i++) {
         pthread_create(&worker_threads[i], NULL, worker_thread_main, NULL);
     }
 }
@@ -400,6 +407,7 @@ void* pace_send_actor_message(void* actor_ptr, void (*func)(void*), void* arg) {
         task->next = NULL;
         
         pthread_mutex_lock(&queue_mutex);
+        ensure_thread_pool_started();
         if (task_queue_tail) {
             task_queue_tail->next = task;
             task_queue_tail = task;
@@ -414,20 +422,20 @@ void* pace_send_actor_message(void* actor_ptr, void (*func)(void*), void* arg) {
 }
 
 void pace_thread_pool_shutdown(void) {
-    if (!worker_threads) return;
-    
-    pthread_mutex_lock(&queue_mutex);
-    pool_shutdown = 1;
-    pthread_cond_broadcast(&queue_cond);
-    pthread_mutex_unlock(&queue_mutex);
-    
-    for (size_t i = 0; i < worker_count; i++) {
-        pthread_join(worker_threads[i], NULL);
+    if (worker_threads) {
+        pthread_mutex_lock(&queue_mutex);
+        pool_shutdown = 1;
+        pthread_cond_broadcast(&queue_cond);
+        pthread_mutex_unlock(&queue_mutex);
+        
+        for (size_t i = 0; i < worker_count; i++) {
+            pthread_join(worker_threads[i], NULL);
+        }
+        
+        free(worker_threads);
+        worker_threads = NULL;
+        worker_count = 0;
     }
-    
-    free(worker_threads);
-    worker_threads = NULL;
-    worker_count = 0;
     
     cleanup_all_fibers();
 }
