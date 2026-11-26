@@ -1,0 +1,31 @@
+fn maybeInt(present: bool) -> int? {
+    if present {
+        return 0
+    }
+    return null
+}
+
+fn main() {
+    let a: int? = 0
+    let b: int? = null
+    assert((a ?? 5) == 0, "int? = 0 should coalesce to 0")
+    assert((b ?? 5) == 5, "int? = null should coalesce to 5")
+    assert(a != null, "int? = 0 should not be null")
+    assert(b == null, "int? = null should be null")
+
+    let f: float? = 0.0
+    let fn_null: float? = null
+    assert((f ?? 3.5) == 0.0, "float? = 0.0 should coalesce to 0.0")
+    assert((fn_null ?? 3.5) == 3.5, "float? = null should coalesce to 3.5")
+
+    let flag: bool? = false
+    let flag_null: bool? = null
+    assert((flag ?? true) == false, "bool? = false should coalesce to false")
+    assert((flag_null ?? true) == true, "bool? = null should coalesce to true")
+
+    let r0 = maybeInt(true)
+    let rNull = maybeInt(false)
+    assert((r0 ?? 99) == 0, "returned 0 as int? should stay 0")
+    assert((rNull ?? 99) == 99, "returned null as int? should coalesce to 99")
+}
+

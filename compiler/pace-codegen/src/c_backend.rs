@@ -42,6 +42,13 @@ impl CGenerator {
         self.output.push_str("    void* env;\n");
         self.output.push_str("} PaceClosure;\n\n");
 
+        self.output.push_str("typedef struct PaceOptInt { int has_value; long long value; } PaceOptInt;\n");
+        self.output.push_str("typedef struct PaceOptFloat { int has_value; double value; } PaceOptFloat;\n");
+        self.output.push_str("typedef struct PaceOptBool { int has_value; long long value; } PaceOptBool;\n");
+        self.output.push_str("static inline PaceOptInt pace_opt_int_from_ptr(void* p) { return p ? (PaceOptInt){1, (long long)(intptr_t)p} : (PaceOptInt){0, 0}; }\n");
+        self.output.push_str("static inline PaceOptFloat pace_opt_float_from_ptr(void* p) { return p ? (PaceOptFloat){1, (double)(intptr_t)p} : (PaceOptFloat){0, 0}; }\n");
+        self.output.push_str("static inline PaceOptBool pace_opt_bool_from_ptr(void* p) { return p ? (PaceOptBool){1, (long long)(intptr_t)p} : (PaceOptBool){0, 0}; }\n\n");
+
         for func in &program.functions {
             if let Some(env_layout) = &func.env_layout {
                 self.output.push_str(&format!("struct __Env_{} {{\n", func.name));
@@ -252,7 +259,23 @@ impl CGenerator {
         self.output.clone()
     }
 
+    fn is_primitive_opt(ty: &Ty) -> Option<&'static str> {
+        if let Ty::Optional(inner) = ty {
+            match inner.as_ref() {
+                Ty::Int => Some("PaceOptInt"),
+                Ty::Float => Some("PaceOptFloat"),
+                Ty::Bool => Some("PaceOptBool"),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
     fn emit_c_type(&self, ty: &Ty) -> String {
+        if let Some(opt_name) = Self::is_primitive_opt(ty) {
+            return opt_name.to_string();
+        }
         match ty {
             Ty::Int | Ty::Bool => "long long".to_string(),
             Ty::Float => "double".to_string(),
@@ -286,6 +309,9 @@ impl CGenerator {
     }
 
     fn emit_c_default_val(&self, ty: &Ty) -> String {
+        if Self::is_primitive_opt(ty).is_some() {
+            return "{0, 0}".to_string();
+        }
         match ty {
             Ty::Int | Ty::Bool | Ty::Float => "0".to_string(),
             Ty::String | Ty::Class(_) | Ty::Actor(_) | Ty::Function(_, _) | Ty::Closure(_, _) | Ty::List(_) | Ty::Map(_, _) => "NULL".to_string(),
@@ -411,6 +437,15 @@ impl CGenerator {
                     } else {
                         if self.emit_c_type(&func.return_type) == "void" {
                             self.output.push_str("    return;\n");
+                        } else if let Some(opt_name) = Self::is_primitive_opt(&func.return_type) {
+                            let loc_ty = &func.body.locals[local.0 as usize];
+                            if matches!(loc_ty, Ty::Optional(inner) if **inner == Ty::Void) {
+                                self.output.push_str(&format!("    return ({}){{0, 0}};\n", opt_name));
+                            } else if Self::is_primitive_opt(loc_ty).is_none() {
+                                self.output.push_str(&format!("    return ({}){{1, _{}}};\n", opt_name, local.0));
+                            } else {
+                                self.output.push_str(&format!("    return _{};\n", local.0));
+                            }
                         } else {
                             self.output.push_str(&format!("    return _{};\n", local.0));
                         }
@@ -518,6 +553,42 @@ impl CGenerator {
                         }
                         if let Lvalue::Local(local) = lval {
                             let dest_ty = &locals[local.0 as usize];
+                            if let Some(opt_name) = Self::is_primitive_opt(dest_ty) {
+                                if matches!(rval, Rvalue::ListGet(_, _) | Rvalue::MapGet(_, _))
+                                    || matches!(rval, Rvalue::BuiltinCall(name, _) if name == "pace_list_pop")
+                                {
+                                    let helper = match opt_name {
+                                        "PaceOptFloat" => "pace_opt_float_from_ptr",
+                                        "PaceOptBool" => "pace_opt_bool_from_ptr",
+                                        _ => "pace_opt_int_from_ptr",
+                                    };
+                                    write!(&mut self.output, "{}(", helper).unwrap();
+                                    self.generate_rvalue(rval, locals);
+                                    self.output.push_str(");\n");
+                                    continue;
+                                } else if let Rvalue::Use(src) = rval {
+                                    let src_ty = &locals[src.0 as usize];
+                                    if matches!(src_ty, Ty::Optional(inner) if **inner == Ty::Void) {
+                                        writeln!(&mut self.output, "({}){{0, 0}};", opt_name).unwrap();
+                                        continue;
+                                    } else if Self::is_primitive_opt(src_ty).is_none() {
+                                        writeln!(&mut self.output, "({}){{1, _{}}};", opt_name, src.0).unwrap();
+                                        continue;
+                                    }
+                                } else if matches!(rval, Rvalue::Constant(_)) {
+                                    write!(&mut self.output, "({}){{1, ", opt_name).unwrap();
+                                    self.generate_rvalue(rval, locals);
+                                    self.output.push_str("};\n");
+                                    continue;
+                                }
+                            } else if matches!(dest_ty, Ty::Int | Ty::Float | Ty::Bool) {
+                                if let Rvalue::Use(src) = rval {
+                                    if Self::is_primitive_opt(&locals[src.0 as usize]).is_some() {
+                                        writeln!(&mut self.output, "_{}.value;", src.0).unwrap();
+                                        continue;
+                                    }
+                                }
+                            }
                             if matches!(rval, Rvalue::ListGet(_, _) | Rvalue::MapGet(_, _))
                                 || matches!(rval, Rvalue::BuiltinCall(name, _) if name == "pace_list_pop")
                             {
@@ -589,12 +660,30 @@ impl CGenerator {
             .unwrap(),
             Rvalue::BinaryOp(op, lhs, rhs) => {
                 if matches!(op, BinaryOp::NullCoalesce) {
-                    write!(
-                        &mut self.output,
-                        "_{} != 0 ? _{} : _{}",
-                        lhs.0, lhs.0, rhs.0
-                    )
-                    .unwrap();
+                    if Self::is_primitive_opt(&locals[lhs.0 as usize]).is_some() {
+                        if Self::is_primitive_opt(&locals[rhs.0 as usize]).is_some() {
+                            write!(
+                                &mut self.output,
+                                "(_{}.has_value ? _{} : _{})",
+                                lhs.0, lhs.0, rhs.0
+                            )
+                            .unwrap();
+                        } else {
+                            write!(
+                                &mut self.output,
+                                "(_{}.has_value ? _{}.value : _{})",
+                                lhs.0, lhs.0, rhs.0
+                            )
+                            .unwrap();
+                        }
+                    } else {
+                        write!(
+                            &mut self.output,
+                            "_{} != 0 ? _{} : _{}",
+                            lhs.0, lhs.0, rhs.0
+                        )
+                        .unwrap();
+                    }
                 } else if matches!(op, BinaryOp::And) {
                     write!(&mut self.output, "_{} && _{}", lhs.0, rhs.0).unwrap();
                 } else if matches!(op, BinaryOp::Or) {
@@ -602,7 +691,35 @@ impl CGenerator {
                 } else {
                     let is_string = matches!(locals[lhs.0 as usize], Ty::String)
                         || matches!(locals[rhs.0 as usize], Ty::String);
-                    if is_string && matches!(op, BinaryOp::EqEq) {
+                    let lhs_opt = Self::is_primitive_opt(&locals[lhs.0 as usize]).is_some();
+                    let rhs_opt = Self::is_primitive_opt(&locals[rhs.0 as usize]).is_some();
+                    let lhs_null = matches!(&locals[lhs.0 as usize], Ty::Optional(inner) if **inner == Ty::Void);
+                    let rhs_null = matches!(&locals[rhs.0 as usize], Ty::Optional(inner) if **inner == Ty::Void);
+
+                    if matches!(op, BinaryOp::EqEq | BinaryOp::NotEq) && (lhs_opt || rhs_opt) {
+                        let is_eq = matches!(op, BinaryOp::EqEq);
+                        if lhs_opt && rhs_null {
+                            write!(&mut self.output, "(_{}.has_value {} 0)", lhs.0, if is_eq { "==" } else { "!=" }).unwrap();
+                        } else if rhs_opt && lhs_null {
+                            write!(&mut self.output, "(_{}.has_value {} 0)", rhs.0, if is_eq { "==" } else { "!=" }).unwrap();
+                        } else if lhs_opt && rhs_opt {
+                            if is_eq {
+                                write!(&mut self.output, "(_{}.has_value == _{}.has_value && (!_{}.has_value || _{}.value == _{}.value))", lhs.0, rhs.0, lhs.0, lhs.0, rhs.0).unwrap();
+                            } else {
+                                write!(&mut self.output, "(_{}.has_value != _{}.has_value || (_{}.has_value && _{}.value != _{}.value))", lhs.0, rhs.0, lhs.0, lhs.0, rhs.0).unwrap();
+                            }
+                        } else if lhs_opt {
+                            if is_eq {
+                                write!(&mut self.output, "(_{}.has_value && _{}.value == _{})", lhs.0, lhs.0, rhs.0).unwrap();
+                            } else {
+                                write!(&mut self.output, "(!_{}.has_value || _{}.value != _{})", lhs.0, lhs.0, rhs.0).unwrap();
+                            }
+                        } else if is_eq {
+                            write!(&mut self.output, "(_{}.has_value && _{} == _{}.value)", rhs.0, lhs.0, rhs.0).unwrap();
+                        } else {
+                            write!(&mut self.output, "(!_{}.has_value || _{} != _{}.value)", rhs.0, lhs.0, rhs.0).unwrap();
+                        }
+                    } else if is_string && matches!(op, BinaryOp::EqEq) {
                         write!(&mut self.output, "pace_string_equals(_{}, _{})", lhs.0, rhs.0).unwrap();
                     } else if is_string && matches!(op, BinaryOp::NotEq) {
                         write!(&mut self.output, "!pace_string_equals(_{}, _{})", lhs.0, rhs.0).unwrap();
@@ -688,22 +805,33 @@ impl CGenerator {
                     let mut format_str = String::new();
                     let mut type_args = Vec::new();
                     for arg in args {
-                        let mut ty = &locals[arg.0 as usize];
+                        let raw_ty = &locals[arg.0 as usize];
+                        let is_prim_opt = Self::is_primitive_opt(raw_ty).is_some();
+                        let val_expr = if is_prim_opt {
+                            format!("_{}.value", arg.0)
+                        } else {
+                            format!("_{}", arg.0)
+                        };
+                        let mut ty = raw_ty;
                         if let Ty::Optional(inner) = ty {
                             ty = inner;
                         }
                         if matches!(ty, Ty::Int) {
                             format_str.push_str("%lld");
-                            type_args.push(format!("_{}", arg.0));
+                            type_args.push(val_expr);
                         } else if matches!(ty, Ty::Float) {
                             format_str.push_str("%f");
-                            type_args.push(format!("_{}", arg.0));
+                            type_args.push(val_expr);
                         } else if matches!(ty, Ty::String) {
                             format_str.push_str("%s");
                             type_args.push(format!("(_{} ? _{}->data : \"null\")", arg.0, arg.0));
                         } else if matches!(ty, Ty::Bool) {
                             format_str.push_str("%s");
-                            type_args.push(format!("_{} ? \"true\" : \"false\"", arg.0));
+                            if is_prim_opt {
+                                type_args.push(format!("(_{}.has_value ? (_{}.value ? \"true\" : \"false\") : \"null\")", arg.0, arg.0));
+                            } else {
+                                type_args.push(format!("_{} ? \"true\" : \"false\"", arg.0));
+                            }
                         } else {
                             format_str.push_str("%p");
                             type_args.push(format!("(void*)_{}", arg.0));
@@ -734,6 +862,23 @@ impl CGenerator {
                         write!(&mut self.output, "pace_assert(_{}, _{})", args[0].0, args[1].0).unwrap();
                     }
                     return;
+                }
+
+                if (name == "print" || name == "println") && args.len() == 1 {
+                    if Self::is_primitive_opt(&locals[args[0].0 as usize]).is_some() {
+                        let inner_fn = match &locals[args[0].0 as usize] {
+                            Ty::Optional(inner) if matches!(inner.as_ref(), Ty::Float) => "pace_print_float",
+                            Ty::Optional(inner) if matches!(inner.as_ref(), Ty::Bool) => "pace_print_bool",
+                            _ => "pace_print_int",
+                        };
+                        write!(
+                            &mut self.output,
+                            "(_{}.has_value ? {}(_{}.value) : pace_print_string(pace_string_new(\"null\")))",
+                            args[0].0, inner_fn, args[0].0
+                        )
+                        .unwrap();
+                        return;
+                    }
                 }
 
                 let c_name = if name == "print" || name == "println" {
