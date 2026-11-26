@@ -1,0 +1,136 @@
+class Acc {
+    total: int
+    init() {
+        self.total = 0
+    }
+    fn add(n: int) {
+        self.total = self.total + n
+    }
+}
+
+fn main() {
+    // 1. List properties & basic mutations
+    var nums = [10, 20, 30]
+    assert(!nums.isEmpty, "nums is not empty")
+    assert(nums.isNotEmpty, "nums isNotEmpty")
+    assert((nums.first ?? -1) == 10, "first is 10")
+    assert((nums.last ?? -1) == 30, "last is 30")
+
+    let empty = List<int>()
+    assert(empty.isEmpty, "empty list isEmpty")
+    assert(!empty.isNotEmpty, "empty list !isNotEmpty")
+    assert(empty.first == null, "empty first is null")
+    assert(empty.last == null, "empty last is null")
+
+    nums.add(40)
+    nums.insert(1, 15)
+    assert(nums.len() == 5, "len after add+insert")
+    assert(nums[1] == 15, "inserted at index 1")
+    let removed = nums.removeAt(1)
+    assert(removed == 15, "removeAt returned 15")
+    assert(nums.len() == 4, "len after removeAt")
+
+    // 2. Query & transform
+    assert(nums.contains(30), "contains 30")
+    assert(!nums.contains(99), "does not contain 99")
+    assert(nums.indexOf(30) == 2, "indexOf 30 is 2")
+    assert(nums.indexOf(99) == -1, "indexOf missing is -1")
+
+    let sliced = nums.slice(1, 3)
+    assert(sliced.len() == 2 && sliced[0] == 20 && sliced[1] == 30, "slice(1, 3)")
+
+    let rev = nums.reversed()
+    assert(rev.len() == 4 && rev[0] == 40 && rev[3] == 10, "reversed")
+
+    let words = ["pace", "is", "fast"]
+    assert(words.join("-") == "pace-is-fast", "join")
+
+    // 3. Higher-order List methods
+    let acc = Acc()
+    nums.forEach((n: int) => {
+        acc.add(n)
+    })
+    assert(acc.total == 100, "forEach sum = 100")
+
+    let doubled = nums.map((n: int) -> int => n * 2)
+    assert(doubled.len() == 4 && doubled[0] == 20 && doubled[3] == 80, "map doubled")
+
+    let big = nums.filter((n: int) -> bool => n >= 30)
+    assert(big.len() == 2 && big[0] == 30 && big[1] == 40, "filter >= 30")
+
+    let found = nums.find((n: int) -> bool => n > 25)
+    assert((found ?? 0) == 30, "find > 25")
+    assert(nums.find((n: int) -> bool => n > 999) == null, "find missing is null")
+
+    assert(nums.any((n: int) -> bool => n == 40), "any == 40")
+    assert(!nums.any((n: int) -> bool => n == 99), "!any == 99")
+    assert(nums.every((n: int) -> bool => n > 0), "every > 0")
+    assert(!nums.every((n: int) -> bool => n > 20), "!every > 20")
+
+    let total = nums.reduce(0, (acc: int, n: int) -> int => acc + n)
+    assert(total == 100, "reduce sum = 100")
+
+    // 4. Map extended properties & methods
+    var scores = {"alice": 10, "bob": 20}
+    assert(!scores.isEmpty && scores.isNotEmpty, "map non-empty")
+    assert(scores.containsKey("alice"), "containsKey alice")
+    assert(scores.getOrDefault("alice", -1) == 10, "getOrDefault present")
+    assert(scores.getOrDefault("charlie", -1) == -1, "getOrDefault missing")
+    assert(scores.keys().len() == 2, "keys len 2")
+    assert(scores.values().len() == 2, "values len 2")
+
+    let mapAcc = Acc()
+    scores.forEach((k: string, v: int) => {
+        mapAcc.add(v)
+    })
+    assert(mapAcc.total == 30, "map forEach sum = 30")
+
+    // 5. Set<T>
+    var a = Set<int>()
+    assert(a.isEmpty, "new Set isEmpty")
+    assert(a.add(1), "add 1 returns true")
+    assert(!a.add(1), "duplicate add 1 returns false")
+    assert(a.add(2), "add 2 returns true")
+    assert(a.add(3), "add 3 returns true")
+    assert(a.len() == 3 && a.isNotEmpty, "set len 3")
+    assert(a.has(2) && a.contains(3), "has/contains")
+    assert(a.remove(2) && !a.has(2), "remove 2")
+    assert(a.toList().len() == 2, "toList len 2")
+
+    var b = Set<int>()
+    b.add(3)
+    b.add(4)
+    let u = a.union(b)
+    assert(u.len() == 3 && u.has(1) && u.has(3) && u.has(4), "set union")
+    let inter = a.intersection(b)
+    assert(inter.len() == 1 && inter.has(3), "set intersection")
+    let diff = a.difference(b)
+    assert(diff.len() == 1 && diff.has(1), "set difference")
+
+    var strSet = Set<string>()
+    assert(strSet.add("x") && strSet.add("y") && !strSet.add("x"), "string Set add")
+    assert(strSet.has("x") && strSet.remove("x") && !strSet.has("x"), "string Set remove")
+    strSet.clear()
+    assert(strSet.isEmpty, "string Set clear")
+
+    // 6. for-in iteration over List, Set, and Map
+    var listIterSum = 0
+    for n in [1, 2, 3, 4] {
+        listIterSum = listIterSum + n
+    }
+    assert(listIterSum == 10, "for-in List")
+
+    var setIterSum = 0
+    for n in a {
+        setIterSum = setIterSum + n
+    }
+    assert(setIterSum == 4, "for-in Set (1 + 3)")
+
+    var keyCount = 0
+    for k in scores {
+        if scores.has(k) {
+            keyCount = keyCount + 1
+        }
+    }
+    assert(keyCount == 2, "for-in Map keys")
+}

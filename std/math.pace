@@ -1,0 +1,65 @@
+fn pi() -> float {
+    return 3.14159265358979323846
+}
+
+fn e() -> float {
+    return 2.71828182845904523536
+}
+
+fn sqrt(x: float) -> float {
+    return pace_math_sqrt(x)
+}
+
+fn pow(x: float, y: float) -> float {
+    return pace_math_pow(x, y)
+}
+
+fn abs(x: float) -> float {
+    return pace_math_abs(x)
+}
+
+fn round(x: float) -> float {
+    return pace_math_round(x)
+}
+
+fn floor(x: float) -> float {
+    return pace_math_floor(x)
+}
+
+fn ceil(x: float) -> float {
+    return pace_math_ceil(x)
+}
+
+fn sin(x: float) -> float {
+    return pace_math_sin(x)
+}
+
+fn cos(x: float) -> float {
+    return pace_math_cos(x)
+}
+
+fn tan(x: float) -> float {
+    return pace_math_tan(x)
+}
+
+fn min(a: int, b: int) -> int {
+    if a < b {
+        return a
+    }
+    return b
+}
+
+fn max(a: int, b: int) -> int {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+fn isEven(n: int) -> bool {
+    return n % 2 == 0
+}
+
+fn isOdd(n: int) -> bool {
+    return n % 2 != 0
+}

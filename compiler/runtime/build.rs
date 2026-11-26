@@ -8,5 +8,7 @@ fn main() {
         .file("src/c_utils.c")
         .file("src/concurrency.c")
         .file("src/collections.c")
+        .file("src/strings.c")
+        .file("src/stdlib.c")
         .compile("c_utils");
 }

@@ -88,4 +88,21 @@ fn testCollections() {
     cache.remove(1)
     println(cache.len())
     println(cache.has(1))
+
+    // 8. Extended List, Map & Set<T>
+    println("8. Extended List, Map & Set<T>:")
+    let vals = [1, 2, 3, 4, 5]
+    let evens = vals.filter((n: int) -> bool => n % 2 == 0)
+    let sum = evens.reduce(0, (acc: int, n: int) -> int => acc + n)
+    println("Evens sum: $sum, first=${vals.first ?? 0}, last=${vals.last ?? 0}")
+
+    let tags = Set<string>()
+    tags.add("pace")
+    tags.add("native")
+    tags.add("pace")
+    let hasNative = tags.has("native")
+    println("Set len=${tags.len()}, has(native)=$hasNative")
+    for tag in tags {
+        println("  tag: $tag")
+    }
 }

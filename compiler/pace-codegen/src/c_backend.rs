@@ -242,7 +242,8 @@ impl CGenerator {
         }
         self.output.push_str("}\n\n");
 
-        self.output.push_str("int main() {\n");
+        self.output.push_str("int main(int argc, char** argv) {\n");
+        self.output.push_str("    pace_set_args(argc, argv);\n");
         self.output.push_str("    pace_thread_pool_init(4);\n");
         self.output.push_str("    pace_event_loop_init();\n");
         self.output.push_str("    pace_init();\n");
@@ -339,6 +340,8 @@ impl CGenerator {
             Ty::Result(_, _) => "PaceResult".to_string(),
             Ty::List(_) => "struct PaceList*".to_string(),
             Ty::Map(_, _) => "struct PaceMap*".to_string(),
+            Ty::Set(_) => "struct PaceSet*".to_string(),
+            Ty::StringBuilder => "struct PaceStringBuilder*".to_string(),
             Ty::Void | Ty::Never => "void".to_string(),
         }
     }
@@ -354,7 +357,7 @@ impl CGenerator {
         }
         match ty {
             Ty::Int | Ty::Bool | Ty::Float => "0".to_string(),
-            Ty::String | Ty::Class(_) | Ty::Actor(_) | Ty::Function(_, _) | Ty::Closure(_, _) | Ty::List(_) | Ty::Map(_, _) => "NULL".to_string(),
+            Ty::String | Ty::Class(_) | Ty::Actor(_) | Ty::Function(_, _) | Ty::Closure(_, _) | Ty::List(_) | Ty::Map(_, _) | Ty::Set(_) | Ty::StringBuilder => "NULL".to_string(),
             Ty::Struct(_) | Ty::Enum(_) => "{0}".to_string(),
             Ty::Optional(inner) => {
                 let default_val = self.emit_c_default_val(inner);
@@ -574,6 +577,16 @@ impl CGenerator {
                         is_void = true;
                     }
 
+                    if is_void
+                        && matches!(
+                            rval,
+                            Rvalue::Use(_) | Rvalue::ResultOk(_) | Rvalue::Constant(_)
+                        )
+                    {
+                        self.output.push_str("/* void */;\n");
+                        continue;
+                    }
+
                     if !is_void {
                         self.generate_lvalue(lval, locals);
                         self.output.push_str(" = ");
@@ -600,7 +613,7 @@ impl CGenerator {
                                     write!(&mut self.output, "({})(intptr_t)", c_dest_ty).unwrap();
                                 }
                             } else if matches!(rval, Rvalue::ListGet(_, _) | Rvalue::MapGet(_, _))
-                                    || matches!(rval, Rvalue::BuiltinCall(name, _) if name == "pace_list_pop")
+                                    || matches!(rval, Rvalue::BuiltinCall(name, _) if name == "pace_list_pop" || name == "pace_list_remove_at")
                                 {
                                     let helper = match opt_name {
                                         "PaceOptFloat" => "pace_opt_float_from_ptr",
@@ -666,7 +679,7 @@ impl CGenerator {
                                     write!(&mut self.output, "({})(intptr_t)", c_dest_ty).unwrap();
                                 }
                             } else if matches!(rval, Rvalue::ListGet(_, _) | Rvalue::MapGet(_, _))
-                                || matches!(rval, Rvalue::BuiltinCall(name, _) if name == "pace_list_pop")
+                                || matches!(rval, Rvalue::BuiltinCall(name, _) if name == "pace_list_pop" || name == "pace_list_remove_at")
                             {
                                 let c_dest_ty = self.emit_c_type(dest_ty);
                                 if Self::is_boxed_collection_ty(dest_ty) {
@@ -939,6 +952,16 @@ impl CGenerator {
                     let val_cast = self.emit_box_for_collection(args[1], val_ty);
                     write!(&mut self.output, "pace_list_push(_{}, {})", args[0].0, val_cast).unwrap();
                     return;
+                } else if name == "pace_list_insert" {
+                    let val_ty = &locals[args[2].0 as usize];
+                    let val_cast = self.emit_box_for_collection(args[2], val_ty);
+                    write!(
+                        &mut self.output,
+                        "pace_list_insert(_{}, _{}, {})",
+                        args[0].0, args[1].0, val_cast
+                    )
+                    .unwrap();
+                    return;
                 } else if name == "pace_list_pop" {
                     write!(&mut self.output, "pace_list_pop(_{})", args[0].0).unwrap();
                     return;
@@ -1162,7 +1185,7 @@ impl CGenerator {
                 }
             }
             Rvalue::ListNew(elem_ty, cap_local) => {
-                let is_ref = matches!(elem_ty, Ty::Class(_) | Ty::String | Ty::List(_) | Ty::Map(_, _))
+                let is_ref = matches!(elem_ty, Ty::Class(_) | Ty::String | Ty::List(_) | Ty::Map(_, _) | Ty::Set(_))
                     || Self::is_boxed_collection_ty(elem_ty);
                 let dtor = if is_ref { "(void (*)(void*))pace_release" } else { "NULL" };
                 write!(&mut self.output, "pace_list_new(_{}, {})", cap_local.0, dtor).unwrap();
@@ -1177,10 +1200,14 @@ impl CGenerator {
             }
             Rvalue::MapNew(k_ty, v_ty) => {
                 let key_is_str = if matches!(k_ty, Ty::String) { "1" } else { "0" };
-                let is_ref = matches!(v_ty, Ty::Class(_) | Ty::String | Ty::List(_) | Ty::Map(_, _))
+                let is_ref = matches!(v_ty, Ty::Class(_) | Ty::String | Ty::List(_) | Ty::Map(_, _) | Ty::Set(_))
                     || Self::is_boxed_collection_ty(v_ty);
                 let dtor = if is_ref { "(void (*)(void*))pace_release" } else { "NULL" };
                 write!(&mut self.output, "pace_map_new(16, {}, {})", key_is_str, dtor).unwrap();
+            }
+            Rvalue::SetNew(elem_ty) => {
+                let key_is_str = if matches!(elem_ty, Ty::String) { "1" } else { "0" };
+                write!(&mut self.output, "pace_set_new(16, {})", key_is_str).unwrap();
             }
             Rvalue::MapGet(map_local, key_local) => {
                 let key_ty = &locals[key_local.0 as usize];

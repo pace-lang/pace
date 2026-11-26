@@ -1,0 +1,6 @@
+class OS {
+    static fn name() -> string {
+        return pace_os_name()
+    }
+}
+

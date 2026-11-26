@@ -105,7 +105,7 @@ impl<'a> MirBuilder<'a> {
 
     pub fn new_local(&mut self, ty: Ty) -> Local {
         let l = Local(self.locals.len() as u32);
-        let is_rc = matches!(ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _));
+        let is_rc = matches!(ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _) | Ty::Set(_) | Ty::StringBuilder);
         self.locals.push(ty);
         if is_rc && self.scope_stack.len() > 1 {
             self.scope_stack.last_mut().unwrap().push(l);
@@ -145,7 +145,7 @@ impl<'a> MirBuilder<'a> {
                             Lvalue::Local(var_local),
                             Rvalue::Use(rval_local),
                         ));
-                        if matches!(var_ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _)) {
+                        if matches!(var_ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _) | Ty::Set(_) | Ty::StringBuilder) {
                             self.push_stmt(Statement::Retain(Lvalue::Local(var_local)));
                         }
                     } else {
@@ -236,8 +236,10 @@ impl<'a> MirBuilder<'a> {
                     .expect("Super used outside of a method")
             }
             Expr::Closure { params, return_type: _, body, captured_vars, span: _ } => {
-                self.closure_counter += 1;
-                let closure_name = format!("__closure_{}", self.closure_counter);
+                static CLOSURE_COUNTER: std::sync::atomic::AtomicU64 =
+                    std::sync::atomic::AtomicU64::new(0);
+                let cid = CLOSURE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                let closure_name = format!("__closure_{}", cid);
                 
                 let mut fn_builder = MirBuilder::new(
                     self.global_fns.clone(),
@@ -303,8 +305,10 @@ impl<'a> MirBuilder<'a> {
                 
                 let mut non_released = mir_params.clone();
                 non_released.extend(env_layout.iter().map(|(l, _)| *l));
+                let nested_closures = std::mem::take(&mut fn_builder.closure_functions);
                 let fn_body = fn_builder.finish(&non_released, &ret_ty);
 
+                self.closure_functions.extend(nested_closures);
                 self.closure_functions.push(MirFunction {
                     name: closure_name.clone(),
                     params: mir_params,
@@ -600,6 +604,160 @@ impl<'a> MirBuilder<'a> {
 
                 let obj_local = self.build_expr(object);
                 let obj_ty = self.locals[obj_local.0 as usize].clone();
+                if let Ty::List(elem_ty) = &obj_ty {
+                    match member.as_str() {
+                        "isEmpty" | "isNotEmpty" => {
+                            let len_local = self.new_local(Ty::Int);
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(len_local),
+                                Rvalue::BuiltinCall("pace_list_len".to_string(), vec![obj_local]),
+                            ));
+                            let zero = self.new_local(Ty::Int);
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(zero),
+                                Rvalue::Constant(Constant::Int("0".to_string())),
+                            ));
+                            let temp = self.new_local(Ty::Bool);
+                            let op = if member == "isEmpty" {
+                                pace_ast::BinaryOp::EqEq
+                            } else {
+                                pace_ast::BinaryOp::NotEq
+                            };
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(temp),
+                                Rvalue::BinaryOp(op, len_local, zero),
+                            ));
+                            return temp;
+                        }
+                        "first" | "last" => {
+                            let len_local = self.new_local(Ty::Int);
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(len_local),
+                                Rvalue::BuiltinCall("pace_list_len".to_string(), vec![obj_local]),
+                            ));
+                            let zero = self.new_local(Ty::Int);
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(zero),
+                                Rvalue::Constant(Constant::Int("0".to_string())),
+                            ));
+                            let cond = self.new_local(Ty::Bool);
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(cond),
+                                Rvalue::BinaryOp(pace_ast::BinaryOp::Gt, len_local, zero),
+                            ));
+                            let res = self.new_local(Ty::Optional(elem_ty.clone()));
+                            let then_bb = self.new_block();
+                            let else_bb = self.new_block();
+                            let merge_bb = self.new_block();
+                            self.blocks[self.current_block.0 as usize].terminator =
+                                Some(Terminator::Branch {
+                                    cond,
+                                    then_block: then_bb,
+                                    else_block: else_bb,
+                                });
+                            self.current_block = then_bb;
+                            let idx = if member == "first" {
+                                zero
+                            } else {
+                                let one = self.new_local(Ty::Int);
+                                self.push_stmt(Statement::Assign(
+                                    Lvalue::Local(one),
+                                    Rvalue::Constant(Constant::Int("1".to_string())),
+                                ));
+                                let last_idx = self.new_local(Ty::Int);
+                                self.push_stmt(Statement::Assign(
+                                    Lvalue::Local(last_idx),
+                                    Rvalue::BinaryOp(pace_ast::BinaryOp::Sub, len_local, one),
+                                ));
+                                last_idx
+                            };
+                            let val = self.new_local(*elem_ty.clone());
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(val),
+                                Rvalue::ListGet(obj_local, idx),
+                            ));
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(res),
+                                Rvalue::Use(val),
+                            ));
+                            self.blocks[self.current_block.0 as usize].terminator =
+                                Some(Terminator::Goto(merge_bb));
+                            self.current_block = else_bb;
+                            let null_local = self.new_local(Ty::Optional(Box::new(Ty::Void)));
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(null_local),
+                                Rvalue::Constant(Constant::Int("0".to_string())),
+                            ));
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(res),
+                                Rvalue::Use(null_local),
+                            ));
+                            self.blocks[self.current_block.0 as usize].terminator =
+                                Some(Terminator::Goto(merge_bb));
+                            self.current_block = merge_bb;
+                            return res;
+                        }
+                        _ => {}
+                    }
+                } else if let Ty::String | Ty::StringBuilder = &obj_ty {
+                    if member == "isEmpty" || member == "isNotEmpty" {
+                        let fn_name = if matches!(obj_ty, Ty::String) {
+                            "pace_string_len"
+                        } else {
+                            "pace_sb_len"
+                        };
+                        let len_local = self.new_local(Ty::Int);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(len_local),
+                            Rvalue::BuiltinCall(fn_name.to_string(), vec![obj_local]),
+                        ));
+                        let zero = self.new_local(Ty::Int);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(zero),
+                            Rvalue::Constant(Constant::Int("0".to_string())),
+                        ));
+                        let temp = self.new_local(Ty::Bool);
+                        let op = if member == "isEmpty" {
+                            pace_ast::BinaryOp::EqEq
+                        } else {
+                            pace_ast::BinaryOp::NotEq
+                        };
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(temp),
+                            Rvalue::BinaryOp(op, len_local, zero),
+                        ));
+                        return temp;
+                    }
+                } else if let Ty::Map(_, _) | Ty::Set(_) = &obj_ty {
+                    if member == "isEmpty" || member == "isNotEmpty" {
+                        let fn_name = if matches!(obj_ty, Ty::Map(_, _)) {
+                            "pace_map_len"
+                        } else {
+                            "pace_set_len"
+                        };
+                        let len_local = self.new_local(Ty::Int);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(len_local),
+                            Rvalue::BuiltinCall(fn_name.to_string(), vec![obj_local]),
+                        ));
+                        let zero = self.new_local(Ty::Int);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(zero),
+                            Rvalue::Constant(Constant::Int("0".to_string())),
+                        ));
+                        let temp = self.new_local(Ty::Bool);
+                        let op = if member == "isEmpty" {
+                            pace_ast::BinaryOp::EqEq
+                        } else {
+                            pace_ast::BinaryOp::NotEq
+                        };
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(temp),
+                            Rvalue::BinaryOp(op, len_local, zero),
+                        ));
+                        return temp;
+                    }
+                }
                 let field_ty = match obj_ty {
                     Ty::Struct(id) => {
                         let mut ft = Ty::Int;
@@ -704,6 +862,32 @@ impl<'a> MirBuilder<'a> {
                         self.push_stmt(Statement::Assign(
                             Lvalue::Local(temp),
                             Rvalue::MapNew(k_ty, v_ty),
+                        ));
+                        return temp;
+                    } else if name == "Set" {
+                        let elem_ty = if let Some(ty) = self.local_types.get(id) {
+                            if let Ty::Set(inner) = ty {
+                                *inner.clone()
+                            } else {
+                                Ty::Int
+                            }
+                        } else if let Some(Ty::Set(inner)) = &self.current_expected_ty {
+                            *inner.clone()
+                        } else {
+                            Ty::Int
+                        };
+                        let set_ty = Ty::Set(Box::new(elem_ty.clone()));
+                        let temp = self.new_local(set_ty);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(temp),
+                            Rvalue::SetNew(elem_ty),
+                        ));
+                        return temp;
+                    } else if name == "StringBuilder" {
+                        let temp = self.new_local(Ty::StringBuilder);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(temp),
+                            Rvalue::BuiltinCall("pace_sb_new".to_string(), vec![]),
                         ));
                         return temp;
                     }
@@ -917,6 +1101,9 @@ impl<'a> MirBuilder<'a> {
                         let obj_ty = self.locals[obj_local.0 as usize].clone();
                         if let Ty::List(elem_ty) = &obj_ty {
                             match member.as_str() {
+                                "__iter" => {
+                                    return obj_local;
+                                }
                                 "len" => {
                                     let temp = self.new_local(Ty::Int);
                                     self.push_stmt(Statement::Assign(
@@ -925,7 +1112,7 @@ impl<'a> MirBuilder<'a> {
                                     ));
                                     return temp;
                                 }
-                                "push" => {
+                                "push" | "add" => {
                                     let prev = self.current_expected_ty.take();
                                     self.current_expected_ty = Some(*elem_ty.clone());
                                     let arg_local = self.build_expr(&args[0].expr);
@@ -936,6 +1123,309 @@ impl<'a> MirBuilder<'a> {
                                         Rvalue::BuiltinCall("pace_list_push".to_string(), vec![obj_local, arg_local]),
                                     ));
                                     return temp;
+                                }
+                                "insert" => {
+                                    let idx_local = self.build_expr(&args[0].expr);
+                                    let prev = self.current_expected_ty.take();
+                                    self.current_expected_ty = Some(*elem_ty.clone());
+                                    let val_local = self.build_expr(&args[1].expr);
+                                    self.current_expected_ty = prev;
+                                    let temp = self.new_local(Ty::Void);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_list_insert".to_string(), vec![obj_local, idx_local, val_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "removeAt" => {
+                                    let idx_local = self.build_expr(&args[0].expr);
+                                    let temp = self.new_local(*elem_ty.clone());
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_list_remove_at".to_string(), vec![obj_local, idx_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "contains" | "indexOf" => {
+                                    let prev = self.current_expected_ty.take();
+                                    self.current_expected_ty = Some(*elem_ty.clone());
+                                    let val_local = self.build_expr(&args[0].expr);
+                                    self.current_expected_ty = prev;
+                                    let suffix = if matches!(**elem_ty, Ty::String) {
+                                        "str"
+                                    } else if matches!(**elem_ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _) | Ty::Set(_)) {
+                                        "ptr"
+                                    } else {
+                                        "int"
+                                    };
+                                    let prefix = if member == "contains" { "pace_list_contains_" } else { "pace_list_index_of_" };
+                                    let ret_ty = if member == "contains" { Ty::Bool } else { Ty::Int };
+                                    let temp = self.new_local(ret_ty);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall(format!("{}{}", prefix, suffix), vec![obj_local, val_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "slice" => {
+                                    let start_local = self.build_expr(&args[0].expr);
+                                    let end_local = self.build_expr(&args[1].expr);
+                                    let temp = self.new_local(Ty::List(elem_ty.clone()));
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_list_slice".to_string(), vec![obj_local, start_local, end_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "reversed" => {
+                                    let temp = self.new_local(Ty::List(elem_ty.clone()));
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_list_reversed".to_string(), vec![obj_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "join" => {
+                                    let sep_local = self.build_expr(&args[0].expr);
+                                    let temp = self.new_local(Ty::String);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_list_join".to_string(), vec![obj_local, sep_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "forEach" | "map" | "filter" | "find" | "any" | "every" | "reduce" => {
+                                    let elem_t = *elem_ty.clone();
+                                    let (init_local, fn_local) = if member == "reduce" {
+                                        (Some(self.build_expr(&args[0].expr)), self.build_expr(&args[1].expr))
+                                    } else {
+                                        (None, self.build_expr(&args[0].expr))
+                                    };
+                                    let fn_ret_ty = match &self.locals[fn_local.0 as usize] {
+                                        Ty::Closure(_, r) | Ty::Function(_, r) => *r.clone(),
+                                        _ => Ty::Int,
+                                    };
+
+                                    let len_local = self.new_local(Ty::Int);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(len_local),
+                                        Rvalue::BuiltinCall("pace_list_len".to_string(), vec![obj_local]),
+                                    ));
+                                    let idx_local = self.new_local(Ty::Int);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(idx_local),
+                                        Rvalue::Constant(Constant::Int("0".to_string())),
+                                    ));
+                                    let one_local = self.new_local(Ty::Int);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(one_local),
+                                        Rvalue::Constant(Constant::Int("1".to_string())),
+                                    ));
+
+                                    // Initialize accumulator / result
+                                    let res_local = match member.as_str() {
+                                        "forEach" => self.new_local(Ty::Void),
+                                        "map" => {
+                                            let l = self.new_local(Ty::List(Box::new(fn_ret_ty.clone())));
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(l),
+                                                Rvalue::ListNew(fn_ret_ty.clone(), len_local),
+                                            ));
+                                            l
+                                        }
+                                        "filter" => {
+                                            let l = self.new_local(Ty::List(Box::new(elem_t.clone())));
+                                            let cap = self.new_local(Ty::Int);
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(cap),
+                                                Rvalue::Constant(Constant::Int("4".to_string())),
+                                            ));
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(l),
+                                                Rvalue::ListNew(elem_t.clone(), cap),
+                                            ));
+                                            l
+                                        }
+                                        "find" => {
+                                            let null_local = self.new_local(Ty::Optional(Box::new(Ty::Void)));
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(null_local),
+                                                Rvalue::Constant(Constant::Int("0".to_string())),
+                                            ));
+                                            let l = self.new_local(Ty::Optional(Box::new(elem_t.clone())));
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(l),
+                                                Rvalue::Use(null_local),
+                                            ));
+                                            l
+                                        }
+                                        "any" => {
+                                            let l = self.new_local(Ty::Bool);
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(l),
+                                                Rvalue::Constant(Constant::Bool(false)),
+                                            ));
+                                            l
+                                        }
+                                        "every" => {
+                                            let l = self.new_local(Ty::Bool);
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(l),
+                                                Rvalue::Constant(Constant::Bool(true)),
+                                            ));
+                                            l
+                                        }
+                                        "reduce" => {
+                                            let init_l = init_local.unwrap();
+                                            let init_ty = self.locals[init_l.0 as usize].clone();
+                                            let l = self.new_local(init_ty);
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(l),
+                                                Rvalue::Use(init_l),
+                                            ));
+                                            l
+                                        }
+                                        _ => unreachable!(),
+                                    };
+
+                                    let cond_bb = self.new_block();
+                                    let body_bb = self.new_block();
+                                    let step_bb = self.new_block();
+                                    let done_bb = self.new_block();
+
+                                    self.blocks[self.current_block.0 as usize].terminator =
+                                        Some(Terminator::Goto(cond_bb));
+
+                                    self.current_block = cond_bb;
+                                    let loop_cond = self.new_local(Ty::Bool);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(loop_cond),
+                                        Rvalue::BinaryOp(pace_ast::BinaryOp::Lt, idx_local, len_local),
+                                    ));
+                                    self.blocks[self.current_block.0 as usize].terminator =
+                                        Some(Terminator::Branch {
+                                            cond: loop_cond,
+                                            then_block: body_bb,
+                                            else_block: done_bb,
+                                        });
+
+                                    self.current_block = body_bb;
+                                    let elem_local = self.new_local(elem_t.clone());
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(elem_local),
+                                        Rvalue::ListGet(obj_local, idx_local),
+                                    ));
+                                    let call_args = if member == "reduce" {
+                                        vec![res_local, elem_local]
+                                    } else {
+                                        vec![elem_local]
+                                    };
+                                    let call_res = self.new_local(fn_ret_ty.clone());
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(call_res),
+                                        Rvalue::Call(fn_local, call_args),
+                                    ));
+
+                                    match member.as_str() {
+                                        "forEach" => {
+                                            self.blocks[self.current_block.0 as usize].terminator =
+                                                Some(Terminator::Goto(step_bb));
+                                        }
+                                        "map" => {
+                                            let dummy = self.new_local(Ty::Void);
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(dummy),
+                                                Rvalue::BuiltinCall("pace_list_push".to_string(), vec![res_local, call_res]),
+                                            ));
+                                            self.blocks[self.current_block.0 as usize].terminator =
+                                                Some(Terminator::Goto(step_bb));
+                                        }
+                                        "filter" => {
+                                            let push_bb = self.new_block();
+                                            self.blocks[self.current_block.0 as usize].terminator =
+                                                Some(Terminator::Branch {
+                                                    cond: call_res,
+                                                    then_block: push_bb,
+                                                    else_block: step_bb,
+                                                });
+                                            self.current_block = push_bb;
+                                            let dummy = self.new_local(Ty::Void);
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(dummy),
+                                                Rvalue::BuiltinCall("pace_list_push".to_string(), vec![res_local, elem_local]),
+                                            ));
+                                            self.blocks[self.current_block.0 as usize].terminator =
+                                                Some(Terminator::Goto(step_bb));
+                                        }
+                                        "find" => {
+                                            let hit_bb = self.new_block();
+                                            self.blocks[self.current_block.0 as usize].terminator =
+                                                Some(Terminator::Branch {
+                                                    cond: call_res,
+                                                    then_block: hit_bb,
+                                                    else_block: step_bb,
+                                                });
+                                            self.current_block = hit_bb;
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(res_local),
+                                                Rvalue::Use(elem_local),
+                                            ));
+                                            self.blocks[self.current_block.0 as usize].terminator =
+                                                Some(Terminator::Goto(done_bb));
+                                        }
+                                        "any" => {
+                                            let hit_bb = self.new_block();
+                                            self.blocks[self.current_block.0 as usize].terminator =
+                                                Some(Terminator::Branch {
+                                                    cond: call_res,
+                                                    then_block: hit_bb,
+                                                    else_block: step_bb,
+                                                });
+                                            self.current_block = hit_bb;
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(res_local),
+                                                Rvalue::Constant(Constant::Bool(true)),
+                                            ));
+                                            self.blocks[self.current_block.0 as usize].terminator =
+                                                Some(Terminator::Goto(done_bb));
+                                        }
+                                        "every" => {
+                                            let miss_bb = self.new_block();
+                                            self.blocks[self.current_block.0 as usize].terminator =
+                                                Some(Terminator::Branch {
+                                                    cond: call_res,
+                                                    then_block: step_bb,
+                                                    else_block: miss_bb,
+                                                });
+                                            self.current_block = miss_bb;
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(res_local),
+                                                Rvalue::Constant(Constant::Bool(false)),
+                                            ));
+                                            self.blocks[self.current_block.0 as usize].terminator =
+                                                Some(Terminator::Goto(done_bb));
+                                        }
+                                        "reduce" => {
+                                            self.push_stmt(Statement::Assign(
+                                                Lvalue::Local(res_local),
+                                                Rvalue::Use(call_res),
+                                            ));
+                                            self.blocks[self.current_block.0 as usize].terminator =
+                                                Some(Terminator::Goto(step_bb));
+                                        }
+                                        _ => unreachable!(),
+                                    }
+
+                                    self.current_block = step_bb;
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(idx_local),
+                                        Rvalue::BinaryOp(pace_ast::BinaryOp::Add, idx_local, one_local),
+                                    ));
+                                    self.blocks[self.current_block.0 as usize].terminator =
+                                        Some(Terminator::Goto(cond_bb));
+
+                                    self.current_block = done_bb;
+                                    return res_local;
                                 }
                                 "pop" => {
                                     let temp = self.new_local(Ty::Optional(elem_ty.clone()));
@@ -979,6 +1469,14 @@ impl<'a> MirBuilder<'a> {
                             }
                         } else if let Ty::Map(k_ty, v_ty) = &obj_ty {
                             match member.as_str() {
+                                "__iter" | "keys" => {
+                                    let temp = self.new_local(Ty::List(k_ty.clone()));
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_map_keys".to_string(), vec![obj_local]),
+                                    ));
+                                    return temp;
+                                }
                                 "len" => {
                                     let temp = self.new_local(Ty::Int);
                                     self.push_stmt(Statement::Assign(
@@ -987,7 +1485,7 @@ impl<'a> MirBuilder<'a> {
                                     ));
                                     return temp;
                                 }
-                                "has" => {
+                                "has" | "containsKey" => {
                                     let prev = self.current_expected_ty.take();
                                     self.current_expected_ty = Some(*k_ty.clone());
                                     let key_local = self.build_expr(&args[0].expr);
@@ -1000,6 +1498,126 @@ impl<'a> MirBuilder<'a> {
                                         Rvalue::BuiltinCall(fn_name.to_string(), vec![obj_local, key_local]),
                                     ));
                                     return temp;
+                                }
+                                "getOrDefault" => {
+                                    let prev = self.current_expected_ty.take();
+                                    self.current_expected_ty = Some(*k_ty.clone());
+                                    let key_local = self.build_expr(&args[0].expr);
+                                    self.current_expected_ty = Some(*v_ty.clone());
+                                    let def_local = self.build_expr(&args[1].expr);
+                                    self.current_expected_ty = prev;
+
+                                    let is_str = matches!(**k_ty, Ty::String);
+                                    let has_fn = if is_str { "pace_map_has_str" } else { "pace_map_has_int" };
+                                    let has_local = self.new_local(Ty::Bool);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(has_local),
+                                        Rvalue::BuiltinCall(has_fn.to_string(), vec![obj_local, key_local]),
+                                    ));
+                                    let res_local = self.new_local(*v_ty.clone());
+                                    let then_bb = self.new_block();
+                                    let else_bb = self.new_block();
+                                    let merge_bb = self.new_block();
+                                    self.blocks[self.current_block.0 as usize].terminator =
+                                        Some(Terminator::Branch {
+                                            cond: has_local,
+                                            then_block: then_bb,
+                                            else_block: else_bb,
+                                        });
+                                    self.current_block = then_bb;
+                                    let val_local = self.new_local(*v_ty.clone());
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(val_local),
+                                        Rvalue::MapGet(obj_local, key_local),
+                                    ));
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(res_local),
+                                        Rvalue::Use(val_local),
+                                    ));
+                                    self.blocks[self.current_block.0 as usize].terminator =
+                                        Some(Terminator::Goto(merge_bb));
+                                    self.current_block = else_bb;
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(res_local),
+                                        Rvalue::Use(def_local),
+                                    ));
+                                    self.blocks[self.current_block.0 as usize].terminator =
+                                        Some(Terminator::Goto(merge_bb));
+                                    self.current_block = merge_bb;
+                                    return res_local;
+                                }
+                                "values" => {
+                                    let temp = self.new_local(Ty::List(v_ty.clone()));
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_map_values".to_string(), vec![obj_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "forEach" => {
+                                    let fn_local = self.build_expr(&args[0].expr);
+                                    let keys_list = self.new_local(Ty::List(k_ty.clone()));
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(keys_list),
+                                        Rvalue::BuiltinCall("pace_map_keys".to_string(), vec![obj_local]),
+                                    ));
+                                    let len_local = self.new_local(Ty::Int);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(len_local),
+                                        Rvalue::BuiltinCall("pace_list_len".to_string(), vec![keys_list]),
+                                    ));
+                                    let idx_local = self.new_local(Ty::Int);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(idx_local),
+                                        Rvalue::Constant(Constant::Int("0".to_string())),
+                                    ));
+                                    let one_local = self.new_local(Ty::Int);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(one_local),
+                                        Rvalue::Constant(Constant::Int("1".to_string())),
+                                    ));
+                                    let cond_bb = self.new_block();
+                                    let body_bb = self.new_block();
+                                    let done_bb = self.new_block();
+                                    self.blocks[self.current_block.0 as usize].terminator =
+                                        Some(Terminator::Goto(cond_bb));
+                                    self.current_block = cond_bb;
+                                    let cond = self.new_local(Ty::Bool);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(cond),
+                                        Rvalue::BinaryOp(pace_ast::BinaryOp::Lt, idx_local, len_local),
+                                    ));
+                                    self.blocks[self.current_block.0 as usize].terminator =
+                                        Some(Terminator::Branch {
+                                            cond,
+                                            then_block: body_bb,
+                                            else_block: done_bb,
+                                        });
+                                    self.current_block = body_bb;
+                                    let k_local = self.new_local(*k_ty.clone());
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(k_local),
+                                        Rvalue::ListGet(keys_list, idx_local),
+                                    ));
+                                    let v_local = self.new_local(*v_ty.clone());
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(v_local),
+                                        Rvalue::MapGet(obj_local, k_local),
+                                    ));
+                                    let dummy = self.new_local(Ty::Void);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(dummy),
+                                        Rvalue::Call(fn_local, vec![k_local, v_local]),
+                                    ));
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(idx_local),
+                                        Rvalue::BinaryOp(pace_ast::BinaryOp::Add, idx_local, one_local),
+                                    ));
+                                    self.blocks[self.current_block.0 as usize].terminator =
+                                        Some(Terminator::Goto(cond_bb));
+                                    self.current_block = done_bb;
+                                    let ret = self.new_local(Ty::Void);
+                                    return ret;
                                 }
                                 "remove" => {
                                     let prev = self.current_expected_ty.take();
@@ -1050,6 +1668,110 @@ impl<'a> MirBuilder<'a> {
                                     return temp;
                                 }
                                 _ => {}
+                            }
+                        } else if let Ty::Set(elem_ty) = &obj_ty {
+                            let is_str = matches!(**elem_ty, Ty::String);
+                            match member.as_str() {
+                                "len" => {
+                                    let temp = self.new_local(Ty::Int);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_set_len".to_string(), vec![obj_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "add" | "has" | "contains" | "remove" => {
+                                    let prev = self.current_expected_ty.take();
+                                    self.current_expected_ty = Some(*elem_ty.clone());
+                                    let key_local = self.build_expr(&args[0].expr);
+                                    self.current_expected_ty = prev;
+                                    let base = match member.as_str() {
+                                        "add" => "pace_set_add_",
+                                        "remove" => "pace_set_remove_",
+                                        _ => "pace_set_has_",
+                                    };
+                                    let fn_name = format!("{}{}", base, if is_str { "str" } else { "int" });
+                                    let temp = self.new_local(Ty::Bool);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall(fn_name, vec![obj_local, key_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "clear" => {
+                                    let temp = self.new_local(Ty::Void);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_set_clear".to_string(), vec![obj_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "toList" | "__iter" => {
+                                    let temp = self.new_local(Ty::List(elem_ty.clone()));
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall("pace_set_to_list".to_string(), vec![obj_local]),
+                                    ));
+                                    return temp;
+                                }
+                                "union" | "intersection" | "difference" => {
+                                    let other_local = self.build_expr(&args[0].expr);
+                                    let fn_name = format!("pace_set_{}", member);
+                                    let temp = self.new_local(Ty::Set(elem_ty.clone()));
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::BuiltinCall(fn_name, vec![obj_local, other_local]),
+                                    ));
+                                    return temp;
+                                }
+                                _ => {}
+                            }
+                        } else if let Ty::String = &obj_ty {
+                            let (fn_name, ret_ty) = match member.as_str() {
+                                "len" => ("pace_string_len", Ty::Int),
+                                "contains" => ("pace_string_contains", Ty::Bool),
+                                "startsWith" => ("pace_string_starts_with", Ty::Bool),
+                                "endsWith" => ("pace_string_ends_with", Ty::Bool),
+                                "indexOf" => ("pace_string_index_of", Ty::Int),
+                                "trim" => ("pace_string_trim", Ty::String),
+                                "slice" => ("pace_string_slice", Ty::String),
+                                "replace" => ("pace_string_replace", Ty::String),
+                                "toLower" => ("pace_string_to_lower", Ty::String),
+                                "toUpper" => ("pace_string_to_upper", Ty::String),
+                                "split" => ("pace_string_split", Ty::List(Box::new(Ty::String))),
+                                _ => ("", Ty::Void),
+                            };
+                            if !fn_name.is_empty() {
+                                let mut call_args = vec![obj_local];
+                                for arg in args {
+                                    call_args.push(self.build_expr(&arg.expr));
+                                }
+                                let temp = self.new_local(ret_ty);
+                                self.push_stmt(Statement::Assign(
+                                    Lvalue::Local(temp),
+                                    Rvalue::BuiltinCall(fn_name.to_string(), call_args),
+                                ));
+                                return temp;
+                            }
+                        } else if let Ty::StringBuilder = &obj_ty {
+                            let (fn_name, ret_ty) = match member.as_str() {
+                                "len" => ("pace_sb_len", Ty::Int),
+                                "append" => ("pace_sb_append", Ty::Void),
+                                "toString" => ("pace_sb_to_string", Ty::String),
+                                "clear" => ("pace_sb_clear", Ty::Void),
+                                _ => ("", Ty::Void),
+                            };
+                            if !fn_name.is_empty() {
+                                let mut call_args = vec![obj_local];
+                                for arg in args {
+                                    call_args.push(self.build_expr(&arg.expr));
+                                }
+                                let temp = self.new_local(ret_ty);
+                                self.push_stmt(Statement::Assign(
+                                    Lvalue::Local(temp),
+                                    Rvalue::BuiltinCall(fn_name.to_string(), call_args),
+                                ));
+                                return temp;
                             }
                         } else if let Ty::Result(_, _) = &obj_ty {
                             match member.as_str() {
@@ -1291,6 +2013,26 @@ impl<'a> MirBuilder<'a> {
                 }
                 let ret_ty = if name == "sleep" {
                     Ty::Future(Box::new(Ty::Void))
+                } else if name.as_str().starts_with("pace_") {
+                    match name.as_str() {
+                        "pace_eprintln" | "pace_env_set" | "pace_time_sleep_ms" => Ty::Void,
+                        "pace_process_exit" => Ty::Never,
+                        "pace_file_exists" | "pace_dir_exists" | "pace_env_has" => Ty::Bool,
+                        "pace_time_now_ms" => Ty::Int,
+                        "pace_os_name" | "pace_process_cwd" => Ty::String,
+                        "pace_env_get" => Ty::Optional(Box::new(Ty::String)),
+                        "pace_process_args" => Ty::List(Box::new(Ty::String)),
+                        "pace_read_line" | "pace_file_read_text" => {
+                            Ty::Result(Box::new(Ty::String), Box::new(Ty::String))
+                        }
+                        "pace_file_write_text" | "pace_dir_make" => {
+                            Ty::Result(Box::new(Ty::Void), Box::new(Ty::String))
+                        }
+                        "pace_math_sqrt" | "pace_math_pow" | "pace_math_abs"
+                        | "pace_math_round" | "pace_math_floor" | "pace_math_ceil"
+                        | "pace_math_sin" | "pace_math_cos" | "pace_math_tan" => Ty::Float,
+                        _ => Ty::Int,
+                    }
                 } else if name == "ok" {
                     if let Some(Ty::Result(o, e)) = &self.current_expected_ty {
                         Ty::Result(o.clone(), e.clone())
@@ -1712,7 +2454,7 @@ impl<'a> MirBuilder<'a> {
                 self.current_expected_ty = Some(lval_ty.clone());
                 let rval = self.build_expr(value);
                 self.current_expected_ty = prev;
-                if matches!(lval_ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _)) {
+                if matches!(lval_ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _) | Ty::Set(_) | Ty::StringBuilder) {
                     self.push_stmt(Statement::Retain(Lvalue::Local(rval)));
                     self.push_stmt(Statement::Release(lvalue.clone()));
                 }
@@ -2323,7 +3065,7 @@ impl<'a> MirBuilder<'a> {
             if let Some(Terminator::Return(ret_local)) = block.terminator {
                 for (i, ty) in self.locals.iter().enumerate() {
                     let local = Local(i as u32);
-                    if matches!(ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _))
+                    if matches!(ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _) | Ty::Set(_) | Ty::StringBuilder)
                         && local != ret_local
                         && !params.contains(&local)
                         && !self.scope_managed_locals.contains(&local)

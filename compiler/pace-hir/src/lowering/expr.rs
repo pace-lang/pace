@@ -77,7 +77,8 @@ impl LoweringContext {
                         || ident.name == "sleep"
                         || ident.name == "assert"
                         || ident.name == "ok"
-                        || ident.name == "error")
+                        || ident.name == "error"
+                        || ident.name.as_str().starts_with("pace_"))
                 {
                     let mut lowered_args = Vec::new();
                     for pace_ast::CallArg { expr: arg, .. } in args {

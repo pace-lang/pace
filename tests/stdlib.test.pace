@@ -1,0 +1,77 @@
+import io
+import math
+import os
+import env as env
+import process as process
+import time as time
+
+fn writeAndReadTmp() -> Result<string, string> {
+    let dir = "/tmp/pace_stdlib_test_dir"
+    if !Directory.exists(dir) {
+        let _ = Directory.make(dir)?
+    }
+    let path = "$dir/hello.txt"
+    let _ = File.writeText(path, "hello pace stdlib")?
+    assertTrue(File.exists(path))
+    let content = File.readText(path)?
+    return ok(content)
+}
+
+fn checkIo() -> Result<Unit, string> {
+    let txt = writeAndReadTmp()?
+    assertEq<string>(txt, "hello pace stdlib")
+    return ok()
+}
+
+fn main() {
+    group("math", () => {
+        test("constants and float ops", () => {
+            assertTrue(pi() > 3.14 && pi() < 3.15)
+            assertTrue(e() > 2.71 && e() < 2.72)
+            assertTrue(sqrt(16.0) > 3.99 && sqrt(16.0) < 4.01)
+            assertTrue(pow(2.0, 10.0) > 1023.9 && pow(2.0, 10.0) < 1024.1)
+            assertTrue(abs(-5.5) > 5.49 && abs(-5.5) < 5.51)
+            assertTrue(floor(3.9) > 2.99 && floor(3.9) < 3.01)
+            assertTrue(ceil(3.1) > 3.99 && ceil(3.1) < 4.01)
+            assertTrue(round(3.6) > 3.99 && round(3.6) < 4.01)
+        })
+
+        test("int helpers", () => {
+            assertEq<int>(min(10, 25), 10)
+            assertEq<int>(max(10, 25), 25)
+            assertTrue(isEven(4))
+            assertTrue(isOdd(5))
+        })
+    })
+
+    group("os, env, process, time", () => {
+        test("os and process", () => {
+            assertTrue(OS.name().isNotEmpty)
+            assertTrue(process.cwd().isNotEmpty)
+            assertTrue(process.args().len() >= 1)
+        })
+
+        test("env get/set/has", () => {
+            env.set("PACE_STDLIB_TEST", "ok")
+            assertTrue(env.has("PACE_STDLIB_TEST"))
+            assertEq<string>(env.get("PACE_STDLIB_TEST") ?? "", "ok")
+            assertNull<string>(env.get("PACE_STDLIB_MISSING_KEY_XYZ"))
+        })
+
+        test("time now and sleep", () => {
+            let t0 = time.now()
+            time.sleep(5)
+            let dt = time.elapsed(t0)
+            assertTrue(dt >= 0)
+        })
+    })
+
+    group("io", () => {
+        test("Directory and File read/write", () => {
+            let res = checkIo()
+            assertTrue(res.isOk())
+        })
+    })
+
+    finishTests()
+}

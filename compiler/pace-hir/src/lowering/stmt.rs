@@ -72,6 +72,15 @@ impl LoweringContext {
                     span,
                 } => {
                     let lowered_iter = self.lower_expr(iter)?;
+                    let iter_call = Expr::Call {
+                        callee: Box::new(Expr::MemberAccess {
+                            object: Box::new(lowered_iter),
+                            member: pace_span::intern("__iter"),
+                            span,
+                        }),
+                        args: vec![],
+                        span,
+                    };
                     let iter_id = self.generate_id();
                     let iter_sym = pace_span::intern(&format!("__iter_{}", iter_id.0));
                     self.bind_local(iter_sym, iter_id);
@@ -79,7 +88,7 @@ impl LoweringContext {
                         id: iter_id,
                         name: iter_sym,
                         ty: None,
-                        value: Some(lowered_iter),
+                        value: Some(iter_call),
                         span,
                     });
 

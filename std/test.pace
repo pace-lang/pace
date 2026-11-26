@@ -1,0 +1,74 @@
+var __paceTestCurrentFailed = false
+var __paceTestAnyFailed = false
+
+fn group(name: string, body: () -> Unit) -> Unit {
+    println("  $name")
+    body()
+}
+
+fn test(description: string, body: () -> Unit) -> Unit {
+    __paceTestCurrentFailed = false
+    let start = pace_time_now_ms()
+    body()
+    let ms = pace_time_now_ms() - start
+    if __paceTestCurrentFailed {
+        pace_eprintln("    ✗ $description (${ms}ms)")
+        __paceTestAnyFailed = true
+    } else {
+        println("    ✓ $description (${ms}ms)")
+    }
+}
+
+fn fail(message: string) -> Unit {
+    __paceTestCurrentFailed = true
+    pace_eprintln("      FAIL: $message")
+}
+
+fn assertTrue(cond: bool) -> Unit {
+    if !cond {
+        __paceTestCurrentFailed = true
+        pace_eprintln("      Expected: true, Actual: false")
+    }
+}
+
+fn assertFalse(cond: bool) -> Unit {
+    if cond {
+        __paceTestCurrentFailed = true
+        pace_eprintln("      Expected: false, Actual: true")
+    }
+}
+
+fn assertEq<T>(actual: T, expected: T) -> Unit {
+    if actual != expected {
+        __paceTestCurrentFailed = true
+        pace_eprintln("      Expected: $expected, Actual: $actual")
+    }
+}
+
+fn assertNotEq<T>(actual: T, unexpected: T) -> Unit {
+    if actual == unexpected {
+        __paceTestCurrentFailed = true
+        pace_eprintln("      Expected value to differ from: $unexpected")
+    }
+}
+
+fn assertNull<T>(val: T?) -> Unit {
+    if val != null {
+        __paceTestCurrentFailed = true
+        pace_eprintln("      Expected: null, Actual: non-null")
+    }
+}
+
+fn assertNotNull<T>(val: T?) -> Unit {
+    if val == null {
+        __paceTestCurrentFailed = true
+        pace_eprintln("      Expected: non-null, Actual: null")
+    }
+}
+
+fn finishTests() -> Unit {
+    if __paceTestAnyFailed {
+        pace_process_exit(1)
+    }
+}
+

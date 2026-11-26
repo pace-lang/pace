@@ -12,6 +12,7 @@ import structs_classes
 import async_await
 import actors
 import traits
+import stdlib_showcase
 
 async fn main() -> Future<Unit> {
 
@@ -38,4 +39,7 @@ async fn main() -> Future<Unit> {
     
     // Traits
     testTraits()
+
+    // Standard Library & Strings
+    testStdlib()
 }

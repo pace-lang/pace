@@ -1,0 +1,12 @@
+fn now() -> int {
+    return pace_time_now_ms()
+}
+
+fn sleep(ms: int) -> Unit {
+    pace_time_sleep_ms(ms)
+}
+
+fn elapsed(startMs: int) -> int {
+    return pace_time_now_ms() - startMs
+}
+

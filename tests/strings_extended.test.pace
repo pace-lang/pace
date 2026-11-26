@@ -1,0 +1,36 @@
+fn main() {
+    let s = "  Hello, Pace World!  "
+    assert(s.len() == 22, "len")
+    assert(!s.isEmpty && s.isNotEmpty, "isEmpty / isNotEmpty")
+    assert("".isEmpty && !"".isNotEmpty, "empty string checks")
+
+    let trimmed = s.trim()
+    assert(trimmed == "Hello, Pace World!", "trim")
+    assert(trimmed.startsWith("Hello"), "startsWith")
+    assert(trimmed.endsWith("World!"), "endsWith")
+    assert(trimmed.contains("Pace"), "contains")
+    assert(!trimmed.contains("Rust"), "!contains")
+    assert(trimmed.indexOf("Pace") == 7, "indexOf found")
+    assert(trimmed.indexOf("Missing") == -1, "indexOf missing")
+
+    assert(trimmed.slice(7, 11) == "Pace", "slice")
+    assert(trimmed.toLower() == "hello, pace world!", "toLower")
+    assert(trimmed.toUpper() == "HELLO, PACE WORLD!", "toUpper")
+    assert(trimmed.replace("World", "Lang") == "Hello, Pace Lang!", "replace")
+
+    let parts = "a,b,c".split(",")
+    assert(parts.len() == 3, "split len")
+    assert(parts[0] == "a" && parts[1] == "b" && parts[2] == "c", "split parts")
+
+    // StringBuilder
+    let sb = StringBuilder()
+    assert(sb.isEmpty && sb.len() == 0, "new sb empty")
+    sb.append("Pace")
+    sb.append(" ")
+    sb.append("v0.5")
+    assert(sb.isNotEmpty && sb.len() == 9, "sb len")
+    assert(sb.toString() == "Pace v0.5", "sb toString")
+    sb.clear()
+    assert(sb.isEmpty && sb.toString() == "", "sb clear")
+}
+

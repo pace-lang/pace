@@ -149,6 +149,7 @@ impl TypeChecker {
                 "Int" | "int" => Ok(Ty::Int),
                 "Float" | "float" => Ok(Ty::Float),
                 "String" | "string" => Ok(Ty::String),
+                "StringBuilder" => Ok(Ty::StringBuilder),
                 "Bool" | "bool" => Ok(Ty::Bool),
                 "Unit" | "Void" | "void" => Ok(Ty::Void),
                 "Never" => Ok(Ty::Never),
@@ -179,6 +180,19 @@ impl TypeChecker {
                         let ok = self.get_type(&args[0])?;
                         let err = self.get_type(&args[1])?;
                         return Ok(Ty::Result(Box::new(ok), Box::new(err)));
+                    }
+                    if id.name.as_str() == "List" && args.len() == 1 {
+                        let inner = self.get_type(&args[0])?;
+                        return Ok(Ty::List(Box::new(inner)));
+                    }
+                    if id.name.as_str() == "Map" && args.len() == 2 {
+                        let k = self.get_type(&args[0])?;
+                        let v = self.get_type(&args[1])?;
+                        return Ok(Ty::Map(Box::new(k), Box::new(v)));
+                    }
+                    if id.name.as_str() == "Set" && args.len() == 1 {
+                        let inner = self.get_type(&args[0])?;
+                        return Ok(Ty::Set(Box::new(inner)));
                     }
                     let mut final_args = Vec::new();
                     if let Some(template) = self.generic_templates.get(&id.name.to_string()) {
@@ -256,6 +270,7 @@ impl TypeChecker {
                     "Int" | "int" => Ok(Ty::Int),
                     "Float" | "float" => Ok(Ty::Float),
                     "String" | "string" => Ok(Ty::String),
+                "StringBuilder" => Ok(Ty::StringBuilder),
                     "Bool" | "bool" => Ok(Ty::Bool),
                     "Unit" | "Void" | "void" => Ok(Ty::Void),
                     "Never" => Ok(Ty::Never),
@@ -316,6 +331,10 @@ impl TypeChecker {
                         let k = self.resolve_type(&args[0])?;
                         let v = self.resolve_type(&args[1])?;
                         return Ok(Ty::Map(Box::new(k), Box::new(v)));
+                    }
+                    if id.name.as_str() == "Set" && args.len() == 1 {
+                        let inner = self.resolve_type(&args[0])?;
+                        return Ok(Ty::Set(Box::new(inner)));
                     }
                     self.instantiate_generic(&id.name, args)
                 } else {
@@ -2096,6 +2115,26 @@ impl TypeChecker {
                         return Ok(inst_ty);
                     }
                     return Err("Map requires two type parameters, e.g. Map<int, int>".to_string());
+                } else if name == "Set" {
+                    if let Some(args) = generic_args && args.len() == 1 {
+                        let inner = self.resolve_type(&args[0])?;
+                        let inst_ty = Ty::Set(Box::new(inner));
+                        self.env.insert(*id, inst_ty.clone());
+                        self.local_types.insert(*id, inst_ty.clone());
+                        return Ok(inst_ty);
+                    }
+                    if let Some(Ty::Set(inner)) = &self.current_expected_ty {
+                        let inst_ty = Ty::Set(inner.clone());
+                        self.env.insert(*id, inst_ty.clone());
+                        self.local_types.insert(*id, inst_ty.clone());
+                        return Ok(inst_ty);
+                    }
+                    return Err("Set requires a type parameter, e.g. Set<int>".to_string());
+                } else if name == "StringBuilder" {
+                    let inst_ty = Ty::StringBuilder;
+                    self.env.insert(*id, inst_ty.clone());
+                    self.local_types.insert(*id, inst_ty.clone());
+                    return Ok(inst_ty);
                 } else {
                     let err_msg = format!("Cannot find value '{}' in this scope", name);
                     self.reporter
@@ -2157,9 +2196,7 @@ impl TypeChecker {
                     | pace_ast::BinaryOp::Gt
                     | pace_ast::BinaryOp::Lt
                     | pace_ast::BinaryOp::GtEq
-                    | pace_ast::BinaryOp::LtEq => {
-                        Ok(Ty::Int) // Boolean represented as Int in MVP
-                    }
+                    | pace_ast::BinaryOp::LtEq => Ok(Ty::Bool),
                     pace_ast::BinaryOp::And | pace_ast::BinaryOp::Or => Ok(Ty::Bool),
                     pace_ast::BinaryOp::NullCoalesce => {
                         if let Ty::Optional(inner) = &left_ty {
@@ -2436,26 +2473,107 @@ impl TypeChecker {
                     }
                     Ty::List(elem) => {
                         match member.as_str() {
+                            "__iter" => Ok(Ty::Function(vec![], Box::new(Ty::List(elem.clone())))),
                             "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
-                            "push" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Void))),
+                            "isEmpty" | "isNotEmpty" => Ok(Ty::Bool),
+                            "first" | "last" => Ok(Ty::Optional(elem.clone())),
+                            "push" | "add" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Void))),
                             "pop" => Ok(Ty::Function(vec![], Box::new(Ty::Optional(elem.clone())))),
                             "get" => Ok(Ty::Function(vec![Ty::Int], elem.clone())),
                             "set" => Ok(Ty::Function(vec![Ty::Int, *elem.clone()], Box::new(Ty::Void))),
+                            "insert" => Ok(Ty::Function(vec![Ty::Int, *elem.clone()], Box::new(Ty::Void))),
+                            "removeAt" => Ok(Ty::Function(vec![Ty::Int], elem.clone())),
+                            "contains" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Bool))),
+                            "indexOf" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Int))),
+                            "slice" => Ok(Ty::Function(vec![Ty::Int, Ty::Int], Box::new(Ty::List(elem.clone())))),
+                            "reversed" => Ok(Ty::Function(vec![], Box::new(Ty::List(elem.clone())))),
+                            "join" => Ok(Ty::Function(vec![Ty::String], Box::new(Ty::String))),
                             "clear" => Ok(Ty::Function(vec![], Box::new(Ty::Void))),
+                            "forEach" => Ok(Ty::Function(
+                                vec![Ty::Closure(vec![*elem.clone()], Box::new(Ty::Void))],
+                                Box::new(Ty::Void),
+                            )),
+                            "filter" => Ok(Ty::Function(
+                                vec![Ty::Closure(vec![*elem.clone()], Box::new(Ty::Bool))],
+                                Box::new(Ty::List(elem.clone())),
+                            )),
+                            "find" => Ok(Ty::Function(
+                                vec![Ty::Closure(vec![*elem.clone()], Box::new(Ty::Bool))],
+                                Box::new(Ty::Optional(elem.clone())),
+                            )),
+                            "any" | "every" => Ok(Ty::Function(
+                                vec![Ty::Closure(vec![*elem.clone()], Box::new(Ty::Bool))],
+                                Box::new(Ty::Bool),
+                            )),
                             _ => Err(format!("List has no member '{}'", member)),
                         }
                     }
                     Ty::Map(k, v) => {
                         match member.as_str() {
+                            "__iter" => Ok(Ty::Function(vec![], Box::new(Ty::List(k.clone())))),
                             "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
+                            "isEmpty" | "isNotEmpty" => Ok(Ty::Bool),
                             "set" => Ok(Ty::Function(vec![*k.clone(), *v.clone()], Box::new(Ty::Void))),
                             "get" => Ok(Ty::Function(vec![*k.clone()], Box::new(Ty::Optional(v.clone())))),
-                            "has" => Ok(Ty::Function(vec![*k.clone()], Box::new(Ty::Bool))),
+                            "getOrDefault" => Ok(Ty::Function(vec![*k.clone(), *v.clone()], v.clone())),
+                            "has" | "containsKey" => Ok(Ty::Function(vec![*k.clone()], Box::new(Ty::Bool))),
                             "remove" => Ok(Ty::Function(vec![*k.clone()], Box::new(Ty::Bool))),
                             "clear" => Ok(Ty::Function(vec![], Box::new(Ty::Void))),
+                            "keys" => Ok(Ty::Function(vec![], Box::new(Ty::List(k.clone())))),
+                            "values" => Ok(Ty::Function(vec![], Box::new(Ty::List(v.clone())))),
+                            "forEach" => Ok(Ty::Function(
+                                vec![Ty::Closure(vec![*k.clone(), *v.clone()], Box::new(Ty::Void))],
+                                Box::new(Ty::Void),
+                            )),
                             _ => Err(format!("Map has no member '{}'", member)),
                         }
                     }
+                    Ty::Set(elem) => {
+                        let set_ty = Ty::Set(elem.clone());
+                        match member.as_str() {
+                            "__iter" => Ok(Ty::Function(vec![], Box::new(Ty::List(elem.clone())))),
+                            "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
+                            "isEmpty" | "isNotEmpty" => Ok(Ty::Bool),
+                            "add" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Bool))),
+                            "has" | "contains" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Bool))),
+                            "remove" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Bool))),
+                            "clear" => Ok(Ty::Function(vec![], Box::new(Ty::Void))),
+                            "toList" => Ok(Ty::Function(vec![], Box::new(Ty::List(elem.clone())))),
+                            "union" | "intersection" | "difference" => {
+                                Ok(Ty::Function(vec![set_ty.clone()], Box::new(set_ty)))
+                            }
+                            _ => Err(format!("Set has no member '{}'", member)),
+                        }
+                    }
+                    Ty::String => match member.as_str() {
+                        "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
+                        "isEmpty" | "isNotEmpty" => Ok(Ty::Bool),
+                        "contains" | "startsWith" | "endsWith" => {
+                            Ok(Ty::Function(vec![Ty::String], Box::new(Ty::Bool)))
+                        }
+                        "indexOf" => Ok(Ty::Function(vec![Ty::String], Box::new(Ty::Int))),
+                        "trim" | "toLower" | "toUpper" => {
+                            Ok(Ty::Function(vec![], Box::new(Ty::String)))
+                        }
+                        "slice" => Ok(Ty::Function(vec![Ty::Int, Ty::Int], Box::new(Ty::String))),
+                        "replace" => Ok(Ty::Function(
+                            vec![Ty::String, Ty::String],
+                            Box::new(Ty::String),
+                        )),
+                        "split" => Ok(Ty::Function(
+                            vec![Ty::String],
+                            Box::new(Ty::List(Box::new(Ty::String))),
+                        )),
+                        _ => Err(format!("string has no member '{}'", member)),
+                    },
+                    Ty::StringBuilder => match member.as_str() {
+                        "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
+                        "isEmpty" | "isNotEmpty" => Ok(Ty::Bool),
+                        "append" => Ok(Ty::Function(vec![Ty::String], Box::new(Ty::Void))),
+                        "toString" => Ok(Ty::Function(vec![], Box::new(Ty::String))),
+                        "clear" => Ok(Ty::Function(vec![], Box::new(Ty::Void))),
+                        _ => Err(format!("StringBuilder has no member '{}'", member)),
+                    },
                     Ty::Result(_, _) => {
                         match member.as_str() {
                             "isOk" | "isError" => Ok(Ty::Function(vec![], Box::new(Ty::Bool))),
@@ -2549,6 +2667,25 @@ impl TypeChecker {
                                 self.resolved_global_names.insert(*callee_id, mono_name);
                                 generic_instantiation = Some(func_ty);
                             }
+                        }
+                    }
+                } else if let Expr::MemberAccess { object, member, .. } = &**callee
+                    && (member == "map" || member == "reduce")
+                {
+                    let obj_ty = self.check_expr(object)?;
+                    if let Ty::List(_) = obj_ty {
+                        if member == "map" && args.len() == 1 {
+                            let fn_ty = self.check_expr(&args[0].expr)?;
+                            if let Ty::Function(_, ret) | Ty::Closure(_, ret) = fn_ty {
+                                return Ok(Ty::List(ret));
+                            }
+                        } else if member == "reduce" && args.len() == 2 {
+                            let init_ty = self.check_expr(&args[0].expr)?;
+                            let fn_ty = self.check_expr(&args[1].expr)?;
+                            if let Ty::Function(_, ret) | Ty::Closure(_, ret) = fn_ty {
+                                return Ok(*ret);
+                            }
+                            return Ok(init_ty);
                         }
                     }
                 }
@@ -2947,7 +3084,7 @@ impl TypeChecker {
                 if let Ty::Function(_, ret_ty) | Ty::Closure(_, ret_ty) = callee_ty {
                     return Ok(*ret_ty);
                 }
-                if let Ty::List(_) | Ty::Map(_, _) = callee_ty {
+                if let Ty::List(_) | Ty::Map(_, _) | Ty::Set(_) | Ty::StringBuilder = callee_ty {
                     return Ok(callee_ty);
                 }
                 Ok(Ty::Int) // Fallback for MVP
@@ -2963,6 +3100,26 @@ impl TypeChecker {
                         return Err(format!("{} takes exactly 1 argument", name));
                     }
                     Ok(Ty::Int)
+                } else if name.as_str().starts_with("pace_") {
+                    match name.as_str() {
+                        "pace_eprintln" | "pace_env_set" | "pace_time_sleep_ms" => Ok(Ty::Void),
+                        "pace_process_exit" => Ok(Ty::Never),
+                        "pace_file_exists" | "pace_dir_exists" | "pace_env_has" => Ok(Ty::Bool),
+                        "pace_time_now_ms" => Ok(Ty::Int),
+                        "pace_os_name" | "pace_process_cwd" => Ok(Ty::String),
+                        "pace_env_get" => Ok(Ty::Optional(Box::new(Ty::String))),
+                        "pace_process_args" => Ok(Ty::List(Box::new(Ty::String))),
+                        "pace_read_line" | "pace_file_read_text" => {
+                            Ok(Ty::Result(Box::new(Ty::String), Box::new(Ty::String)))
+                        }
+                        "pace_file_write_text" | "pace_dir_make" => {
+                            Ok(Ty::Result(Box::new(Ty::Void), Box::new(Ty::String)))
+                        }
+                        "pace_math_sqrt" | "pace_math_pow" | "pace_math_abs"
+                        | "pace_math_round" | "pace_math_floor" | "pace_math_ceil"
+                        | "pace_math_sin" | "pace_math_cos" | "pace_math_tan" => Ok(Ty::Float),
+                        _ => Err(format!("Unknown runtime builtin '{}'", name)),
+                    }
                 } else if name == "assert" {
                     if arg_types.is_empty() || arg_types.len() > 2 {
                         return Err("assert takes 1 or 2 arguments: assert(condition, [message])".to_string());
@@ -3978,6 +4135,8 @@ impl TypeChecker {
             Ty::Result(ok, err) => format!("Result<{}, {}>", self.display_ty(ok), self.display_ty(err)),
             Ty::List(inner) => format!("List<{}>", self.display_ty(inner)),
             Ty::Map(k, v) => format!("Map<{}, {}>", self.display_ty(k), self.display_ty(v)),
+            Ty::Set(inner) => format!("Set<{}>", self.display_ty(inner)),
+            Ty::StringBuilder => "StringBuilder".to_string(),
             Ty::Function(args, ret) => {
                 let args_str = args
                     .iter()

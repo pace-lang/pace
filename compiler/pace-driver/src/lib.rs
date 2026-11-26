@@ -92,6 +92,19 @@ pub fn sanitize_module_name(name: &str) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
+fn get_virtual_stdlib_module(name: &str) -> Option<&'static str> {
+    match name {
+        "io" => Some(include_str!("../../../std/io.pace")),
+        "math" => Some(include_str!("../../../std/math.pace")),
+        "os" => Some(include_str!("../../../std/os.pace")),
+        "env" => Some(include_str!("../../../std/env.pace")),
+        "process" => Some(include_str!("../../../std/process.pace")),
+        "time" => Some(include_str!("../../../std/time.pace")),
+        "test" => Some(include_str!("../../../std/test.pace")),
+        _ => None,
+    }
+}
+
 fn parse_file_and_imports(
     file_path: &Path,
     module_name_opt: Option<String>,
@@ -110,7 +123,16 @@ fn parse_file_and_imports(
         return Ok(());
     }
 
-    let source = if let Some(text) = overrides.get(file_path) {
+    let virtual_name = file_path
+        .to_str()
+        .and_then(|s| s.strip_prefix("__pace_std__/"))
+        .and_then(|s| s.strip_suffix(".pace"));
+
+    let source = if let Some(vname) = virtual_name {
+        get_virtual_stdlib_module(vname)
+            .ok_or_else(|| format!("Unknown virtual stdlib module: {}", vname))?
+            .to_string()
+    } else if let Some(text) = overrides.get(file_path) {
         text.clone()
     } else {
         fs::read_to_string(file_path)
@@ -120,8 +142,32 @@ fn parse_file_and_imports(
     let lexer = Lexer::new(&source, file_id);
     let mut parser = Parser::new(lexer);
 
-    let (ast, diags, comments) = parser.parse_program();
+    let (mut ast, diags, comments) = parser.parse_program();
     all_diags.extend(diags);
+
+    if virtual_name.is_none()
+        && file_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .is_some_and(|n| n.ends_with(".test.pace"))
+    {
+        let already_imports_test = ast.iter().any(|d| {
+            matches!(d, pace_ast::Decl::Import { path, .. } if path.len() == 1 && path[0].name == "test")
+        });
+        if !already_imports_test {
+            ast.insert(
+                0,
+                pace_ast::Decl::Import {
+                    path: vec![pace_ast::Ident {
+                        name: pace_span::intern("test"),
+                        span: pace_span::Span::DUMMY,
+                    }],
+                    alias: None,
+                    span: pace_span::Span::DUMMY,
+                },
+            );
+        }
+    }
 
     let mut module_decls = Vec::new();
     let raw_module_name = module_name_opt.unwrap_or_else(|| {
@@ -170,7 +216,12 @@ fn parse_file_and_imports(
                 import_path = resolved_path;
             }
 
-            if !import_path.exists() {
+            if !import_path.exists()
+                && path.len() == 1
+                && get_virtual_stdlib_module(first_ident.as_str()).is_some()
+            {
+                import_path = PathBuf::from(format!("__pace_std__/{}.pace", first_ident));
+            } else if !import_path.exists() {
                 return Err(format!(
                     "Could not resolve import {:?} (tried {})",
                     path.iter()
@@ -305,10 +356,26 @@ pub fn compile_file(opts: CompileOptions) -> Result<(), String> {
             reporter.report(pace_errors::Diagnostic::error(e));
             reporter.emit_all(&source_map);
         }
-        tc.reporter.emit_all(&source_map);
+        tc.reporter.diagnostics.retain(|d| {
+        !(d.severity == pace_errors::Severity::Warning
+            && d.span.is_some_and(|s| {
+                source_map
+                    .get_file(s.file_id)
+                    .is_some_and(|f| f.0.starts_with("__pace_std__/"))
+            }))
+    });
+    tc.reporter.emit_all(&source_map);
         return Err("Compilation failed due to type errors.".to_string());
     }
 
+    tc.reporter.diagnostics.retain(|d| {
+        !(d.severity == pace_errors::Severity::Warning
+            && d.span.is_some_and(|s| {
+                source_map
+                    .get_file(s.file_id)
+                    .is_some_and(|f| f.0.starts_with("__pace_std__/"))
+            }))
+    });
     tc.reporter.emit_all(&source_map);
     if tc.reporter.has_errors() {
         return Err("Compilation failed due to type errors.".to_string());
@@ -370,6 +437,7 @@ pub fn compile_file(opts: CompileOptions) -> Result<(), String> {
         .arg(lib_dir)
         .arg("-lpace_rt")
         .arg("-lpthread")
+        .arg("-lm")
         .arg("-o")
         .arg(&bin_file)
         .status();

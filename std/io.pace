@@ -1,0 +1,40 @@
+fn eprintln(msg: string) -> Unit {
+    pace_eprintln(msg)
+}
+
+fn readLine() -> Result<string, string> {
+    return pace_read_line()
+}
+
+fn readTextFile(path: string) -> Result<string, string> {
+    return pace_file_read_text(path)
+}
+
+fn writeTextFile(path: string, contents: string) -> Result<Unit, string> {
+    return pace_file_write_text(path, contents)
+}
+
+class File {
+    static fn exists(path: string) -> bool {
+        return pace_file_exists(path)
+    }
+
+    static fn readText(path: string) -> Result<string, string> {
+        return pace_file_read_text(path)
+    }
+
+    static fn writeText(path: string, contents: string) -> Result<Unit, string> {
+        return pace_file_write_text(path, contents)
+    }
+}
+
+class Directory {
+    static fn exists(path: string) -> bool {
+        return pace_dir_exists(path)
+    }
+
+    static fn make(path: string) -> Result<Unit, string> {
+        return pace_dir_make(path)
+    }
+}
+

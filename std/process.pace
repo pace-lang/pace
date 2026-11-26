@@ -1,0 +1,12 @@
+fn args() -> List<string> {
+    return pace_process_args()
+}
+
+fn cwd() -> string {
+    return pace_process_cwd()
+}
+
+fn exit(code: int) -> Never {
+    pace_process_exit(code)
+}
+

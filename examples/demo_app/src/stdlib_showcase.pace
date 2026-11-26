@@ -1,0 +1,31 @@
+import math
+import os
+import env as env
+import process as process
+import time as time
+
+fn testStdlib() {
+    println("--- Testing Standard Library & Strings ---")
+    let raw = "  Pace Language v0.5  "
+    let clean = raw.trim()
+    println("Trimmed: $clean (len=${clean.len()})")
+    println("Upper: ${clean.toUpper()}")
+    let hasPace = clean.contains("Pace")
+    println("Contains Pace: $hasPace")
+
+    let sb = StringBuilder()
+    sb.append("Fast")
+    sb.append(" + ")
+    sb.append("Safe")
+    println("StringBuilder: ${sb.toString()}")
+
+    println("Math sqrt(144)=${sqrt(144.0)}, max=${max(10, 42)}, pi=${pi()}")
+    println("OS: ${OS.name()}, CWD: ${process.cwd()}")
+    env.set("PACE_DEMO", "active")
+    let demoEnv = env.get("PACE_DEMO") ?? "unset"
+    println("Env PACE_DEMO=$demoEnv")
+
+    let t0 = time.now()
+    time.sleep(2)
+    println("Elapsed: ${time.elapsed(t0)}ms")
+}

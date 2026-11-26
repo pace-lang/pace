@@ -15,6 +15,8 @@ pub enum Ty {
     Result(Box<Ty>, Box<Ty>),
     List(Box<Ty>),
     Map(Box<Ty>, Box<Ty>),
+    Set(Box<Ty>),
+    StringBuilder,
     Void,
     Never,
 }
