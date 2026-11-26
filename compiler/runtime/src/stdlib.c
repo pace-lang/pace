@@ -1,4 +1,6 @@
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>
@@ -6,7 +8,18 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#ifdef _WIN32
+#include <direct.h>
+#include <windows.h>
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+#endif
+#ifndef S_ISDIR
+#define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
+#endif
+#else
 #include <unistd.h>
+#endif
 #include "../pace_runtime.h"
 
 static int g_pace_argc = 0;
@@ -29,7 +42,11 @@ PaceList* pace_process_args(void) {
 
 struct PaceString* pace_process_cwd(void) {
     char buf[4096];
+#ifdef _WIN32
+    if (_getcwd(buf, (int)sizeof(buf)) != NULL) {
+#else
     if (getcwd(buf, sizeof(buf)) != NULL) {
+#endif
         return pace_string_new(buf);
     }
     return pace_string_new("");
@@ -49,17 +66,35 @@ void pace_eprintln(struct PaceString* val) {
 }
 
 PaceResult pace_read_line(void) {
-    char* line = NULL;
-    size_t cap = 0;
-    ssize_t n = getline(&line, &cap, stdin);
-    if (n < 0) {
-        if (line) free(line);
+    size_t cap = 128;
+    size_t len = 0;
+    char* line = (char*)malloc(cap);
+    if (!line) {
+        pace_panic("Fatal error: out of memory in pace_read_line");
+    }
+    int c;
+    while ((c = fgetc(stdin)) != EOF) {
+        if (c == '\n') break;
+        if (len + 1 >= cap) {
+            cap *= 2;
+            char* next = (char*)realloc(line, cap);
+            if (!next) {
+                free(line);
+                pace_panic("Fatal error: out of memory in pace_read_line");
+            }
+            line = next;
+        }
+        line[len++] = (char)c;
+    }
+    if (c == EOF && len == 0) {
+        free(line);
         struct PaceString* err = pace_string_new("EOF");
         return (PaceResult){0, NULL, err};
     }
-    while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) {
-        line[--n] = '\0';
+    while (len > 0 && line[len - 1] == '\r') {
+        len--;
     }
+    line[len] = '\0';
     struct PaceString* res = pace_string_new(line);
     free(line);
     return (PaceResult){1, res, NULL};
@@ -128,7 +163,12 @@ PaceResult pace_dir_make(struct PaceString* path) {
     if (!path || !path->data) {
         return (PaceResult){0, NULL, pace_string_new("Invalid path")};
     }
-    if (mkdir(path->data, 0755) != 0 && errno != EEXIST) {
+#ifdef _WIN32
+    int rc = _mkdir(path->data);
+#else
+    int rc = mkdir(path->data, 0755);
+#endif
+    if (rc != 0 && errno != EEXIST) {
         return (PaceResult){0, NULL, pace_string_new(strerror(errno))};
     }
     return (PaceResult){1, NULL, NULL};
@@ -143,7 +183,12 @@ struct PaceString* pace_env_get(struct PaceString* key) {
 
 void pace_env_set(struct PaceString* key, struct PaceString* val) {
     if (!key || !key->data) return;
-    setenv(key->data, (val && val->data) ? val->data : "", 1);
+    const char* v = (val && val->data) ? val->data : "";
+#ifdef _WIN32
+    _putenv_s(key->data, v);
+#else
+    setenv(key->data, v, 1);
+#endif
 }
 
 int pace_env_has(struct PaceString* key) {
@@ -163,16 +208,24 @@ struct PaceString* pace_os_name(void) {
 
 int64_t pace_time_now_ms(void) {
     struct timespec ts;
+#ifdef _WIN32
+    timespec_get(&ts, TIME_UTC);
+#else
     clock_gettime(CLOCK_REALTIME, &ts);
+#endif
     return (int64_t)ts.tv_sec * 1000 + (int64_t)(ts.tv_nsec / 1000000);
 }
 
 void pace_time_sleep_ms(int64_t ms) {
     if (ms <= 0) return;
+#ifdef _WIN32
+    Sleep((DWORD)ms);
+#else
     struct timespec ts;
     ts.tv_sec = ms / 1000;
     ts.tv_nsec = (ms % 1000) * 1000000L;
     nanosleep(&ts, NULL);
+#endif
 }
 
 double pace_math_sqrt(double x) { return sqrt(x); }
