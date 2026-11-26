@@ -963,6 +963,31 @@ impl<'a> MirBuilder<'a> {
                                 }
                                 _ => {}
                             }
+                        } else if let Ty::Result(_, _) = &obj_ty {
+                            match member.as_str() {
+                                "isOk" => {
+                                    let temp = self.new_local(Ty::Bool);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::ResultIsOk(obj_local),
+                                    ));
+                                    return temp;
+                                }
+                                "isError" => {
+                                    let ok_local = self.new_local(Ty::Bool);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(ok_local),
+                                        Rvalue::ResultIsOk(obj_local),
+                                    ));
+                                    let temp = self.new_local(Ty::Bool);
+                                    self.push_stmt(Statement::Assign(
+                                        Lvalue::Local(temp),
+                                        Rvalue::UnaryOp(pace_ast::UnaryOp::Not, ok_local),
+                                    ));
+                                    return temp;
+                                }
+                                _ => {}
+                            }
                         } else if let Ty::Struct(id) | Ty::Class(id) | Ty::Actor(id) = obj_ty {
                             let mut target_id = id;
                             if is_super && let Some(&parent_id) = self.class_parents.get(&id) {
@@ -1084,20 +1109,38 @@ impl<'a> MirBuilder<'a> {
                     let mut is_enum_variant = false;
                     let mut enum_id = None;
 
-                    if let Some(Ty::Function(_, ret)) = self.global_functions_env.get(&global_name)
+                    let mut param_tys_opt = None;
+                    if let Some(Ty::Function(ptys, ret)) = self.global_functions_env.get(&global_name)
                     {
+                        param_tys_opt = Some(ptys.clone());
                         if let Ty::Enum(eid) = **ret {
                             is_enum_variant = true;
                             enum_id = Some(eid);
                         } else {
                             ret_ty = *ret.clone();
                         }
-                    } else if let Some(Ty::Function(_, ret)) = self.methods_env.get(&global_name) {
+                    } else if let Some(Ty::Function(ptys, ret)) = self.methods_env.get(&global_name) {
+                        param_tys_opt = Some(ptys.clone());
                         if let Ty::Enum(eid) = **ret {
                             is_enum_variant = true;
                             enum_id = Some(eid);
                         } else {
                             ret_ty = *ret.clone();
+                        }
+                    }
+                    if let Some(ptys) = param_tys_opt {
+                        for (i, pty) in ptys.iter().enumerate() {
+                            if i < arg_locals.len()
+                                && matches!(pty, Ty::Optional(_))
+                                && self.locals[arg_locals[i].0 as usize] != *pty
+                            {
+                                let coerced = self.new_local(pty.clone());
+                                self.push_stmt(Statement::Assign(
+                                    Lvalue::Local(coerced),
+                                    Rvalue::Use(arg_locals[i]),
+                                ));
+                                arg_locals[i] = coerced;
+                            }
                         }
                     }
 
@@ -1160,6 +1203,26 @@ impl<'a> MirBuilder<'a> {
                 }
                 let ret_ty = if name == "sleep" {
                     Ty::Future(Box::new(Ty::Void))
+                } else if name == "ok" {
+                    if let Some(Ty::Result(o, e)) = &self.current_expected_ty {
+                        Ty::Result(o.clone(), e.clone())
+                    } else {
+                        let ok_ty = arg_locals
+                            .first()
+                            .map(|l| self.locals[l.0 as usize].clone())
+                            .unwrap_or(Ty::Void);
+                        Ty::Result(Box::new(ok_ty), Box::new(Ty::Void))
+                    }
+                } else if name == "error" {
+                    if let Some(Ty::Result(o, e)) = &self.current_expected_ty {
+                        Ty::Result(o.clone(), e.clone())
+                    } else {
+                        let err_ty = arg_locals
+                            .first()
+                            .map(|l| self.locals[l.0 as usize].clone())
+                            .unwrap_or(Ty::Void);
+                        Ty::Result(Box::new(Ty::Void), Box::new(err_ty))
+                    }
                 } else {
                     Ty::Int
                 };
@@ -1564,17 +1627,82 @@ impl<'a> MirBuilder<'a> {
             Expr::Try(inner, _) => {
                 let inner_local = self.build_expr(inner);
                 let inner_ty = self.locals[inner_local.0 as usize].clone();
-                let ret_ty = match inner_ty {
-                    Ty::Result(ok, _) => *ok,
-                    Ty::Optional(val) => *val,
-                    other => other,
-                };
-                let temp = self.new_local(ret_ty);
-                self.push_stmt(Statement::Assign(
-                    Lvalue::Local(temp),
-                    Rvalue::Use(inner_local),
-                ));
-                temp
+                match inner_ty {
+                    Ty::Result(ok_ty, err_ty) => {
+                        let cond_local = self.new_local(Ty::Bool);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(cond_local),
+                            Rvalue::ResultIsOk(inner_local),
+                        ));
+                        let ok_bb = self.new_block();
+                        let err_bb = self.new_block();
+                        let merge_bb = self.new_block();
+                        let cur_bb = self.current_block;
+                        self.blocks[cur_bb.0 as usize].terminator = Some(Terminator::Branch {
+                            cond: cond_local,
+                            then_block: ok_bb,
+                            else_block: err_bb,
+                        });
+
+                        self.current_block = err_bb;
+                        let err_ret = self.new_local(Ty::Result(Box::new(Ty::Void), err_ty));
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(err_ret),
+                            Rvalue::ResultPropagateErr(inner_local),
+                        ));
+                        self.blocks[err_bb.0 as usize].terminator =
+                            Some(Terminator::Return(err_ret));
+
+                        self.current_block = ok_bb;
+                        let out_local = self.new_local(*ok_ty);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(out_local),
+                            Rvalue::ResultOk(inner_local),
+                        ));
+                        self.blocks[ok_bb.0 as usize].terminator = Some(Terminator::Goto(merge_bb));
+
+                        self.current_block = merge_bb;
+                        out_local
+                    }
+                    Ty::Optional(val_ty) => {
+                        let cond_local = self.new_local(Ty::Bool);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(cond_local),
+                            Rvalue::OptionIsSome(inner_local),
+                        ));
+                        let some_bb = self.new_block();
+                        let none_bb = self.new_block();
+                        let merge_bb = self.new_block();
+                        let cur_bb = self.current_block;
+                        self.blocks[cur_bb.0 as usize].terminator = Some(Terminator::Branch {
+                            cond: cond_local,
+                            then_block: some_bb,
+                            else_block: none_bb,
+                        });
+
+                        self.current_block = none_bb;
+                        let null_local = self.new_local(Ty::Optional(Box::new(Ty::Void)));
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(null_local),
+                            Rvalue::Constant(Constant::Int("0".to_string())),
+                        ));
+                        self.blocks[none_bb.0 as usize].terminator =
+                            Some(Terminator::Return(null_local));
+
+                        self.current_block = some_bb;
+                        let out_local = self.new_local(*val_ty);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(out_local),
+                            Rvalue::Use(inner_local),
+                        ));
+                        self.blocks[some_bb.0 as usize].terminator =
+                            Some(Terminator::Goto(merge_bb));
+
+                        self.current_block = merge_bb;
+                        out_local
+                    }
+                    _ => inner_local,
+                }
             }
             Expr::ListLiteral(elements, _) => {
                 let elem_ty = if let Some(Ty::List(inner)) = &self.current_expected_ty {

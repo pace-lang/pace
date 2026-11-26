@@ -2456,6 +2456,12 @@ impl TypeChecker {
                             _ => Err(format!("Map has no member '{}'", member)),
                         }
                     }
+                    Ty::Result(_, _) => {
+                        match member.as_str() {
+                            "isOk" | "isError" => Ok(Ty::Function(vec![], Box::new(Ty::Bool))),
+                            _ => Err(format!("Result has no member '{}'", member)),
+                        }
+                    }
                     _ => Err(format!(
                         "Cannot access member '{}' on type {}",
                         member,
@@ -2971,6 +2977,50 @@ impl TypeChecker {
                         return Err(format!("{} takes an int", name));
                     }
                     Ok(Ty::Future(Box::new(Ty::Void)))
+                } else if name == "ok" {
+                    if arg_types.len() > 1 {
+                        return Err("ok() takes 0 or 1 arguments".to_string());
+                    }
+                    let expected = self
+                        .current_expected_ty
+                        .as_ref()
+                        .or(self.current_return_ty.as_ref())
+                        .cloned();
+                    if let Some(Ty::Result(ok_ty, err_ty)) = expected {
+                        let actual_ok = arg_types.first().cloned().unwrap_or(Ty::Void);
+                        if actual_ok != *ok_ty {
+                            return Err(format!(
+                                "Type mismatch in ok(): expected {}, found {}",
+                                self.display_ty(&ok_ty),
+                                self.display_ty(&actual_ok)
+                            ));
+                        }
+                        Ok(Ty::Result(ok_ty, err_ty))
+                    } else {
+                        let val_ty = arg_types.first().cloned().unwrap_or(Ty::Void);
+                        Ok(Ty::Result(Box::new(val_ty), Box::new(Ty::Void)))
+                    }
+                } else if name == "error" {
+                    if arg_types.len() != 1 {
+                        return Err("error() takes exactly 1 argument".to_string());
+                    }
+                    let expected = self
+                        .current_expected_ty
+                        .as_ref()
+                        .or(self.current_return_ty.as_ref())
+                        .cloned();
+                    if let Some(Ty::Result(ok_ty, err_ty)) = expected {
+                        if arg_types[0] != *err_ty {
+                            return Err(format!(
+                                "Type mismatch in error(): expected {}, found {}",
+                                self.display_ty(&err_ty),
+                                self.display_ty(&arg_types[0])
+                            ));
+                        }
+                        Ok(Ty::Result(ok_ty, err_ty))
+                    } else {
+                        Ok(Ty::Result(Box::new(Ty::Void), Box::new(arg_types[0].clone())))
+                    }
                 } else {
                     Err(format!("Unknown builtin: {}", name))
                 }

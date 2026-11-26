@@ -1,0 +1,30 @@
+fn divide(a: int, b: int) -> Result<int, string> {
+    if b == 0 {
+        return error("division by zero")
+    }
+    return ok(a / b)
+}
+
+fn compute(a: int, b: int) -> Result<int, string> {
+    let q = divide(a, b)?
+    return ok(q + 10)
+}
+
+fn unwrapIntOpt(x: int?) -> int? {
+    let v: int = x?
+    return v + 1
+}
+
+fn main() {
+    let r1 = compute(20, 4)
+    assert(r1.isOk(), "compute(20, 4) should be ok")
+
+    let r2 = compute(20, 0)
+    assert(r2.isError(), "compute(20, 0) should propagate error")
+
+    let o1 = unwrapIntOpt(0)
+    assert((o1 ?? 99) == 1, "int? = 0 with ? should unwrap to 0 and return 1")
+
+    let o2 = unwrapIntOpt(null)
+    assert(o2 == null, "int? = null with ? should early-return null")
+}

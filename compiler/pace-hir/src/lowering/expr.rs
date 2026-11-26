@@ -72,7 +72,12 @@ impl LoweringContext {
             }),
             ast::Expr::Call { callee, args, span } => {
                 if let ast::Expr::Ident(ident, _) = &*callee
-                    && (ident.name == "print" || ident.name == "println" || ident.name == "sleep" || ident.name == "assert")
+                    && (ident.name == "print"
+                        || ident.name == "println"
+                        || ident.name == "sleep"
+                        || ident.name == "assert"
+                        || ident.name == "ok"
+                        || ident.name == "error")
                 {
                     let mut lowered_args = Vec::new();
                     for pace_ast::CallArg { expr: arg, .. } in args {

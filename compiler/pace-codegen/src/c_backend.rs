@@ -290,6 +290,25 @@ impl CGenerator {
         }
     }
 
+    fn emit_box_for_ptr(&self, local: pace_mir::Local, ty: &Ty) -> String {
+        let c_ty = self.emit_c_type(ty);
+        if c_ty == "void" {
+            "NULL".to_string()
+        } else if c_ty.contains('*') {
+            format!("(void*)_{}", local.0)
+        } else if Self::is_boxed_collection_ty(ty)
+            || Self::is_primitive_opt(ty).is_some()
+            || matches!(ty, Ty::Float | Ty::Result(_, _))
+        {
+            format!(
+                "memcpy(pace_alloc(sizeof({}), NULL), &_{}, sizeof({}))",
+                c_ty, local.0, c_ty
+            )
+        } else {
+            format!("(void*)(intptr_t)_{}", local.0)
+        }
+    }
+
     fn emit_c_type(&self, ty: &Ty) -> String {
         if let Some(opt_name) = Self::is_primitive_opt(ty) {
             return opt_name.to_string();
@@ -317,14 +336,7 @@ impl CGenerator {
                 }
             }
             Ty::Future(_) => "void*".to_string(),
-            Ty::Result(ok, _) => {
-                let ok_c = self.emit_c_type(ok);
-                if ok_c == "void" {
-                    "void*".to_string()
-                } else {
-                    ok_c
-                }
-            }
+            Ty::Result(_, _) => "PaceResult".to_string(),
             Ty::List(_) => "struct PaceList*".to_string(),
             Ty::Map(_, _) => "struct PaceMap*".to_string(),
             Ty::Void | Ty::Never => "void".to_string(),
@@ -360,14 +372,7 @@ impl CGenerator {
                     default_val
                 }
             }
-            Ty::Result(ok, _) => {
-                let default_val = self.emit_c_default_val(ok);
-                if default_val.is_empty() {
-                    "NULL".to_string()
-                } else {
-                    default_val
-                }
-            }
+            Ty::Result(_, _) => "{0, NULL, NULL}".to_string(),
             Ty::Void | Ty::Never => "".to_string(),
         }
     }
@@ -582,7 +587,19 @@ impl CGenerator {
                         if let Lvalue::Local(local) = lval {
                             let dest_ty = &locals[local.0 as usize];
                             if let Some(opt_name) = Self::is_primitive_opt(dest_ty) {
-                                if matches!(rval, Rvalue::ListGet(_, _) | Rvalue::MapGet(_, _))
+                                if matches!(rval, Rvalue::ResultOk(_)) {
+                                let c_dest_ty = self.emit_c_type(dest_ty);
+                                if c_dest_ty.contains('*') {
+                                    write!(&mut self.output, "({})", c_dest_ty).unwrap();
+                                } else if Self::is_boxed_collection_ty(dest_ty)
+                                    || Self::is_primitive_opt(dest_ty).is_some()
+                                    || matches!(dest_ty, Ty::Float | Ty::Result(_, _))
+                                {
+                                    write!(&mut self.output, "*({}*)", c_dest_ty).unwrap();
+                                } else {
+                                    write!(&mut self.output, "({})(intptr_t)", c_dest_ty).unwrap();
+                                }
+                            } else if matches!(rval, Rvalue::ListGet(_, _) | Rvalue::MapGet(_, _))
                                     || matches!(rval, Rvalue::BuiltinCall(name, _) if name == "pace_list_pop")
                                 {
                                     let helper = match opt_name {
@@ -636,7 +653,19 @@ impl CGenerator {
                                     }
                                 }
                             }
-                            if matches!(rval, Rvalue::ListGet(_, _) | Rvalue::MapGet(_, _))
+                            if matches!(rval, Rvalue::ResultOk(_)) {
+                                let c_dest_ty = self.emit_c_type(dest_ty);
+                                if c_dest_ty.contains('*') {
+                                    write!(&mut self.output, "({})", c_dest_ty).unwrap();
+                                } else if Self::is_boxed_collection_ty(dest_ty)
+                                    || Self::is_primitive_opt(dest_ty).is_some()
+                                    || matches!(dest_ty, Ty::Float | Ty::Result(_, _))
+                                {
+                                    write!(&mut self.output, "*({}*)", c_dest_ty).unwrap();
+                                } else {
+                                    write!(&mut self.output, "({})(intptr_t)", c_dest_ty).unwrap();
+                                }
+                            } else if matches!(rval, Rvalue::ListGet(_, _) | Rvalue::MapGet(_, _))
                                 || matches!(rval, Rvalue::BuiltinCall(name, _) if name == "pace_list_pop")
                             {
                                 let c_dest_ty = self.emit_c_type(dest_ty);
@@ -913,6 +942,18 @@ impl CGenerator {
                 } else if name == "pace_list_pop" {
                     write!(&mut self.output, "pace_list_pop(_{})", args[0].0).unwrap();
                     return;
+                } else if name == "ok" {
+                    if args.is_empty() {
+                        self.output.push_str("(PaceResult){1, NULL, NULL}");
+                    } else {
+                        let boxed = self.emit_box_for_ptr(args[0], &locals[args[0].0 as usize]);
+                        write!(&mut self.output, "(PaceResult){{1, {}, NULL}}", boxed).unwrap();
+                    }
+                    return;
+                } else if name == "error" {
+                    let boxed = self.emit_box_for_ptr(args[0], &locals[args[0].0 as usize]);
+                    write!(&mut self.output, "(PaceResult){{0, NULL, {}}}", boxed).unwrap();
+                    return;
                 } else if name == "assert" {
                     if args.len() == 1 {
                         write!(&mut self.output, "pace_assert(_{}, NULL)", args[0].0).unwrap();
@@ -1157,6 +1198,22 @@ impl CGenerator {
                     write!(&mut self.output, "pace_map_set_str(_{}, _{}, {})", map_local.0, key_local.0, val_cast).unwrap();
                 } else {
                     write!(&mut self.output, "pace_map_set_int(_{}, _{}, {})", map_local.0, key_local.0, val_cast).unwrap();
+                }
+            }
+            Rvalue::ResultIsOk(res) => {
+                write!(&mut self.output, "_{}.is_ok", res.0).unwrap();
+            }
+            Rvalue::ResultOk(res) => {
+                write!(&mut self.output, "_{}.value", res.0).unwrap();
+            }
+            Rvalue::ResultPropagateErr(res) => {
+                write!(&mut self.output, "(PaceResult){{0, NULL, _{}.error}}", res.0).unwrap();
+            }
+            Rvalue::OptionIsSome(opt) => {
+                if Self::is_primitive_opt(&locals[opt.0 as usize]).is_some() {
+                    write!(&mut self.output, "_{}.has_value", opt.0).unwrap();
+                } else {
+                    write!(&mut self.output, "(_{} != NULL)", opt.0).unwrap();
                 }
             }
         }

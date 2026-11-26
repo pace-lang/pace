@@ -61,6 +61,10 @@ pub enum Rvalue {
     MapNew(pace_ty::Ty, pace_ty::Ty),
     MapGet(Local, Local),
     MapSet(Local, Local, Local),
+    ResultIsOk(Local),
+    ResultOk(Local),
+    ResultPropagateErr(Local),
+    OptionIsSome(Local),
 }
 
 #[derive(Debug, Clone, PartialEq)]

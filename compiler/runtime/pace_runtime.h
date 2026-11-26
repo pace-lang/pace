@@ -27,6 +27,12 @@ struct PaceString {
     size_t length;
 };
 
+typedef struct PaceResult {
+    int is_ok;
+    void* value;
+    void* error;
+} PaceResult;
+
 struct PaceString* pace_string_new(const char* c_str);
 struct PaceString* pace_format_string(const char* fmt, ...);
 
