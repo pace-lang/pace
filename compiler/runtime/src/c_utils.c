@@ -10,8 +10,11 @@ void* pace_format_string(const char* fmt, ...) {
     va_start(args, fmt);
     int size = vsnprintf(NULL, 0, fmt, args);
     va_end(args);
-    
-    char* buf = (char*)malloc(size + 1);
+    if (size < 0) {
+        abort();
+    }
+
+    char* buf = (char*)malloc((size_t)size + 1);
     if (!buf) {
         // Fallback or panic
         abort();

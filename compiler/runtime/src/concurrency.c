@@ -101,9 +101,18 @@ static void fiber_trampoline(void (*func)(void*), void* arg, PaceFiber* fiber) {
     setcontext(&main_loop_ctx);
 }
 
+static void* pace_xmalloc(size_t size) {
+    void* ptr = malloc(size);
+    if (!ptr) {
+        fprintf(stderr, "Fatal error: out of memory in concurrency runtime\n");
+        abort();
+    }
+    return ptr;
+}
+
 void* pace_spawn_fiber(void (*func)(void*), void* arg) {
-    PaceFiber* fiber = (PaceFiber*)malloc(sizeof(PaceFiber));
-    fiber->stack = malloc(FIBER_STACK_SIZE);
+    PaceFiber* fiber = (PaceFiber*)pace_xmalloc(sizeof(PaceFiber));
+    fiber->stack = pace_xmalloc(FIBER_STACK_SIZE);
     fiber->is_done = 0;
     fiber->result = NULL;
     fiber->waiting_on = NULL;
@@ -269,8 +278,8 @@ static void fiber_sleep_trampoline(void* arg) {
 }
 
 void* pace_sleep(long long ms) {
-    PaceFiber* fiber = (PaceFiber*)malloc(sizeof(PaceFiber));
-    fiber->stack = malloc(FIBER_STACK_SIZE);
+    PaceFiber* fiber = (PaceFiber*)pace_xmalloc(sizeof(PaceFiber));
+    fiber->stack = pace_xmalloc(FIBER_STACK_SIZE);
     fiber->is_done = 0;
     fiber->result = NULL;
     fiber->waiting_on = NULL;
@@ -363,7 +372,7 @@ static void ensure_thread_pool_started(void) {
     if (worker_threads) return;
     size_t count = (configured_thread_count == 0) ? 4 : configured_thread_count;
     worker_count = count;
-    worker_threads = (pthread_t*)malloc(sizeof(pthread_t) * count);
+    worker_threads = (pthread_t*)pace_xmalloc(sizeof(pthread_t) * count);
     for (size_t i = 0; i < count; i++) {
         pthread_create(&worker_threads[i], NULL, worker_thread_main, NULL);
     }
@@ -372,7 +381,7 @@ static void ensure_thread_pool_started(void) {
 void* pace_send_actor_message(void* actor_ptr, void (*func)(void*), void* arg) {
     struct PaceActorBase* actor = (struct PaceActorBase*)actor_ptr;
     
-    PaceFiber* future = (PaceFiber*)malloc(sizeof(PaceFiber));
+    PaceFiber* future = (PaceFiber*)pace_xmalloc(sizeof(PaceFiber));
     future->stack = NULL;
     future->is_done = 0;
     future->result = NULL;
@@ -380,7 +389,7 @@ void* pace_send_actor_message(void* actor_ptr, void (*func)(void*), void* arg) {
     future->next = NULL;
     register_fiber(future);
 
-    struct PaceActorMessage* msg = (struct PaceActorMessage*)malloc(sizeof(struct PaceActorMessage));
+    struct PaceActorMessage* msg = (struct PaceActorMessage*)pace_xmalloc(sizeof(struct PaceActorMessage));
     msg->func = func;
     msg->arg = arg;
     msg->future = future;
@@ -402,7 +411,7 @@ void* pace_send_actor_message(void* actor_ptr, void (*func)(void*), void* arg) {
     pthread_mutex_unlock(&actor->mailbox_mutex);
     
     if (should_spawn) {
-        ThreadTask* task = (ThreadTask*)malloc(sizeof(ThreadTask));
+        ThreadTask* task = (ThreadTask*)pace_xmalloc(sizeof(ThreadTask));
         task->actor = actor;
         task->next = NULL;
         

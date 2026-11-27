@@ -1389,7 +1389,6 @@ fn annotation_hover_at(text: &str, offset: usize) -> Option<&'static str> {
         "override" => Some("`@override` — Marks a method as overriding a base class method."),
         "deprecated" => Some("`@deprecated(\"reason\")` — Marks a function, type, or method as deprecated."),
         "inline" => Some("`@inline` — Hints to the compiler to inline this function."),
-        "test" => Some("`@test` — Marks a function as a test entry point."),
         _ => None,
     }
 }
@@ -1399,7 +1398,6 @@ fn annotation_completions() -> Vec<CompletionItem> {
         ("override", "Override a method from a base class"),
         ("deprecated", "Mark a symbol as deprecated"),
         ("inline", "Hint to inline this function"),
-        ("test", "Mark a function as a test case"),
     ]
     .into_iter()
     .map(|(label, doc)| CompletionItem {
