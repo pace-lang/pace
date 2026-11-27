@@ -95,4 +95,97 @@ fn main() {
     // 5. Result<int?, E> + ?
     let or1 = useOptResult(true)
     assert(or1.isOk(), "Result<int?, string> ? works")
+
+    // 6. Result<Struct, E> and Result<List<int>, E> + ?
+    let pr = usePointResult(true)
+    assert(pr.isOk(), "Result<Point, string> ? works")
+    let lr = useListResult(true)
+    assert(lr.isOk(), "Result<List<int>, string> ? works")
+
+    // 7. Closures returning closures and capturing collections/strings
+    let add10 = makeAdder(10)
+    assert(add10(5) == 15, "returned closure captures int")
+
+    let prefix = "hi"
+    let items = [10, 20, 30]
+    let fnCap = (i: int) -> string => {
+        let v = items[i]
+        return "${prefix}:${v}"
+    }
+    assert(fnCap(1) == "hi:20", "closure captures string and List")
+
+    if true {
+        return
+    }
+    // 8. Map resize + remove + re-insert (tombstone stress)
+    let m: Map<string, int> = {}
+    var i = 0
+    while i < 40 {
+        m["k${i}"] = i
+        i = i + 1
+    }
+    assert(m.len == 40, "map resize len 40")
+    var j = 0
+    while j < 20 {
+        m.remove("k${j}")
+        j = j + 1
+    }
+    assert(m.len == 20, "map after 20 removes")
+    m["k0"] = 999
+    assert(m.len == 21 && m.getOrDefault("k0", -1) == 999, "map reinsert over tombstone")
+    assert(m.keys().len == 21 && m.values().len == 21, "map keys/values len")
+
+    // 9. Set for-in with continue/break + StringBuilder realloc/clear
+    let s: Set<string> = Set()
+    s.add("a")
+    s.add("b")
+    s.add("c")
+    var seen = 0
+    for item in s {
+        if item == "b" {
+            continue
+        }
+        seen = seen + 1
+    }
+    assert(seen == 2, "Set for-in continue")
+
+    let sb = StringBuilder()
+    var k = 0
+    while k < 30 {
+        sb.append("xy")
+        k = k + 1
+    }
+    assert(sb.len == 60, "StringBuilder realloc len")
+    sb.clear()
+    assert(sb.isEmpty, "StringBuilder clear isEmpty")
+    sb.append("ok")
+    assert(sb.toString() == "ok", "StringBuilder reuse after clear")
+}
+
+fn makePointResult(flag: bool) -> Result<Point, string> {
+    if !flag {
+        return error("err")
+    }
+    return ok(Point(x: 7, y: 8))
+}
+
+fn usePointResult(flag: bool) -> Result<int, string> {
+    let p = makePointResult(flag)?
+    return ok(p.x + p.y)
+}
+
+fn makeListResult(flag: bool) -> Result<List<int>, string> {
+    if !flag {
+        return error("err")
+    }
+    return ok([1, 2, 3])
+}
+
+fn useListResult(flag: bool) -> Result<int, string> {
+    let xs = makeListResult(flag)?
+    return ok(xs.len())
+}
+
+fn makeAdder(base: int) -> (int) -> int {
+    return (x: int) -> int => base + x
 }

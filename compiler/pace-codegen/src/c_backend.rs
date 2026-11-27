@@ -35,7 +35,7 @@ impl CGenerator {
         self.output.push_str("#ifndef _WIN32\n");
         self.output.push_str("#include <pthread.h>\n");
         self.output.push_str("#endif\n");
-        self.output.push_str("#include <math.h>\n#include <stdio.h>\n#include \"pace_runtime.h\"\n\n");
+        self.output.push_str("#include <math.h>\n#include <stdio.h>\n#include \"pace_runtime.h\"\n\nstatic inline void* pace_retain_ptr(void* p) { if (p) pace_retain(p); return p; }\n\n");
 
         self.output.push_str("typedef struct PaceClosure {\n");
         self.output.push_str("    void* func;\n");
@@ -288,6 +288,28 @@ impl CGenerator {
             }
         } else {
             None
+        }
+    }
+
+    fn is_refcounted_ptr(ty: &Ty) -> bool {
+        matches!(
+            ty,
+            Ty::Class(_)
+                | Ty::String
+                | Ty::List(_)
+                | Ty::Map(_, _)
+                | Ty::Set(_)
+                | Ty::StringBuilder
+                | Ty::Closure(_, _)
+                | Ty::Function(_, _)
+        )
+    }
+
+    fn emit_box_for_result(&self, local: pace_mir::Local, ty: &Ty) -> String {
+        if Self::is_refcounted_ptr(ty) {
+            format!("pace_retain_ptr((void*)_{})", local.0)
+        } else {
+            self.emit_box_for_ptr(local, ty)
         }
     }
 
@@ -1012,12 +1034,12 @@ impl CGenerator {
                     if args.is_empty() {
                         self.output.push_str("(PaceResult){1, NULL, NULL}");
                     } else {
-                        let boxed = self.emit_box_for_ptr(args[0], &locals[args[0].0 as usize]);
+                        let boxed = self.emit_box_for_result(args[0], &locals[args[0].0 as usize]);
                         write!(&mut self.output, "(PaceResult){{1, {}, NULL}}", boxed).unwrap();
                     }
                     return;
                 } else if name == "error" {
-                    let boxed = self.emit_box_for_ptr(args[0], &locals[args[0].0 as usize]);
+                    let boxed = self.emit_box_for_result(args[0], &locals[args[0].0 as usize]);
                     write!(&mut self.output, "(PaceResult){{0, NULL, {}}}", boxed).unwrap();
                     return;
                 } else if name == "assert" {

@@ -4,26 +4,53 @@ use pace_ty::{Ty, TypeChecker};
 use std::collections::HashMap;
 
 fn tc_get_type(tc: &TypeChecker, ty: &pace_ast::Type) -> Option<Ty> {
-    tc.get_type(ty).ok().or_else(|| {
-        if let pace_ast::Type::Named(id) = ty {
+    if let Ok(t) = tc.get_type(ty) {
+        return Some(t);
+    }
+    match ty {
+        pace_ast::Type::Named(id) => {
             let suffix = format!("_{}", id.name);
             for (mangled, &(hir_id, kind)) in &tc.named_types {
                 if mangled == id.name || mangled.ends_with(&suffix) {
-                    if kind == 1 {
-                        return Some(Ty::Class(hir_id));
-                    }
-                    if kind == 0 {
-                        return Some(Ty::Struct(hir_id));
-                    }
-                    if kind == 3 {
-                        return Some(Ty::Actor(hir_id));
-                    }
-                    return Some(Ty::Enum(hir_id));
+                    return Some(match kind {
+                        1 => Ty::Class(hir_id),
+                        0 => Ty::Struct(hir_id),
+                        3 => Ty::Actor(hir_id),
+                        _ => Ty::Enum(hir_id),
+                    });
                 }
             }
+            None
         }
-        None
-    })
+        pace_ast::Type::Optional(inner, _) => {
+            Some(Ty::Optional(Box::new(tc_get_type(tc, inner)?)))
+        }
+        pace_ast::Type::Generic(base, args, _) => {
+            if let pace_ast::Type::Named(id) = base.as_ref() {
+                match (id.name.as_str(), args.as_slice()) {
+                    ("Option", [a]) => Some(Ty::Optional(Box::new(tc_get_type(tc, a)?))),
+                    ("Result", [ok, err]) => Some(Ty::Result(
+                        Box::new(tc_get_type(tc, ok)?),
+                        Box::new(tc_get_type(tc, err)?),
+                    )),
+                    ("List", [elem]) => Some(Ty::List(Box::new(tc_get_type(tc, elem)?))),
+                    ("Map", [k, v]) => Some(Ty::Map(
+                        Box::new(tc_get_type(tc, k)?),
+                        Box::new(tc_get_type(tc, v)?),
+                    )),
+                    ("Set", [elem]) => Some(Ty::Set(Box::new(tc_get_type(tc, elem)?))),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
+        pace_ast::Type::Closure(params, ret, _) => {
+            let p_tys: Option<Vec<Ty>> = params.iter().map(|p| tc_get_type(tc, p)).collect();
+            let r_ty = tc_get_type(tc, ret)?;
+            Some(Ty::Function(p_tys?, Box::new(r_ty)))
+        }
+    }
 }
 
 
@@ -2862,7 +2889,9 @@ impl<'a> MirBuilder<'a> {
                         mir_params.push(local);
                     }
 
-                    let ret_ty = if let Some(rty) = return_type {
+                    let ret_ty = if let Some(Ty::Function(_, ret)) = tc.env.get(func_id) {
+                        *ret.clone()
+                    } else if let Some(rty) = return_type {
                         tc_get_type(tc, rty).unwrap_or(Ty::Void)
                     } else {
                         Ty::Void
