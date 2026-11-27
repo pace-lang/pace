@@ -183,7 +183,7 @@ fn makeListResult(flag: bool) -> Result<List<int>, string> {
 
 fn useListResult(flag: bool) -> Result<int, string> {
     let xs = makeListResult(flag)?
-    return ok(xs.len())
+    return ok(xs.len)
 }
 
 fn makeAdder(base: int) -> (int) -> int {

@@ -2479,7 +2479,7 @@ impl TypeChecker {
                     Ty::List(elem) => {
                         match member.as_str() {
                             "__iter" => Ok(Ty::Function(vec![], Box::new(Ty::List(elem.clone())))),
-                            "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
+                            "len" => Ok(Ty::Int),
                             "isEmpty" | "isNotEmpty" => Ok(Ty::Bool),
                             "first" | "last" => Ok(Ty::Optional(elem.clone())),
                             "push" | "add" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Void))),
@@ -2516,7 +2516,7 @@ impl TypeChecker {
                     Ty::Map(k, v) => {
                         match member.as_str() {
                             "__iter" => Ok(Ty::Function(vec![], Box::new(Ty::List(k.clone())))),
-                            "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
+                            "len" => Ok(Ty::Int),
                             "isEmpty" | "isNotEmpty" => Ok(Ty::Bool),
                             "set" => Ok(Ty::Function(vec![*k.clone(), *v.clone()], Box::new(Ty::Void))),
                             "get" => Ok(Ty::Function(vec![*k.clone()], Box::new(Ty::Optional(v.clone())))),
@@ -2537,7 +2537,7 @@ impl TypeChecker {
                         let set_ty = Ty::Set(elem.clone());
                         match member.as_str() {
                             "__iter" => Ok(Ty::Function(vec![], Box::new(Ty::List(elem.clone())))),
-                            "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
+                            "len" => Ok(Ty::Int),
                             "isEmpty" | "isNotEmpty" => Ok(Ty::Bool),
                             "add" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Bool))),
                             "has" | "contains" => Ok(Ty::Function(vec![*elem.clone()], Box::new(Ty::Bool))),
@@ -2551,7 +2551,7 @@ impl TypeChecker {
                         }
                     }
                     Ty::String => match member.as_str() {
-                        "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
+                        "len" => Ok(Ty::Int),
                         "isEmpty" | "isNotEmpty" => Ok(Ty::Bool),
                         "contains" | "startsWith" | "endsWith" => {
                             Ok(Ty::Function(vec![Ty::String], Box::new(Ty::Bool)))
@@ -2572,7 +2572,7 @@ impl TypeChecker {
                         _ => Err(format!("string has no member '{}'", member)),
                     },
                     Ty::StringBuilder => match member.as_str() {
-                        "len" => Ok(Ty::Function(vec![], Box::new(Ty::Int))),
+                        "len" => Ok(Ty::Int),
                         "isEmpty" | "isNotEmpty" => Ok(Ty::Bool),
                         "append" => Ok(Ty::Function(vec![Ty::String], Box::new(Ty::Void))),
                         "toString" => Ok(Ty::Function(vec![], Box::new(Ty::String))),
@@ -2673,6 +2673,17 @@ impl TypeChecker {
                                 generic_instantiation = Some(func_ty);
                             }
                         }
+                    }
+                } else if let Expr::MemberAccess { object, member, .. } = &**callee
+                    && member == "len"
+                    && args.is_empty()
+                {
+                    let obj_ty = self.check_expr(object)?;
+                    if matches!(
+                        obj_ty,
+                        Ty::List(_) | Ty::Map(_, _) | Ty::Set(_) | Ty::String | Ty::StringBuilder
+                    ) {
+                        return Ok(Ty::Int);
                     }
                 } else if let Expr::MemberAccess { object, member, .. } = &**callee
                     && (member == "map" || member == "reduce")
