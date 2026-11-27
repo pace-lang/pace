@@ -137,9 +137,6 @@ impl LoweringContext {
                         span: var.span,
                     });
 
-                    let lowered_body = self.lower_block(body)?;
-                    loop_stmts.extend(lowered_body.statements);
-
                     let inc_expr = Expr::Assign {
                         target: Box::new(Expr::Ident(idx_id, idx_sym, None, span)),
                         value: Box::new(Expr::Binary {
@@ -150,7 +147,11 @@ impl LoweringContext {
                         }),
                         span,
                     };
+                    // Increment before the user body so `continue` cannot skip advancing `__idx`.
                     loop_stmts.push(Stmt::ExprStmt(inc_expr, span));
+
+                    let lowered_body = self.lower_block(body)?;
+                    loop_stmts.extend(lowered_body.statements);
 
                     self.scope = loop_outer_scope;
 

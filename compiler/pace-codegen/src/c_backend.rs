@@ -636,19 +636,7 @@ impl CGenerator {
                         if let Lvalue::Local(local) = lval {
                             let dest_ty = &locals[local.0 as usize];
                             if let Some(opt_name) = Self::is_primitive_opt(dest_ty) {
-                                if matches!(rval, Rvalue::ResultOk(_)) {
-                                let c_dest_ty = self.emit_c_type(dest_ty);
-                                if c_dest_ty.contains('*') {
-                                    write!(&mut self.output, "({})", c_dest_ty).unwrap();
-                                } else if Self::is_boxed_collection_ty(dest_ty)
-                                    || Self::is_primitive_opt(dest_ty).is_some()
-                                    || matches!(dest_ty, Ty::Float | Ty::Result(_, _))
-                                {
-                                    write!(&mut self.output, "*({}*)", c_dest_ty).unwrap();
-                                } else {
-                                    write!(&mut self.output, "({})(intptr_t)", c_dest_ty).unwrap();
-                                }
-                            } else if matches!(rval, Rvalue::ListGet(_, _) | Rvalue::MapGet(_, _))
+                                if matches!(rval, Rvalue::ListGet(_, _) | Rvalue::MapGet(_, _))
                                     || matches!(rval, Rvalue::BuiltinCall(name, _) if name == "pace_list_pop" || name == "pace_list_remove_at")
                                 {
                                     let helper = match opt_name {

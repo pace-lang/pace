@@ -1,0 +1,98 @@
+struct Point {
+    x: int
+    y: int
+}
+
+enum Shape {
+    Circle(r: float),
+    Rect(p: Point),
+    Empty
+}
+
+fn unwrapOptResult(flag: bool) -> Result<int?, string> {
+    if !flag {
+        return error("bad")
+    }
+    let inner: int? = 42
+    return ok(inner)
+}
+
+fn useOptResult(flag: bool) -> Result<int?, string> {
+    let v = unwrapOptResult(flag)?
+    return ok(v)
+}
+
+fn floatResult(okFlag: bool) -> Result<float, string> {
+    if !okFlag {
+        return error("nope")
+    }
+    return ok(3.5)
+}
+
+fn useFloatResult(okFlag: bool) -> Result<float, string> {
+    let f = floatResult(okFlag)?
+    return ok(f * 2.0)
+}
+
+fn main() {
+    // 1. Result<float, E> + ?
+    let fr = useFloatResult(true)
+    assert(fr.isOk(), "float result is ok")
+
+    // 2. Empty collections & for-in break/continue
+    let emptyList: List<int> = []
+    assert(emptyList.isEmpty, "empty list isEmpty")
+    assert(!emptyList.isNotEmpty, "empty list !isNotEmpty")
+    assert(emptyList.slice(0, 5).len == 0, "empty list slice")
+    assert(emptyList.reversed().len == 0, "empty list reversed")
+    var emptyCount = 0
+    for item in emptyList {
+        emptyCount = emptyCount + item
+    }
+    assert(emptyCount == 0, "for-in on empty list runs 0 times")
+
+    let nums = [1, 2, 3, 4, 5]
+    var sum = 0
+    for n in nums {
+        if n == 2 {
+            continue
+        }
+        if n == 5 {
+            break
+        }
+        sum = sum + n
+    }
+    assert(sum == 1 + 3 + 4, "for-in continue and break")
+
+    // 3. String edge cases & % in interpolation
+    let pct = 100
+    let pctMsg = "${pct}% complete"
+    assert(pctMsg == "100% complete", "% in interpolated string")
+    let emptyStr = ""
+    assert(emptyStr.isEmpty, "empty string isEmpty")
+    assert(emptyStr.slice(-5, 100) == "", "empty string slice")
+    assert("abc".slice(-2, 99) == "abc", "clamped slice")
+    assert("a,b,".split(",").len == 3, "trailing delimiter split")
+    assert("hello".replace("xyz", "123") == "hello", "replace no match")
+
+    // 4. Enum match with float & struct payloads
+    let s1 = Shape.Circle(r: 2.5)
+    let area = match s1 {
+        Circle(r) => r * 2.0,
+        Rect(p) => 0.0,
+        Empty => 0.0
+    }
+    assert((area > 4.9) && (area < 5.1), "enum match float payload")
+
+    let s2 = Shape.Rect(p: Point(x: 3, y: 4))
+    let px = match s2 {
+        Circle(r) => 0,
+        Rect(p) => p.x + p.y,
+        Empty => -1
+    }
+    assert(px == 7, "enum match struct payload")
+
+    // 5. Result<int?, E> + ?
+    let or1 = useOptResult(true)
+    assert(or1.isOk(), "Result<int?, string> ? works")
+}

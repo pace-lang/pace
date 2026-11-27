@@ -604,32 +604,49 @@ impl<'a> MirBuilder<'a> {
 
                 let obj_local = self.build_expr(object);
                 let obj_ty = self.locals[obj_local.0 as usize].clone();
+                let len_fn = match &obj_ty {
+                    Ty::List(_) => Some("pace_list_len"),
+                    Ty::String => Some("pace_string_len"),
+                    Ty::StringBuilder => Some("pace_sb_len"),
+                    Ty::Map(_, _) => Some("pace_map_len"),
+                    Ty::Set(_) => Some("pace_set_len"),
+                    _ => None,
+                };
+                if let Some(fn_name) = len_fn {
+                    if member == "len" {
+                        let len_local = self.new_local(Ty::Int);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(len_local),
+                            Rvalue::BuiltinCall(fn_name.to_string(), vec![obj_local]),
+                        ));
+                        return len_local;
+                    }
+                    if member == "isEmpty" || member == "isNotEmpty" {
+                        let len_local = self.new_local(Ty::Int);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(len_local),
+                            Rvalue::BuiltinCall(fn_name.to_string(), vec![obj_local]),
+                        ));
+                        let zero = self.new_local(Ty::Int);
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(zero),
+                            Rvalue::Constant(Constant::Int("0".to_string())),
+                        ));
+                        let temp = self.new_local(Ty::Bool);
+                        let op = if member == "isEmpty" {
+                            pace_ast::BinaryOp::EqEq
+                        } else {
+                            pace_ast::BinaryOp::NotEq
+                        };
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(temp),
+                            Rvalue::BinaryOp(op, len_local, zero),
+                        ));
+                        return temp;
+                    }
+                }
                 if let Ty::List(elem_ty) = &obj_ty {
-                    match member.as_str() {
-                        "isEmpty" | "isNotEmpty" => {
-                            let len_local = self.new_local(Ty::Int);
-                            self.push_stmt(Statement::Assign(
-                                Lvalue::Local(len_local),
-                                Rvalue::BuiltinCall("pace_list_len".to_string(), vec![obj_local]),
-                            ));
-                            let zero = self.new_local(Ty::Int);
-                            self.push_stmt(Statement::Assign(
-                                Lvalue::Local(zero),
-                                Rvalue::Constant(Constant::Int("0".to_string())),
-                            ));
-                            let temp = self.new_local(Ty::Bool);
-                            let op = if member == "isEmpty" {
-                                pace_ast::BinaryOp::EqEq
-                            } else {
-                                pace_ast::BinaryOp::NotEq
-                            };
-                            self.push_stmt(Statement::Assign(
-                                Lvalue::Local(temp),
-                                Rvalue::BinaryOp(op, len_local, zero),
-                            ));
-                            return temp;
-                        }
-                        "first" | "last" => {
+                    if member == "first" || member == "last" {
                             let len_local = self.new_local(Ty::Int);
                             self.push_stmt(Statement::Assign(
                                 Lvalue::Local(len_local),
@@ -696,66 +713,6 @@ impl<'a> MirBuilder<'a> {
                                 Some(Terminator::Goto(merge_bb));
                             self.current_block = merge_bb;
                             return res;
-                        }
-                        _ => {}
-                    }
-                } else if let Ty::String | Ty::StringBuilder = &obj_ty {
-                    if member == "isEmpty" || member == "isNotEmpty" {
-                        let fn_name = if matches!(obj_ty, Ty::String) {
-                            "pace_string_len"
-                        } else {
-                            "pace_sb_len"
-                        };
-                        let len_local = self.new_local(Ty::Int);
-                        self.push_stmt(Statement::Assign(
-                            Lvalue::Local(len_local),
-                            Rvalue::BuiltinCall(fn_name.to_string(), vec![obj_local]),
-                        ));
-                        let zero = self.new_local(Ty::Int);
-                        self.push_stmt(Statement::Assign(
-                            Lvalue::Local(zero),
-                            Rvalue::Constant(Constant::Int("0".to_string())),
-                        ));
-                        let temp = self.new_local(Ty::Bool);
-                        let op = if member == "isEmpty" {
-                            pace_ast::BinaryOp::EqEq
-                        } else {
-                            pace_ast::BinaryOp::NotEq
-                        };
-                        self.push_stmt(Statement::Assign(
-                            Lvalue::Local(temp),
-                            Rvalue::BinaryOp(op, len_local, zero),
-                        ));
-                        return temp;
-                    }
-                } else if let Ty::Map(_, _) | Ty::Set(_) = &obj_ty {
-                    if member == "isEmpty" || member == "isNotEmpty" {
-                        let fn_name = if matches!(obj_ty, Ty::Map(_, _)) {
-                            "pace_map_len"
-                        } else {
-                            "pace_set_len"
-                        };
-                        let len_local = self.new_local(Ty::Int);
-                        self.push_stmt(Statement::Assign(
-                            Lvalue::Local(len_local),
-                            Rvalue::BuiltinCall(fn_name.to_string(), vec![obj_local]),
-                        ));
-                        let zero = self.new_local(Ty::Int);
-                        self.push_stmt(Statement::Assign(
-                            Lvalue::Local(zero),
-                            Rvalue::Constant(Constant::Int("0".to_string())),
-                        ));
-                        let temp = self.new_local(Ty::Bool);
-                        let op = if member == "isEmpty" {
-                            pace_ast::BinaryOp::EqEq
-                        } else {
-                            pace_ast::BinaryOp::NotEq
-                        };
-                        self.push_stmt(Statement::Assign(
-                            Lvalue::Local(temp),
-                            Rvalue::BinaryOp(op, len_local, zero),
-                        ));
-                        return temp;
                     }
                 }
                 let field_ty = match obj_ty {
