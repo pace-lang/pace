@@ -1,0 +1,13 @@
+import helper
+import helper as h
+
+fn main() {
+    assert(greet("pace") == "hello pace", "direct module import function")
+    assert(h.greet("world") == "hello world", "aliased module import function")
+    // TODO(bug): top-level `let`/`var` bindings from imported modules are not exported into module_scopes
+    // assert(moduleVersion == 5, "imported top-level let")
+    // assert(h.moduleVersion == 5, "aliased top-level let")
+
+    let cfg = Config(port: 8080)
+    assert(cfg.port == 8080, "imported struct")
+}

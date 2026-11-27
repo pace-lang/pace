@@ -1,0 +1,13 @@
+let moduleVersion = 5
+
+fn greet(name: string) -> string {
+    return "hello ${name}"
+}
+
+struct Config {
+    port: int
+}
+
+private fn secretHelper() -> int {
+    return 99
+}

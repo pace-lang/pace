@@ -34,6 +34,8 @@ fn main() {
             assertTrue(floor(3.9) > 2.99 && floor(3.9) < 3.01)
             assertTrue(ceil(3.1) > 3.99 && ceil(3.1) < 4.01)
             assertTrue(round(3.6) > 3.99 && round(3.6) < 4.01)
+            assertTrue(sin(0.0) > -0.01 && sin(0.0) < 0.01)
+            assertTrue(cos(0.0) > 0.99 && cos(0.0) < 1.01)
         })
 
         test("int helpers", () => {
@@ -70,6 +72,10 @@ fn main() {
         test("Directory and File read/write", () => {
             let res = checkIo()
             assertTrue(res.isOk())
+            assertFalse(File.exists("/tmp/pace_stdlib_test_dir"))
+            assertFalse(Directory.exists("/tmp/pace_stdlib_test_dir/hello.txt"))
+            let missing = File.readText("/tmp/pace_nonexistent_file_xyz_999.txt")
+            assertTrue(missing.isError())
         })
     })
 
