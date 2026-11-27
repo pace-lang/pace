@@ -35,7 +35,7 @@ impl CGenerator {
         self.output.push_str("#ifndef _WIN32\n");
         self.output.push_str("#include <pthread.h>\n");
         self.output.push_str("#endif\n");
-        self.output.push_str("#include \"pace_runtime.h\"\n\n");
+        self.output.push_str("#include <stdio.h>\n#include \"pace_runtime.h\"\n\n");
 
         self.output.push_str("typedef struct PaceClosure {\n");
         self.output.push_str("    void* func;\n");
@@ -587,6 +587,42 @@ impl CGenerator {
                         continue;
                     }
 
+                    let mut has_opt_buf = false;
+                    if let Rvalue::BuiltinCall(name, args) = rval {
+                        if name == "interpolate_string" {
+                            let mut seen = std::collections::HashSet::new();
+                            for arg in args {
+                                if !seen.insert(arg.0) {
+                                    continue;
+                                }
+                                let raw_ty = &locals[arg.0 as usize];
+                                if Self::is_primitive_opt(raw_ty).is_some() {
+                                    if let Ty::Optional(inner) = raw_ty {
+                                        if matches!(inner.as_ref(), Ty::Int | Ty::Float) {
+                                            if !has_opt_buf {
+                                                self.output.push_str("    {\n");
+                                                has_opt_buf = true;
+                                            }
+                                            if matches!(inner.as_ref(), Ty::Int) {
+                                                writeln!(
+                                                    &mut self.output,
+                                                    "    char __opt_buf_{}[64]; if (_{}.has_value) snprintf(__opt_buf_{}, sizeof(__opt_buf_{}), \"%lld\", (long long)_{}.value); else snprintf(__opt_buf_{}, sizeof(__opt_buf_{}), \"null\");",
+                                                    arg.0, arg.0, arg.0, arg.0, arg.0, arg.0, arg.0
+                                                ).unwrap();
+                                            } else {
+                                                writeln!(
+                                                    &mut self.output,
+                                                    "    char __opt_buf_{}[64]; if (_{}.has_value) snprintf(__opt_buf_{}, sizeof(__opt_buf_{}), \"%f\", _{}.value); else snprintf(__opt_buf_{}, sizeof(__opt_buf_{}), \"null\");",
+                                                    arg.0, arg.0, arg.0, arg.0, arg.0, arg.0, arg.0
+                                                ).unwrap();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if !is_void {
                         self.generate_lvalue(lval, locals);
                         self.output.push_str(" = ");
@@ -695,6 +731,9 @@ impl CGenerator {
 
                     self.generate_rvalue(rval, locals);
                     self.output.push_str(";\n");
+                    if has_opt_buf {
+                        self.output.push_str("    }\n");
+                    }
                 }
                 Statement::Retain(lval) => {
                     self.output.push_str("    pace_retain(");
@@ -921,11 +960,21 @@ impl CGenerator {
                             ty = inner;
                         }
                         if matches!(ty, Ty::Int) {
-                            format_str.push_str("%lld");
-                            type_args.push(val_expr);
+                            if is_prim_opt {
+                                format_str.push_str("%s");
+                                type_args.push(format!("__opt_buf_{}", arg.0));
+                            } else {
+                                format_str.push_str("%lld");
+                                type_args.push(val_expr);
+                            }
                         } else if matches!(ty, Ty::Float) {
-                            format_str.push_str("%f");
-                            type_args.push(val_expr);
+                            if is_prim_opt {
+                                format_str.push_str("%s");
+                                type_args.push(format!("__opt_buf_{}", arg.0));
+                            } else {
+                                format_str.push_str("%f");
+                                type_args.push(val_expr);
+                            }
                         } else if matches!(ty, Ty::String) {
                             format_str.push_str("%s");
                             type_args.push(format!("(_{} ? _{}->data : \"null\")", arg.0, arg.0));
@@ -995,7 +1044,7 @@ impl CGenerator {
                         };
                         write!(
                             &mut self.output,
-                            "(_{}.has_value ? {}(_{}.value) : pace_print_string(pace_string_new(\"null\")))",
+                            "if (_{}.has_value) {{ {}(_{}.value); }} else {{ struct PaceString* __tmp_null = pace_string_new(\"null\"); pace_print_string(__tmp_null); pace_release(__tmp_null); }}",
                             args[0].0, inner_fn, args[0].0
                         )
                         .unwrap();

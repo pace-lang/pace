@@ -33,4 +33,14 @@ fn main() {
     let d2 = maybeDouble(21)
     assert(d1 == null, "null propagates through ?")
     assert((d2 ?? 0) == 42, "present value unwraps through ?")
+
+    // Primitive optional interpolation
+    let oiNull: int? = null
+    let oiVal: int? = 42
+    let ofNull: float? = null
+    let obNull: bool? = null
+    assert("$oiNull" == "null", "null int? interpolates as null")
+    assert("$oiVal" == "42", "present int? interpolates as 42")
+    assert("$ofNull" == "null", "null float? interpolates as null")
+    assert("$obNull" == "null", "null bool? interpolates as null")
 }
