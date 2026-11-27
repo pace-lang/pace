@@ -1,0 +1,33 @@
+struct Point {
+    x: int
+    y: int
+}
+
+fn main() {
+    let words = ["a", "bb", "ccc", "dddd"]
+    let lens = words.map((s: string) -> int => s.len)
+    assert(lens.len == 4 && lens[2] == 3, "List<string>.map -> List<int>")
+
+    let nums = [1, 2, 3, 4, 5, 6]
+    let labels = nums
+        .filter((n: int) -> bool => n % 2 == 0)
+        .map((n: int) -> string => "n=${n}")
+    assert(labels.len == 3 && labels[0] == "n=2" && labels[2] == "n=6", "filter().map() chaining")
+
+    let sum = nums.reduce(0, (acc: int, x: int) -> int => acc + x)
+    assert(sum == 21, "List.reduce")
+    assert(nums.any((x: int) -> bool => x > 5), "List.any true")
+    assert(!nums.every((x: int) -> bool => x < 6), "List.every false")
+
+    let missing = nums.find((x: int) -> bool => x > 100)
+    let found = nums.find((x: int) -> bool => x > 4)
+    assert(missing == null, "List.find missing")
+    assert((found ?? 0) == 5, "List.find present")
+
+    let pts: List<Point> = [Point(x: 1, y: 2), Point(x: 3, y: 4)]
+    var ptSum = 0
+    for p in pts {
+        ptSum = ptSum + p.x + p.y
+    }
+    assert(ptSum == 10, "List<Struct> for-in")
+}

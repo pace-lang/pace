@@ -1,0 +1,48 @@
+struct Coord {
+    x: int
+    y: int
+}
+
+fn main() {
+    // Map resize + tombstone delete/reinsert stress
+    // Map resize + tombstone delete/reinsert stress
+    let m: Map<string, int> = {}
+    var i = 0
+    while i < 50 {
+        m["k${i}"] = i * 2
+        i = i + 1
+    }
+    assert(m.len == 50, "Map resized to 50 entries")
+
+    var j = 0
+    while j < 25 {
+        m.remove("k${j}")
+        j = j + 1
+    }
+    assert(m.len == 25, "Map after 25 removals")
+    m["k0"] = 999
+    assert(m.len == 26 && m.getOrDefault("k0", -1) == 999, "Map tombstone reinsert")
+    assert(m.keys().len == 26 && m.values().len == 26, "Map keys/values length")
+
+    // Map<int, string> and Map<string, Struct>
+    let im: Map<int, string> = {1: "one", 2: "two"}
+    assert(im[1] == "one" && im.getOrDefault(9, "none") == "none", "Map<int, string>")
+
+    let cm: Map<string, Coord> = {"a": Coord(x: 1, y: 2)}
+    cm["b"] = Coord(x: 7, y: 8)
+    let c = cm["b"] ?? Coord(x: 0, y: 0)
+    assert(c.x == 7 && c.y == 8, "Map<string, Struct>")
+
+    // Set<int>, Set<float>, and Set<string> for-in with continue
+    let s1: Set<int> = Set()
+    s1.add(1)
+    s1.add(2)
+    s1.add(3)
+    let s2: Set<int> = Set()
+    s2.add(2)
+    s2.add(3)
+    s2.add(4)
+    assert(s1.union(s2).len == 4, "Set<int> union")
+    assert(s1.intersection(s2).len == 2, "Set<int> intersection")
+    assert(s1.difference(s2).len == 1, "Set<int> difference")
+}

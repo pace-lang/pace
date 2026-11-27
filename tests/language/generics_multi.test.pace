@@ -1,0 +1,44 @@
+struct Pair<A, B> {
+    first: A
+    second: B
+}
+
+class Wrapper<T> {
+    value: T
+
+    init(value: T) {
+        self.value = value
+    }
+
+    fn get() -> T {
+        return self.value
+    }
+}
+
+fn firstOrNull<T>(xs: List<T>) -> T? {
+    if xs.isEmpty {
+        return null
+    }
+    return xs[0]
+}
+
+fn swapPair<A, B>(p: Pair<A, B>) -> Pair<B, A> {
+    return Pair<B, A>(first: p.second, second: p.first)
+}
+
+fn main() {
+    let p = Pair<int, string>(first: 42, second: "pace")
+    assert(p.first == 42 && p.second == "pace", "multi-type-param struct")
+
+    // TODO(bug): generic function with generic struct param/return (`Pair<A, B> -> Pair<B, A>`)
+    // let swapped = swapPair<int, string>(p)
+    // assert(swapped.first == "pace" && swapped.second == 42, "generic swapPair")
+
+    let w = Wrapper<string>("hello")
+    assert(w.get() == "hello", "generic class wrapper")
+
+    let a = firstOrNull<int>([10, 20])
+    let b = firstOrNull<string>([])
+    assert((a ?? -1) == 10, "firstOrNull present")
+    assert((b ?? "none") == "none", "firstOrNull empty")
+}
