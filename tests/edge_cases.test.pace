@@ -194,6 +194,65 @@ fn main() {
     // 13. String escaping (\n, \t, \", \\)
     let esc = "a\tb\nc\"d\\e"
     assert(esc.contains("\t") && esc.contains("\n") && esc.contains("\"") && esc.contains("\\"), "string escapes")
+
+    // 14. List<float> pop/first/last/slice + List<bool>
+    let fl = [1.5, 2.5, 3.5]
+    assert((fl.first ?? 0.0) > 1.4 && (fl.last ?? 0.0) > 3.4, "List<float> first/last")
+    let poppedF = fl.pop() ?? 0.0
+    assert(poppedF > 3.4 && poppedF < 3.6 && fl.len == 2, "List<float> pop")
+
+    let bl = [true, false, true]
+    assert(bl.contains(false) && !(bl.last ?? false) == false, "List<bool> contains/last")
+
+    // 15. Set<int> operations + for-in
+    let si1: Set<int> = Set()
+    si1.add(1)
+    si1.add(2)
+    si1.add(3)
+    let si2: Set<int> = Set()
+    si2.add(2)
+    si2.add(3)
+    si2.add(4)
+    let u = si1.union(si2)
+    let inter = si1.intersection(si2)
+    let diff = si1.difference(si2)
+    assert(u.len == 4 && inter.len == 2 && diff.len == 1, "Set<int> union/intersection/difference")
+    assert(diff.has(1) && !diff.has(2), "Set<int> difference contents")
+
+    // 16. match returning String and Struct
+    let mStr = match Shape.Circle(r: 1.0) {
+        Circle(r) => "circle",
+        Rect(p) => "rect",
+        Empty => "empty"
+    }
+    assert(mStr == "circle", "match returning string")
+
+    let mPt = match Shape.Empty {
+        Circle(r) => Point(x: 1, y: 1),
+        Rect(p) => p,
+        Empty => Point(x: 9, y: 8)
+    }
+    assert(mPt.x == 9 && mPt.y == 8, "match returning struct")
+
+    // 17. Recursive function + while continue
+    assert(fib(7) == 13, "recursive fib")
+    var wi = 0
+    var wsum = 0
+    while wi < 5 {
+        wi = wi + 1
+        if wi == 3 {
+            continue
+        }
+        wsum = wsum + wi
+    }
+    assert(wsum == 1 + 2 + 4 + 5, "while with continue")
+}
+
+fn fib(n: int) -> int {
+    if n <= 1 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
 }
 
 fn makePointResult(flag: bool) -> Result<Point, string> {

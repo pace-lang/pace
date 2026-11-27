@@ -2093,13 +2093,11 @@ impl TypeChecker {
                     if let Some(args) = generic_args && args.len() == 1 {
                         let inner = self.resolve_type(&args[0])?;
                         let inst_ty = Ty::List(Box::new(inner));
-                        self.env.insert(*id, inst_ty.clone());
                         self.local_types.insert(*id, inst_ty.clone());
                         return Ok(inst_ty);
                     }
                     if let Some(Ty::List(inner)) = &self.current_expected_ty {
                         let inst_ty = Ty::List(inner.clone());
-                        self.env.insert(*id, inst_ty.clone());
                         self.local_types.insert(*id, inst_ty.clone());
                         return Ok(inst_ty);
                     }
@@ -2109,13 +2107,11 @@ impl TypeChecker {
                         let k = self.resolve_type(&args[0])?;
                         let v = self.resolve_type(&args[1])?;
                         let inst_ty = Ty::Map(Box::new(k), Box::new(v));
-                        self.env.insert(*id, inst_ty.clone());
                         self.local_types.insert(*id, inst_ty.clone());
                         return Ok(inst_ty);
                     }
                     if let Some(Ty::Map(k, v)) = &self.current_expected_ty {
                         let inst_ty = Ty::Map(k.clone(), v.clone());
-                        self.env.insert(*id, inst_ty.clone());
                         self.local_types.insert(*id, inst_ty.clone());
                         return Ok(inst_ty);
                     }
@@ -2124,13 +2120,11 @@ impl TypeChecker {
                     if let Some(args) = generic_args && args.len() == 1 {
                         let inner = self.resolve_type(&args[0])?;
                         let inst_ty = Ty::Set(Box::new(inner));
-                        self.env.insert(*id, inst_ty.clone());
                         self.local_types.insert(*id, inst_ty.clone());
                         return Ok(inst_ty);
                     }
                     if let Some(Ty::Set(inner)) = &self.current_expected_ty {
                         let inst_ty = Ty::Set(inner.clone());
-                        self.env.insert(*id, inst_ty.clone());
                         self.local_types.insert(*id, inst_ty.clone());
                         return Ok(inst_ty);
                     }

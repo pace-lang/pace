@@ -1010,7 +1010,7 @@ impl<'a> MirBuilder<'a> {
                         if ty_opt.is_none() {
                             ty_opt = self.local_types.get(id).cloned();
                         }
-                        if let Some(ty) = ty_opt.filter(|_| is_type_name) {
+                        if let Some(ty) = ty_opt.filter(|t| is_type_name || matches!(t, Ty::Enum(_))) {
                             if matches!(ty, Ty::Struct(_) | Ty::Class(_)) {
                                 let mut type_name = "";
                                 let nid = match ty {
@@ -2123,7 +2123,8 @@ impl<'a> MirBuilder<'a> {
             }
             Expr::Match { subject, arms, .. } => {
                 let subject_local = self.build_expr(subject);
-                let temp = self.new_local(Ty::Int); // MVP return Ty
+                let mut temp_ty = self.current_expected_ty.clone().unwrap_or(Ty::Void);
+                let temp = self.new_local(temp_ty.clone());
 
                 let tag_local = self.new_local(Ty::Int);
                 self.push_stmt(Statement::Assign(
@@ -2175,6 +2176,10 @@ impl<'a> MirBuilder<'a> {
                                 Some(Terminator::Goto(body_bb));
                             self.current_block = body_bb;
                             let arm_local = self.build_expr(&arm.body);
+                            if temp_ty == Ty::Void {
+                                temp_ty = self.locals[arm_local.0 as usize].clone();
+                                self.locals[temp.0 as usize] = temp_ty.clone();
+                            }
                             self.push_stmt(Statement::Assign(
                                 Lvalue::Local(temp),
                                 Rvalue::Use(arm_local),
@@ -2195,6 +2200,10 @@ impl<'a> MirBuilder<'a> {
                             Some(Terminator::Goto(body_bb));
                         self.current_block = body_bb;
                         let arm_local = self.build_expr(&arm.body);
+                        if temp_ty == Ty::Void {
+                            temp_ty = self.locals[arm_local.0 as usize].clone();
+                            self.locals[temp.0 as usize] = temp_ty.clone();
+                        }
                         self.push_stmt(Statement::Assign(
                             Lvalue::Local(temp),
                             Rvalue::Use(arm_local),
@@ -2259,6 +2268,10 @@ impl<'a> MirBuilder<'a> {
                     }
 
                     let arm_local = self.build_expr(&arm.body);
+                    if temp_ty == Ty::Void {
+                        temp_ty = self.locals[arm_local.0 as usize].clone();
+                        self.locals[temp.0 as usize] = temp_ty.clone();
+                    }
                     self.push_stmt(Statement::Assign(
                         Lvalue::Local(temp),
                         Rvalue::Use(arm_local),
