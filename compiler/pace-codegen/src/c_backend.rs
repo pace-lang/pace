@@ -35,7 +35,7 @@ impl CGenerator {
         self.output.push_str("#ifndef _WIN32\n");
         self.output.push_str("#include <pthread.h>\n");
         self.output.push_str("#endif\n");
-        self.output.push_str("#include <stdio.h>\n#include \"pace_runtime.h\"\n\n");
+        self.output.push_str("#include <math.h>\n#include <stdio.h>\n#include \"pace_runtime.h\"\n\n");
 
         self.output.push_str("typedef struct PaceClosure {\n");
         self.output.push_str("    void* func;\n");
@@ -833,7 +833,11 @@ impl CGenerator {
                     write!(&mut self.output, "_{} || _{}", lhs.0, rhs.0).unwrap();
                 } else {
                     let is_string = matches!(locals[lhs.0 as usize], Ty::String)
-                        || matches!(locals[rhs.0 as usize], Ty::String);
+                        || matches!(locals[rhs.0 as usize], Ty::String)
+                        || matches!(&locals[lhs.0 as usize], Ty::Optional(inner) if matches!(inner.as_ref(), Ty::String))
+                        || matches!(&locals[rhs.0 as usize], Ty::Optional(inner) if matches!(inner.as_ref(), Ty::String));
+                    let is_float = matches!(locals[lhs.0 as usize], Ty::Float)
+                        || matches!(locals[rhs.0 as usize], Ty::Float);
                     let lhs_opt = Self::is_primitive_opt(&locals[lhs.0 as usize]).is_some();
                     let rhs_opt = Self::is_primitive_opt(&locals[rhs.0 as usize]).is_some();
                     let lhs_null = matches!(&locals[lhs.0 as usize], Ty::Optional(inner) if **inner == Ty::Void);
@@ -866,6 +870,8 @@ impl CGenerator {
                         write!(&mut self.output, "pace_string_equals(_{}, _{})", lhs.0, rhs.0).unwrap();
                     } else if is_string && matches!(op, BinaryOp::NotEq) {
                         write!(&mut self.output, "!pace_string_equals(_{}, _{})", lhs.0, rhs.0).unwrap();
+                    } else if is_float && matches!(op, BinaryOp::Mod) {
+                        write!(&mut self.output, "fmod(_{}, _{})", lhs.0, rhs.0).unwrap();
                     } else {
                         let op_str = match op {
                             BinaryOp::Add => "+",

@@ -43,4 +43,13 @@ fn main() {
     assert("$oiVal" == "42", "present int? interpolates as 42")
     assert("$ofNull" == "null", "null float? interpolates as null")
     assert("$obNull" == "null", "null bool? interpolates as null")
+
+    // Optional string content equality
+    let tag = "pace"
+    let os1: string? = "hello ${tag}"
+    let os2: string? = "hello pace"
+    let os3: string? = null
+    assert(os1 == os2, "string? == string? compares by content")
+    assert(os1 != os3, "string? != null compares properly")
+    assert(os3 == null, "null string? == null")
 }

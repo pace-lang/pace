@@ -29,6 +29,8 @@ fn main() {
     let f = 1.5 + 2.5 * 2.0
     assert((f > 6.4) && (f < 6.6), "float precedence")
     assert((7.5 / 2.5 > 2.9) && (7.5 / 2.5 < 3.1), "float division")
+    let fmodRes = 7.5 % 2.0
+    assert((fmodRes > 1.4) && (fmodRes < 1.6), "float modulo")
 
     // Comparisons
     assert(5 > 3 && 3 >= 3, "gt and gte")
