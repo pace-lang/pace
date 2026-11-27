@@ -667,7 +667,7 @@ impl CGenerator {
                                         _ => "pace_opt_int_from_ptr",
                                     };
                                     write!(&mut self.output, "{}(", helper).unwrap();
-                                    self.generate_rvalue(rval, locals);
+                                    self.generate_rvalue(rval, locals, None);
                                     self.output.push_str(");\n");
                                     continue;
                                 } else if let Rvalue::Use(src) = rval {
@@ -681,7 +681,7 @@ impl CGenerator {
                                     }
                                 } else if matches!(rval, Rvalue::Constant(_)) {
                                     write!(&mut self.output, "({}){{1, ", opt_name).unwrap();
-                                    self.generate_rvalue(rval, locals);
+                                    self.generate_rvalue(rval, locals, None);
                                     self.output.push_str("};\n");
                                     continue;
                                 }
@@ -739,7 +739,12 @@ impl CGenerator {
                         }
                     }
 
-                    self.generate_rvalue(rval, locals);
+                    let dest_ty = if let Lvalue::Local(l) = lval {
+                        Some(&locals[l.0 as usize])
+                    } else {
+                        None
+                    };
+                    self.generate_rvalue(rval, locals, dest_ty);
                     self.output.push_str(";\n");
                     if has_opt_buf {
                         self.output.push_str("    }\n");
@@ -784,7 +789,7 @@ impl CGenerator {
         }
     }
 
-    fn generate_rvalue(&mut self, rvalue: &Rvalue, locals: &[Ty]) {
+    fn generate_rvalue(&mut self, rvalue: &Rvalue, locals: &[Ty], dest_ty: Option<&Ty>) {
         match rvalue {
             Rvalue::Use(local) => write!(&mut self.output, "_{}", local.0).unwrap(),
             Rvalue::UnaryOp(op, local) => match op {
@@ -796,12 +801,13 @@ impl CGenerator {
             Rvalue::Constant(Constant::Bool(val)) => {
                 write!(&mut self.output, "{}", if *val { "1" } else { "0" }).unwrap()
             }
-            Rvalue::Constant(Constant::String(val)) => write!(
-                &mut self.output,
-                "pace_string_new(\"{}\")",
-                val.trim_matches('"')
-            )
-            .unwrap(),
+            Rvalue::Constant(Constant::String(val)) => {
+                let unquoted = val
+                    .strip_prefix('"')
+                    .and_then(|s| s.strip_suffix('"'))
+                    .unwrap_or(val);
+                write!(&mut self.output, "pace_string_new(\"{}\")", unquoted).unwrap();
+            }
             Rvalue::BinaryOp(op, lhs, rhs) => {
                 if matches!(op, BinaryOp::NullCoalesce) {
                     if Self::is_primitive_opt(&locals[lhs.0 as usize]).is_some() {
@@ -902,22 +908,36 @@ impl CGenerator {
                 }
             }
             Rvalue::OptionalFieldAccess(obj, field) => {
-                let is_ptr = matches!(locals[obj.0 as usize], Ty::Class(_) | Ty::Optional(_));
-                if is_ptr {
-                    write!(
-                        &mut self.output,
-                        "_{} != 0 ? _{}->{} : 0",
-                        obj.0, obj.0, field
-                    )
-                    .unwrap();
+                let obj_ty = &locals[obj.0 as usize];
+                let access = if matches!(obj_ty, Ty::Class(_) | Ty::Optional(_)) {
+                    format!("_{}->{}", obj.0, field)
                 } else {
-                    write!(
-                        &mut self.output,
-                        "_{} != 0 ? _{}.{} : 0",
-                        obj.0, obj.0, field
-                    )
-                    .unwrap(); // assuming structs might be checked for 0? Not really safe in C, but works for pointer MVP
+                    format!("_{}.{}", obj.0, field)
+                };
+                if let Some(dty) = dest_ty {
+                    if let Some(opt_name) = Self::is_primitive_opt(dty) {
+                        write!(
+                            &mut self.output,
+                            "(_{} != NULL ? ({}){{1, {}}} : ({}){{0, 0}})",
+                            obj.0, opt_name, access, opt_name
+                        )
+                        .unwrap();
+                        return;
+                    }
+                    if let Ty::Optional(inner) = dty {
+                        if Self::is_boxed_collection_ty(inner) {
+                            let c_fty = self.emit_c_type(inner);
+                            write!(
+                                &mut self.output,
+                                "(_{} != NULL ? ({}*)memcpy(pace_alloc(sizeof({}), NULL), &({}), sizeof({})) : NULL)",
+                                obj.0, c_fty, c_fty, access, c_fty
+                            )
+                            .unwrap();
+                            return;
+                        }
+                    }
                 }
+                write!(&mut self.output, "(_{} != NULL ? {} : NULL)", obj.0, access).unwrap();
             }
             Rvalue::Call(callee, args) => {
                 let callee_ty = &locals[callee.0 as usize];

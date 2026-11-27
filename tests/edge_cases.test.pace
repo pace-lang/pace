@@ -160,6 +160,40 @@ fn main() {
     assert(sb.isEmpty, "StringBuilder clear isEmpty")
     sb.append("ok")
     assert(sb.toString() == "ok", "StringBuilder reuse after clear")
+
+    // 10. Optional Struct (Point?) and Optional List (List<int>?)
+    let op1: Point? = null
+    let op2: Point? = Point(x: 9, y: 1)
+    assert((op1?.x ?? -1) == -1, "null Point?.x ?? -1")
+    assert((op2?.x ?? -1) == 9, "present Point?.x ?? -1")
+    let op3: Point = op1 ?? Point(x: 4, y: 5)
+    assert(op3.x == 4 && op3.y == 5, "Point? ?? Point")
+
+    let ol1: List<int>? = null
+    let ol2: List<int>? = [7, 8]
+    assert((ol1 ?? [1]).len == 1, "null List<int>? ?? [1]")
+    assert((ol2 ?? [1]).len == 2, "present List<int>? ?? [1]")
+
+    // 11. Higher-order List chaining + find returning int?
+    let baseNums = [1, 2, 3, 4, 5]
+    let mappedStrs = baseNums.filter((n: int) -> bool => n % 2 == 1).map((n: int) -> string => "n=${n}")
+    assert(mappedStrs.len == 3 && mappedStrs[1] == "n=3", "filter().map() int->string")
+    let foundNone = baseNums.find((n: int) -> bool => n > 100)
+    let foundSome = baseNums.find((n: int) -> bool => n > 3)
+    assert(foundNone == null, "find missing returns null")
+    assert((foundSome ?? 0) == 4, "find present returns 4")
+
+    // 12. Map<int, string> & Map<string, Point>
+    let intMap: Map<int, string> = {1: "one", 2: "two"}
+    assert(intMap[1] == "one" && intMap.getOrDefault(99, "none") == "none", "Map<int, string>")
+    let ptMap: Map<string, Point> = {"origin": Point(x: 0, y: 0)}
+    ptMap["p"] = Point(x: 11, y: 22)
+    let gotPt = ptMap["p"] ?? Point(x: 0, y: 0)
+    assert(gotPt.x == 11 && gotPt.y == 22, "Map<string, Point>")
+
+    // 13. String escaping (\n, \t, \", \\)
+    let esc = "a\tb\nc\"d\\e"
+    assert(esc.contains("\t") && esc.contains("\n") && esc.contains("\"") && esc.contains("\\"), "string escapes")
 }
 
 fn makePointResult(flag: bool) -> Result<Point, string> {
