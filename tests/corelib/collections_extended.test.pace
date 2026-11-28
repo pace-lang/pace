@@ -133,4 +133,22 @@ fn main() {
         }
     }
     assert(keyCount == 2, "for-in Map keys")
+
+    // 7. float boxing in List<float> and Map<string, float>
+    var fl = List<float>()
+    fl.push(1.5)
+    fl.push(2.75)
+    assert(fl[0] == 1.5, "List<float> index 0")
+    assert(fl[1] == 2.75, "List<float> index 1")
+    fl[0] = 3.25
+    assert(fl[0] == 3.25, "List<float> set")
+    let poppedFloat = fl.pop()
+    assert(poppedFloat != null && (poppedFloat ?? 0.0) == 2.75, "List<float> pop")
+
+    var fm = Map<string, float>()
+    fm["pi"] = 3.14159
+    fm["half"] = 0.5
+    let gotPi = fm.get("pi")
+    assert(gotPi != null && (gotPi ?? 0.0) == 3.14159, "Map<string, float> get")
+    assert(fm["half"] == 0.5, "Map<string, float> index")
 }

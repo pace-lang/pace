@@ -213,6 +213,7 @@ impl Formatter {
                 return_type,
                 body,
                 is_static,
+                is_async,
                 is_private,
                 annotations,
                 ..
@@ -241,6 +242,9 @@ impl Formatter {
                 }
                 if *is_static {
                     self.write("static ");
+                }
+                if *is_async {
+                    self.write("async ");
                 }
                 self.write("fn ");
                 self.write(&name.name);
@@ -810,7 +814,26 @@ impl Formatter {
             Expr::Binary {
                 left, op, right, ..
             } => {
-                self.format_expr(left);
+                let prec = Self::binary_precedence(*op);
+                let left_paren = match left.as_ref() {
+                    Expr::Binary { op: lop, .. } => Self::binary_precedence(*lop) < prec,
+                    Expr::Assign { .. } | Expr::Closure { .. } => true,
+                    _ => false,
+                };
+                let right_paren = match right.as_ref() {
+                    Expr::Binary { op: rop, .. } => {
+                        let rp = Self::binary_precedence(*rop);
+                        rp < prec
+                            || (rp == prec
+                                && !matches!(
+                                    op,
+                                    BinaryOp::Add | BinaryOp::Mul | BinaryOp::And | BinaryOp::Or
+                                ))
+                    }
+                    Expr::Assign { .. } | Expr::Closure { .. } => true,
+                    _ => false,
+                };
+                self.format_expr_paren(left, left_paren);
                 self.write(" ");
                 self.write(match op {
                     BinaryOp::Add => "+",
@@ -829,27 +852,31 @@ impl Formatter {
                     BinaryOp::Or => "||",
                 });
                 self.write(" ");
-                self.format_expr(right);
+                self.format_expr_paren(right, right_paren);
             }
             Expr::Unary { op, expr, .. } => {
                 self.write(match op {
                     pace_ast::UnaryOp::Neg => "-",
                     pace_ast::UnaryOp::Not => "!",
                 });
-                self.format_expr(expr);
+                let needs_paren = matches!(
+                    expr.as_ref(),
+                    Expr::Binary { .. } | Expr::Assign { .. } | Expr::Closure { .. }
+                );
+                self.format_expr_paren(expr, needs_paren);
             }
             Expr::MemberAccess { object, member, .. } => {
-                self.format_expr(object);
+                self.format_expr_paren(object, Self::is_low_prec_expr(object));
                 self.write(".");
                 self.write(&member.name);
             }
             Expr::OptionalMemberAccess { object, member, .. } => {
-                self.format_expr(object);
+                self.format_expr_paren(object, Self::is_low_prec_expr(object));
                 self.write("?.");
                 self.write(&member.name);
             }
             Expr::Call { callee, args, .. } => {
-                self.format_expr(callee);
+                self.format_expr_paren(callee, Self::is_low_prec_expr(callee));
                 self.write("(");
                 for (
                     i,
@@ -920,11 +947,12 @@ impl Formatter {
                         self.format_type(ty);
                     }
                 }
-                self.write(") -> ");
+                self.write(")");
                 if let Some(ty) = return_type {
+                    self.write(" -> ");
                     self.format_type(ty);
-                    self.write(" ");
                 }
+                self.write(" => ");
                 match body {
                     pace_ast::ClosureBody::Expr(e) => self.format_expr(e),
                     pace_ast::ClosureBody::Block(b) => {
@@ -932,7 +960,6 @@ impl Formatter {
                         self.indent();
                         for stmt in &b.statements {
                             self.format_stmt(stmt);
-                            self.write("\n");
                         }
                         self.dedent();
                         self.write_indent();
@@ -945,7 +972,7 @@ impl Formatter {
                 self.format_expr(inner);
             }
             Expr::Try(inner, _) => {
-                self.format_expr(inner);
+                self.format_expr_paren(inner, Self::is_low_prec_expr(inner));
                 self.write("?");
             }
             Expr::ListLiteral(elements, _) => {
@@ -971,11 +998,44 @@ impl Formatter {
                 self.write("}");
             }
             Expr::Index { target, index, .. } => {
-                self.format_expr(target);
+                self.format_expr_paren(target, Self::is_low_prec_expr(target));
                 self.write("[");
                 self.format_expr(index);
                 self.write("]");
             }
+        }
+    }
+
+    fn binary_precedence(op: BinaryOp) -> u8 {
+        match op {
+            BinaryOp::Or => 1,
+            BinaryOp::And => 2,
+            BinaryOp::NullCoalesce => 3,
+            BinaryOp::EqEq | BinaryOp::NotEq => 4,
+            BinaryOp::Gt | BinaryOp::Lt | BinaryOp::GtEq | BinaryOp::LtEq => 5,
+            BinaryOp::Add | BinaryOp::Sub => 6,
+            BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => 7,
+        }
+    }
+
+    fn is_low_prec_expr(expr: &Expr) -> bool {
+        matches!(
+            expr,
+            Expr::Binary { .. }
+                | Expr::Unary { .. }
+                | Expr::Assign { .. }
+                | Expr::Closure { .. }
+                | Expr::Await(_, _)
+        )
+    }
+
+    fn format_expr_paren(&mut self, expr: &Expr, needs_paren: bool) {
+        if needs_paren {
+            self.write("(");
+            self.format_expr(expr);
+            self.write(")");
+        } else {
+            self.format_expr(expr);
         }
     }
 

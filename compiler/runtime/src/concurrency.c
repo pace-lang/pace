@@ -452,55 +452,318 @@ void pace_thread_pool_shutdown(void) {
 
 #else // _WIN32
 
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "../pace_runtime.h"
 
-void pace_event_loop_init(void) {
-    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
-    exit(1);
+#define FIBER_STACK_SIZE (64 * 1024)
+
+typedef struct PaceFiber {
+    LPVOID win_fiber;
+    void (*func)(void*);
+    void* arg;
+    long long sleep_ms;
+    int is_sleep;
+    volatile int is_done;
+    void* result;
+    struct PaceFiber* waiting_on;
+    struct PaceFiber* next;
+    int awaited;
+    struct PaceFiber* all_next;
+} PaceFiber;
+
+typedef struct SleepEntry {
+    PaceFiber* fiber;
+    long long wakeup_time_ms;
+    struct SleepEntry* next;
+} SleepEntry;
+
+static PaceFiber* all_fibers_head = NULL;
+static CRITICAL_SECTION all_fibers_cs;
+static int all_fibers_cs_init = 0;
+
+#ifdef _MSC_VER
+static __declspec(thread) PaceFiber* current_fiber = NULL;
+#else
+static __thread PaceFiber* current_fiber = NULL;
+#endif
+
+static PaceFiber* ready_queue_head = NULL;
+static PaceFiber* ready_queue_tail = NULL;
+static SleepEntry* sleep_queue = NULL;
+static LPVOID main_loop_fiber = NULL;
+
+static void ensure_fibers_cs(void) {
+    if (!all_fibers_cs_init) {
+        InitializeCriticalSection(&all_fibers_cs);
+        all_fibers_cs_init = 1;
+    }
 }
 
-void* pace_spawn_fiber(void (*func)(void*, void*), void* arg) {
-    (void)func;
-    (void)arg;
-    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
-    exit(1);
+static void ensure_main_fiber(void) {
+    if (!main_loop_fiber) {
+        main_loop_fiber = ConvertThreadToFiber(NULL);
+        if (!main_loop_fiber) {
+            main_loop_fiber = GetCurrentFiber();
+        }
+    }
+}
+
+static void* pace_xmalloc(size_t size) {
+    void* ptr = malloc(size);
+    if (!ptr) {
+        fprintf(stderr, "Fatal error: out of memory in concurrency runtime\n");
+        abort();
+    }
+    return ptr;
+}
+
+static void register_fiber(PaceFiber* fiber) {
+    ensure_fibers_cs();
+    fiber->awaited = 0;
+    fiber->all_next = NULL;
+    EnterCriticalSection(&all_fibers_cs);
+    fiber->all_next = all_fibers_head;
+    all_fibers_head = fiber;
+    LeaveCriticalSection(&all_fibers_cs);
+}
+
+static void cleanup_all_fibers(void) {
+    if (!all_fibers_cs_init) return;
+    EnterCriticalSection(&all_fibers_cs);
+    PaceFiber* curr = all_fibers_head;
+    while (curr) {
+        PaceFiber* next = curr->all_next;
+        if (curr->win_fiber) {
+            DeleteFiber(curr->win_fiber);
+            curr->win_fiber = NULL;
+        }
+        free(curr);
+        curr = next;
+    }
+    all_fibers_head = NULL;
+    LeaveCriticalSection(&all_fibers_cs);
+}
+
+static long long current_time_ms(void) {
+    return (long long)GetTickCount64();
+}
+
+static void enqueue_fiber(PaceFiber* fiber) {
+    fiber->next = NULL;
+    if (ready_queue_tail) {
+        ready_queue_tail->next = fiber;
+        ready_queue_tail = fiber;
+    } else {
+        ready_queue_head = ready_queue_tail = fiber;
+    }
+}
+
+static PaceFiber* dequeue_fiber(void) {
+    if (!ready_queue_head) return NULL;
+    PaceFiber* f = ready_queue_head;
+    ready_queue_head = f->next;
+    if (!ready_queue_head) ready_queue_tail = NULL;
+    return f;
+}
+
+static void pace_check_sleep_queue(void) {
+    long long now = current_time_ms();
+    SleepEntry* prev = NULL;
+    SleepEntry* curr = sleep_queue;
+    while (curr) {
+        if (now >= curr->wakeup_time_ms) {
+            enqueue_fiber(curr->fiber);
+            SleepEntry* to_free = curr;
+            if (prev) {
+                prev->next = curr->next;
+                curr = curr->next;
+            } else {
+                sleep_queue = curr->next;
+                curr = curr->next;
+            }
+            free(to_free);
+        } else {
+            prev = curr;
+            curr = curr->next;
+        }
+    }
+}
+
+static VOID CALLBACK win_fiber_trampoline(PVOID lpParameter) {
+    PaceFiber* fiber = (PaceFiber*)lpParameter;
+    if (fiber->is_sleep) {
+        SleepEntry* entry = (SleepEntry*)pace_xmalloc(sizeof(SleepEntry));
+        entry->fiber = fiber;
+        entry->wakeup_time_ms = current_time_ms() + fiber->sleep_ms;
+        if (!sleep_queue || sleep_queue->wakeup_time_ms >= entry->wakeup_time_ms) {
+            entry->next = sleep_queue;
+            sleep_queue = entry;
+        } else {
+            SleepEntry* curr = sleep_queue;
+            while (curr->next && curr->next->wakeup_time_ms < entry->wakeup_time_ms) {
+                curr = curr->next;
+            }
+            entry->next = curr->next;
+            curr->next = entry;
+        }
+        fiber->waiting_on = (void*)1;
+        SwitchToFiber(main_loop_fiber);
+        fiber->waiting_on = NULL;
+    } else if (fiber->func) {
+        fiber->func(fiber->arg);
+    }
+    fiber->is_done = 1;
+    SwitchToFiber(main_loop_fiber);
+}
+
+void pace_event_loop_init(void) {
+    ready_queue_head = NULL;
+    ready_queue_tail = NULL;
+    sleep_queue = NULL;
+    current_fiber = NULL;
+    ensure_fibers_cs();
+    ensure_main_fiber();
+}
+
+void* pace_spawn_fiber(void (*func)(void*), void* arg) {
+    ensure_main_fiber();
+    PaceFiber* fiber = (PaceFiber*)pace_xmalloc(sizeof(PaceFiber));
+    fiber->func = func;
+    fiber->arg = arg;
+    fiber->sleep_ms = 0;
+    fiber->is_sleep = 0;
+    fiber->is_done = 0;
+    fiber->result = NULL;
+    fiber->waiting_on = NULL;
+    fiber->next = NULL;
+    fiber->win_fiber = CreateFiber(FIBER_STACK_SIZE, win_fiber_trampoline, fiber);
+    if (!fiber->win_fiber) {
+        fprintf(stderr, "Fatal error: CreateFiber failed in pace_spawn_fiber\n");
+        abort();
+    }
+    register_fiber(fiber);
+    enqueue_fiber(fiber);
+    return fiber;
 }
 
 void* pace_await_fiber(void* fiber_ptr) {
-    (void)fiber_ptr;
-    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
-    exit(1);
+    if (!fiber_ptr) return NULL;
+    ensure_main_fiber();
+    PaceFiber* target = (PaceFiber*)fiber_ptr;
+
+    if (target->awaited) {
+        return target->result;
+    }
+
+    if (!target->is_done) {
+        if (current_fiber) {
+            current_fiber->waiting_on = target;
+            SwitchToFiber(main_loop_fiber);
+        } else {
+            while (!target->is_done) {
+                pace_check_sleep_queue();
+                PaceFiber* next_f = dequeue_fiber();
+                if (next_f) {
+                    current_fiber = next_f;
+                    SwitchToFiber(next_f->win_fiber);
+                    current_fiber = NULL;
+                    if (!next_f->is_done && next_f->waiting_on != (void*)1) {
+                        enqueue_fiber(next_f);
+                    }
+                } else if (sleep_queue) {
+                    long long now = current_time_ms();
+                    long long sleep_time = sleep_queue->wakeup_time_ms - now;
+                    if (sleep_time > 0) {
+                        Sleep((DWORD)(sleep_time > 10 ? 10 : sleep_time));
+                    }
+                } else {
+                    Sleep(1);
+                }
+            }
+        }
+    }
+
+    void* result = target->result;
+    target->awaited = 1;
+    if (target->win_fiber) {
+        DeleteFiber(target->win_fiber);
+        target->win_fiber = NULL;
+    }
+    return result;
 }
 
 void pace_event_loop_run(void) {
-    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
-    exit(1);
+    ensure_main_fiber();
+    while (ready_queue_head || sleep_queue) {
+        pace_check_sleep_queue();
+        PaceFiber* f = dequeue_fiber();
+        if (f) {
+            if (f->waiting_on && f->waiting_on != (void*)1 && !f->waiting_on->is_done) {
+                enqueue_fiber(f);
+                if (ready_queue_head == f) {
+                    Sleep(1);
+                }
+                continue;
+            } else {
+                f->waiting_on = NULL;
+            }
+
+            current_fiber = f;
+            SwitchToFiber(f->win_fiber);
+            current_fiber = NULL;
+
+            if (!f->is_done && f->waiting_on != (void*)1) {
+                enqueue_fiber(f);
+            }
+        } else if (sleep_queue) {
+            long long now = current_time_ms();
+            long long sleep_time = sleep_queue->wakeup_time_ms - now;
+            if (sleep_time > 0) {
+                Sleep((DWORD)sleep_time);
+            }
+        }
+    }
 }
 
 void pace_fiber_set_result(void* fiber_ptr, void* result) {
-    (void)fiber_ptr;
-    (void)result;
-    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
-    exit(1);
+    PaceFiber* target = (PaceFiber*)fiber_ptr;
+    if (target) {
+        target->result = result;
+    }
 }
 
 void pace_fiber_set_current_result(void* result) {
-    (void)result;
-    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
-    exit(1);
+    if (current_fiber) {
+        current_fiber->result = result;
+    }
 }
 
 void* pace_sleep(long long ms) {
-    (void)ms;
-    fprintf(stderr, "Concurrency (Fibers/Threads) is not currently supported on Windows.\n");
-    exit(1);
+    ensure_main_fiber();
+    PaceFiber* fiber = (PaceFiber*)pace_xmalloc(sizeof(PaceFiber));
+    fiber->func = NULL;
+    fiber->arg = NULL;
+    fiber->sleep_ms = ms;
+    fiber->is_sleep = 1;
+    fiber->is_done = 0;
+    fiber->result = NULL;
+    fiber->waiting_on = NULL;
+    fiber->next = NULL;
+    fiber->win_fiber = CreateFiber(FIBER_STACK_SIZE, win_fiber_trampoline, fiber);
+    if (!fiber->win_fiber) {
+        fprintf(stderr, "Fatal error: CreateFiber failed in pace_sleep\n");
+        abort();
+    }
+    register_fiber(fiber);
+    enqueue_fiber(fiber);
+    return fiber;
 }
 
 void pace_thread_pool_init(size_t num_threads) {
     (void)num_threads;
-    // On Windows, silently succeed init but abort if they actually spawn an actor message
-    // (This allows single-threaded scripts to compile/run without crashing immediately if init is called by default)
 }
 
 void* pace_send_actor_message(void* actor_ptr, void (*func)(void*, void*), void* arg) {
@@ -512,6 +775,7 @@ void* pace_send_actor_message(void* actor_ptr, void (*func)(void*, void*), void*
 }
 
 void pace_thread_pool_shutdown(void) {
+    cleanup_all_fibers();
 }
 
 #endif // _WIN32

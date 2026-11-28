@@ -46,6 +46,7 @@ mod tests {
         let class_parents = HashMap::new();
 
         let global_functions_env = HashMap::new();
+        let global_vars_env = HashMap::new();
         let resolved_global_names = HashMap::new();
 
         let mut builder = MirBuilder::new(
@@ -61,6 +62,7 @@ mod tests {
             &methods_env,
             &class_parents,
             &global_functions_env,
+            &global_vars_env,
             &resolved_global_names,
         );
         builder.locals.push(pace_ty::Ty::Int);

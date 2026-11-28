@@ -46,6 +46,7 @@ pub struct TypeChecker {
     pub methods_env: HashMap<String, Ty>,
     pub methods_privacy: HashMap<String, bool>,
     pub global_functions: HashMap<String, Ty>,
+    pub global_vars: HashMap<String, Ty>,
     pub struct_defs: HashMap<HirId, Vec<ResolvedField>>,
     pub class_defs: HashMap<HirId, Vec<ResolvedField>>,
     pub class_parents: HashMap<HirId, HirId>,
@@ -97,6 +98,7 @@ impl TypeChecker {
             methods_env: HashMap::new(),
             methods_privacy: HashMap::new(),
             global_functions: HashMap::new(),
+            global_vars: HashMap::new(),
             struct_defs: HashMap::new(),
             class_defs: HashMap::new(),
             class_parents: HashMap::new(),
@@ -336,7 +338,25 @@ impl TypeChecker {
                         let inner = self.resolve_type(&args[0])?;
                         return Ok(Ty::Set(Box::new(inner)));
                     }
-                    self.instantiate_generic(&id.name, args)
+                    let mangled_name = if let Some(curr) = &self.current_module {
+                        if let Some(scope) = self.module_scopes.get(curr) {
+                            scope
+                                .visible_symbols
+                                .get(id.name.as_str())
+                                .cloned()
+                                .unwrap_or_else(|| id.name.to_string())
+                        } else {
+                            id.name.to_string()
+                        }
+                    } else {
+                        id.name.to_string()
+                    };
+                    let gname = if self.generic_templates.contains_key(&mangled_name) {
+                        mangled_name
+                    } else {
+                        id.name.to_string()
+                    };
+                    self.instantiate_generic(&gname, args)
                 } else {
                     Err("Complex generic base types not supported".to_string())
                 }
@@ -1002,6 +1022,39 @@ impl TypeChecker {
                 if let Some(scope) = self.module_scopes.get_mut(module_name) {
                     scope.visible_symbols.insert(name.to_string(), mangled_name);
                 }
+            } else if let Decl::Let {
+                id,
+                name,
+                is_private,
+                span,
+                ..
+            }
+            | Decl::Var {
+                id,
+                name,
+                is_private,
+                span,
+                ..
+            }
+            | Decl::Const {
+                id,
+                name,
+                is_private,
+                span,
+                ..
+            } = decl
+            {
+                if *is_private {
+                    if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                        scope.private_symbols.insert(name.to_string());
+                    }
+                }
+                let mangled_name = format!("{}_{}", module_name, name);
+                self.global_spans.insert(mangled_name.clone(), *span);
+                self.resolved_global_names.insert(*id, mangled_name.clone());
+                if let Some(scope) = self.module_scopes.get_mut(module_name) {
+                    scope.visible_symbols.insert(name.to_string(), mangled_name);
+                }
             }
         }
 
@@ -1468,6 +1521,9 @@ impl TypeChecker {
                 }
                 self.env.insert(*id, ty.clone());
                 self.local_types.insert(*id, ty.clone());
+                if let Some(mangled_name) = self.resolved_global_names.get(id).cloned() {
+                    self.global_vars.insert(mangled_name, ty.clone());
+                }
                 self.mutability_env.insert(*id, false); // Let is immutable
                 self.declared_bindings.push((*id, name.to_string(), *span));
                 Ok(())
@@ -1521,6 +1577,9 @@ impl TypeChecker {
                 }
                 self.env.insert(*id, ty.clone());
                 self.local_types.insert(*id, ty.clone());
+                if let Some(mangled_name) = self.resolved_global_names.get(id).cloned() {
+                    self.global_vars.insert(mangled_name, ty.clone());
+                }
                 self.mutability_env.insert(*id, true); // Var is mutable
                 self.declared_bindings.push((*id, name.to_string(), *span));
                 Ok(())
@@ -2010,15 +2069,11 @@ impl TypeChecker {
                         name.as_str()
                     };
                     if let Some(args) = generic_args {
-                        match self.instantiate_generic_named(gname, args) {
-                            Ok((inst_ty, mono_name)) => {
-                                self.env.insert(*id, inst_ty.clone());
-                                self.local_types.insert(*id, inst_ty.clone());
-                                self.resolved_global_names.insert(*id, mono_name);
-                                return Ok(inst_ty);
-                            }
-                            Err(_e) => {}
-                        }
+                        let (inst_ty, mono_name) = self.instantiate_generic_named(gname, args)?;
+                        self.env.insert(*id, inst_ty.clone());
+                        self.local_types.insert(*id, inst_ty.clone());
+                        self.resolved_global_names.insert(*id, mono_name);
+                        return Ok(inst_ty);
                     }
                 }
 
@@ -2032,6 +2087,15 @@ impl TypeChecker {
                     self.used_bindings_by_name.insert(name.to_string());
                     self.resolved_global_names.insert(*id, mangled_name.clone());
                     self.local_types.insert(*id, ty.clone());
+                    if let Some(def_span) = self.global_spans.get(&mangled_name) {
+                        self.definition_info.insert(*span, *def_span);
+                    }
+                    Ok(ty)
+                } else if let Some(ty) = self.global_vars.get(&mangled_name).cloned() {
+                    self.used_bindings_by_name.insert(name.to_string());
+                    self.env.insert(*id, ty.clone());
+                    self.local_types.insert(*id, ty.clone());
+                    self.resolved_global_names.insert(*id, mangled_name.clone());
                     if let Some(def_span) = self.global_spans.get(&mangled_name) {
                         self.definition_info.insert(*span, *def_span);
                     }
@@ -2062,15 +2126,11 @@ impl TypeChecker {
                         name.as_str()
                     };
                     if let Some(args) = generic_args {
-                        match self.instantiate_generic_named(gname, args) {
-                            Ok((inst_ty, mono_name)) => {
-                                self.env.insert(*id, inst_ty.clone());
-                                self.local_types.insert(*id, inst_ty.clone());
-                                self.resolved_global_names.insert(*id, mono_name);
-                                return Ok(inst_ty);
-                            }
-                            Err(_e) => {}
-                        }
+                        let (inst_ty, mono_name) = self.instantiate_generic_named(gname, args)?;
+                        self.env.insert(*id, inst_ty.clone());
+                        self.local_types.insert(*id, inst_ty.clone());
+                        self.resolved_global_names.insert(*id, mono_name);
+                        return Ok(inst_ty);
                     }
                     if let Some(expected) = &self.current_expected_ty {
                         match expected {
@@ -2288,6 +2348,11 @@ impl TypeChecker {
                         self.used_bindings_by_name.insert(member.to_string());
 
                         if let Some(ty) = self.global_functions.get(mangled_name).cloned() {
+                            if let Some(def_span) = self.global_spans.get(mangled_name) {
+                                self.definition_info.insert(*span, *def_span);
+                            }
+                            return Ok(ty);
+                        } else if let Some(ty) = self.global_vars.get(mangled_name).cloned() {
                             if let Some(def_span) = self.global_spans.get(mangled_name) {
                                 self.definition_info.insert(*span, *def_span);
                             }
@@ -3390,15 +3455,34 @@ impl TypeChecker {
 
                     if let Some(expected) = &ret_ty {
                         if *expected != arm_ty {
-                            self.reporter.report(
-                                Diagnostic::error(format!(
-                                    "Match arms have incompatible types: {} and {}",
-                                    self.display_ty(expected),
-                                    self.display_ty(&arm_ty)
-                                ))
-                                .with_span(arm.span)
-                                .with_code(ErrorCode::TypeMismatch),
-                            );
+                            if *expected == Ty::Never {
+                                ret_ty = Some(arm_ty);
+                            } else if arm_ty == Ty::Never {
+                                // Keep expected type
+                            } else if matches!(expected, Ty::Optional(inner) if **inner == Ty::Void) {
+                                ret_ty = Some(match arm_ty {
+                                    Ty::Optional(_) => arm_ty,
+                                    other => Ty::Optional(Box::new(other)),
+                                });
+                            } else if matches!(&arm_ty, Ty::Optional(inner) if **inner == Ty::Void) {
+                                if !matches!(expected, Ty::Optional(_)) {
+                                    ret_ty = Some(Ty::Optional(Box::new(expected.clone())));
+                                }
+                            } else if *expected == Ty::Optional(Box::new(arm_ty.clone())) {
+                                // arm_ty is T, expected is T?; keep T?
+                            } else if arm_ty == Ty::Optional(Box::new(expected.clone())) {
+                                ret_ty = Some(arm_ty);
+                            } else {
+                                self.reporter.report(
+                                    Diagnostic::error(format!(
+                                        "Match arms have incompatible types: {} and {}",
+                                        self.display_ty(expected),
+                                        self.display_ty(&arm_ty)
+                                    ))
+                                    .with_span(arm.span)
+                                    .with_code(ErrorCode::TypeMismatch),
+                                );
+                            }
                         }
                     } else {
                         ret_ty = Some(arm_ty);
@@ -3918,6 +4002,7 @@ impl TypeChecker {
                         name: m_name,
                         params,
                         return_type,
+                        body,
                         ..
                     } = method
                     {
@@ -3932,6 +4017,7 @@ impl TypeChecker {
                         if let Some(ret_ty) = return_type {
                             *ret_ty = substitute_type(ret_ty, &mapping);
                         }
+                        substitute_types_in_block(body, &mapping);
                     }
                 }
             }
@@ -3958,6 +4044,7 @@ impl TypeChecker {
                 params,
                 return_type,
                 generic_params,
+                body,
                 ..
             } => {
                 *name = pace_span::intern(&mono_name);
@@ -3968,9 +4055,7 @@ impl TypeChecker {
                 if let Some(rty) = return_type {
                     *rty = substitute_type(rty, &mapping);
                 }
-                // We should theoretically substitute types in the body too, but since type resolution
-                // happens on the fly in `check_expr` through `env` and `named_types`, the AST substitution
-                // is mostly needed for declarations.
+                substitute_types_in_block(body, &mapping);
             }
             _ => {}
         }
@@ -4206,5 +4291,136 @@ pub fn substitute_type(
             let sub_params = params.iter().map(|p| substitute_type(p, mapping)).collect();
             pace_ast::Type::Closure(sub_params, Box::new(substitute_type(ret, mapping)), *span)
         }
+    }
+}
+
+fn substitute_types_in_block(
+    block: &mut pace_hir::Block,
+    mapping: &std::collections::HashMap<pace_span::Symbol, pace_ast::Type>,
+) {
+    for stmt in &mut block.statements {
+        substitute_types_in_stmt(stmt, mapping);
+    }
+}
+
+fn substitute_types_in_stmt(
+    stmt: &mut pace_hir::Stmt,
+    mapping: &std::collections::HashMap<pace_span::Symbol, pace_ast::Type>,
+) {
+    match stmt {
+        pace_hir::Stmt::Let { ty, value, .. } | pace_hir::Stmt::Var { ty, value, .. } => {
+            if let Some(t) = ty {
+                *t = substitute_type(t, mapping);
+            }
+            if let Some(v) = value {
+                substitute_types_in_expr(v, mapping);
+            }
+        }
+        pace_hir::Stmt::ExprStmt(e, _) => substitute_types_in_expr(e, mapping),
+        pace_hir::Stmt::Return(Some(e), _) => substitute_types_in_expr(e, mapping),
+        pace_hir::Stmt::Return(None, _)
+        | pace_hir::Stmt::Break(_)
+        | pace_hir::Stmt::Continue(_) => {}
+    }
+}
+
+fn substitute_types_in_expr(
+    expr: &mut pace_hir::Expr,
+    mapping: &std::collections::HashMap<pace_span::Symbol, pace_ast::Type>,
+) {
+    match expr {
+        pace_hir::Expr::Ident(_, _, Some(args), _) => {
+            for a in args.iter_mut() {
+                *a = substitute_type(a, mapping);
+            }
+        }
+        pace_hir::Expr::InterpolatedString(parts, _) => {
+            for p in parts.iter_mut() {
+                substitute_types_in_expr(p, mapping);
+            }
+        }
+        pace_hir::Expr::Binary { left, right, .. } => {
+            substitute_types_in_expr(left, mapping);
+            substitute_types_in_expr(right, mapping);
+        }
+        pace_hir::Expr::MemberAccess { object, .. }
+        | pace_hir::Expr::OptionalMemberAccess { object, .. } => {
+            substitute_types_in_expr(object, mapping);
+        }
+        pace_hir::Expr::Call { callee, args, .. } => {
+            substitute_types_in_expr(callee, mapping);
+            for a in args.iter_mut() {
+                substitute_types_in_expr(&mut a.expr, mapping);
+            }
+        }
+        pace_hir::Expr::BuiltinCall(_, args, _) | pace_hir::Expr::ListLiteral(args, _) => {
+            for a in args.iter_mut() {
+                substitute_types_in_expr(a, mapping);
+            }
+        }
+        pace_hir::Expr::MapLiteral(entries, _) => {
+            for (k, v) in entries.iter_mut() {
+                substitute_types_in_expr(k, mapping);
+                substitute_types_in_expr(v, mapping);
+            }
+        }
+        pace_hir::Expr::If {
+            cond,
+            then_block,
+            else_block,
+            ..
+        } => {
+            substitute_types_in_expr(cond, mapping);
+            substitute_types_in_block(then_block, mapping);
+            if let Some(eb) = else_block {
+                substitute_types_in_block(eb, mapping);
+            }
+        }
+        pace_hir::Expr::While { cond, body, .. } => {
+            substitute_types_in_expr(cond, mapping);
+            substitute_types_in_block(body, mapping);
+        }
+        pace_hir::Expr::Assign { target, value, .. }
+        | pace_hir::Expr::Index { target, index: value, .. } => {
+            substitute_types_in_expr(target, mapping);
+            substitute_types_in_expr(value, mapping);
+        }
+        pace_hir::Expr::Match { subject, arms, .. } => {
+            substitute_types_in_expr(subject, mapping);
+            for arm in arms.iter_mut() {
+                substitute_types_in_expr(&mut arm.body, mapping);
+            }
+        }
+        pace_hir::Expr::Closure {
+            params,
+            return_type,
+            body,
+            ..
+        } => {
+            for p in params.iter_mut() {
+                if let Some(t) = &mut p.ty {
+                    *t = substitute_type(t, mapping);
+                }
+            }
+            if let Some(rt) = return_type {
+                *rt = substitute_type(rt, mapping);
+            }
+            match body {
+                pace_hir::ClosureBody::Expr(e) => substitute_types_in_expr(e, mapping),
+                pace_hir::ClosureBody::Block(b) => substitute_types_in_block(b, mapping),
+            }
+        }
+        pace_hir::Expr::Await(inner, _)
+        | pace_hir::Expr::Try(inner, _)
+        | pace_hir::Expr::Unary { expr: inner, .. } => {
+            substitute_types_in_expr(inner, mapping);
+        }
+        pace_hir::Expr::IntLiteral(_, _)
+        | pace_hir::Expr::FloatLiteral(_, _)
+        | pace_hir::Expr::BoolLiteral(_, _)
+        | pace_hir::Expr::StringLiteral(_, _)
+        | pace_hir::Expr::Null(_)
+        | pace_hir::Expr::Ident(_, _, None, _)
+        | pace_hir::Expr::Super(_) => {}
     }
 }

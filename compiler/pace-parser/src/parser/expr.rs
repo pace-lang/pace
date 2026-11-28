@@ -446,8 +446,23 @@ impl<'a> Parser<'a> {
                             chars.next(); // consume '{'
                             let mut expr_str = String::new();
                             let mut brace_count = 1;
+                            let mut in_nested_str = false;
+                            let mut escaped = false;
                             for (_, inner_c) in chars.by_ref() {
-                                if inner_c == '{' {
+                                if in_nested_str {
+                                    if escaped {
+                                        escaped = false;
+                                    } else if inner_c == '\\' {
+                                        escaped = true;
+                                    } else if inner_c == '"' {
+                                        in_nested_str = false;
+                                    }
+                                    expr_str.push(inner_c);
+                                    continue;
+                                }
+                                if inner_c == '"' {
+                                    in_nested_str = true;
+                                } else if inner_c == '{' {
                                     brace_count += 1;
                                 } else if inner_c == '}' {
                                     brace_count -= 1;

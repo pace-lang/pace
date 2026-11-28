@@ -45,4 +45,19 @@ fn main() {
     assert(s1.union(s2).len == 4, "Set<int> union")
     assert(s1.intersection(s2).len == 2, "Set<int> intersection")
     assert(s1.difference(s2).len == 1, "Set<int> difference")
+
+    let ss: Set<string> = Set()
+    ss.add("alpha")
+    ss.add("beta")
+    assert(ss.has("alpha") && !ss.has("gamma"), "Set<string> alongside Set<int>")
+
+    let sf: Set<float> = Set()
+    assert(sf.add(1.5) && sf.add(2.25) && !sf.add(1.5), "Set<float> add")
+    assert(sf.has(1.5) && sf.has(2.25) && !sf.has(1.0), "Set<float> has")
+    assert(sf.remove(1.5) && !sf.has(1.5) && sf.len == 1, "Set<float> remove")
+    var fsum = 0.0
+    for v in sf {
+        fsum = fsum + v
+    }
+    assert(fsum == 2.25, "Set<float> iteration")
 }

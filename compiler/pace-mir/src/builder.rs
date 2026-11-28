@@ -73,6 +73,7 @@ pub struct MirBuilder<'a> {
     pub current_self_local: Option<Local>,
     pub class_parents: &'a HashMap<HirId, HirId>,
     pub global_functions_env: &'a HashMap<String, Ty>,
+    pub global_vars_env: &'a HashMap<String, Ty>,
     pub resolved_global_names: &'a HashMap<pace_hir::HirId, String>,
     pub closure_functions: Vec<MirFunction>,
     pub closure_counter: usize,
@@ -96,6 +97,7 @@ impl<'a> MirBuilder<'a> {
         methods_env: &'a HashMap<String, Ty>,
         class_parents: &'a HashMap<HirId, HirId>,
         global_functions_env: &'a HashMap<String, Ty>,
+        global_vars_env: &'a HashMap<String, Ty>,
         resolved_global_names: &'a HashMap<pace_hir::HirId, String>,
     ) -> Self {
         let initial_block = BasicBlock {
@@ -121,6 +123,7 @@ impl<'a> MirBuilder<'a> {
             methods_env,
             class_parents,
             global_functions_env,
+            global_vars_env,
             resolved_global_names,
             closure_functions: Vec::new(),
             closure_counter: 0,
@@ -281,6 +284,7 @@ impl<'a> MirBuilder<'a> {
                     self.methods_env,
                     self.class_parents,
                     self.global_functions_env,
+                    self.global_vars_env,
                     self.resolved_global_names,
                 );
                 
@@ -372,7 +376,7 @@ impl<'a> MirBuilder<'a> {
 
                 if let Some(l) = self.hir_to_local.get(id) {
                     *l
-                } else if let Some(ty) = self.global_env.get(id) {
+                } else if let Some(ty) = self.global_env.get(id).or_else(|| self.local_types.get(id)) {
                     let g_name = self
                         .resolved_global_names
                         .get(id)
@@ -575,6 +579,17 @@ impl<'a> MirBuilder<'a> {
             Expr::MemberAccess { object, member, .. } => {
                 // If the object is a type (class/struct), it's a static access
                 if let Expr::Ident(id, _name, generic_args, _) = &**object {
+                    if let Some(target_module) = self.resolved_global_names.get(id) {
+                        let g_name = format!("{}_{}", target_module, member);
+                        if let Some(var_ty) = self.global_vars_env.get(&g_name) {
+                            let temp = self.new_local(var_ty.clone());
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(temp),
+                                Rvalue::GlobalRead(g_name),
+                            ));
+                            return temp;
+                        }
+                    }
                     let is_type_name = self
                         .resolved_global_names
                         .get(id)
@@ -1674,7 +1689,14 @@ impl<'a> MirBuilder<'a> {
                                         "remove" => "pace_set_remove_",
                                         _ => "pace_set_has_",
                                     };
-                                    let fn_name = format!("{}{}", base, if is_str { "str" } else { "int" });
+                                    let suffix = if is_str {
+                                        "str"
+                                    } else if matches!(elem_ty.as_ref(), Ty::Float) {
+                                        "float"
+                                    } else {
+                                        "int"
+                                    };
+                                    let fn_name = format!("{}{}", base, suffix);
                                     let temp = self.new_local(Ty::Bool);
                                     self.push_stmt(Statement::Assign(
                                         Lvalue::Local(temp),
@@ -2706,6 +2728,7 @@ impl<'a> MirBuilder<'a> {
             &tc.methods_env,
             &tc.class_parents,
             &tc.global_functions,
+            &tc.global_vars,
             &tc.resolved_global_names,
         );
         let mut _main_last_local = Local(0);
@@ -2825,6 +2848,7 @@ impl<'a> MirBuilder<'a> {
                                 &tc.methods_env,
                                 &tc.class_parents,
                                 &tc.global_functions,
+                                &tc.global_vars,
                                 &tc.resolved_global_names,
                             );
                             let mut mir_params = Vec::new();
@@ -2889,6 +2913,7 @@ impl<'a> MirBuilder<'a> {
                         &tc.methods_env,
                         &tc.class_parents,
                         &tc.global_functions,
+                        &tc.global_vars,
                         &tc.resolved_global_names,
                     );
                     let mut mir_params = Vec::new();
@@ -2902,7 +2927,11 @@ impl<'a> MirBuilder<'a> {
                         mir_params.push(local);
                     }
 
-                    let ret_ty = if let Some(Ty::Function(_, ret)) = tc.env.get(func_id) {
+                    let ret_ty = if let Some(Ty::Function(_, ret)) = tc
+                        .env
+                        .get(func_id)
+                        .or_else(|| tc.methods_env.get(&name.to_string()))
+                    {
                         *ret.clone()
                     } else if let Some(rty) = return_type {
                         tc_get_type(tc, rty).unwrap_or(Ty::Void)
@@ -2963,6 +2992,7 @@ impl<'a> MirBuilder<'a> {
                                 &tc.methods_env,
                                 &tc.class_parents,
                                 &tc.global_functions,
+                                &tc.global_vars,
                                 &tc.resolved_global_names,
                             );
                             

@@ -1,5 +1,58 @@
 use logos::Logos;
 
+fn scan_string_body(bytes: &[u8], pos: &mut usize) -> bool {
+    while *pos < bytes.len() {
+        let b = bytes[*pos];
+        if b == b'\\' {
+            *pos += 1;
+            if *pos < bytes.len() {
+                *pos += 1;
+            } else {
+                return false;
+            }
+        } else if b == b'"' {
+            *pos += 1;
+            return true;
+        } else if b == b'$' && *pos + 1 < bytes.len() && bytes[*pos + 1] == b'{' {
+            *pos += 2;
+            let mut depth = 1usize;
+            while *pos < bytes.len() && depth > 0 {
+                if bytes[*pos] == b'"' {
+                    *pos += 1;
+                    if !scan_string_body(bytes, pos) {
+                        return false;
+                    }
+                } else if bytes[*pos] == b'{' {
+                    depth += 1;
+                    *pos += 1;
+                } else if bytes[*pos] == b'}' {
+                    depth -= 1;
+                    *pos += 1;
+                } else {
+                    *pos += 1;
+                }
+            }
+            if depth > 0 {
+                return false;
+            }
+        } else {
+            *pos += 1;
+        }
+    }
+    false
+}
+
+fn lex_string<'a>(lex: &mut logos::Lexer<'a, TokenKind<'a>>) -> Option<&'a str> {
+    let rem = lex.remainder().as_bytes();
+    let mut pos = 0;
+    if scan_string_body(rem, &mut pos) {
+        lex.bump(pos);
+        Some(lex.slice())
+    } else {
+        None
+    }
+}
+
 #[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(skip r"[ \t\n\f]+")] // Skip whitespace
 pub enum TokenKind<'a> {
@@ -106,7 +159,7 @@ pub enum TokenKind<'a> {
     #[regex(r"[0-9]+", |lex| lex.slice())]
     Int(&'a str),
 
-    #[regex(r#""([^"\\]|\\.)*""#, |lex| lex.slice())]
+    #[token("\"", lex_string)]
     String(&'a str),
 
     // Doc Comments

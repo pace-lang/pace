@@ -46,7 +46,7 @@ impl CGenerator {
         self.output.push_str("typedef struct PaceOptFloat { int has_value; double value; } PaceOptFloat;\n");
         self.output.push_str("typedef struct PaceOptBool { int has_value; long long value; } PaceOptBool;\n");
         self.output.push_str("static inline PaceOptInt pace_opt_int_from_ptr(void* p) { return p ? (PaceOptInt){1, (long long)(intptr_t)p} : (PaceOptInt){0, 0}; }\n");
-        self.output.push_str("static inline PaceOptFloat pace_opt_float_from_ptr(void* p) { return p ? (PaceOptFloat){1, (double)(intptr_t)p} : (PaceOptFloat){0, 0}; }\n");
+        self.output.push_str("static inline PaceOptFloat pace_opt_float_from_ptr(void* p) { return p ? (PaceOptFloat){1, *(double*)p} : (PaceOptFloat){0, 0}; }\n");
         self.output.push_str("static inline PaceOptBool pace_opt_bool_from_ptr(void* p) { return p ? (PaceOptBool){1, (long long)(intptr_t)p} : (PaceOptBool){0, 0}; }\n\n");
 
         for func in &program.functions {
@@ -261,7 +261,7 @@ impl CGenerator {
     }
 
     fn is_boxed_collection_ty(ty: &Ty) -> bool {
-        matches!(ty, Ty::Struct(_) | Ty::Enum(_))
+        matches!(ty, Ty::Struct(_) | Ty::Enum(_) | Ty::Float)
     }
 
     fn emit_box_for_collection(&self, local: pace_mir::Local, ty: &Ty) -> String {
@@ -697,17 +697,17 @@ impl CGenerator {
                                         continue;
                                     }
                                 }
-                            } else if Self::is_boxed_collection_ty(dest_ty) {
-                                if let Rvalue::Use(src) = rval {
-                                    if matches!(&locals[src.0 as usize], Ty::Optional(inner) if Self::is_boxed_collection_ty(inner)) {
-                                        writeln!(&mut self.output, "*_{};", src.0).unwrap();
-                                        continue;
-                                    }
-                                }
                             } else if matches!(dest_ty, Ty::Int | Ty::Float | Ty::Bool) {
                                 if let Rvalue::Use(src) = rval {
                                     if Self::is_primitive_opt(&locals[src.0 as usize]).is_some() {
                                         writeln!(&mut self.output, "_{}.value;", src.0).unwrap();
+                                        continue;
+                                    }
+                                }
+                            } else if Self::is_boxed_collection_ty(dest_ty) {
+                                if let Rvalue::Use(src) = rval {
+                                    if matches!(&locals[src.0 as usize], Ty::Optional(inner) if Self::is_boxed_collection_ty(inner)) {
+                                        writeln!(&mut self.output, "*_{};", src.0).unwrap();
                                         continue;
                                     }
                                 }
@@ -1296,8 +1296,12 @@ impl CGenerator {
                 write!(&mut self.output, "pace_map_new(16, {}, {})", key_is_str, dtor).unwrap();
             }
             Rvalue::SetNew(elem_ty) => {
-                let key_is_str = if matches!(elem_ty, Ty::String) { "1" } else { "0" };
-                write!(&mut self.output, "pace_set_new(16, {})", key_is_str).unwrap();
+                let key_kind = match elem_ty {
+                    Ty::String => "1",
+                    Ty::Float => "2",
+                    _ => "0",
+                };
+                write!(&mut self.output, "pace_set_new(16, {})", key_kind).unwrap();
             }
             Rvalue::MapGet(map_local, key_local) => {
                 let key_ty = &locals[key_local.0 as usize];

@@ -40,4 +40,21 @@ fn main() {
         Empty => Rect(w: 1, h: 1)
     }
     assert(extracted.w == 5 && extracted.h == 6, "struct match return")
+
+    let optRadius1: float? = match Shape.Empty {
+        Empty => null,
+        Circle(r) => r,
+        Box(r) => 1.0
+    }
+    assert(optRadius1 == null, "match arm null then T")
+
+    let optRadius2: float? = match Shape.Circle(r: 3.5) {
+        Circle(r) => r,
+        _ => null
+    }
+    assert(optRadius2 != null && (optRadius2 ?? 0.0) == 3.5, "match arm T then null")
+
+    let optStr: string? = null
+    let msg = "${optStr ?? "none"}"
+    assert(msg == "none", "nested string in interpolation")
 }

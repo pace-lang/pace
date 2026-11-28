@@ -48,4 +48,30 @@ return a + x }";
         let expected = "struct Point {\n    var x: int\n    var y: int\n}\n";
         assert_eq!(format_source(source), expected);
     }
+
+    #[test]
+    fn test_format_async_fn_and_closures() {
+        let source = "async fn fetch() -> int {
+    let f = (x: int) -> int => x + 1
+    let g = () => {
+        return 42
+    }
+    return f(1)
+}";
+        let expected = "async fn fetch() -> int {\n    let f = (x: int) -> int => x + 1\n    let g = () => {\n        return 42\n    }\n    return f(1)\n}\n";
+        assert_eq!(format_source(source), expected);
+    }
+
+    #[test]
+    fn test_format_precedence_parens() {
+        let source = "fn calc(o1: int?, a: int, b: int, c: int) -> bool {
+    let x = (o1 ?? 99) == 1
+    let y = (a + b) * c
+    let z = a - (b + c)
+    let w = !(a == b)
+    return x && w
+}";
+        let expected = "fn calc(o1: int?, a: int, b: int, c: int) -> bool {\n    let x = (o1 ?? 99) == 1\n    let y = (a + b) * c\n    let z = a - (b + c)\n    let w = !(a == b)\n    return x && w\n}\n";
+        assert_eq!(format_source(source), expected);
+    }
 }

@@ -768,6 +768,80 @@ int pace_set_remove_str(PaceSet* set, struct PaceString* key) {
     }
 }
 
+static uint64_t hash_float(double key) {
+    if (key == 0.0) key = 0.0; // normalize -0.0
+    uint64_t bits = 0;
+    memcpy(&bits, &key, sizeof(double));
+    return hash_int((int64_t)bits);
+}
+
+int pace_set_add_float(PaceSet* set, double key) {
+    if (!set) return 0;
+    if ((set->count + set->tombstones + 1) * 10 >= set->capacity * 7) {
+        pace_set_resize(set, set->capacity * 2);
+    }
+    if (key == 0.0) key = 0.0;
+    uint64_t h = hash_float(key);
+    uint64_t mask = (uint64_t)(set->capacity - 1);
+    size_t idx = (size_t)(h & mask);
+    size_t first_tomb = (size_t)-1;
+    while (1) {
+        PaceSetEntry* e = &set->entries[idx];
+        if (e->state == MAP_STATE_EMPTY) {
+            size_t target = (first_tomb != (size_t)-1) ? first_tomb : idx;
+            if (first_tomb != (size_t)-1) set->tombstones--;
+            double* boxed = (double*)pace_alloc(sizeof(double), NULL);
+            *boxed = key;
+            set->entries[target].hash = h;
+            set->entries[target].key = boxed;
+            set->entries[target].state = MAP_STATE_OCCUPIED;
+            set->count++;
+            return 1;
+        }
+        if (e->state == MAP_STATE_TOMBSTONE) {
+            if (first_tomb == (size_t)-1) first_tomb = idx;
+        } else if (e->hash == h && *(double*)e->key == key) {
+            return 0;
+        }
+        idx = (idx + 1) & mask;
+    }
+}
+
+int pace_set_has_float(PaceSet* set, double key) {
+    if (!set || set->count == 0) return 0;
+    if (key == 0.0) key = 0.0;
+    uint64_t h = hash_float(key);
+    uint64_t mask = (uint64_t)(set->capacity - 1);
+    size_t idx = (size_t)(h & mask);
+    while (1) {
+        PaceSetEntry* e = &set->entries[idx];
+        if (e->state == MAP_STATE_EMPTY) return 0;
+        if (e->state == MAP_STATE_OCCUPIED && e->hash == h && *(double*)e->key == key) return 1;
+        idx = (idx + 1) & mask;
+    }
+}
+
+int pace_set_remove_float(PaceSet* set, double key) {
+    if (!set || set->count == 0) return 0;
+    if (key == 0.0) key = 0.0;
+    uint64_t h = hash_float(key);
+    uint64_t mask = (uint64_t)(set->capacity - 1);
+    size_t idx = (size_t)(h & mask);
+    while (1) {
+        PaceSetEntry* e = &set->entries[idx];
+        if (e->state == MAP_STATE_EMPTY) return 0;
+        if (e->state == MAP_STATE_OCCUPIED && e->hash == h && *(double*)e->key == key) {
+            e->state = MAP_STATE_TOMBSTONE;
+            pace_release(e->key);
+            e->key = NULL;
+            set->count--;
+            set->tombstones++;
+            return 1;
+        }
+        idx = (idx + 1) & mask;
+    }
+}
+
 int64_t pace_set_len(PaceSet* set) {
     if (!set) return 0;
     return (int64_t)set->count;
@@ -805,7 +879,8 @@ PaceSet* pace_set_union(PaceSet* a, PaceSet* b) {
     if (a) {
         for (size_t i = 0; i < a->capacity; i++) {
             if (a->entries[i].state == MAP_STATE_OCCUPIED) {
-                if (is_str) pace_set_add_str(out, (struct PaceString*)a->entries[i].key);
+                if (is_str == 1) pace_set_add_str(out, (struct PaceString*)a->entries[i].key);
+                else if (is_str == 2) pace_set_add_float(out, *(double*)a->entries[i].key);
                 else pace_set_add_int(out, (int64_t)(intptr_t)a->entries[i].key);
             }
         }
@@ -813,7 +888,8 @@ PaceSet* pace_set_union(PaceSet* a, PaceSet* b) {
     if (b) {
         for (size_t i = 0; i < b->capacity; i++) {
             if (b->entries[i].state == MAP_STATE_OCCUPIED) {
-                if (is_str) pace_set_add_str(out, (struct PaceString*)b->entries[i].key);
+                if (is_str == 1) pace_set_add_str(out, (struct PaceString*)b->entries[i].key);
+                else if (is_str == 2) pace_set_add_float(out, *(double*)b->entries[i].key);
                 else pace_set_add_int(out, (int64_t)(intptr_t)b->entries[i].key);
             }
         }
@@ -827,9 +903,12 @@ PaceSet* pace_set_intersection(PaceSet* a, PaceSet* b) {
     if (!a || !b) return out;
     for (size_t i = 0; i < a->capacity; i++) {
         if (a->entries[i].state == MAP_STATE_OCCUPIED) {
-            if (is_str) {
+            if (is_str == 1) {
                 struct PaceString* k = (struct PaceString*)a->entries[i].key;
                 if (pace_set_has_str(b, k)) pace_set_add_str(out, k);
+            } else if (is_str == 2) {
+                double k = *(double*)a->entries[i].key;
+                if (pace_set_has_float(b, k)) pace_set_add_float(out, k);
             } else {
                 int64_t k = (int64_t)(intptr_t)a->entries[i].key;
                 if (pace_set_has_int(b, k)) pace_set_add_int(out, k);
@@ -845,9 +924,12 @@ PaceSet* pace_set_difference(PaceSet* a, PaceSet* b) {
     if (!a) return out;
     for (size_t i = 0; i < a->capacity; i++) {
         if (a->entries[i].state == MAP_STATE_OCCUPIED) {
-            if (is_str) {
+            if (is_str == 1) {
                 struct PaceString* k = (struct PaceString*)a->entries[i].key;
                 if (!b || !pace_set_has_str(b, k)) pace_set_add_str(out, k);
+            } else if (is_str == 2) {
+                double k = *(double*)a->entries[i].key;
+                if (!b || !pace_set_has_float(b, k)) pace_set_add_float(out, k);
             } else {
                 int64_t k = (int64_t)(intptr_t)a->entries[i].key;
                 if (!b || !pace_set_has_int(b, k)) pace_set_add_int(out, k);

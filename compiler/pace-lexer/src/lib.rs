@@ -52,4 +52,20 @@ mod tests {
         assert_eq!(lexer.next().unwrap().unwrap().kind, TokenKind::Arrow);
         assert!(lexer.next().is_none());
     }
+
+    #[test]
+    fn test_nested_string_in_interpolation() {
+        let source = r#""${b ?? "none"}" "${a ?? "x}y"}""#;
+        let mut lexer = Lexer::new(source, pace_span::FileId::DUMMY);
+
+        assert_eq!(
+            lexer.next().unwrap().unwrap().kind,
+            TokenKind::String(r#""${b ?? "none"}""#)
+        );
+        assert_eq!(
+            lexer.next().unwrap().unwrap().kind,
+            TokenKind::String(r#""${a ?? "x}y"}""#)
+        );
+        assert!(lexer.next().is_none());
+    }
 }
