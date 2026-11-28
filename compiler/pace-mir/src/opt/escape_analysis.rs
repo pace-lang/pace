@@ -133,6 +133,11 @@ impl EscapeAnalyzer {
                             return true;
                         }
                     }
+                    Statement::BoxSet(cell, val) => {
+                        if aliases.contains(cell) || aliases.contains(val) {
+                            return true;
+                        }
+                    }
                     Statement::Assign(lval, rval) => {
                         if matches!(lval, Lvalue::FieldAccess(_, _) | Lvalue::EnumFieldAccess(_, _, _)) {
                             if Self::rvalue_uses_any(rval, &aliases) {
@@ -246,6 +251,7 @@ impl EscapeAnalyzer {
             | Rvalue::StackInstantiate(_, args)
             | Rvalue::InstantiateEnum(_, _, args)
             | Rvalue::MakeClosure(_, args) => args.iter().any(|a| set.contains(a)),
+            Rvalue::BoxNew(l) | Rvalue::BoxGet(l, _) => set.contains(l),
             Rvalue::Constant(_) | Rvalue::GlobalRead(_) | Rvalue::MapNew(_, _) | Rvalue::SetNew(_) => false,
         }
     }
@@ -328,6 +334,9 @@ impl EscapeAnalyzer {
                             lhits || Self::rvalue_uses_any(rval, &aliases)
                         }
                         Statement::GlobalWrite(_, l) => aliases.contains(l),
+                        Statement::BoxSet(cell, val) => {
+                            aliases.contains(cell) || aliases.contains(val)
+                        }
                         Statement::Retain(_) | Statement::Release(_) => false,
                     };
                     if hits {
@@ -358,6 +367,12 @@ impl EscapeAnalyzer {
             for stmt in &body.blocks[bi].statements {
                 match stmt {
                     Statement::GlobalWrite(_, l) if aliases.contains(l) => {
+                        escapes = true;
+                        break;
+                    }
+                    Statement::BoxSet(cell, val)
+                        if aliases.contains(cell) || aliases.contains(val) =>
+                    {
                         escapes = true;
                         break;
                     }

@@ -209,6 +209,10 @@ impl DceOptimizer {
                     Statement::GlobalWrite(_, l) => {
                         used.insert(*l);
                     }
+                    Statement::BoxSet(cell, val) => {
+                        used.insert(*cell);
+                        used.insert(*val);
+                    }
                 }
             }
             if let Some(term) = &block.terminator {
@@ -238,7 +242,9 @@ impl DceOptimizer {
             | Rvalue::ResultPropagateErr(l)
             | Rvalue::OptionIsSome(l)
             | Rvalue::UnaryOp(_, l)
-            | Rvalue::ListNew(_, l) => {
+            | Rvalue::ListNew(_, l)
+            | Rvalue::BoxNew(l)
+            | Rvalue::BoxGet(l, _) => {
                 used.insert(*l);
             }
             Rvalue::BinaryOp(_, a, b) | Rvalue::ListGet(a, b) | Rvalue::MapGet(a, b) => {

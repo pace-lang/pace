@@ -27,6 +27,7 @@ pub enum Statement {
     Retain(Lvalue),
     Release(Lvalue),
     GlobalWrite(String, Local),
+    BoxSet(Local, Local),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,6 +68,8 @@ pub enum Rvalue {
     ResultOk(Local),
     ResultPropagateErr(Local),
     OptionIsSome(Local),
+    BoxNew(Local),
+    BoxGet(Local, pace_ty::Ty),
 }
 
 #[derive(Debug, Clone, PartialEq)]

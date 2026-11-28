@@ -784,6 +784,10 @@ impl CGenerator {
                 Statement::GlobalWrite(name, local) => {
                     writeln!(&mut self.output, "    {} = _{};", name, local.0).unwrap();
                 }
+                Statement::BoxSet(cell, val) => {
+                    let c_ty = self.emit_c_type(&locals[val.0 as usize]);
+                    writeln!(&mut self.output, "    *({}*)_{} = _{};", c_ty, cell.0, val.0).unwrap();
+                }
             }
         }
     }
@@ -1360,6 +1364,19 @@ impl CGenerator {
                 } else {
                     write!(&mut self.output, "(_{} != NULL)", opt.0).unwrap();
                 }
+            }
+            Rvalue::BoxNew(src) => {
+                let c_ty = self.emit_c_type(&locals[src.0 as usize]);
+                write!(
+                    &mut self.output,
+                    "memcpy(pace_alloc(sizeof({}), NULL), &_{}, sizeof({}))",
+                    c_ty, src.0, c_ty
+                )
+                .unwrap();
+            }
+            Rvalue::BoxGet(cell, ty) => {
+                let c_ty = self.emit_c_type(ty);
+                write!(&mut self.output, "*({}*)_{}", c_ty, cell.0).unwrap();
             }
         }
     }

@@ -35,4 +35,22 @@ fn main() {
     assert(inc(5) == 15, "first call mutates captured Counter")
     assert(inc(7) == 22, "second call sees updated Counter")
     assert(c.val == 22, "outer reference reflects mutations")
+
+    // Closure mutating captured `var` binding
+    var count = 0
+    let bump = () => {
+        count = count + 1
+    }
+    bump()
+    bump()
+    assert(count == 2, "closure mutates captured var")
+
+    var total = 10.0
+    let addTotal = (d: float) => {
+        total = total + d
+    }
+    addTotal(2.5)
+    total = total + 1.5
+    addTotal(1.0)
+    assert(total == 15.0, "outer and closure share captured float var")
 }

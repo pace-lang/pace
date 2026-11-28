@@ -80,6 +80,8 @@ pub struct MirBuilder<'a> {
     pub loop_stack: Vec<(BasicBlockId, BasicBlockId)>,
     pub scope_stack: Vec<Vec<Local>>,
     pub scope_managed_locals: std::collections::HashSet<Local>,
+    pub captured_vars_in_scope: std::collections::HashSet<HirId>,
+    pub boxed_var_cells: HashMap<HirId, (Local, Ty)>,
 }
 
 impl<'a> MirBuilder<'a> {
@@ -130,6 +132,8 @@ impl<'a> MirBuilder<'a> {
             loop_stack: Vec::new(),
             scope_stack: Vec::new(),
             scope_managed_locals: std::collections::HashSet::new(),
+            captured_vars_in_scope: std::collections::HashSet::new(),
+            boxed_var_cells: HashMap::new(),
         }
     }
 
@@ -158,7 +162,7 @@ impl<'a> MirBuilder<'a> {
         let is_inner_scope = self.scope_stack.len() > 1;
         for stmt in &block.statements {
             match stmt {
-                pace_hir::Stmt::Let { id, value, .. } | pace_hir::Stmt::Var { id, value, .. } => {
+                pace_hir::Stmt::Let { id, value, .. } => {
                     let var_ty = self
                         .local_types
                         .get(id)
@@ -179,15 +183,54 @@ impl<'a> MirBuilder<'a> {
                             self.push_stmt(Statement::Retain(Lvalue::Local(var_local)));
                         }
                     } else {
-                        // Uninitialized variable
-                        let var_ty = self
-                            .local_types
-                            .get(id)
-                            .expect("Variable type not found in local_types environment")
-                            .clone();
                         let var_local = self.new_local(var_ty.clone());
                         self.hir_to_local.insert(*id, var_local);
-                        // C backend automatically zeroes/nulls locals upon declaration
+                    }
+                }
+                pace_hir::Stmt::Var { id, value, .. } => {
+                    let var_ty = self
+                        .local_types
+                        .get(id)
+                        .expect("Variable type not found in local_types environment")
+                        .clone();
+                    let is_boxed = self.captured_vars_in_scope.contains(id);
+                    if let Some(val) = value {
+                        let prev = self.current_expected_ty.take();
+                        self.current_expected_ty = Some(var_ty.clone());
+                        let rval_local = self.build_expr(val);
+                        self.current_expected_ty = prev;
+                        if is_boxed {
+                            if matches!(var_ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _) | Ty::Set(_) | Ty::StringBuilder) {
+                                self.push_stmt(Statement::Retain(Lvalue::Local(rval_local)));
+                            }
+                            let cell_local = self.new_local(Ty::Optional(Box::new(Ty::Void)));
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(cell_local),
+                                Rvalue::BoxNew(rval_local),
+                            ));
+                            self.boxed_var_cells.insert(*id, (cell_local, var_ty));
+                        } else {
+                            let var_local = self.new_local(var_ty.clone());
+                            self.hir_to_local.insert(*id, var_local);
+                            self.push_stmt(Statement::Assign(
+                                Lvalue::Local(var_local),
+                                Rvalue::Use(rval_local),
+                            ));
+                            if matches!(var_ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _) | Ty::Set(_) | Ty::StringBuilder) {
+                                self.push_stmt(Statement::Retain(Lvalue::Local(var_local)));
+                            }
+                        }
+                    } else if is_boxed {
+                        let init_local = self.new_local(var_ty.clone());
+                        let cell_local = self.new_local(Ty::Optional(Box::new(Ty::Void)));
+                        self.push_stmt(Statement::Assign(
+                            Lvalue::Local(cell_local),
+                            Rvalue::BoxNew(init_local),
+                        ));
+                        self.boxed_var_cells.insert(*id, (cell_local, var_ty));
+                    } else {
+                        let var_local = self.new_local(var_ty.clone());
+                        self.hir_to_local.insert(*id, var_local);
                     }
                 }
                 pace_hir::Stmt::ExprStmt(expr, _) => {
@@ -300,8 +343,14 @@ impl<'a> MirBuilder<'a> {
                 
                 let mut captured_mir_locals = Vec::new();
                 let mut env_layout = Vec::new();
+                fn_builder.captured_vars_in_scope = self.captured_vars_in_scope.clone();
                 for cap_id in captured_vars {
-                    if let Some(local) = self.hir_to_local.get(cap_id) {
+                    if let Some((cell_local, var_ty)) = self.boxed_var_cells.get(cap_id).cloned() {
+                        captured_mir_locals.push(cell_local);
+                        let fn_cell_local = fn_builder.new_local(Ty::Optional(Box::new(Ty::Void)));
+                        fn_builder.boxed_var_cells.insert(*cap_id, (fn_cell_local, var_ty));
+                        env_layout.push((fn_cell_local, Ty::Optional(Box::new(Ty::Void))));
+                    } else if let Some(local) = self.hir_to_local.get(cap_id) {
                         captured_mir_locals.push(*local);
                         let ty = self.locals[local.0 as usize].clone();
                         let fn_local = fn_builder.new_local(ty.clone());
@@ -374,7 +423,14 @@ impl<'a> MirBuilder<'a> {
                     }
                 }
 
-                if let Some(l) = self.hir_to_local.get(id) {
+                if let Some((cell_local, var_ty)) = self.boxed_var_cells.get(id).cloned() {
+                    let temp = self.new_local(var_ty.clone());
+                    self.push_stmt(Statement::Assign(
+                        Lvalue::Local(temp),
+                        Rvalue::BoxGet(cell_local, var_ty),
+                    ));
+                    temp
+                } else if let Some(l) = self.hir_to_local.get(id) {
                     *l
                 } else if let Some(ty) = self.global_env.get(id).or_else(|| self.local_types.get(id)) {
                     let g_name = self
@@ -2381,6 +2437,19 @@ impl<'a> MirBuilder<'a> {
                 temp
             }
             Expr::Assign { target, value, .. } => {
+                if let Expr::Ident(id, _, _, _) = &**target
+                    && let Some((cell_local, var_ty)) = self.boxed_var_cells.get(id).cloned()
+                {
+                    let prev = self.current_expected_ty.take();
+                    self.current_expected_ty = Some(var_ty.clone());
+                    let rval = self.build_expr(value);
+                    self.current_expected_ty = prev;
+                    if matches!(var_ty, Ty::Class(_) | Ty::List(_) | Ty::Map(_, _) | Ty::Set(_) | Ty::StringBuilder) {
+                        self.push_stmt(Statement::Retain(Lvalue::Local(rval)));
+                    }
+                    self.push_stmt(Statement::BoxSet(cell_local, rval));
+                    return rval;
+                }
                 if let Expr::Index { target: idx_target, index: idx_expr, span: _ } = &**target {
                     let obj_local = self.build_expr(idx_target);
                     let obj_ty = self.locals[obj_local.0 as usize].clone();
@@ -2928,7 +2997,9 @@ impl<'a> MirBuilder<'a> {
                             } else {
                                 Ty::Void
                             };
-                            fn_builder.build_block(body);
+                            collect_captured_vars_in_block(body, &mut fn_builder.captured_vars_in_scope);
+                            collect_captured_vars_in_block(body, &mut fn_builder.captured_vars_in_scope);
+                    fn_builder.build_block(body);
                             let extracted_closures = std::mem::take(&mut fn_builder.closure_functions);
                             let fn_body = fn_builder.finish(&mir_params, &ret_ty);
 
@@ -2999,6 +3070,7 @@ impl<'a> MirBuilder<'a> {
                     } else {
                         Ty::Void
                     };
+                    collect_captured_vars_in_block(body, &mut fn_builder.captured_vars_in_scope);
                     fn_builder.build_block(body);
                     let extracted_closures = std::mem::take(&mut fn_builder.closure_functions);
                     let fn_body = fn_builder.finish(&mir_params, &ret_ty);
@@ -3134,6 +3206,118 @@ impl<'a> MirBuilder<'a> {
             enum_defs: resolved_enum_defs,
             global_vars,
         }
+    }
+}
+
+fn collect_captured_vars_in_block(
+    block: &pace_hir::Block,
+    out: &mut std::collections::HashSet<HirId>,
+) {
+    for stmt in &block.statements {
+        match stmt {
+            pace_hir::Stmt::Let { value, .. } | pace_hir::Stmt::Var { value, .. } => {
+                if let Some(v) = value {
+                    collect_captured_vars_in_expr(v, out);
+                }
+            }
+            pace_hir::Stmt::ExprStmt(e, _) => collect_captured_vars_in_expr(e, out),
+            pace_hir::Stmt::Return(Some(e), _) => collect_captured_vars_in_expr(e, out),
+            pace_hir::Stmt::Return(None, _)
+            | pace_hir::Stmt::Break(_)
+            | pace_hir::Stmt::Continue(_) => {}
+        }
+    }
+}
+
+fn collect_captured_vars_in_expr(
+    expr: &pace_hir::Expr,
+    out: &mut std::collections::HashSet<HirId>,
+) {
+    match expr {
+        pace_hir::Expr::Closure {
+            captured_vars,
+            body,
+            ..
+        } => {
+            out.extend(captured_vars.iter().copied());
+            match body {
+                pace_hir::ClosureBody::Expr(e) => collect_captured_vars_in_expr(e, out),
+                pace_hir::ClosureBody::Block(b) => collect_captured_vars_in_block(b, out),
+            }
+        }
+        pace_hir::Expr::InterpolatedString(parts, _) => {
+            for p in parts {
+                collect_captured_vars_in_expr(p, out);
+            }
+        }
+        pace_hir::Expr::Binary { left, right, .. } => {
+            collect_captured_vars_in_expr(left, out);
+            collect_captured_vars_in_expr(right, out);
+        }
+        pace_hir::Expr::MemberAccess { object, .. }
+        | pace_hir::Expr::OptionalMemberAccess { object, .. } => {
+            collect_captured_vars_in_expr(object, out);
+        }
+        pace_hir::Expr::Call { callee, args, .. } => {
+            collect_captured_vars_in_expr(callee, out);
+            for a in args {
+                collect_captured_vars_in_expr(&a.expr, out);
+            }
+        }
+        pace_hir::Expr::BuiltinCall(_, args, _) | pace_hir::Expr::ListLiteral(args, _) => {
+            for a in args {
+                collect_captured_vars_in_expr(a, out);
+            }
+        }
+        pace_hir::Expr::MapLiteral(entries, _) => {
+            for (k, v) in entries {
+                collect_captured_vars_in_expr(k, out);
+                collect_captured_vars_in_expr(v, out);
+            }
+        }
+        pace_hir::Expr::If {
+            cond,
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_captured_vars_in_expr(cond, out);
+            collect_captured_vars_in_block(then_block, out);
+            if let Some(eb) = else_block {
+                collect_captured_vars_in_block(eb, out);
+            }
+        }
+        pace_hir::Expr::While { cond, body, .. } => {
+            collect_captured_vars_in_expr(cond, out);
+            collect_captured_vars_in_block(body, out);
+        }
+        pace_hir::Expr::Assign { target, value, .. }
+        | pace_hir::Expr::Index {
+            target,
+            index: value,
+            ..
+        } => {
+            collect_captured_vars_in_expr(target, out);
+            collect_captured_vars_in_expr(value, out);
+        }
+        pace_hir::Expr::Match { subject, arms, .. } => {
+            collect_captured_vars_in_expr(subject, out);
+            for arm in arms {
+                collect_captured_vars_in_expr(&arm.body, out);
+            }
+        }
+        pace_hir::Expr::Await(inner, _)
+        | pace_hir::Expr::Try(inner, _)
+        | pace_hir::Expr::Unary { expr: inner, .. } => {
+            collect_captured_vars_in_expr(inner, out);
+        }
+        pace_hir::Expr::IntLiteral(_, _)
+        | pace_hir::Expr::FloatLiteral(_, _)
+        | pace_hir::Expr::BoolLiteral(_, _)
+        | pace_hir::Expr::StringLiteral(_, _)
+        | pace_hir::Expr::Null(_)
+        | pace_hir::Expr::Ident(_, _, _, _)
+        | pace_hir::Expr::Super(_) => {}
     }
 }
 
