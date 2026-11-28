@@ -15,6 +15,9 @@ fn maybeDouble(x: int?) -> int? {
     return v * 2
 }
 
+struct OptInner { val: int }
+struct OptOuter { inner: OptInner? }
+
 fn main() {
     // String optional + coalescing
     let s1: string? = null
@@ -52,4 +55,12 @@ fn main() {
     assert(os1 == os2, "string? == string? compares by content")
     assert(os1 != os3, "string? != null compares properly")
     assert(os3 == null, "null string? == null")
+
+    // Chained ?. across optional struct fields
+    let oo1: OptOuter? = OptOuter(inner: OptInner(val: 42))
+    let oo2: OptOuter? = OptOuter(inner: null)
+    let oo3: OptOuter? = null
+    assert((oo1?.inner?.val ?? -1) == 42, "deep ?. hit")
+    assert((oo2?.inner?.val ?? -1) == -1, "deep ?. inner null")
+    assert((oo3?.inner?.val ?? -1) == -1, "deep ?. outer null")
 }

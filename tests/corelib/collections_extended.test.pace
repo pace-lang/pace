@@ -151,4 +151,10 @@ fn main() {
     let gotPi = fm.get("pi")
     assert(gotPi != null && (gotPi ?? 0.0) == 3.14159, "Map<string, float> get")
     assert(fm["half"] == 0.5, "Map<string, float> index")
+
+    // 8. List and Map literals mixing T and null
+    let optList: List<int?> = [1, null, 3]
+    assert(optList.len == 3 && (optList[0] ?? -1) == 1 && optList[1] == null && (optList[2] ?? -1) == 3, "List<int?> literal")
+    let optMap: Map<string, int?> = {"a": 10, "b": null}
+    assert(optMap.has("a") && optMap.has("b"), "Map<string, int?> literal")
 }

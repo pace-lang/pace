@@ -91,6 +91,61 @@ impl Default for TypeChecker {
 }
 
 impl TypeChecker {
+    fn is_assignable(&self, target: &Ty, source: &Ty) -> bool {
+        if target == source {
+            return true;
+        }
+        if let Ty::Optional(inner) = target {
+            if **inner == *source {
+                return true;
+            }
+            if matches!(source, Ty::Optional(s_inner) if **s_inner == Ty::Void) {
+                return true;
+            }
+        }
+        if let (Ty::Class(target_id), Ty::Class(source_id)) = (target, source) {
+            let mut curr = self.class_parents.get(source_id).copied();
+            while let Some(pid) = curr {
+                if pid == *target_id {
+                    return true;
+                }
+                curr = self.class_parents.get(&pid).copied();
+            }
+        }
+        false
+    }
+
+    fn unify_types(&self, a: &Ty, b: &Ty) -> Option<Ty> {
+        if a == b {
+            return Some(a.clone());
+        }
+        if *a == Ty::Never {
+            return Some(b.clone());
+        }
+        if *b == Ty::Never {
+            return Some(a.clone());
+        }
+        if matches!(a, Ty::Optional(inner) if **inner == Ty::Void) {
+            return Some(match b {
+                Ty::Optional(_) => b.clone(),
+                other => Ty::Optional(Box::new(other.clone())),
+            });
+        }
+        if matches!(b, Ty::Optional(inner) if **inner == Ty::Void) {
+            return Some(match a {
+                Ty::Optional(_) => a.clone(),
+                other => Ty::Optional(Box::new(other.clone())),
+            });
+        }
+        if self.is_assignable(a, b) {
+            return Some(a.clone());
+        }
+        if self.is_assignable(b, a) {
+            return Some(b.clone());
+        }
+        None
+    }
+
     pub fn new() -> Self {
         Self {
             env: HashMap::new(),
@@ -1304,19 +1359,7 @@ impl TypeChecker {
                     };
 
                     if let Some(expected) = expected_ty {
-                        let mut type_matches = ty == expected;
-                        if !type_matches {
-                            if expected == Ty::Optional(Box::new(ty.clone())) {
-                                type_matches = true;
-                            } else if let (Ty::Optional(_), Ty::Optional(inner_val)) =
-                                (&expected, &ty)
-                                && **inner_val == Ty::Void
-                            {
-                                type_matches = true;
-                            }
-                        }
-
-                        if !type_matches {
+                        if !self.is_assignable(&expected, &ty) {
                             self.reporter.report(
                                 pace_errors::Diagnostic::error(format!(
                                     "Type mismatch: expected {}, got {}",
@@ -2290,7 +2333,11 @@ impl TypeChecker {
                                 } in fields
                                 {
                                     if fname == member {
-                                        return Ok(Ty::Optional(Box::new(fty.clone())));
+                                        return Ok(if matches!(fty, Ty::Optional(_)) {
+                                            fty.clone()
+                                        } else {
+                                            Ty::Optional(Box::new(fty.clone()))
+                                        });
                                     }
                                 }
                             }
@@ -2303,7 +2350,11 @@ impl TypeChecker {
                                 } in fields
                                 {
                                     if fname == member {
-                                        return Ok(Ty::Optional(Box::new(fty.clone())));
+                                        return Ok(if matches!(fty, Ty::Optional(_)) {
+                                            fty.clone()
+                                        } else {
+                                            Ty::Optional(Box::new(fty.clone()))
+                                        });
                                     }
                                 }
                             }
@@ -2848,10 +2899,15 @@ impl TypeChecker {
                         .map(|f| (f.name.clone(), f.ty.clone()))
                         .collect();
                     for pace_hir::HirCallArg { label, expr: fexpr } in args {
+                        let prev_expected = self.current_expected_ty.take();
+                        self.current_expected_ty = label
+                            .as_ref()
+                            .and_then(|fname| def_map.get(fname.as_str()).cloned());
                         let fty = self.check_expr(fexpr)?;
+                        self.current_expected_ty = prev_expected;
                         if let Some(fname) = label {
                             if let Some(expected_ty) = def_map.remove(fname.as_str()) {
-                                if fty != expected_ty {
+                                if !self.is_assignable(&expected_ty, &fty) {
                                     self.reporter.report(
                                         Diagnostic::error(format!(
                                             "Field '{}' expects type {}, got {}",
@@ -2985,10 +3041,15 @@ impl TypeChecker {
                         .map(|f| (f.name.clone(), f.ty.clone()))
                         .collect();
                     for pace_hir::HirCallArg { label, expr: fexpr } in args {
+                        let prev_expected = self.current_expected_ty.take();
+                        self.current_expected_ty = label
+                            .as_ref()
+                            .and_then(|fname| def_map.get(fname.as_str()).cloned());
                         let fty = self.check_expr(fexpr)?;
+                        self.current_expected_ty = prev_expected;
                         if let Some(fname) = label {
                             if let Some(expected_ty) = def_map.remove(fname.as_str()) {
-                                if fty != expected_ty {
+                                if !self.is_assignable(&expected_ty, &fty) {
                                     self.reporter.report(
                                         Diagnostic::error(format!(
                                             "Field '{}' expects type {}, got {}",
@@ -3088,7 +3149,12 @@ impl TypeChecker {
                         def_map.insert(n, self.resolve_type(&t)?);
                     }
                     for pace_hir::HirCallArg { label, expr: fexpr } in args {
+                        let prev_expected = self.current_expected_ty.take();
+                        self.current_expected_ty = label
+                            .as_ref()
+                            .and_then(|fname| def_map.get(fname).cloned());
                         let fty = self.check_expr(fexpr)?;
+                        self.current_expected_ty = prev_expected;
                         if let Some(fname) = label {
                             if let Some(expected_ty) = def_map.remove(fname) {
                                 if fty != expected_ty {
@@ -3698,13 +3764,15 @@ impl TypeChecker {
                     return Ok(Ty::List(Box::new(Ty::Int)));
                 }
 
-                let first_elem_ty = self.check_expr(&elements[0])?;
+                let mut first_elem_ty = self.check_expr(&elements[0])?;
                 for elem in &elements[1..] {
                     let prev_exp = self.current_expected_ty.take();
                     self.current_expected_ty = Some(first_elem_ty.clone());
                     let elem_ty = self.check_expr(elem)?;
                     self.current_expected_ty = prev_exp;
-                    if elem_ty != first_elem_ty && !(first_elem_ty == Ty::Optional(Box::new(elem_ty.clone()))) {
+                    if let Some(unified) = self.unify_types(&first_elem_ty, &elem_ty) {
+                        first_elem_ty = unified;
+                    } else {
                         self.reporter.report(
                             Diagnostic::error(format!(
                                 "List elements must have consistent types: expected {}, found {}",
@@ -3726,7 +3794,7 @@ impl TypeChecker {
                 }
 
                 let first_k_ty = self.check_expr(&entries[0].0)?;
-                let first_v_ty = self.check_expr(&entries[0].1)?;
+                let mut first_v_ty = self.check_expr(&entries[0].1)?;
 
                 for (k, v) in &entries[1..] {
                     let k_ty = self.check_expr(k)?;
@@ -3741,7 +3809,9 @@ impl TypeChecker {
                             .with_span(k.span()),
                         );
                     }
-                    if v_ty != first_v_ty {
+                    if let Some(unified) = self.unify_types(&first_v_ty, &v_ty) {
+                        first_v_ty = unified;
+                    } else {
                         self.reporter.report(
                             Diagnostic::error(format!(
                                 "Map values must have consistent types: expected {}, found {}",

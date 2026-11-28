@@ -265,6 +265,18 @@ impl CGenerator {
     }
 
     fn emit_box_for_collection(&self, local: pace_mir::Local, ty: &Ty) -> String {
+        if let Some(opt_name) = Self::is_primitive_opt(ty) {
+            if opt_name == "PaceOptFloat" {
+                return format!(
+                    "(_{}.has_value ? memcpy(pace_alloc(sizeof(double), NULL), &_{}.value, sizeof(double)) : NULL)",
+                    local.0, local.0
+                );
+            }
+            return format!(
+                "(_{}.has_value ? (void*)(intptr_t)_{}.value : NULL)",
+                local.0, local.0
+            );
+        }
         let c_ty = self.emit_c_type(ty);
         if c_ty.contains('*') {
             format!("(void*)_{}", local.0)
@@ -711,6 +723,15 @@ impl CGenerator {
                                         continue;
                                     }
                                 }
+                            } else if let Ty::Class(dest_id) = dest_ty {
+                                if let Rvalue::Use(src) = rval
+                                    && let Ty::Class(src_id) = &locals[src.0 as usize]
+                                    && src_id != dest_id
+                                {
+                                    let c_dest_ty = self.emit_c_type(dest_ty);
+                                    writeln!(&mut self.output, "({}) _{};", c_dest_ty, src.0).unwrap();
+                                    continue;
+                                }
                             }
                             if matches!(rval, Rvalue::ResultOk(_)) {
                                 let c_dest_ty = self.emit_c_type(dest_ty);
@@ -1156,7 +1177,10 @@ impl CGenerator {
                 write!(&mut self.output, "{}", name).unwrap();
             }
             Rvalue::FieldAccess(obj, field) => {
-                let is_ptr = matches!(locals[obj.0 as usize], Ty::Class(_) | Ty::Actor(_));
+                let is_ptr = matches!(
+                    locals[obj.0 as usize],
+                    Ty::Class(_) | Ty::Actor(_) | Ty::Optional(_)
+                );
                 if is_ptr {
                     write!(&mut self.output, "_{}->{}", obj.0, field).unwrap();
                 } else {

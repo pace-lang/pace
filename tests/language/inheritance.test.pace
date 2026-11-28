@@ -49,5 +49,8 @@ fn main() {
 
     makeAnimalSpeak(d)
     makeAnimalSpeak(c)
+
+    let poly: Animal = Dog("Buddy", "Labrador")
+    assert(poly.name == "Buddy", "polymorphic base-typed binding")
 }
 

@@ -545,35 +545,71 @@ impl<'a> MirBuilder<'a> {
                 };
 
                 let mut field_ty = Ty::Optional(Box::new(Ty::Void));
-                match inner_ty {
-                    Ty::Struct(id) => {
-                        if let Some(fields) = self.struct_defs.get(&id) {
-                            for pace_ty::ResolvedField { name: n, ty: t, .. } in fields {
-                                if n == member {
-                                    field_ty = Ty::Optional(Box::new(t.clone()));
-                                    break;
-                                }
+                let mut already_optional = false;
+                let fields_opt = match inner_ty {
+                    Ty::Struct(id) => self.struct_defs.get(&id),
+                    Ty::Class(id) | Ty::Actor(id) => self.class_defs.get(&id),
+                    _ => None,
+                };
+                if let Some(fields) = fields_opt {
+                    for pace_ty::ResolvedField { name: n, ty: t, .. } in fields {
+                        if n == member {
+                            if matches!(t, Ty::Optional(_)) {
+                                field_ty = t.clone();
+                                already_optional = true;
+                            } else {
+                                field_ty = Ty::Optional(Box::new(t.clone()));
                             }
+                            break;
                         }
                     }
-                    Ty::Class(id) | Ty::Actor(id) => {
-                        if let Some(fields) = self.class_defs.get(&id) {
-                            for pace_ty::ResolvedField { name: n, ty: t, .. } in fields {
-                                if n == member {
-                                    field_ty = Ty::Optional(Box::new(t.clone()));
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
                 }
 
-                let temp = self.new_local(field_ty);
-                self.push_stmt(Statement::Assign(
-                    Lvalue::Local(temp),
-                    Rvalue::OptionalFieldAccess(obj, member.to_string()),
-                ));
+                let temp = self.new_local(field_ty.clone());
+                if already_optional {
+                    let null_cmp = self.new_local(Ty::Bool);
+                    let null_val = self.new_local(Ty::Optional(Box::new(Ty::Void)));
+                    self.push_stmt(Statement::Assign(
+                        Lvalue::Local(null_val),
+                        Rvalue::Constant(Constant::Int("0".to_string())),
+                    ));
+                    self.push_stmt(Statement::Assign(
+                        Lvalue::Local(null_cmp),
+                        Rvalue::BinaryOp(pace_ast::BinaryOp::NotEq, obj, null_val),
+                    ));
+                    let then_bb = self.new_block();
+                    let else_bb = self.new_block();
+                    let merge_bb = self.new_block();
+                    self.blocks[self.current_block.0 as usize].terminator =
+                        Some(Terminator::Branch {
+                            cond: null_cmp,
+                            then_block: then_bb,
+                            else_block: else_bb,
+                        });
+
+                    self.current_block = then_bb;
+                    self.push_stmt(Statement::Assign(
+                        Lvalue::Local(temp),
+                        Rvalue::FieldAccess(obj, member.to_string()),
+                    ));
+                    self.blocks[self.current_block.0 as usize].terminator =
+                        Some(Terminator::Goto(merge_bb));
+
+                    self.current_block = else_bb;
+                    self.push_stmt(Statement::Assign(
+                        Lvalue::Local(temp),
+                        Rvalue::Use(null_val),
+                    ));
+                    self.blocks[self.current_block.0 as usize].terminator =
+                        Some(Terminator::Goto(merge_bb));
+
+                    self.current_block = merge_bb;
+                } else {
+                    self.push_stmt(Statement::Assign(
+                        Lvalue::Local(temp),
+                        Rvalue::OptionalFieldAccess(obj, member.to_string()),
+                    ));
+                }
                 temp
             }
             Expr::MemberAccess { object, member, .. } => {
@@ -1912,6 +1948,31 @@ impl<'a> MirBuilder<'a> {
                             Rvalue::GlobalCall(init_name, call_args),
                         ));
                     } else {
+                        let expected_field_tys: Vec<Ty> = match &ty {
+                            Ty::Struct(id) => self
+                                .struct_defs
+                                .get(id)
+                                .map(|fs| fs.iter().map(|f| f.ty.clone()).collect())
+                                .unwrap_or_default(),
+                            Ty::Class(id) | Ty::Actor(id) => self
+                                .class_defs
+                                .get(id)
+                                .map(|fs| fs.iter().map(|f| f.ty.clone()).collect())
+                                .unwrap_or_default(),
+                            _ => Vec::new(),
+                        };
+                        for (i, arg_local) in arg_locals.iter_mut().enumerate() {
+                            if let Some(expected_ty) = expected_field_tys.get(i)
+                                && &self.locals[arg_local.0 as usize] != expected_ty
+                            {
+                                let coerced = self.new_local(expected_ty.clone());
+                                self.push_stmt(Statement::Assign(
+                                    Lvalue::Local(coerced),
+                                    Rvalue::Use(*arg_local),
+                                ));
+                                *arg_local = coerced;
+                            }
+                        }
                         self.push_stmt(Statement::Assign(
                             Lvalue::Local(temp),
                             Rvalue::Instantiate(ty, arg_locals),
