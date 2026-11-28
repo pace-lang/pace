@@ -75,6 +75,7 @@ struct PaceActorBase {
 };
 
 void* pace_send_actor_message(void* actor, void (*func)(void*), void* arg);
+void pace_send_actor_message_detached(void* actor, void (*func)(void*), void* arg);
 
 // Collections API
 struct PaceList;

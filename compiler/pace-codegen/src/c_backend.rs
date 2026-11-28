@@ -422,30 +422,43 @@ impl CGenerator {
             &func.name
         };
 
+        let direct_actor_self = func.is_async
+            && func.params.len() == 1
+            && func.env_layout.is_none()
+            && matches!(func.body.locals[func.params[0].0 as usize], Ty::Actor(_));
+
         if func.is_async {
-            self.output.push_str(&format!("struct __AsyncEnv_{} {{\n", c_name));
-            for param in func.params.iter() {
-                let ty = &func.body.locals[param.0 as usize];
-                let ty_str = self.emit_c_type(ty);
-                self.output.push_str(&format!("    {} _{};\n", ty_str, param.0));
+            if !direct_actor_self {
+                self.output.push_str(&format!("struct __AsyncEnv_{} {{\n", c_name));
+                for param in func.params.iter() {
+                    let ty = &func.body.locals[param.0 as usize];
+                    let ty_str = self.emit_c_type(ty);
+                    self.output.push_str(&format!("    {} _{};\n", ty_str, param.0));
+                }
+                if func.env_layout.is_some() {
+                    self.output.push_str("    void* __env;\n");
+                }
+                self.output.push_str("};\n\n");
             }
-            if func.env_layout.is_some() {
-                self.output.push_str("    void* __env;\n");
-            }
-            self.output.push_str("};\n\n");
-            
+
             self.output.push_str(&format!("void __async_body_{}(void* __env_ptr) {{\n", c_name));
-            self.output.push_str(&format!("    struct __AsyncEnv_{}* __async_env = (struct __AsyncEnv_{}*)__env_ptr;\n", c_name, c_name));
-            
-            for param in func.params.iter() {
-                let ty = &func.body.locals[param.0 as usize];
-                let ty_str = self.emit_c_type(ty);
-                self.output.push_str(&format!("    {} _{} = __async_env->_{};\n", ty_str, param.0, param.0));
+            if direct_actor_self {
+                let p0 = func.params[0].0;
+                let ty_str = self.emit_c_type(&func.body.locals[p0 as usize]);
+                self.output.push_str(&format!("    {} _{} = ({})__env_ptr;\n", ty_str, p0, ty_str));
+            } else {
+                self.output.push_str(&format!("    struct __AsyncEnv_{}* __async_env = (struct __AsyncEnv_{}*)__env_ptr;\n", c_name, c_name));
+
+                for param in func.params.iter() {
+                    let ty = &func.body.locals[param.0 as usize];
+                    let ty_str = self.emit_c_type(ty);
+                    self.output.push_str(&format!("    {} _{} = __async_env->_{};\n", ty_str, param.0, param.0));
+                }
+                if func.env_layout.is_some() {
+                    self.output.push_str("    void* __env = __async_env->__env;\n");
+                }
+                self.output.push_str("    free(__async_env);\n");
             }
-            if func.env_layout.is_some() {
-                self.output.push_str("    void* __env = __async_env->__env;\n");
-            }
-            self.output.push_str("    free(__async_env);\n");
         } else {
             self.output.push_str(&format!("{} {}(", ret_ty_str, c_name));
             let mut has_params = false;
@@ -575,17 +588,26 @@ impl CGenerator {
                 }
             }
 
-            self.output.push_str(&format!("    struct __AsyncEnv_{}* __async_env = (struct __AsyncEnv_{}*)malloc(sizeof(struct __AsyncEnv_{}));\n", c_name, c_name, c_name));
-            for param in func.params.iter() {
-                self.output.push_str(&format!("    __async_env->_{} = _{};\n", param.0, param.0));
-            }
-            if func.env_layout.is_some() {
-                self.output.push_str("    __async_env->__env = __env;\n");
-            }
-            if is_actor_method {
-                self.output.push_str(&format!("    return pace_send_actor_message((void*)_{}, __async_body_{}, __async_env);\n", actor_param.unwrap(), c_name));
+            let env_arg = if direct_actor_self {
+                format!("(void*)_{}", actor_param.unwrap())
             } else {
-                self.output.push_str(&format!("    return pace_spawn_fiber(__async_body_{}, __async_env);\n", c_name));
+                self.output.push_str(&format!("    struct __AsyncEnv_{}* __async_env = (struct __AsyncEnv_{}*)malloc(sizeof(struct __AsyncEnv_{}));\n", c_name, c_name, c_name));
+                for param in func.params.iter() {
+                    self.output.push_str(&format!("    __async_env->_{} = _{};\n", param.0, param.0));
+                }
+                if func.env_layout.is_some() {
+                    self.output.push_str("    __async_env->__env = __env;\n");
+                }
+                "__async_env".to_string()
+            };
+            if is_actor_method {
+                if func.return_type == Ty::Void {
+                    self.output.push_str(&format!("    pace_send_actor_message_detached((void*)_{}, __async_body_{}, {});\n    return NULL;\n", actor_param.unwrap(), c_name, env_arg));
+                } else {
+                    self.output.push_str(&format!("    return pace_send_actor_message((void*)_{}, __async_body_{}, {});\n", actor_param.unwrap(), c_name, env_arg));
+                }
+            } else {
+                self.output.push_str(&format!("    return pace_spawn_fiber(__async_body_{}, {});\n", c_name, env_arg));
             }
             self.output.push_str("}\n");
         }

@@ -11,7 +11,7 @@
 #define FIBER_STACK_SIZE (64 * 1024)
 
 typedef struct PaceFiber {
-    ucontext_t ctx;
+    ucontext_t* ctx;
     void* stack;
     volatile int is_done;
     void* result;
@@ -41,6 +41,10 @@ static void cleanup_all_fibers(void) {
         if (curr->stack) {
             free(curr->stack);
             curr->stack = NULL;
+        }
+        if (curr->ctx) {
+            free(curr->ctx);
+            curr->ctx = NULL;
         }
         free(curr);
         curr = next;
@@ -112,6 +116,7 @@ static void* pace_xmalloc(size_t size) {
 
 void* pace_spawn_fiber(void (*func)(void*), void* arg) {
     PaceFiber* fiber = (PaceFiber*)pace_xmalloc(sizeof(PaceFiber));
+    fiber->ctx = (ucontext_t*)pace_xmalloc(sizeof(ucontext_t));
     fiber->stack = pace_xmalloc(FIBER_STACK_SIZE);
     fiber->is_done = 0;
     fiber->result = NULL;
@@ -119,12 +124,12 @@ void* pace_spawn_fiber(void (*func)(void*), void* arg) {
     fiber->next = NULL;
     register_fiber(fiber);
 
-    getcontext(&fiber->ctx);
-    fiber->ctx.uc_stack.ss_sp = fiber->stack;
-    fiber->ctx.uc_stack.ss_size = FIBER_STACK_SIZE;
-    fiber->ctx.uc_link = &main_loop_ctx;
+    getcontext(fiber->ctx);
+    fiber->ctx->uc_stack.ss_sp = fiber->stack;
+    fiber->ctx->uc_stack.ss_size = FIBER_STACK_SIZE;
+    fiber->ctx->uc_link = &main_loop_ctx;
     
-    makecontext(&fiber->ctx, (void (*)())fiber_trampoline, 3, func, arg, fiber);
+    makecontext(fiber->ctx, (void (*)())fiber_trampoline, 3, func, arg, fiber);
 
     enqueue_fiber(fiber);
     return fiber;
@@ -162,18 +167,18 @@ void* pace_await_fiber(void* fiber_ptr) {
     }
 
     if (!target->is_done) {
-        if (current_fiber) {
+        if (current_fiber && current_fiber->ctx) {
             current_fiber->waiting_on = target;
             // Save current fiber state and switch back to main loop
-            swapcontext(&current_fiber->ctx, &main_loop_ctx);
+            swapcontext(current_fiber->ctx, &main_loop_ctx);
         } else {
             // If called from main thread
             while (!target->is_done) {
                 pace_check_sleep_queue();
                 PaceFiber* next_f = dequeue_fiber();
-                if (next_f) {
+                if (next_f && next_f->ctx) {
                     current_fiber = next_f;
-                    swapcontext(&main_loop_ctx, &next_f->ctx);
+                    swapcontext(&main_loop_ctx, next_f->ctx);
                     current_fiber = NULL;
                     if (!next_f->is_done && next_f->waiting_on != (void*)1) {
                         enqueue_fiber(next_f);
@@ -197,6 +202,10 @@ void* pace_await_fiber(void* fiber_ptr) {
         free(target->stack);
         target->stack = NULL;
     }
+    if (target->ctx) {
+        free(target->ctx);
+        target->ctx = NULL;
+    }
     return result;
 }
 
@@ -217,7 +226,7 @@ void pace_event_loop_run(void) {
             }
 
             current_fiber = f;
-            swapcontext(&main_loop_ctx, &f->ctx);
+            swapcontext(&main_loop_ctx, f->ctx);
             current_fiber = NULL;
 
             if (!f->is_done && f->waiting_on != (void*)1) {
@@ -269,7 +278,7 @@ static void fiber_sleep_trampoline(void* arg) {
     // Prevent event loop from immediately re-enqueueing this fiber
     current_fiber->waiting_on = (void*)1; 
     
-    swapcontext(&current_fiber->ctx, &main_loop_ctx);
+    swapcontext(current_fiber->ctx, &main_loop_ctx);
     
     // Woken up
     current_fiber->waiting_on = NULL;
@@ -279,6 +288,7 @@ static void fiber_sleep_trampoline(void* arg) {
 
 void* pace_sleep(long long ms) {
     PaceFiber* fiber = (PaceFiber*)pace_xmalloc(sizeof(PaceFiber));
+    fiber->ctx = (ucontext_t*)pace_xmalloc(sizeof(ucontext_t));
     fiber->stack = pace_xmalloc(FIBER_STACK_SIZE);
     fiber->is_done = 0;
     fiber->result = NULL;
@@ -286,12 +296,12 @@ void* pace_sleep(long long ms) {
     fiber->next = NULL;
     register_fiber(fiber);
 
-    getcontext(&fiber->ctx);
-    fiber->ctx.uc_stack.ss_sp = fiber->stack;
-    fiber->ctx.uc_stack.ss_size = FIBER_STACK_SIZE;
-    fiber->ctx.uc_link = &main_loop_ctx;
+    getcontext(fiber->ctx);
+    fiber->ctx->uc_stack.ss_sp = fiber->stack;
+    fiber->ctx->uc_stack.ss_size = FIBER_STACK_SIZE;
+    fiber->ctx->uc_link = &main_loop_ctx;
     
-    makecontext(&fiber->ctx, (void (*)())fiber_sleep_trampoline, 1, (void*)ms);
+    makecontext(fiber->ctx, (void (*)())fiber_sleep_trampoline, 1, (void*)ms);
 
     enqueue_fiber(fiber);
     return fiber;
@@ -335,27 +345,27 @@ static void* worker_thread_main(void* arg) {
             
             while (1) {
                 pthread_mutex_lock(&actor->mailbox_mutex);
-                struct PaceActorMessage* msg = actor->mailbox_head;
-                if (msg) {
-                    actor->mailbox_head = msg->next;
-                    if (!actor->mailbox_head) {
-                        actor->mailbox_tail = NULL;
-                    }
-                } else {
+                struct PaceActorMessage* batch = actor->mailbox_head;
+                if (!batch) {
                     actor->is_running = 0;
                     pthread_mutex_unlock(&actor->mailbox_mutex);
                     break;
                 }
+                actor->mailbox_head = NULL;
+                actor->mailbox_tail = NULL;
                 pthread_mutex_unlock(&actor->mailbox_mutex);
-                
-                current_fiber = (PaceFiber*)msg->future;
-                msg->func(msg->arg);
-                
-                if (msg->future) {
-                    ((PaceFiber*)msg->future)->is_done = 1;
+
+                while (batch) {
+                    struct PaceActorMessage* msg = batch;
+                    batch = msg->next;
+                    current_fiber = (PaceFiber*)msg->future;
+                    msg->func(msg->arg);
+                    if (msg->future) {
+                        ((PaceFiber*)msg->future)->is_done = 1;
+                    }
+                    current_fiber = NULL;
+                    free(msg);
                 }
-                current_fiber = NULL;
-                free(msg);
             }
         }
     }
@@ -378,23 +388,18 @@ static void ensure_thread_pool_started(void) {
     }
 }
 
-void* pace_send_actor_message(void* actor_ptr, void (*func)(void*), void* arg) {
-    struct PaceActorBase* actor = (struct PaceActorBase*)actor_ptr;
-    
-    PaceFiber* future = (PaceFiber*)pace_xmalloc(sizeof(PaceFiber));
-    future->stack = NULL;
-    future->is_done = 0;
-    future->result = NULL;
-    future->waiting_on = NULL;
-    future->next = NULL;
-    register_fiber(future);
-
+static void pace_enqueue_actor_msg(
+    struct PaceActorBase* actor,
+    void (*func)(void*),
+    void* arg,
+    void* future
+) {
     struct PaceActorMessage* msg = (struct PaceActorMessage*)pace_xmalloc(sizeof(struct PaceActorMessage));
     msg->func = func;
     msg->arg = arg;
     msg->future = future;
     msg->next = NULL;
-    
+
     pthread_mutex_lock(&actor->mailbox_mutex);
     if (actor->mailbox_tail) {
         actor->mailbox_tail->next = msg;
@@ -402,19 +407,19 @@ void* pace_send_actor_message(void* actor_ptr, void (*func)(void*), void* arg) {
     } else {
         actor->mailbox_head = actor->mailbox_tail = msg;
     }
-    
+
     int should_spawn = 0;
     if (!actor->is_running) {
         actor->is_running = 1;
         should_spawn = 1;
     }
     pthread_mutex_unlock(&actor->mailbox_mutex);
-    
+
     if (should_spawn) {
         ThreadTask* task = (ThreadTask*)pace_xmalloc(sizeof(ThreadTask));
         task->actor = actor;
         task->next = NULL;
-        
+
         pthread_mutex_lock(&queue_mutex);
         ensure_thread_pool_started();
         if (task_queue_tail) {
@@ -426,8 +431,26 @@ void* pace_send_actor_message(void* actor_ptr, void (*func)(void*), void* arg) {
         pthread_cond_signal(&queue_cond);
         pthread_mutex_unlock(&queue_mutex);
     }
-    
+}
+
+void* pace_send_actor_message(void* actor_ptr, void (*func)(void*), void* arg) {
+    struct PaceActorBase* actor = (struct PaceActorBase*)actor_ptr;
+
+    PaceFiber* future = (PaceFiber*)pace_xmalloc(sizeof(PaceFiber));
+    future->ctx = NULL;
+    future->stack = NULL;
+    future->is_done = 0;
+    future->result = NULL;
+    future->waiting_on = NULL;
+    future->next = NULL;
+    register_fiber(future);
+
+    pace_enqueue_actor_msg(actor, func, arg, future);
     return future;
+}
+
+void pace_send_actor_message_detached(void* actor_ptr, void (*func)(void*), void* arg) {
+    pace_enqueue_actor_msg((struct PaceActorBase*)actor_ptr, func, arg, NULL);
 }
 
 void pace_thread_pool_shutdown(void) {
@@ -767,6 +790,14 @@ void pace_thread_pool_init(size_t num_threads) {
 }
 
 void* pace_send_actor_message(void* actor_ptr, void (*func)(void*, void*), void* arg) {
+    (void)actor_ptr;
+    (void)func;
+    (void)arg;
+    fprintf(stderr, "Actors (Multi-Threading) are not currently supported on Windows.\n");
+    exit(1);
+}
+
+void pace_send_actor_message_detached(void* actor_ptr, void (*func)(void*), void* arg) {
     (void)actor_ptr;
     (void)func;
     (void)arg;
